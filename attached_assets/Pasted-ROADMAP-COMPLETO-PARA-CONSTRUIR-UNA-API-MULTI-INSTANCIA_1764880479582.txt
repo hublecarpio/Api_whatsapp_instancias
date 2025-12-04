@@ -1,0 +1,323 @@
+ROADMAP COMPLETO PARA CONSTRUIR UNA API MULTI-INSTANCIA DE WHATSAPP (ESTILO EVOLUTION API)
+1. Preparar Arquitectura Base del Proyecto
+
+Crear un repositorio nuevo.
+
+Configurar proyecto Node.js con estructura modular:
+
+/src
+  /api
+  /core
+  /instances
+  /storage
+  /utils
+
+
+Añadir TypeScript (opcional) para mayor escalabilidad.
+
+Instalar dependencias clave:
+
+express o fastify
+
+@whiskeysockets/baileys
+
+qrcode
+
+axios
+
+uuid
+
+dotenv
+
+cors
+
+pino (logging)
+
+Crear archivo .env para configuración:
+
+PORT=3000
+BASE_URL=http://localhost:3000
+
+2. Sistema de Gestión de Instancias (Core del Proyecto)
+
+Crear módulo InstanceManager responsable de:
+
+Crear instancias
+
+Reiniciar instancias
+
+Eliminar instancias
+
+Almacenar todas las instancias activas en memoria/Redis
+
+Registrar webhooks individualizados por instancia
+
+El manager debe incluir funciones:
+
+createInstance(id, webhook)
+getInstance(id)
+deleteInstance(id)
+listInstances()
+
+
+Persistir metadatos de instancias en Redis o archivo JSON:
+
+id
+
+webhook
+
+estado
+
+fecha de creación
+
+última conexión
+
+3. Crear Clase WhatsAppInstance (núcleo Baileys)
+
+Implementar WhatsAppInstance encargada de manejar:
+
+Autenticación multi-file con Baileys
+
+Eventos de conexión/desconexión
+
+Lectura de mensajes entrantes
+
+Reenvío de eventos al webhook
+
+Emisión de QR
+
+Reconexión automática
+
+Dentro de la clase implementar handlers:
+
+handleQR(qr)
+handleMessages(messages)
+handleConnectionUpdate(update)
+sendText(to, message)
+sendImage(to, fileBuffer, caption)
+sendFile(to, fileBuffer, mimeType, fileName)
+
+
+Crear carpeta /storage/sessions/{instanceId} para almacenar sesiones persistentes.
+
+4. Crear Dispatcher de Webhooks
+
+Crear módulo que reciba eventos del BaileysInstance y los envíe al webhook configurado:
+
+POST webhook_url
+{
+   instanceId,
+   event,
+   payload
+}
+
+
+Implementar reintento automático con backoff en caso de falla del webhook.
+
+Guardar logs de eventos enviados y errores.
+
+5. Crear API REST Escalable
+
+Implementar los siguientes endpoints:
+
+5.1 Crear instancia
+POST /instances
+Body:
+{
+  "instanceId": "string",
+  "webhook": "string"
+}
+
+
+Acciones:
+
+Verificar que no exista instancia.
+
+Crear instancia en InstanceManager.
+
+Iniciar sesión Baileys.
+
+Registrar listeners para QR y eventos.
+
+Responder con estado.
+
+5.2 Obtener QR de instancia
+GET /instances/:id/qr
+
+
+Acciones:
+
+Verificar si existe la instancia.
+
+Retornar última imagen QR en Base64 o status conectado.
+
+5.3 Ver estado de instancia
+GET /instances/:id/status
+
+
+Responde:
+
+{
+  "instanceId": "...",
+  "status": "connected | connecting | requires_qr | disconnected"
+}
+
+5.4 Enviar mensaje de texto
+POST /instances/:id/sendMessage
+{
+  "to": "string",
+  "message": "string"
+}
+
+5.5 Enviar imagen
+POST /instances/:id/sendImage
+{
+  "to": "...",
+  "url": "...",
+  "caption": "..."
+}
+
+
+Descargar archivo → generar buffer → enviar vía Baileys.
+
+5.6 Enviar archivo (pdf/docx/xls/etc.)
+POST /instances/:id/sendFile
+{
+  "to": "...",
+  "url": "...",
+  "fileName": "...",
+  "mimeType": "..."
+}
+
+5.7 Eliminar instancia
+DELETE /instances/:id
+
+
+Acciones:
+
+Cerrar socket
+
+Eliminar sesión
+
+Borrar metadatos
+
+6. Sistema de Logs y Métricas
+
+Registrar logs por instancia:
+
+Mensajes enviados
+
+Mensajes recibidos
+
+Errores de conexión
+
+Estado actual
+
+Registrar métricas:
+
+Cantidad de mensajes por día
+
+Uptime de cada instancia
+
+Uso de recursos
+
+Guardar métricas en Redis o Postgres si se desea escalabilidad.
+
+7. Escalabilidad Horizontal con PM2 o Docker
+7.1 Configurar Dockerfile
+
+Incluir:
+
+node:18
+
+instalación de dependencias
+
+mapeo de /storage
+
+7.2 docker-compose.yml
+
+Configurar:
+
+Auto-restart
+
+Volúmenes persistentes
+
+Variables de entorno
+
+7.3 PM2 Cluster Mode
+
+Levantar múltiples workers Node.js para balancear carga.
+
+8. Seguridad de la API
+
+Implementar API Keys por instancia.
+
+Rate limiting por endpoint.
+
+Validación estricta de orígenes de webhook.
+
+Sanitización de inputs.
+
+9. Panel Web (Opcional pero recomendado)
+
+Un frontend para:
+
+Ver QR en vivo
+
+Ver estado de instancias
+
+Enviar mensajes de prueba
+
+Revisar logs
+
+Crear/activar/desactivar instancias
+
+Puede construirse en:
+
+React
+
+Next.js
+
+Vue
+
+Consumirá tu API REST.
+
+10. Documentación con Swagger / Redoc
+
+Generar documentación automática:
+
+Inputs/outputs
+
+Ejemplos de errores
+
+Lista de eventos del webhook
+
+Tipos de media soportados
+
+11. Testing y QA
+
+Crear pruebas para:
+
+Crear instancia
+
+Conexión exitosa
+
+Reconexión automática
+
+Enviar texto
+
+Enviar multimedia
+
+Recepción de mensajes
+
+Webhook funcionando
+
+12. Preparar versión PRO (si quieres monetizar)
+
+Planes por cantidad de instancias.
+
+Límite de mensajes diarios.
+
+Panel multi-usuario.
+
+Token JWT por usuario.
