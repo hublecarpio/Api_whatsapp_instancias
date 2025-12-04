@@ -221,7 +221,8 @@ export class WhatsAppInstance {
       this.logger.debug({ 
         fromMe: message.key?.fromMe, 
         hasMessage: !!message.message,
-        remoteJid: message.key?.remoteJid
+        remoteJid: message.key?.remoteJid,
+        participant: message.key?.participant
       }, 'Processing message');
 
       if (message.key?.fromMe) {
@@ -235,18 +236,45 @@ export class WhatsAppInstance {
         continue;
       }
 
-      const from = message.key?.remoteJid || '';
+      const remoteJid = message.key?.remoteJid || '';
       const pushName = message.pushName || '';
-      const isGroup = from.endsWith('@g.us');
-      const sender = isGroup ? message.key?.participant : from;
+      const isGroup = remoteJid.endsWith('@g.us');
+      const isLid = remoteJid.endsWith('@lid');
+      
+      let from = remoteJid;
+      let sender = isGroup ? message.key?.participant : remoteJid;
+      let phoneNumber = '';
+      
+      if (isLid) {
+        const participant = message.key?.participant;
+        if (participant && participant.endsWith('@s.whatsapp.net')) {
+          phoneNumber = participant.replace('@s.whatsapp.net', '');
+          sender = participant;
+        }
+        
+        const verifiedBizName = (message as any).verifiedBizName;
+        if (verifiedBizName) {
+          this.logger.debug({ verifiedBizName }, 'Business account detected');
+        }
+      } else if (!isGroup) {
+        phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+      }
+      
+      if (sender?.endsWith('@lid') && !phoneNumber) {
+        phoneNumber = '';
+      } else if (sender && !phoneNumber) {
+        phoneNumber = sender.replace('@s.whatsapp.net', '').replace('@lid', '');
+      }
       
       let messageContent: any = {
         from,
         sender,
         pushName,
+        phoneNumber,
         messageId: message.key?.id,
         timestamp: message.messageTimestamp,
-        isGroup
+        isGroup,
+        isLid
       };
 
       const actualMessage = this.extractActualMessage(msg);
