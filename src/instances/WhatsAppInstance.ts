@@ -206,52 +206,227 @@ export class WhatsAppInstance {
       return;
     }
 
-    const { messages, type } = messageInfo;
+    const { messages, type: upsertType } = messageInfo;
+
+    if (upsertType !== 'notify') {
+      return;
+    }
 
     for (const message of messages) {
-      if (!message.key?.fromMe && message.message) {
-        const from = message.key?.remoteJid;
-        const pushName = message.pushName || 'Unknown';
-        
-        let messageContent: any = {
-          from,
-          pushName,
-          messageId: message.key?.id,
-          timestamp: message.messageTimestamp
-        };
+      if (message.key?.fromMe) {
+        continue;
+      }
 
-        if (message.message.conversation) {
-          messageContent.type = 'text';
-          messageContent.text = message.message.conversation;
-        } else if (message.message.extendedTextMessage) {
-          messageContent.type = 'text';
-          messageContent.text = message.message.extendedTextMessage.text;
-        } else if (message.message.imageMessage) {
-          messageContent.type = 'image';
-          messageContent.caption = message.message.imageMessage.caption || '';
-          messageContent.mimetype = message.message.imageMessage.mimetype;
-        } else if (message.message.videoMessage) {
-          messageContent.type = 'video';
-          messageContent.caption = message.message.videoMessage.caption || '';
-          messageContent.mimetype = message.message.videoMessage.mimetype;
-        } else if (message.message.audioMessage) {
-          messageContent.type = 'audio';
-          messageContent.mimetype = message.message.audioMessage.mimetype;
-        } else if (message.message.documentMessage) {
-          messageContent.type = 'document';
-          messageContent.fileName = message.message.documentMessage.fileName;
-          messageContent.mimetype = message.message.documentMessage.mimetype;
-        } else {
-          messageContent.type = 'unknown';
-        }
+      const msg = message.message;
+      if (!msg) {
+        continue;
+      }
 
-        this.logger.info({ from, type: messageContent.type }, 'Message received');
+      const from = message.key?.remoteJid || '';
+      const pushName = message.pushName || '';
+      const isGroup = from.endsWith('@g.us');
+      const sender = isGroup ? message.key?.participant : from;
+      
+      let messageContent: any = {
+        from,
+        sender,
+        pushName,
+        messageId: message.key?.id,
+        timestamp: message.messageTimestamp,
+        isGroup
+      };
 
-        if (!this.isDeleted && !this.isClosing) {
-          await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.received', messageContent);
-        }
+      const actualMessage = this.extractActualMessage(msg);
+      const parsed = this.parseMessageContent(actualMessage);
+      
+      messageContent = { ...messageContent, ...parsed };
+
+      if (parsed.type === 'protocol' || parsed.type === 'reaction') {
+        continue;
+      }
+
+      this.logger.info({ 
+        from, 
+        sender,
+        type: messageContent.type,
+        hasText: !!messageContent.text
+      }, 'Message received');
+
+      if (!this.isDeleted && !this.isClosing) {
+        await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.received', messageContent);
       }
     }
+  }
+
+  private extractActualMessage(msg: proto.IMessage): proto.IMessage {
+    if (msg.viewOnceMessage?.message) {
+      return msg.viewOnceMessage.message;
+    }
+    if (msg.viewOnceMessageV2?.message) {
+      return msg.viewOnceMessageV2.message;
+    }
+    if (msg.viewOnceMessageV2Extension?.message) {
+      return msg.viewOnceMessageV2Extension.message;
+    }
+    if (msg.ephemeralMessage?.message) {
+      return msg.ephemeralMessage.message;
+    }
+    if (msg.documentWithCaptionMessage?.message) {
+      return msg.documentWithCaptionMessage.message;
+    }
+    return msg;
+  }
+
+  private parseMessageContent(msg: proto.IMessage): any {
+    if (msg.conversation) {
+      return {
+        type: 'text',
+        text: msg.conversation
+      };
+    }
+
+    if (msg.extendedTextMessage) {
+      return {
+        type: 'text',
+        text: msg.extendedTextMessage.text || '',
+        quotedMessage: msg.extendedTextMessage.contextInfo?.quotedMessage ? true : false
+      };
+    }
+
+    if (msg.imageMessage) {
+      return {
+        type: 'image',
+        caption: msg.imageMessage.caption || '',
+        mimetype: msg.imageMessage.mimetype || 'image/jpeg',
+        url: msg.imageMessage.url || '',
+        mediaKey: msg.imageMessage.mediaKey ? Buffer.from(msg.imageMessage.mediaKey).toString('base64') : ''
+      };
+    }
+
+    if (msg.videoMessage) {
+      return {
+        type: 'video',
+        caption: msg.videoMessage.caption || '',
+        mimetype: msg.videoMessage.mimetype || 'video/mp4',
+        seconds: msg.videoMessage.seconds || 0
+      };
+    }
+
+    if (msg.audioMessage) {
+      return {
+        type: 'audio',
+        mimetype: msg.audioMessage.mimetype || 'audio/ogg',
+        seconds: msg.audioMessage.seconds || 0,
+        ptt: msg.audioMessage.ptt || false
+      };
+    }
+
+    if (msg.documentMessage) {
+      return {
+        type: 'document',
+        fileName: msg.documentMessage.fileName || 'document',
+        mimetype: msg.documentMessage.mimetype || 'application/octet-stream',
+        pageCount: msg.documentMessage.pageCount || 0
+      };
+    }
+
+    if (msg.stickerMessage) {
+      return {
+        type: 'sticker',
+        mimetype: msg.stickerMessage.mimetype || 'image/webp',
+        isAnimated: msg.stickerMessage.isAnimated || false
+      };
+    }
+
+    if (msg.contactMessage) {
+      return {
+        type: 'contact',
+        displayName: msg.contactMessage.displayName || '',
+        vcard: msg.contactMessage.vcard || ''
+      };
+    }
+
+    if (msg.contactsArrayMessage) {
+      return {
+        type: 'contacts',
+        contacts: msg.contactsArrayMessage.contacts?.map(c => ({
+          displayName: c.displayName || '',
+          vcard: c.vcard || ''
+        })) || []
+      };
+    }
+
+    if (msg.locationMessage) {
+      return {
+        type: 'location',
+        latitude: msg.locationMessage.degreesLatitude || 0,
+        longitude: msg.locationMessage.degreesLongitude || 0,
+        name: msg.locationMessage.name || '',
+        address: msg.locationMessage.address || ''
+      };
+    }
+
+    if (msg.liveLocationMessage) {
+      return {
+        type: 'live_location',
+        latitude: msg.liveLocationMessage.degreesLatitude || 0,
+        longitude: msg.liveLocationMessage.degreesLongitude || 0,
+        caption: msg.liveLocationMessage.caption || ''
+      };
+    }
+
+    if (msg.reactionMessage) {
+      return {
+        type: 'reaction',
+        emoji: msg.reactionMessage.text || '',
+        targetMessageId: msg.reactionMessage.key?.id || ''
+      };
+    }
+
+    if (msg.pollCreationMessage || msg.pollCreationMessageV2 || msg.pollCreationMessageV3) {
+      const poll = msg.pollCreationMessage || msg.pollCreationMessageV2 || msg.pollCreationMessageV3;
+      return {
+        type: 'poll',
+        name: poll?.name || '',
+        options: poll?.options?.map(o => o.optionName) || []
+      };
+    }
+
+    if (msg.protocolMessage) {
+      return {
+        type: 'protocol'
+      };
+    }
+
+    if (msg.buttonsResponseMessage) {
+      return {
+        type: 'button_response',
+        selectedButtonId: msg.buttonsResponseMessage.selectedButtonId || '',
+        selectedDisplayText: msg.buttonsResponseMessage.selectedDisplayText || ''
+      };
+    }
+
+    if (msg.listResponseMessage) {
+      return {
+        type: 'list_response',
+        title: msg.listResponseMessage.title || '',
+        selectedRowId: msg.listResponseMessage.singleSelectReply?.selectedRowId || ''
+      };
+    }
+
+    if (msg.templateButtonReplyMessage) {
+      return {
+        type: 'template_button_reply',
+        selectedId: msg.templateButtonReplyMessage.selectedId || '',
+        selectedDisplayText: msg.templateButtonReplyMessage.selectedDisplayText || ''
+      };
+    }
+
+    const messageKeys = Object.keys(msg).filter(k => !k.startsWith('_'));
+    return {
+      type: 'unknown',
+      availableTypes: messageKeys
+    };
   }
 
   getQRCode(): string | null {
