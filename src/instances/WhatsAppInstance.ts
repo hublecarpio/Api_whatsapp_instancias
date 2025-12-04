@@ -20,6 +20,24 @@ import { ConnectionStatus } from '../utils/types';
 
 const SESSIONS_PATH = path.join(process.cwd(), 'src', 'storage', 'sessions');
 
+// Helper to sanitize phone numbers - returns only digit-based values, empty string otherwise
+function sanitizePhone(value: string | undefined | null): string {
+  if (!value) return '';
+  // Remove @ suffix and device ID
+  let cleaned = value.replace(/@s\.whatsapp\.net.*$/, '').replace(/@lid.*$/, '');
+  // Remove device ID suffix like :0, :1
+  if (cleaned.includes(':')) {
+    cleaned = cleaned.split(':')[0];
+  }
+  // Check if it's a valid phone number (only digits, optionally starting with +)
+  const digitsOnly = cleaned.replace(/[^\d]/g, '');
+  // Must have at least 8 digits to be a valid phone number
+  if (digitsOnly.length >= 8) {
+    return digitsOnly;
+  }
+  return '';
+}
+
 export interface InstanceOptions {
   id: string;
   webhook?: string;
@@ -112,10 +130,11 @@ export class WhatsAppInstance {
       this.socket.ev.on('contacts.update', (contacts) => {
         for (const contact of contacts) {
           if (contact.id && contact.id.endsWith('@lid')) {
-            const phoneNumber = (contact as any).phoneNumber || (contact as any).notify;
-            if (phoneNumber) {
+            // Only use phoneNumber field, NOT notify (which is the display name)
+            const rawPhone = (contact as any).phoneNumber;
+            const pn = sanitizePhone(rawPhone);
+            if (pn) {
               const lid = contact.id.replace('@lid', '');
-              const pn = phoneNumber.replace('@s.whatsapp.net', '');
               this.lidMappings.set(lid, pn);
               this.logger.debug({ lid, phoneNumber: pn }, 'LID mapping discovered from contacts');
             }
@@ -127,10 +146,11 @@ export class WhatsAppInstance {
       this.socket.ev.on('contacts.upsert', (contacts) => {
         for (const contact of contacts) {
           if (contact.id && contact.id.endsWith('@lid')) {
-            const phoneNumber = (contact as any).phoneNumber || (contact as any).notify;
-            if (phoneNumber) {
+            // Only use phoneNumber field, NOT notify (which is the display name)
+            const rawPhone = (contact as any).phoneNumber;
+            const pn = sanitizePhone(rawPhone);
+            if (pn) {
               const lid = contact.id.replace('@lid', '');
-              const pn = phoneNumber.replace('@s.whatsapp.net', '');
               this.lidMappings.set(lid, pn);
               this.logger.debug({ lid, phoneNumber: pn }, 'LID mapping discovered from contacts upsert');
             }
@@ -349,13 +369,13 @@ export class WhatsAppInstance {
         // Store the LID for future reference, phone unknown
         phoneNumber = '';
       } else if (sender && !phoneNumber) {
-        phoneNumber = sender.replace('@s.whatsapp.net', '').replace('@lid', '');
+        phoneNumber = sanitizePhone(sender);
       }
       
-      // Clean device ID suffix (e.g., :0, :1) from phone number and sender
-      if (phoneNumber && phoneNumber.includes(':')) {
-        phoneNumber = phoneNumber.split(':')[0];
-      }
+      // Final sanitization - ensure phoneNumber is digits only (no names)
+      phoneNumber = sanitizePhone(phoneNumber);
+      
+      // Clean device ID suffix (e.g., :0, :1) from sender and from
       if (sender && sender.includes(':')) {
         sender = sender.split(':')[0] + (sender.includes('@') ? '@' + sender.split('@')[1] : '');
       }
@@ -738,8 +758,13 @@ export class WhatsAppInstance {
 
   // Manually add a LID mapping
   addLidMapping(lid: string, phoneNumber: string): void {
-    this.lidMappings.set(lid.replace('@lid', ''), phoneNumber.replace('@s.whatsapp.net', ''));
-    this.logger.info({ lid, phoneNumber }, 'LID mapping added manually');
+    const sanitized = sanitizePhone(phoneNumber);
+    if (!sanitized) {
+      this.logger.warn({ lid, phoneNumber }, 'Invalid phone number, not storing LID mapping');
+      return;
+    }
+    this.lidMappings.set(lid.replace('@lid', ''), sanitized);
+    this.logger.info({ lid, phoneNumber: sanitized }, 'LID mapping added manually');
   }
 
   async disconnect(): Promise<void> {
