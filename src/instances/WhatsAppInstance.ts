@@ -543,15 +543,37 @@ export class WhatsAppInstance {
       this.socket = null;
       this.status = 'disconnected';
       this.qrCode = null;
+      this.isClosing = false;
     }
   }
 
   async close(): Promise<void> {
     this.isClosing = true;
-    this.isDeleted = true;
     
     if (this.socket) {
       this.logger.info('Closing connection...');
+      try {
+        this.socket.ev.removeAllListeners('connection.update');
+        this.socket.ev.removeAllListeners('messages.upsert');
+        this.socket.ev.removeAllListeners('creds.update');
+        this.socket.end(undefined);
+      } catch (error) {
+        // Ignore close errors
+      }
+      this.socket = null;
+    }
+    
+    this.status = 'disconnected';
+    this.qrCode = null;
+    this.isClosing = false;
+  }
+
+  async destroy(): Promise<void> {
+    this.isClosing = true;
+    this.isDeleted = true;
+    
+    if (this.socket) {
+      this.logger.info('Destroying instance...');
       try {
         this.socket.ev.removeAllListeners('connection.update');
         this.socket.ev.removeAllListeners('messages.upsert');

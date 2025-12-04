@@ -97,7 +97,7 @@ export class InstanceManager {
 
     logger.info({ instanceId: id }, 'Deleting instance');
 
-    await instance.close();
+    await instance.destroy();
     instance.clearSession();
     
     this.instances.delete(id);
