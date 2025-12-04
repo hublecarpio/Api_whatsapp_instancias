@@ -177,7 +177,7 @@ volumes:
       device: ":/path/to/sessions"
 ```
 
-## API Endpoints (Updated)
+## API Endpoints (Complete)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -188,12 +188,77 @@ volumes:
 | GET | /instances/:id/status | Get instance connection status |
 | POST | /instances/:id/sendMessage | Send text message |
 | POST | /instances/:id/sendImage | Send image with caption |
+| POST | /instances/:id/sendVideo | Send video with caption |
+| POST | /instances/:id/sendAudio | Send audio/voice (PTT with waveform) |
 | POST | /instances/:id/sendFile | Send document/file |
+| POST | /instances/:id/sendSticker | Send sticker |
+| POST | /instances/:id/sendLocation | Send location |
+| POST | /instances/:id/sendContact | Send contact card |
 | POST | /instances/:id/sendToLid | Send message using LID |
 | GET | /instances/:id/lid-mappings | Get LID to phone mappings |
 | POST | /instances/:id/lid-mappings | Add LID to phone mapping |
 | POST | /instances/:id/restart | Restart instance connection |
 | DELETE | /instances/:id | Delete instance and session |
+
+## Send Examples
+
+### Send Audio (Voice Message with Waveform)
+```bash
+curl -X POST http://localhost:5000/instances/my-instance/sendAudio \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "5511999999999",
+    "url": "https://example.com/audio.ogg",
+    "ptt": true
+  }'
+```
+- `ptt: true` = Voice message with waveform (default)
+- `ptt: false` = Regular audio file
+
+### Send Video
+```bash
+curl -X POST http://localhost:5000/instances/my-instance/sendVideo \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "5511999999999",
+    "url": "https://example.com/video.mp4",
+    "caption": "Check this video!"
+  }'
+```
+
+### Send Location
+```bash
+curl -X POST http://localhost:5000/instances/my-instance/sendLocation \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "5511999999999",
+    "latitude": -23.5505,
+    "longitude": -46.6333,
+    "name": "São Paulo",
+    "address": "São Paulo, Brazil"
+  }'
+```
+
+### Send Contact
+```bash
+curl -X POST http://localhost:5000/instances/my-instance/sendContact \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "5511999999999",
+    "contactName": "John Doe",
+    "contactNumber": "5511888888888"
+  }'
+```
+
+### Send Sticker
+```bash
+curl -X POST http://localhost:5000/instances/my-instance/sendSticker \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "5511999999999",
+    "url": "https://example.com/sticker.webp"
+  }'
+```
 
 ## Recent Changes
 

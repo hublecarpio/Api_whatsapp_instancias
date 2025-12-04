@@ -713,6 +713,160 @@ export class WhatsAppInstance {
     }
   }
 
+  async sendVideo(to: string, url: string, caption?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Instance not connected' };
+    }
+
+    try {
+      const jid = this.formatJid(to);
+      const response = await axios.get(url, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(response.data);
+
+      const result = await this.socket.sendMessage(jid, {
+        video: buffer,
+        caption: caption || '',
+        gifPlayback: false
+      });
+
+      this.logger.info({ to: jid }, 'Video sent');
+
+      await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
+        to: jid,
+        type: 'video',
+        messageId: result?.key?.id
+      });
+
+      return { success: true, messageId: result?.key?.id || undefined };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, to }, 'Failed to send video');
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendAudio(to: string, url: string, ptt: boolean = true): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Instance not connected' };
+    }
+
+    try {
+      const jid = this.formatJid(to);
+      const response = await axios.get(url, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(response.data);
+
+      const result = await this.socket.sendMessage(jid, {
+        audio: buffer,
+        mimetype: 'audio/ogg; codecs=opus',
+        ptt: ptt
+      });
+
+      this.logger.info({ to: jid, ptt }, 'Audio sent');
+
+      await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
+        to: jid,
+        type: ptt ? 'ptt' : 'audio',
+        messageId: result?.key?.id
+      });
+
+      return { success: true, messageId: result?.key?.id || undefined };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, to }, 'Failed to send audio');
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendSticker(to: string, url: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Instance not connected' };
+    }
+
+    try {
+      const jid = this.formatJid(to);
+      const response = await axios.get(url, { responseType: 'arraybuffer' });
+      const buffer = Buffer.from(response.data);
+
+      const result = await this.socket.sendMessage(jid, {
+        sticker: buffer
+      });
+
+      this.logger.info({ to: jid }, 'Sticker sent');
+
+      await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
+        to: jid,
+        type: 'sticker',
+        messageId: result?.key?.id
+      });
+
+      return { success: true, messageId: result?.key?.id || undefined };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, to }, 'Failed to send sticker');
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendLocation(to: string, latitude: number, longitude: number, name?: string, address?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Instance not connected' };
+    }
+
+    try {
+      const jid = this.formatJid(to);
+
+      const result = await this.socket.sendMessage(jid, {
+        location: {
+          degreesLatitude: latitude,
+          degreesLongitude: longitude,
+          name: name || '',
+          address: address || ''
+        }
+      });
+
+      this.logger.info({ to: jid, latitude, longitude }, 'Location sent');
+
+      await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
+        to: jid,
+        type: 'location',
+        messageId: result?.key?.id
+      });
+
+      return { success: true, messageId: result?.key?.id || undefined };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, to }, 'Failed to send location');
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendContact(to: string, contactName: string, contactNumber: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Instance not connected' };
+    }
+
+    try {
+      const jid = this.formatJid(to);
+      const vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:${contactName}\nTEL;type=CELL;type=VOICE;waid=${contactNumber}:+${contactNumber}\nEND:VCARD`;
+
+      const result = await this.socket.sendMessage(jid, {
+        contacts: {
+          displayName: contactName,
+          contacts: [{ vcard }]
+        }
+      });
+
+      this.logger.info({ to: jid, contactName }, 'Contact sent');
+
+      await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
+        to: jid,
+        type: 'contact',
+        messageId: result?.key?.id
+      });
+
+      return { success: true, messageId: result?.key?.id || undefined };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, to }, 'Failed to send contact');
+      return { success: false, error: error.message };
+    }
+  }
+
   private formatJid(number: string): string {
     // If it's already a full JID, return as-is
     if (number.includes('@')) {

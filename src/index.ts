@@ -27,8 +27,16 @@ app.get('/', (req, res) => {
       'GET /instances/:id/qr': 'Get QR code for instance',
       'GET /instances/:id/status': 'Get instance status',
       'POST /instances/:id/sendMessage': 'Send text message',
-      'POST /instances/:id/sendImage': 'Send image',
-      'POST /instances/:id/sendFile': 'Send file',
+      'POST /instances/:id/sendImage': 'Send image with caption',
+      'POST /instances/:id/sendVideo': 'Send video with caption',
+      'POST /instances/:id/sendAudio': 'Send audio/voice message (PTT)',
+      'POST /instances/:id/sendFile': 'Send document/file',
+      'POST /instances/:id/sendSticker': 'Send sticker',
+      'POST /instances/:id/sendLocation': 'Send location',
+      'POST /instances/:id/sendContact': 'Send contact card',
+      'POST /instances/:id/sendToLid': 'Send message to LID',
+      'GET /instances/:id/lid-mappings': 'Get LID to phone mappings',
+      'POST /instances/:id/lid-mappings': 'Add LID mapping',
       'POST /instances/:id/restart': 'Restart instance',
       'DELETE /instances/:id': 'Delete instance'
     }

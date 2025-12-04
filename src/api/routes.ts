@@ -332,6 +332,247 @@ router.post('/instances/:id/sendFile', async (req: Request, res: Response) => {
   }
 });
 
+// Send video with optional caption
+router.post('/instances/:id/sendVideo', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { to, url, caption } = req.body;
+
+    if (!to || !url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both "to" and "url" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendVideo(to, url, caption);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        to,
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send video');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// Send audio/voice message (PTT = Push To Talk with waveform)
+router.post('/instances/:id/sendAudio', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { to, url, ptt = true } = req.body;
+
+    if (!to || !url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both "to" and "url" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendAudio(to, url, ptt);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        to,
+        type: ptt ? 'ptt' : 'audio',
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send audio');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// Send sticker
+router.post('/instances/:id/sendSticker', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { to, url } = req.body;
+
+    if (!to || !url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both "to" and "url" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendSticker(to, url);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        to,
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send sticker');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// Send location
+router.post('/instances/:id/sendLocation', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { to, latitude, longitude, name, address } = req.body;
+
+    if (!to || latitude === undefined || longitude === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: '"to", "latitude", and "longitude" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendLocation(to, latitude, longitude, name, address);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        to,
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send location');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// Send contact
+router.post('/instances/:id/sendContact', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { to, contactName, contactNumber } = req.body;
+
+    if (!to || !contactName || !contactNumber) {
+      return res.status(400).json({
+        success: false,
+        error: '"to", "contactName", and "contactNumber" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendContact(to, contactName, contactNumber);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        to,
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send contact');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 router.post('/instances/:id/restart', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
