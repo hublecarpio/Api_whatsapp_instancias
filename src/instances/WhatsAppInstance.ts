@@ -20,6 +20,13 @@ import { ConnectionStatus } from '../utils/types';
 
 const SESSIONS_PATH = path.join(process.cwd(), 'src', 'storage', 'sessions');
 
+export interface InstanceOptions {
+  id: string;
+  webhook?: string;
+  createdAt?: Date;
+  lastConnection?: Date | null;
+}
+
 export class WhatsAppInstance {
   public id: string;
   public webhook: string;
@@ -33,11 +40,18 @@ export class WhatsAppInstance {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
 
-  constructor(id: string, webhook: string = '') {
-    this.id = id;
-    this.webhook = webhook;
-    this.createdAt = new Date();
-    this.logger = createInstanceLogger(id);
+  constructor(options: InstanceOptions | string, webhook: string = '') {
+    if (typeof options === 'string') {
+      this.id = options;
+      this.webhook = webhook;
+      this.createdAt = new Date();
+    } else {
+      this.id = options.id;
+      this.webhook = options.webhook || '';
+      this.createdAt = options.createdAt ? new Date(options.createdAt) : new Date();
+      this.lastConnection = options.lastConnection ? new Date(options.lastConnection) : null;
+    }
+    this.logger = createInstanceLogger(this.id);
   }
 
   private getSessionPath(): string {

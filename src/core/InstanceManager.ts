@@ -1,4 +1,4 @@
-import { WhatsAppInstance } from '../instances/WhatsAppInstance';
+import { WhatsAppInstance, InstanceOptions } from '../instances/WhatsAppInstance';
 import { InstanceMetadata } from '../utils/types';
 import logger from '../utils/logger';
 import path from 'path';
@@ -22,7 +22,12 @@ export class InstanceManager {
     for (const metadata of savedMetadata) {
       try {
         logger.info({ instanceId: metadata.id }, 'Restoring instance...');
-        const instance = new WhatsAppInstance(metadata.id, metadata.webhook);
+        const instance = new WhatsAppInstance({
+          id: metadata.id,
+          webhook: metadata.webhook,
+          createdAt: metadata.createdAt ? new Date(metadata.createdAt) : undefined,
+          lastConnection: metadata.lastConnection ? new Date(metadata.lastConnection) : null
+        });
         this.instances.set(metadata.id, instance);
         
         await instance.connect();
