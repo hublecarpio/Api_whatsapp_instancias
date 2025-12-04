@@ -2,11 +2,9 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   WASocket,
-  BaileysEventMap,
   ConnectionState,
   proto,
-  downloadMediaMessage,
-  AnyMessageContent
+  fetchLatestBaileysVersion
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import * as qrcode from 'qrcode';
@@ -39,6 +37,8 @@ export class WhatsAppInstance {
   private logger: pino.Logger;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
+  private isClosing: boolean = false;
+  private isDeleted: boolean = false;
 
   constructor(options: InstanceOptions | string, webhook: string = '') {
     if (typeof options === 'string') {
@@ -59,6 +59,11 @@ export class WhatsAppInstance {
   }
 
   async connect(): Promise<void> {
+    if (this.isDeleted || this.isClosing) {
+      this.logger.info('Instance is closing or deleted, skipping connection');
+      return;
+    }
+
     this.status = 'connecting';
     this.logger.info('Starting WhatsApp connection...');
 
@@ -72,29 +77,43 @@ export class WhatsAppInstance {
 
     const silentLogger = pino({ level: 'silent' });
 
-    this.socket = makeWASocket({
-      auth: state,
-      printQRInTerminal: false,
-      logger: silentLogger,
-      browser: ['WhatsApp API', 'Chrome', '1.0.0'],
-      connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 60000,
-      emitOwnEvents: true,
-      markOnlineOnConnect: true
-    });
+    try {
+      const { version } = await fetchLatestBaileysVersion();
+      
+      this.socket = makeWASocket({
+        auth: state,
+        printQRInTerminal: false,
+        logger: silentLogger,
+        browser: ['WhatsApp API', 'Chrome', '120.0.0'],
+        version,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        emitOwnEvents: true,
+        markOnlineOnConnect: true,
+        qrTimeout: 60000,
+        syncFullHistory: false
+      });
 
-    this.socket.ev.on('creds.update', saveCreds);
+      this.socket.ev.on('creds.update', saveCreds);
 
-    this.socket.ev.on('connection.update', (update) => {
-      this.handleConnectionUpdate(update);
-    });
+      this.socket.ev.on('connection.update', (update) => {
+        this.handleConnectionUpdate(update);
+      });
 
-    this.socket.ev.on('messages.upsert', (messageInfo) => {
-      this.handleMessages(messageInfo);
-    });
+      this.socket.ev.on('messages.upsert', (messageInfo) => {
+        this.handleMessages(messageInfo);
+      });
+    } catch (error: any) {
+      this.logger.error({ error: error.message }, 'Failed to create socket');
+      this.status = 'disconnected';
+    }
   }
 
   private async handleConnectionUpdate(update: Partial<ConnectionState>): Promise<void> {
+    if (this.isDeleted || this.isClosing) {
+      return;
+    }
+
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
@@ -102,8 +121,13 @@ export class WhatsAppInstance {
     }
 
     if (connection === 'close') {
+      if (this.isDeleted || this.isClosing) {
+        this.logger.info('Connection closed (instance closing/deleted)');
+        return;
+      }
+
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut && !this.isClosing && !this.isDeleted;
 
       this.logger.warn({ statusCode, shouldReconnect }, 'Connection closed');
 
@@ -113,9 +137,11 @@ export class WhatsAppInstance {
         this.logger.info({ attempt: this.reconnectAttempts }, 'Attempting reconnection...');
         
         setTimeout(() => {
-          this.connect().catch(err => {
-            this.logger.error({ error: err.message }, 'Reconnection failed');
-          });
+          if (!this.isDeleted && !this.isClosing) {
+            this.connect().catch(err => {
+              this.logger.error({ error: err.message }, 'Reconnection failed');
+            });
+          }
         }, 3000 * this.reconnectAttempts);
       } else {
         this.status = 'disconnected';
@@ -127,11 +153,13 @@ export class WhatsAppInstance {
         }
       }
 
-      await WebhookDispatcher.dispatch(this.webhook, this.id, 'connection.close', {
-        statusCode,
-        shouldReconnect,
-        reason: lastDisconnect?.error?.message || 'Unknown'
-      });
+      if (!this.isDeleted && !this.isClosing) {
+        await WebhookDispatcher.dispatch(this.webhook, this.id, 'connection.close', {
+          statusCode,
+          shouldReconnect,
+          reason: lastDisconnect?.error?.message || 'Unknown'
+        });
+      }
 
     } else if (connection === 'open') {
       this.status = 'connected';
@@ -140,14 +168,20 @@ export class WhatsAppInstance {
       this.qrCode = null;
       this.logger.info('Connected to WhatsApp!');
 
-      await WebhookDispatcher.dispatch(this.webhook, this.id, 'connection.open', {
-        status: 'connected',
-        timestamp: this.lastConnection.toISOString()
-      });
+      if (!this.isDeleted && !this.isClosing) {
+        await WebhookDispatcher.dispatch(this.webhook, this.id, 'connection.open', {
+          status: 'connected',
+          timestamp: this.lastConnection.toISOString()
+        });
+      }
     }
   }
 
   private async handleQR(qr: string): Promise<void> {
+    if (this.isDeleted || this.isClosing) {
+      return;
+    }
+
     this.status = 'requires_qr';
     this.logger.info('QR Code received');
 
@@ -157,15 +191,21 @@ export class WhatsAppInstance {
         margin: 2
       });
 
-      await WebhookDispatcher.dispatch(this.webhook, this.id, 'qr.update', {
-        qrCode: this.qrCode
-      });
+      if (!this.isDeleted && !this.isClosing) {
+        await WebhookDispatcher.dispatch(this.webhook, this.id, 'qr.update', {
+          qrCode: this.qrCode
+        });
+      }
     } catch (error: any) {
       this.logger.error({ error: error.message }, 'Failed to generate QR code');
     }
   }
 
   private async handleMessages(messageInfo: { messages: proto.IWebMessageInfo[], type: string }): Promise<void> {
+    if (this.isDeleted || this.isClosing) {
+      return;
+    }
+
     const { messages, type } = messageInfo;
 
     for (const message of messages) {
@@ -207,7 +247,9 @@ export class WhatsAppInstance {
 
         this.logger.info({ from, type: messageContent.type }, 'Message received');
 
-        await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.received', messageContent);
+        if (!this.isDeleted && !this.isClosing) {
+          await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.received', messageContent);
+        }
       }
     }
   }
@@ -316,8 +358,13 @@ export class WhatsAppInstance {
 
   async disconnect(): Promise<void> {
     if (this.socket) {
+      this.isClosing = true;
       this.logger.info('Disconnecting...');
-      await this.socket.logout();
+      try {
+        await this.socket.logout();
+      } catch (error) {
+        // Ignore logout errors
+      }
       this.socket = null;
       this.status = 'disconnected';
       this.qrCode = null;
@@ -325,13 +372,25 @@ export class WhatsAppInstance {
   }
 
   async close(): Promise<void> {
+    this.isClosing = true;
+    this.isDeleted = true;
+    
     if (this.socket) {
       this.logger.info('Closing connection...');
-      this.socket.end(undefined);
+      try {
+        this.socket.ev.removeAllListeners('connection.update');
+        this.socket.ev.removeAllListeners('messages.upsert');
+        this.socket.ev.removeAllListeners('creds.update');
+        this.socket.end(undefined);
+      } catch (error) {
+        // Ignore close errors
+      }
       this.socket = null;
-      this.status = 'disconnected';
-      this.qrCode = null;
     }
+    
+    this.status = 'disconnected';
+    this.qrCode = null;
+    this.webhook = '';
   }
 
   clearSession(): void {
