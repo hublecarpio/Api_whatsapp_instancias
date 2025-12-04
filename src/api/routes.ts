@@ -1,0 +1,355 @@
+import { Router, Request, Response } from 'express';
+import { InstanceManager } from '../core/InstanceManager';
+import { 
+  CreateInstanceRequest, 
+  SendMessageRequest, 
+  SendImageRequest, 
+  SendFileRequest,
+  ApiResponse 
+} from '../utils/types';
+import logger from '../utils/logger';
+
+const router = Router();
+
+router.post('/instances', async (req: Request, res: Response) => {
+  try {
+    const { instanceId, webhook } = req.body as CreateInstanceRequest;
+
+    if (!instanceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'instanceId is required'
+      } as ApiResponse);
+    }
+
+    const existingInstance = InstanceManager.getInstance(instanceId);
+    if (existingInstance) {
+      return res.status(409).json({
+        success: false,
+        error: `Instance '${instanceId}' already exists`
+      } as ApiResponse);
+    }
+
+    const instance = await InstanceManager.createInstance(instanceId, webhook || '');
+
+    res.status(201).json({
+      success: true,
+      data: {
+        instanceId: instance.id,
+        status: instance.status,
+        message: 'Instance created. Scan QR code to connect.'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to create instance');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+router.get('/instances', async (req: Request, res: Response) => {
+  try {
+    const instances = InstanceManager.listInstances();
+    
+    res.json({
+      success: true,
+      data: {
+        count: instances.length,
+        instances
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to list instances');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+router.get('/instances/:id/qr', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    if (instance.status === 'connected') {
+      return res.json({
+        success: true,
+        data: {
+          instanceId: id,
+          status: 'connected',
+          message: 'Instance already connected'
+        }
+      } as ApiResponse);
+    }
+
+    const qrCode = instance.getQRCode();
+
+    if (!qrCode) {
+      return res.json({
+        success: true,
+        data: {
+          instanceId: id,
+          status: instance.status,
+          qrCode: null,
+          message: 'QR code not yet available. Please wait.'
+        }
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        status: instance.status,
+        qrCode
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to get QR code');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+router.get('/instances/:id/status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        status: instance.status,
+        createdAt: instance.createdAt,
+        lastConnection: instance.lastConnection
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to get instance status');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+router.post('/instances/:id/sendMessage', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { to, message } = req.body as SendMessageRequest;
+
+    if (!to || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both "to" and "message" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendText(to, message);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        to,
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send message');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+router.post('/instances/:id/sendImage', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { to, url, caption } = req.body as SendImageRequest;
+
+    if (!to || !url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both "to" and "url" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendImage(to, url, caption);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        to,
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send image');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+router.post('/instances/:id/sendFile', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { to, url, fileName, mimeType } = req.body as SendFileRequest;
+
+    if (!to || !url || !fileName || !mimeType) {
+      return res.status(400).json({
+        success: false,
+        error: '"to", "url", "fileName", and "mimeType" are all required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendFile(to, url, fileName, mimeType);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        to,
+        fileName,
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send file');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+router.post('/instances/:id/restart', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const instance = await InstanceManager.restartInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        status: instance.status,
+        message: 'Instance restarted successfully'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to restart instance');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+router.delete('/instances/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const deleted = await InstanceManager.deleteInstance(id);
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        message: 'Instance deleted successfully'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to delete instance');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+export default router;
