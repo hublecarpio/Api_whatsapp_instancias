@@ -103,6 +103,7 @@ export class WhatsAppInstance {
       });
 
       this.socket.ev.on('messages.upsert', (messageInfo) => {
+        this.logger.info({ type: messageInfo.type, count: messageInfo.messages?.length }, 'messages.upsert event received');
         this.handleMessages(messageInfo);
       });
     } catch (error: any) {
@@ -205,22 +206,32 @@ export class WhatsAppInstance {
 
   private async handleMessages(messageInfo: { messages: proto.IWebMessageInfo[], type: string }): Promise<void> {
     if (this.isDeleted || this.isClosing) {
+      this.logger.debug('Skipping message - instance closing/deleted');
       return;
     }
 
     const { messages, type: upsertType } = messageInfo;
 
     if (upsertType !== 'notify') {
+      this.logger.debug({ upsertType }, 'Skipping message - not notify type');
       return;
     }
 
     for (const message of messages) {
+      this.logger.debug({ 
+        fromMe: message.key?.fromMe, 
+        hasMessage: !!message.message,
+        remoteJid: message.key?.remoteJid
+      }, 'Processing message');
+
       if (message.key?.fromMe) {
+        this.logger.debug('Skipping - message from self');
         continue;
       }
 
       const msg = message.message;
       if (!msg) {
+        this.logger.debug('Skipping - no message content');
         continue;
       }
 
