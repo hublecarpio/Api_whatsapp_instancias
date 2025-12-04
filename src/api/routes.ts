@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { InstanceManager } from '../core/InstanceManager';
+import { MediaStorage } from '../core/MediaStorage';
 import { 
   CreateInstanceRequest, 
   SendMessageRequest, 
@@ -10,6 +11,42 @@ import {
 import logger from '../utils/logger';
 
 const router = Router();
+
+router.get('/media/:instanceId/:fileName', async (req: Request, res: Response) => {
+  try {
+    const { instanceId, fileName } = req.params;
+    
+    if (!MediaStorage.isEnabled()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Media storage not configured'
+      } as ApiResponse);
+    }
+
+    const media = await MediaStorage.getMedia(instanceId, fileName);
+    
+    if (!media) {
+      return res.status(404).json({
+        success: false,
+        error: 'Media not found'
+      } as ApiResponse);
+    }
+
+    res.set({
+      'Content-Type': media.mimetype,
+      'Content-Length': media.buffer.length.toString(),
+      'Cache-Control': 'public, max-age=31536000'
+    });
+    
+    res.send(media.buffer);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to serve media');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
 
 router.post('/instances', async (req: Request, res: Response) => {
   try {

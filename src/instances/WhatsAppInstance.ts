@@ -4,7 +4,8 @@ import makeWASocket, {
   WASocket,
   ConnectionState,
   proto,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  downloadMediaMessage
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import * as qrcode from 'qrcode';
@@ -14,6 +15,7 @@ import fs from 'fs';
 import pino from 'pino';
 import { createInstanceLogger } from '../utils/logger';
 import { WebhookDispatcher } from '../core/WebhookDispatcher';
+import { MediaStorage } from '../core/MediaStorage';
 import { ConnectionStatus } from '../utils/types';
 
 const SESSIONS_PATH = path.join(process.cwd(), 'src', 'storage', 'sessions');
@@ -245,11 +247,43 @@ export class WhatsAppInstance {
         continue;
       }
 
+      const mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
+      if (mediaTypes.includes(parsed.type) && MediaStorage.isEnabled() && message.key) {
+        try {
+          const mediaBuffer = await downloadMediaMessage(
+            message as any,
+            'buffer',
+            {},
+            {
+              logger: this.logger as any,
+              reuploadRequest: this.socket!.updateMediaMessage
+            }
+          );
+
+          if (mediaBuffer && Buffer.isBuffer(mediaBuffer)) {
+            const stored = await MediaStorage.storeMedia(
+              mediaBuffer,
+              parsed.mimetype || 'application/octet-stream',
+              this.id
+            );
+
+            if (stored) {
+              messageContent.mediaUrl = stored.url;
+              messageContent.mediaPath = stored.path;
+              this.logger.info({ mediaUrl: stored.url }, 'Media stored successfully');
+            }
+          }
+        } catch (error: any) {
+          this.logger.warn({ error: error.message }, 'Failed to download/store media');
+        }
+      }
+
       this.logger.info({ 
         from, 
         sender,
         type: messageContent.type,
-        hasText: !!messageContent.text
+        hasText: !!messageContent.text,
+        hasMedia: !!messageContent.mediaUrl
       }, 'Message received');
 
       if (!this.isDeleted && !this.isClosing) {

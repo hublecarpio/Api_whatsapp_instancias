@@ -2,10 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { InstanceManager } from './core/InstanceManager';
+import { MediaStorage } from './core/MediaStorage';
 import routes from './api/routes';
 import logger from './utils/logger';
 
 dotenv.config();
+
+MediaStorage.initialize();
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '5000', 10);

@@ -9,10 +9,16 @@
     "build": "tsc",
     "serve": "node dist/index.js"
   },
-  "keywords": ["whatsapp", "api", "baileys", "multi-instance"],
+  "keywords": [
+    "whatsapp",
+    "api",
+    "baileys",
+    "multi-instance"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google-cloud/storage": "^7.18.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
