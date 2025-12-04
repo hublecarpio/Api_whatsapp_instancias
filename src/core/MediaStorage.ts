@@ -1,50 +1,49 @@
-import { Storage } from "@google-cloud/storage";
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 import logger from "../utils/logger";
+import { Readable } from "stream";
 
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
-
-const storageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
-      },
-    },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+let s3Client: S3Client | null = null;
+let bucketName: string | null = null;
+let publicBaseUrl: string | null = null;
 
 export class MediaStorage {
-  private static bucketName: string | null = null;
-  private static baseUrl: string | null = null;
-
   static initialize(): boolean {
-    const mediaDir = process.env.MEDIA_STORAGE_DIR || "";
-    if (!mediaDir) {
-      logger.warn("MEDIA_STORAGE_DIR not set - media storage disabled");
+    const endpoint = process.env.MINIO_ENDPOINT;
+    const accessKey = process.env.MINIO_ACCESS_KEY;
+    const secretKey = process.env.MINIO_SECRET_KEY;
+    const bucket = process.env.MINIO_BUCKET;
+
+    if (!endpoint || !accessKey || !secretKey || !bucket) {
+      logger.warn("MinIO not configured - media storage disabled. Set MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET");
       return false;
     }
 
-    const parts = mediaDir.replace(/^\//, "").split("/");
-    this.bucketName = parts[0];
-    this.baseUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.BASE_URL || "http://localhost:5000";
+    try {
+      s3Client = new S3Client({
+        endpoint: endpoint,
+        region: "us-east-1",
+        credentials: {
+          accessKeyId: accessKey,
+          secretAccessKey: secretKey,
+        },
+        forcePathStyle: true,
+      });
 
-    logger.info({ bucketName: this.bucketName }, "MediaStorage initialized");
-    return true;
+      bucketName = bucket;
+      
+      publicBaseUrl = process.env.MINIO_PUBLIC_URL || endpoint;
+
+      logger.info({ endpoint, bucket }, "MediaStorage initialized with MinIO");
+      return true;
+    } catch (error: any) {
+      logger.error({ error: error.message }, "Failed to initialize MediaStorage");
+      return false;
+    }
   }
 
   static isEnabled(): boolean {
-    return this.bucketName !== null;
+    return s3Client !== null && bucketName !== null;
   }
 
   static async storeMedia(
@@ -52,26 +51,24 @@ export class MediaStorage {
     mimetype: string,
     instanceId: string
   ): Promise<{ url: string; path: string } | null> {
-    if (!this.bucketName) {
+    if (!s3Client || !bucketName) {
       return null;
     }
 
     try {
       const extension = this.getExtension(mimetype);
       const fileName = `${randomUUID()}${extension}`;
-      const objectPath = `whatsapp-media/${instanceId}/${fileName}`;
+      const objectPath = `whatsapp/${instanceId}/${fileName}`;
 
-      const bucket = storageClient.bucket(this.bucketName);
-      const file = bucket.file(objectPath);
+      await s3Client.send(new PutObjectCommand({
+        Bucket: bucketName,
+        Key: objectPath,
+        Body: buffer,
+        ContentType: mimetype,
+        ACL: "public-read",
+      }));
 
-      await file.save(buffer, {
-        contentType: mimetype,
-        metadata: {
-          cacheControl: "public, max-age=31536000",
-        },
-      });
-
-      const publicUrl = `${this.baseUrl}/media/${instanceId}/${fileName}`;
+      const publicUrl = `${publicBaseUrl}/${bucketName}/${objectPath}`;
 
       logger.info({ path: objectPath, url: publicUrl }, "Media stored successfully");
 
@@ -86,28 +83,42 @@ export class MediaStorage {
   }
 
   static async getMedia(instanceId: string, fileName: string): Promise<{ buffer: Buffer; mimetype: string } | null> {
-    if (!this.bucketName) {
+    if (!s3Client || !bucketName) {
       return null;
     }
 
     try {
-      const objectPath = `whatsapp-media/${instanceId}/${fileName}`;
-      const bucket = storageClient.bucket(this.bucketName);
-      const file = bucket.file(objectPath);
+      const objectPath = `whatsapp/${instanceId}/${fileName}`;
 
-      const [exists] = await file.exists();
-      if (!exists) {
+      const headResponse = await s3Client.send(new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: objectPath,
+      }));
+
+      const response = await s3Client.send(new GetObjectCommand({
+        Bucket: bucketName,
+        Key: objectPath,
+      }));
+
+      if (!response.Body) {
         return null;
       }
 
-      const [buffer] = await file.download();
-      const [metadata] = await file.getMetadata();
+      const stream = response.Body as Readable;
+      const chunks: Buffer[] = [];
+      
+      for await (const chunk of stream) {
+        chunks.push(chunk as Buffer);
+      }
 
       return {
-        buffer,
-        mimetype: (metadata.contentType as string) || "application/octet-stream",
+        buffer: Buffer.concat(chunks),
+        mimetype: headResponse.ContentType || "application/octet-stream",
       };
     } catch (error: any) {
+      if (error.name === "NotFound" || error.$metadata?.httpStatusCode === 404) {
+        return null;
+      }
       logger.error({ error: error.message }, "Failed to get media");
       return null;
     }
