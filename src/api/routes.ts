@@ -389,4 +389,130 @@ router.delete('/instances/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Send message to LID directly
+router.post('/instances/:id/sendToLid', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { lid, message } = req.body;
+
+    if (!lid || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both "lid" and "message" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.sendToLid(lid, message);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        messageId: result.messageId,
+        lid,
+        status: 'sent'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to send message to LID');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// Get LID to phone number mappings
+router.get('/instances/:id/lid-mappings', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const mappings = instance.getLidMappings();
+    const mappingsObject: Record<string, string> = {};
+    mappings.forEach((phoneNumber, lid) => {
+      mappingsObject[lid] = phoneNumber;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        count: mappings.size,
+        mappings: mappingsObject
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to get LID mappings');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// Add LID to phone number mapping manually
+router.post('/instances/:id/lid-mappings', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { lid, phoneNumber } = req.body;
+
+    if (!lid || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both "lid" and "phoneNumber" are required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    instance.addLidMapping(lid, phoneNumber);
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        lid,
+        phoneNumber,
+        message: 'LID mapping added successfully'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to add LID mapping');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 export default router;

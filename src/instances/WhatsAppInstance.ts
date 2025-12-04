@@ -41,6 +41,7 @@ export class WhatsAppInstance {
   private maxReconnectAttempts: number = 5;
   private isClosing: boolean = false;
   private isDeleted: boolean = false;
+  private lidMappings: Map<string, string> = new Map();
 
   constructor(options: InstanceOptions | string, webhook: string = '') {
     if (typeof options === 'string') {
@@ -105,6 +106,36 @@ export class WhatsAppInstance {
       this.socket.ev.on('messages.upsert', (messageInfo) => {
         this.logger.info({ type: messageInfo.type, count: messageInfo.messages?.length }, 'messages.upsert event received');
         this.handleMessages(messageInfo);
+      });
+
+      // Listen for LID to phone number mappings
+      this.socket.ev.on('contacts.update', (contacts) => {
+        for (const contact of contacts) {
+          if (contact.id && contact.id.endsWith('@lid')) {
+            const phoneNumber = (contact as any).phoneNumber || (contact as any).notify;
+            if (phoneNumber) {
+              const lid = contact.id.replace('@lid', '');
+              const pn = phoneNumber.replace('@s.whatsapp.net', '');
+              this.lidMappings.set(lid, pn);
+              this.logger.debug({ lid, phoneNumber: pn }, 'LID mapping discovered from contacts');
+            }
+          }
+        }
+      });
+
+      // Listen for contacts.upsert for new contacts
+      this.socket.ev.on('contacts.upsert', (contacts) => {
+        for (const contact of contacts) {
+          if (contact.id && contact.id.endsWith('@lid')) {
+            const phoneNumber = (contact as any).phoneNumber || (contact as any).notify;
+            if (phoneNumber) {
+              const lid = contact.id.replace('@lid', '');
+              const pn = phoneNumber.replace('@s.whatsapp.net', '');
+              this.lidMappings.set(lid, pn);
+              this.logger.debug({ lid, phoneNumber: pn }, 'LID mapping discovered from contacts upsert');
+            }
+          }
+        }
       });
     } catch (error: any) {
       this.logger.error({ error: error.message }, 'Failed to create socket');
@@ -247,9 +278,47 @@ export class WhatsAppInstance {
       
       if (isLid) {
         const participant = message.key?.participant;
-        if (participant && participant.endsWith('@s.whatsapp.net')) {
+        const participantAlt = (message.key as any)?.participantAlt;
+        
+        // Try participantAlt first (alternate JID with phone number)
+        if (participantAlt && participantAlt.endsWith('@s.whatsapp.net')) {
+          phoneNumber = participantAlt.replace('@s.whatsapp.net', '');
+          sender = participantAlt;
+          this.logger.debug({ participantAlt, phoneNumber }, 'Phone number from participantAlt');
+        }
+        // Try participant
+        else if (participant && participant.endsWith('@s.whatsapp.net')) {
           phoneNumber = participant.replace('@s.whatsapp.net', '');
           sender = participant;
+        }
+        // Try to resolve from our cached LID mappings
+        else {
+          const lidNumber = remoteJid.replace('@lid', '');
+          const cachedPhone = this.lidMappings.get(lidNumber);
+          if (cachedPhone) {
+            phoneNumber = cachedPhone;
+            sender = `${cachedPhone}@s.whatsapp.net`;
+            this.logger.debug({ lid: lidNumber, phoneNumber }, 'Phone number from LID cache');
+          }
+        }
+        
+        // Try to get from socket's signal repository
+        if (!phoneNumber && this.socket) {
+          try {
+            const lidNumber = remoteJid.replace('@lid', '');
+            const signalRepo = (this.socket as any).signalRepository;
+            if (signalRepo?.lidMapping?.getPNForLID) {
+              const pn = await signalRepo.lidMapping.getPNForLID(remoteJid);
+              if (pn) {
+                phoneNumber = pn.replace('@s.whatsapp.net', '');
+                sender = pn;
+                this.lidMappings.set(lidNumber, phoneNumber);
+                this.logger.debug({ lid: lidNumber, phoneNumber }, 'Phone number from signalRepository');
+              }
+            }
+          } catch (e) {
+            // Signal repository method not available
+          }
         }
         
         const verifiedBizName = (message as any).verifiedBizName;
@@ -260,7 +329,24 @@ export class WhatsAppInstance {
         phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
       }
       
+      // For groups, try to resolve participant LID
+      if (isGroup && sender?.endsWith('@lid')) {
+        const participantAlt = (message.key as any)?.participantAlt;
+        if (participantAlt && participantAlt.endsWith('@s.whatsapp.net')) {
+          phoneNumber = participantAlt.replace('@s.whatsapp.net', '');
+          sender = participantAlt;
+        } else {
+          const lidNumber = sender.replace('@lid', '');
+          const cachedPhone = this.lidMappings.get(lidNumber);
+          if (cachedPhone) {
+            phoneNumber = cachedPhone;
+            sender = `${cachedPhone}@s.whatsapp.net`;
+          }
+        }
+      }
+      
       if (sender?.endsWith('@lid') && !phoneNumber) {
+        // Store the LID for future reference, phone unknown
         phoneNumber = '';
       } else if (sender && !phoneNumber) {
         phoneNumber = sender.replace('@s.whatsapp.net', '').replace('@lid', '');
@@ -597,11 +683,52 @@ export class WhatsAppInstance {
   }
 
   private formatJid(number: string): string {
-    let formatted = number.replace(/[^0-9]/g, '');
-    if (!formatted.includes('@')) {
-      formatted = `${formatted}@s.whatsapp.net`;
+    // If it's already a full JID, return as-is
+    if (number.includes('@')) {
+      return number;
     }
+    
+    // Remove non-numeric characters for phone numbers
+    let formatted = number.replace(/[^0-9]/g, '');
+    formatted = `${formatted}@s.whatsapp.net`;
     return formatted;
+  }
+
+  // Method to send message using LID directly
+  async sendToLid(lid: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Instance not connected' };
+    }
+
+    try {
+      // Format as LID JID
+      const jid = lid.includes('@') ? lid : `${lid}@lid`;
+      const result = await this.socket.sendMessage(jid, { text: message });
+      
+      this.logger.info({ to: jid }, 'Text message sent to LID');
+      
+      await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
+        to: jid,
+        type: 'text',
+        messageId: result?.key?.id
+      });
+
+      return { success: true, messageId: result?.key?.id || undefined };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, lid }, 'Failed to send text message to LID');
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Get cached LID mappings
+  getLidMappings(): Map<string, string> {
+    return this.lidMappings;
+  }
+
+  // Manually add a LID mapping
+  addLidMapping(lid: string, phoneNumber: string): void {
+    this.lidMappings.set(lid.replace('@lid', ''), phoneNumber.replace('@s.whatsapp.net', ''));
+    this.logger.info({ lid, phoneNumber }, 'LID mapping added manually');
   }
 
   async disconnect(): Promise<void> {
