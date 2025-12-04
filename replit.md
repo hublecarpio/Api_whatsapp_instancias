@@ -109,8 +109,99 @@ npm run serve
 - **WebhookDispatcher**: Handles webhook delivery with exponential backoff retry on failures
 - **Sessions**: Stored in `src/storage/sessions/{instanceId}/` using Baileys multi-file auth
 
+## Docker Swarm Deployment
+
+### Build and Push Image
+
+```bash
+# Build the image
+docker build -t whatsapp-api:latest .
+
+# Tag for your registry
+docker tag whatsapp-api:latest your-registry.com/whatsapp-api:latest
+
+# Push to registry
+docker push your-registry.com/whatsapp-api:latest
+```
+
+### Deploy to Swarm
+
+```bash
+# Create .env file with your secrets
+cat > .env << EOF
+MINIO_ENDPOINT=https://your-minio.com
+MINIO_ACCESS_KEY=your_access_key
+MINIO_SECRET_KEY=your_secret_key
+MINIO_BUCKET=whatsapp-media
+MINIO_PUBLIC_URL=https://your-public-url.com
+DOMAIN=your-domain.com
+REGISTRY=your-registry.com
+TAG=latest
+EOF
+
+# Deploy stack
+docker stack deploy -c docker-stack.yml whatsapp --with-registry-auth
+
+# Check status
+docker service ls
+docker service logs whatsapp_whatsapp-api -f
+```
+
+### Useful Commands
+
+```bash
+# Scale replicas (note: WhatsApp sessions are not shared between replicas)
+docker service scale whatsapp_whatsapp-api=1
+
+# Update service
+docker service update --image your-registry.com/whatsapp-api:v2 whatsapp_whatsapp-api
+
+# Remove stack
+docker stack rm whatsapp
+```
+
+### Volume Persistence
+
+Sessions are stored in Docker volumes:
+- `whatsapp_sessions`: WhatsApp auth sessions
+- `whatsapp_data`: Instance metadata
+
+For NFS/shared storage in Swarm:
+```yaml
+volumes:
+  whatsapp_sessions:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=nfs-server.local,rw
+      device: ":/path/to/sessions"
+```
+
+## API Endpoints (Updated)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | / | API info and available endpoints |
+| POST | /instances | Create a new WhatsApp instance |
+| GET | /instances | List all instances |
+| GET | /instances/:id/qr | Get QR code for scanning |
+| GET | /instances/:id/status | Get instance connection status |
+| POST | /instances/:id/sendMessage | Send text message |
+| POST | /instances/:id/sendImage | Send image with caption |
+| POST | /instances/:id/sendFile | Send document/file |
+| POST | /instances/:id/sendToLid | Send message using LID |
+| GET | /instances/:id/lid-mappings | Get LID to phone mappings |
+| POST | /instances/:id/lid-mappings | Add LID to phone mapping |
+| POST | /instances/:id/restart | Restart instance connection |
+| DELETE | /instances/:id | Delete instance and session |
+
 ## Recent Changes
 
+- Added Docker and Docker Swarm deployment support
+- Added LID (Linked ID) resolution system
+- Added MinIO S3-compatible media storage
+- Added sanitizePhone to prevent names in phoneNumber field
+- Improved message parsing for all WhatsApp message types
 - Initial implementation of multi-instance WhatsApp API
 - All core endpoints implemented and functional
 - Webhook dispatcher with retry mechanism
