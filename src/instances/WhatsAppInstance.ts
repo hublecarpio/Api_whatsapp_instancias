@@ -352,6 +352,17 @@ export class WhatsAppInstance {
         phoneNumber = sender.replace('@s.whatsapp.net', '').replace('@lid', '');
       }
       
+      // Clean device ID suffix (e.g., :0, :1) from phone number and sender
+      if (phoneNumber && phoneNumber.includes(':')) {
+        phoneNumber = phoneNumber.split(':')[0];
+      }
+      if (sender && sender.includes(':')) {
+        sender = sender.split(':')[0] + (sender.includes('@') ? '@' + sender.split('@')[1] : '');
+      }
+      if (from && from.includes(':') && !from.endsWith('@g.us')) {
+        from = from.split(':')[0] + (from.includes('@') ? '@' + from.split('@')[1] : '');
+      }
+      
       let messageContent: any = {
         from,
         sender,
