@@ -1,60 +1,107 @@
 version: '3.8'
 
 services:
-  whatsapp-api:
-    image: whatsapp-api:latest
-    build:
-      context: .
-      target: production
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-whatsapp_saas}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-localdevpassword}
     ports:
-      - "5000:5000"
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  core-api:
+    build:
+      context: ./core-api
+      target: production
     environment:
       - NODE_ENV=production
-      - PORT=5000
+      - CORE_API_PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-localdevpassword}@postgres:5432/${POSTGRES_DB:-whatsapp_saas}
+      - SESSION_SECRET=${SESSION_SECRET:-dev-secret-change-in-production}
+      - WA_API_URL=http://whatsapp-api:8080
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+    ports:
+      - "3001:3001"
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  whatsapp-api:
+    build:
+      context: .
+      target: production
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${MINIO_BUCKET}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+    ports:
+      - "8080:8080"
     volumes:
       - whatsapp_sessions:/app/src/storage/sessions
-      - whatsapp_data:/app/src/storage
     networks:
-      - whatsapp-network
-    deploy:
-      mode: replicated
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
-      update_config:
-        parallelism: 1
-        delay: 10s
-        failure_action: rollback
-        order: start-first
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
+      - app-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:3001
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - CORE_API_URL=http://core-api:3001
+    ports:
+      - "5000:3000"
+    networks:
+      - app-network
+    depends_on:
+      - core-api
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
 volumes:
-  whatsapp_sessions:
+  postgres_data:
     driver: local
-  whatsapp_data:
+  whatsapp_sessions:
     driver: local
 
 networks:
-  whatsapp-network:
-    driver: overlay
-    attachable: true
+  app-network:
+    driver: bridge

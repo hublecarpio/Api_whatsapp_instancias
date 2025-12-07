@@ -1,13 +1,100 @@
 version: '3.8'
 
 services:
-  whatsapp-api:
-    image: ${REGISTRY:-localhost:5000}/whatsapp-api:${TAG:-latest}
-    ports:
-      - "5000:5000"
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-whatsapp_saas}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-whatsapp_saas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  core-api:
+    image: ${REGISTRY:-localhost:5000}/whatsapp-saas-core:${TAG:-latest}
     environment:
       - NODE_ENV=production
-      - PORT=5000
+      - CORE_API_PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whatsapp_saas}
+      - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET is required}
+      - WA_API_URL=http://whatsapp-api:8080
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${MINIO_BUCKET}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+    networks:
+      - internal
+      - traefik-public
+    depends_on:
+      - postgres
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=traefik-public"
+        - "traefik.http.routers.core-api.rule=Host(`api.${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.core-api.entrypoints=websecure"
+        - "traefik.http.routers.core-api.tls.certresolver=letsencrypt"
+        - "traefik.http.services.core-api.loadbalancer.server.port=3001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  whatsapp-api:
+    image: ${REGISTRY:-localhost:5000}/whatsapp-saas-wa:${TAG:-latest}
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
@@ -15,9 +102,8 @@ services:
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
     volumes:
       - whatsapp_sessions:/app/src/storage/sessions
-      - whatsapp_data:/app/src/storage
     networks:
-      - whatsapp-network
+      - internal
       - traefik-public
     deploy:
       mode: replicated
@@ -35,9 +121,6 @@ services:
         delay: 10s
         failure_action: rollback
         order: start-first
-      rollback_config:
-        parallelism: 1
-        delay: 10s
       resources:
         limits:
           cpus: '1'
@@ -48,25 +131,74 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.docker.network=traefik-public"
-        - "traefik.http.routers.whatsapp-api.rule=Host(`whatsapp-api.${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.whatsapp-api.rule=Host(`wa.${DOMAIN:-localhost}`)"
         - "traefik.http.routers.whatsapp-api.entrypoints=websecure"
         - "traefik.http.routers.whatsapp-api.tls.certresolver=letsencrypt"
-        - "traefik.http.services.whatsapp-api.loadbalancer.server.port=5000"
+        - "traefik.http.services.whatsapp-api.loadbalancer.server.port=8080"
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    image: ${REGISTRY:-localhost:5000}/whatsapp-saas-frontend:${TAG:-latest}
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - CORE_API_URL=http://core-api:3001
+      - NEXT_PUBLIC_API_URL=https://api.${DOMAIN:-localhost}
+    networks:
+      - internal
+      - traefik-public
+    depends_on:
+      - core-api
+    deploy:
+      mode: replicated
+      replicas: 2
+      placement:
+        constraints:
+          - node.role == worker
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=traefik-public"
+        - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)"
+        - "traefik.http.routers.frontend.entrypoints=websecure"
+        - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+        - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
 volumes:
-  whatsapp_sessions:
+  postgres_data:
     driver: local
-  whatsapp_data:
+  whatsapp_sessions:
     driver: local
 
 networks:
-  whatsapp-network:
+  internal:
     driver: overlay
     attachable: true
   traefik-public:

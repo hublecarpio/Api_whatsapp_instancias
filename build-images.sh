@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# ============================================
+# WhatsApp SaaS Platform - Docker Image Builder
+# ============================================
+
+set -e
+
+# Check prerequisites
+if ! command -v docker &> /dev/null; then
+    echo "Error: Docker is not installed or not in PATH"
+    exit 1
+fi
+
+REGISTRY=${REGISTRY:-"localhost:5000"}
+TAG=${TAG:-"latest"}
+DOMAIN=${DOMAIN:-"localhost"}
+
+echo "Building Docker images..."
+echo "Registry: $REGISTRY"
+echo "Tag: $TAG"
+echo "Domain: $DOMAIN"
+
+echo ""
+echo "=== Building WhatsApp API ==="
+docker build -t $REGISTRY/whatsapp-saas-wa:$TAG -f Dockerfile .
+
+echo ""
+echo "=== Building Core API ==="
+docker build -t $REGISTRY/whatsapp-saas-core:$TAG -f core-api/Dockerfile ./core-api
+
+echo ""
+echo "=== Building Frontend ==="
+docker build -t $REGISTRY/whatsapp-saas-frontend:$TAG \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.$DOMAIN \
+  -f frontend/Dockerfile ./frontend
+
+echo ""
+echo "=== All images built successfully ==="
+echo ""
+
+if [ "$1" == "--push" ]; then
+  echo "Pushing images to registry..."
+  docker push $REGISTRY/whatsapp-saas-wa:$TAG
+  docker push $REGISTRY/whatsapp-saas-core:$TAG
+  docker push $REGISTRY/whatsapp-saas-frontend:$TAG
+  echo "Images pushed successfully!"
+fi
+
+echo ""
+echo "Images ready:"
+echo "  - $REGISTRY/whatsapp-saas-wa:$TAG"
+echo "  - $REGISTRY/whatsapp-saas-core:$TAG"
+echo "  - $REGISTRY/whatsapp-saas-frontend:$TAG"
