@@ -178,4 +178,75 @@ router.post('/:id/test', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/:id/logs', async (req: AuthRequest, res: Response) => {
+  try {
+    const { limit = '50', offset = '0' } = req.query;
+    
+    const tool = await prisma.agentTool.findUnique({
+      where: { id: req.params.id },
+      include: { prompt: { include: { business: { select: { userId: true } } } } }
+    });
+    
+    if (!tool || tool.prompt.business.userId !== req.userId) {
+      return res.status(404).json({ error: 'Tool not found' });
+    }
+    
+    const [logs, total] = await Promise.all([
+      prisma.toolLog.findMany({
+        where: { toolId: req.params.id },
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit as string),
+        skip: parseInt(offset as string)
+      }),
+      prisma.toolLog.count({
+        where: { toolId: req.params.id }
+      })
+    ]);
+    
+    res.json({
+      logs,
+      total,
+      limit: parseInt(limit as string),
+      offset: parseInt(offset as string)
+    });
+  } catch (error) {
+    console.error('Get tool logs error:', error);
+    res.status(500).json({ error: 'Failed to get tool logs' });
+  }
+});
+
+router.get('/:id/stats', async (req: AuthRequest, res: Response) => {
+  try {
+    const tool = await prisma.agentTool.findUnique({
+      where: { id: req.params.id },
+      include: { prompt: { include: { business: { select: { userId: true } } } } }
+    });
+    
+    if (!tool || tool.prompt.business.userId !== req.userId) {
+      return res.status(404).json({ error: 'Tool not found' });
+    }
+    
+    const [totalCalls, avgDuration, lastCall] = await Promise.all([
+      prisma.toolLog.count({ where: { toolId: req.params.id } }),
+      prisma.toolLog.aggregate({
+        where: { toolId: req.params.id },
+        _avg: { duration: true }
+      }),
+      prisma.toolLog.findFirst({
+        where: { toolId: req.params.id },
+        orderBy: { createdAt: 'desc' }
+      })
+    ]);
+    
+    res.json({
+      totalCalls,
+      avgDuration: Math.round(avgDuration._avg.duration || 0),
+      lastCall: lastCall?.createdAt || null
+    });
+  } catch (error) {
+    console.error('Get tool stats error:', error);
+    res.status(500).json({ error: 'Failed to get tool stats' });
+  }
+});
+
 export default router;

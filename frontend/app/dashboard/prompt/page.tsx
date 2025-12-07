@@ -23,6 +23,22 @@ interface Tool {
   enabled: boolean;
 }
 
+interface ToolLog {
+  id: string;
+  contactPhone: string | null;
+  request: any;
+  response: any;
+  status: string;
+  duration: number | null;
+  createdAt: string;
+}
+
+interface ToolStats {
+  totalCalls: number;
+  avgDuration: number;
+  lastCall: string | null;
+}
+
 const DEFAULT_PROMPT = `Eres un asistente de atención al cliente amable y profesional.
 
 Tu objetivo es ayudar a los clientes con sus consultas, proporcionar información sobre productos y servicios, y resolver cualquier problema que puedan tener.
@@ -59,6 +75,11 @@ export default function PromptPage() {
   });
   const [testResult, setTestResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools'>('prompt');
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [selectedToolForLogs, setSelectedToolForLogs] = useState<Tool | null>(null);
+  const [toolLogs, setToolLogs] = useState<ToolLog[]>([]);
+  const [toolStats, setToolStats] = useState<ToolStats | null>(null);
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -272,6 +293,34 @@ export default function PromptPage() {
     setShowToolForm(false);
     setEditingTool(null);
     setNewTool({ name: '', description: '', url: '', method: 'POST', headers: '', bodyTemplate: '', parameters: [] });
+  };
+
+  const handleViewLogs = async (tool: Tool) => {
+    setSelectedToolForLogs(tool);
+    setLoadingLogs(true);
+    setShowLogsModal(true);
+    
+    try {
+      const [logsRes, statsRes] = await Promise.all([
+        toolsApi.logs(tool.id, 50, 0),
+        toolsApi.stats(tool.id)
+      ]);
+      setToolLogs(logsRes.data.logs || []);
+      setToolStats(statsRes.data);
+    } catch (err) {
+      console.error('Failed to load tool logs:', err);
+      setToolLogs([]);
+      setToolStats(null);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleCloseLogsModal = () => {
+    setShowLogsModal(false);
+    setSelectedToolForLogs(null);
+    setToolLogs([]);
+    setToolStats(null);
   };
 
   const handleTestTool = async (tool: Tool) => {
@@ -747,6 +796,12 @@ export default function PromptPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <button
+                          onClick={() => handleViewLogs(tool)}
+                          className="text-sm px-3 py-1 text-purple-600 hover:bg-purple-50 rounded"
+                        >
+                          Historial
+                        </button>
+                        <button
                           onClick={() => handleEditTool(tool)}
                           className="text-sm px-3 py-1 text-gray-600 hover:bg-gray-100 rounded"
                         >
@@ -802,6 +857,87 @@ export default function PromptPage() {
           Para cambiar la configuracion de IA, ve a la seccion "Mi Empresa"
         </p>
       </div>
+
+      {showLogsModal && selectedToolForLogs && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Historial: {selectedToolForLogs.name}
+                </h3>
+                {toolStats && (
+                  <div className="flex gap-4 mt-1 text-sm text-gray-600">
+                    <span>Total: <strong>{toolStats.totalCalls}</strong> llamadas</span>
+                    <span>Promedio: <strong>{toolStats.avgDuration}ms</strong></span>
+                    {toolStats.lastCall && (
+                      <span>Ultima: <strong>{new Date(toolStats.lastCall).toLocaleString()}</strong></span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleCloseLogsModal}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-auto max-h-[70vh]">
+              {loadingLogs ? (
+                <div className="text-center py-8 text-gray-500">Cargando...</div>
+              ) : toolLogs.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No hay registros de uso para este tool
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {toolLogs.map((log) => (
+                    <div key={log.id} className="border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-0.5 rounded text-xs ${
+                            log.status === 'success' 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {log.status}
+                          </span>
+                          {log.duration && (
+                            <span className="text-xs text-gray-500">{log.duration}ms</span>
+                          )}
+                          {log.contactPhone && (
+                            <span className="text-xs text-gray-500">Tel: {log.contactPhone}</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-400">
+                          {new Date(log.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1">Request:</p>
+                          <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-24 font-mono">
+                            {JSON.stringify(log.request, null, 2)}
+                          </pre>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1">Response:</p>
+                          <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-24 font-mono">
+                            {JSON.stringify(log.response, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

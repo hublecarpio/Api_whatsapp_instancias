@@ -85,7 +85,10 @@ export const toolsApi = {
   }) => api.post('/agent/tools', data),
   update: (id: string, data: any) => api.put(`/agent/tools/${id}`, data),
   delete: (id: string) => api.delete(`/agent/tools/${id}`),
-  test: (id: string, testPayload?: any) => api.post(`/agent/tools/${id}/test`, { testPayload })
+  test: (id: string, testPayload?: any) => api.post(`/agent/tools/${id}/test`, { testPayload }),
+  logs: (id: string, limit?: number, offset?: number) => 
+    api.get(`/agent/tools/${id}/logs?limit=${limit || 50}&offset=${offset || 0}`),
+  stats: (id: string) => api.get(`/agent/tools/${id}/stats`)
 };
 
 export const waApi = {

@@ -423,7 +423,40 @@ async function processWithAgent(
       
       if (tool) {
         const args = JSON.parse(toolCall.function.arguments);
+        const startTime = Date.now();
+        
+        console.log(`[TOOL CALL] ${tool.name}:`, JSON.stringify(args));
+        
         const result = await executeExternalTool(tool, args);
+        const duration = Date.now() - startTime;
+        
+        console.log(`[TOOL RESPONSE] ${tool.name} (${duration}ms):`, result.substring(0, 500));
+        
+        try {
+          await prisma.toolLog.create({
+            data: {
+              toolId: tool.id,
+              businessId,
+              contactPhone,
+              request: args,
+              response: result ? JSON.parse(result) : null,
+              status: 'success',
+              duration
+            }
+          });
+        } catch (logError) {
+          await prisma.toolLog.create({
+            data: {
+              toolId: tool.id,
+              businessId,
+              contactPhone,
+              request: args,
+              response: { raw: result },
+              status: 'success',
+              duration
+            }
+          });
+        }
         
         toolMessages.push({
           role: 'tool',
@@ -453,6 +486,15 @@ async function processWithAgent(
   }
   
   const aiResponse = completion.choices[0]?.message?.content || 'Lo siento, no pude procesar tu mensaje.';
+  
+  console.log(`[AI RESPONSE]:`, aiResponse.substring(0, 300));
+  
+  const { mediaItems } = extractMediaFromText(aiResponse);
+  if (mediaItems.length > 0) {
+    console.log(`[MEDIA DETECTED]:`, mediaItems.map(m => `${m.type}: ${m.url}`));
+  } else {
+    console.log(`[MEDIA DETECTED]: None`);
+  }
   
   const instance = business.instances[0];
   if (instance) {

@@ -98,6 +98,21 @@ model AgentTool {
   enabled     Boolean @default(true)
 
   prompt AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  logs   ToolLog[]
+}
+
+model ToolLog {
+  id          String   @id @default(uuid())
+  toolId      String
+  businessId  String
+  contactPhone String?
+  request     Json
+  response    Json?
+  status      String   @default("success")
+  duration    Int?
+  createdAt   DateTime @default(now())
+
+  tool AgentTool @relation(fields: [toolId], references: [id], onDelete: Cascade)
 }
 
 model MessageBuffer {
