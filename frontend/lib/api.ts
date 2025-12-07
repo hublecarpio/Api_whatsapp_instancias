@@ -116,6 +116,29 @@ export const mediaApi = {
   }
 };
 
+export const remindersApi = {
+  getConfig: (businessId: string) => api.get(`/reminders/config/${businessId}`),
+  updateConfig: (businessId: string, data: any) => api.put(`/reminders/config/${businessId}`, data),
+  list: (businessId: string, status?: string, contactPhone?: string) => {
+    let url = `/reminders/${businessId}`;
+    const params = [];
+    if (status) params.push(`status=${status}`);
+    if (contactPhone) params.push(`contactPhone=${contactPhone}`);
+    if (params.length) url += '?' + params.join('&');
+    return api.get(url);
+  },
+  create: (data: {
+    business_id: string;
+    contact_phone: string;
+    contact_name?: string;
+    scheduled_at: string;
+    message_template?: string;
+    type?: string;
+  }) => api.post('/reminders', data),
+  cancel: (id: string) => api.delete(`/reminders/${id}`),
+  pendingCount: (businessId: string) => api.get(`/reminders/pending/count/${businessId}`)
+};
+
 export const tagsApi = {
   list: (businessId: string) => api.get(`/tags?business_id=${businessId}`),
   create: (data: { business_id: string; name: string; color?: string; description?: string }) =>

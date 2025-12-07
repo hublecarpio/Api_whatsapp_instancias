@@ -23,7 +23,8 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     { href: '/dashboard/products', label: 'Productos', icon: '📦' },
     { href: '/dashboard/prompt', label: 'Agente IA', icon: '🤖' },
     { href: '/dashboard/chat', label: 'Chat', icon: '💭' },
-    { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' }
+    { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' },
+    { href: '/dashboard/reminders', label: 'Seguimientos', icon: '⏰' }
   ];
 
   return (

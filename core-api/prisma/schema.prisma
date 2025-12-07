@@ -28,13 +28,15 @@ model Business {
   botEnabled   Boolean            @default(true)
   createdAt    DateTime           @default(now())
 
-  user         User               @relation(fields: [userId], references: [id])
-  instances    WhatsAppInstance[]
-  products     Product[]
-  policy       Policy?
-  promptMaster AgentPrompt?
-  messages     MessageLog[]
-  tags         Tag[]
+  user           User               @relation(fields: [userId], references: [id])
+  instances      WhatsAppInstance[]
+  products       Product[]
+  policy         Policy?
+  promptMaster   AgentPrompt?
+  messages       MessageLog[]
+  tags           Tag[]
+  followUpConfig FollowUpConfig?
+  reminders      Reminder[]
 }
 
 model WhatsAppInstance {
@@ -202,4 +204,45 @@ model StagePrompt {
   toolsOverride   Json?
 
   tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+}
+
+model FollowUpConfig {
+  id                  String   @id @default(uuid())
+  businessId          String   @unique
+  enabled             Boolean  @default(true)
+  firstDelayMinutes   Int      @default(15)
+  secondDelayMinutes  Int      @default(60)
+  thirdDelayMinutes   Int      @default(240)
+  maxDailyAttempts    Int      @default(3)
+  pressureLevel       Int      @default(1)
+  allowedStartHour    Int      @default(9)
+  allowedEndHour      Int      @default(21)
+  weekendsEnabled     Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  reminders Reminder[]
+}
+
+model Reminder {
+  id              String    @id @default(uuid())
+  businessId      String
+  contactPhone    String
+  contactName     String?
+  scheduledAt     DateTime
+  executedAt      DateTime?
+  type            String    @default("auto")
+  status          String    @default("pending")
+  attemptNumber   Int       @default(1)
+  messageTemplate String?
+  generatedMessage String?
+  configId        String?
+  createdAt       DateTime  @default(now())
+  
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  config FollowUpConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, status, scheduledAt])
+  @@index([businessId, contactPhone])
 }

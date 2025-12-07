@@ -54,6 +54,12 @@ router.post('/:businessId', async (req: Request, res: Response) => {
         
       case 'message.received':
         if (data && (data.text || data.mediaUrl)) {
+          const fromJid = data.from || '';
+          if (fromJid.endsWith('@g.us') || fromJid.includes('@g.us')) {
+            console.log(`Ignoring group message from ${fromJid}`);
+            return res.json({ received: true, ignored: 'group_message' });
+          }
+          
           const instance = await prisma.whatsAppInstance.findFirst({
             where: { businessId }
           });

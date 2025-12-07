@@ -13,6 +13,8 @@ import webhookRoutes from './routes/webhook.js';
 import toolsRoutes from './routes/tools.js';
 import mediaRoutes from './routes/media.js';
 import tagsRoutes from './routes/tags.js';
+import remindersRoutes from './routes/reminders.js';
+import { startReminderWorker } from './services/reminderWorker.js';
 
 dotenv.config();
 
@@ -54,6 +56,7 @@ app.use('/webhook', webhookRoutes);
 app.use('/agent/tools', toolsRoutes);
 app.use('/media', mediaRoutes);
 app.use('/tags', tagsRoutes);
+app.use('/reminders', remindersRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
@@ -64,4 +67,5 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Core API running at http://0.0.0.0:${PORT}`);
+  startReminderWorker();
 });
