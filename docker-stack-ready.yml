@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=whatsapp_saas
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=CambiaEstoPassword123
+    volumes:
+      - whatsapp_postgres_data:/var/lib/postgresql/data
+    networks:
+      - whatsapp_internal
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d whatsapp_saas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  core-api:
+    image: docker.io/iamhuble/whatsapp-saas-core:latest
+    environment:
+      - NODE_ENV=production
+      - CORE_API_PORT=4001
+      - DATABASE_URL=postgresql://postgres:CambiaEstoPassword123@postgres:5432/whatsapp_saas
+      - SESSION_SECRET=CambiaEstoSecretLargoDeAlMenos32Caracteres
+      - WA_API_URL=http://whatsapp-api:4080
+      - MINIO_ENDPOINT=https://tu-minio.com
+      - MINIO_ACCESS_KEY=tuAccessKey
+      - MINIO_SECRET_KEY=tuSecretKey
+      - MINIO_BUCKET=whatsapp-media
+      - MINIO_PUBLIC_URL=https://tu-minio-publico.com
+    networks:
+      - whatsapp_internal
+      - traefik_public
+    depends_on:
+      - postgres
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.whatsapp_core.rule=Host(`api.efficore.es`)"
+        - "traefik.http.routers.whatsapp_core.entrypoints=websecure"
+        - "traefik.http.routers.whatsapp_core.tls.certresolver=le"
+        - "traefik.http.services.whatsapp_core.loadbalancer.server.port=4001"
+
+  whatsapp-api:
+    image: docker.io/iamhuble/whatsapp-saas-wa:latest
+    environment:
+      - NODE_ENV=production
+      - PORT=4080
+      - MINIO_ENDPOINT=https://tu-minio.com
+      - MINIO_ACCESS_KEY=tuAccessKey
+      - MINIO_SECRET_KEY=tuSecretKey
+      - MINIO_BUCKET=whatsapp-media
+      - MINIO_PUBLIC_URL=https://tu-minio-publico.com
+    volumes:
+      - whatsapp_sessions:/app/src/storage/sessions
+    networks:
+      - whatsapp_internal
+      - traefik_public
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.whatsapp_wa.rule=Host(`wa.efficore.es`)"
+        - "traefik.http.routers.whatsapp_wa.entrypoints=websecure"
+        - "traefik.http.routers.whatsapp_wa.tls.certresolver=le"
+        - "traefik.http.services.whatsapp_wa.loadbalancer.server.port=4080"
+
+  frontend:
+    image: docker.io/iamhuble/whatsapp-saas-frontend:latest
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - CORE_API_URL=http://core-api:4001
+    networks:
+      - whatsapp_internal
+      - traefik_public
+    depends_on:
+      - core-api
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.whatsapp_frontend.rule=Host(`app.efficore.es`)"
+        - "traefik.http.routers.whatsapp_frontend.entrypoints=websecure"
+        - "traefik.http.routers.whatsapp_frontend.tls.certresolver=le"
+        - "traefik.http.services.whatsapp_frontend.loadbalancer.server.port=4000"
+
+volumes:
+  whatsapp_postgres_data:
+    driver: local
+  whatsapp_sessions:
+    driver: local
+
+networks:
+  whatsapp_internal:
+    driver: overlay
+    attachable: true
+  traefik_public:
+    external: true
