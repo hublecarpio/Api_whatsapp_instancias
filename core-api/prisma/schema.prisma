@@ -73,12 +73,41 @@ model Policy {
 }
 
 model AgentPrompt {
-  id         String   @id @default(uuid())
-  businessId String   @unique
-  prompt     String
-  updatedAt  DateTime @default(now())
+  id            String   @id @default(uuid())
+  businessId    String   @unique
+  prompt        String
+  bufferSeconds Int      @default(0)
+  historyLimit  Int      @default(10)
+  splitMessages Boolean  @default(true)
+  updatedAt     DateTime @default(now())
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  tools    AgentTool[]
+}
+
+model AgentTool {
+  id          String  @id @default(uuid())
+  promptId    String
+  name        String
+  description String
+  url         String
+  method      String  @default("POST")
+  headers     Json?
+  bodyTemplate Json?
+  enabled     Boolean @default(true)
+
+  prompt AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+}
+
+model MessageBuffer {
+  id          String   @id @default(uuid())
+  businessId  String
+  contactPhone String
+  messages    Json
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@unique([businessId, contactPhone])
 }
 
 model MessageLog {
