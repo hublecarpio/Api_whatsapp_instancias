@@ -119,16 +119,27 @@ router.get('/:businessId/qr', async (req: AuthRequest, res: Response) => {
     
     const waResponse = await axios.get(`${WA_API_URL}/instances/${instance.instanceBackendId}/qr`);
     
-    if (waResponse.data.qr) {
+    const qrCode = waResponse.data?.data?.qrCode || waResponse.data?.qrCode || instance.qr;
+    
+    if (qrCode && qrCode !== instance.qr) {
       await prisma.whatsAppInstance.update({
         where: { id: instance.id },
-        data: { qr: waResponse.data.qr }
+        data: { qr: qrCode }
       });
     }
     
-    res.json(waResponse.data);
+    res.json({ 
+      qr: qrCode,
+      status: waResponse.data?.data?.status || instance.status
+    });
   } catch (error: any) {
     console.error('Get QR error:', error.response?.data || error.message);
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { businessId: req.params.businessId }
+    });
+    if (instance?.qr) {
+      return res.json({ qr: instance.qr, status: instance.status });
+    }
     res.status(500).json({ error: 'Failed to get QR code' });
   }
 });
