@@ -36,9 +36,12 @@ export default function ChatPage() {
   const [previewFile, setPreviewFile] = useState<{ file: File; url: string; type: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [botToggling, setBotToggling] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -165,6 +168,46 @@ export default function ChatPage() {
       console.error('Failed to toggle bot:', err);
     } finally {
       setBotToggling(false);
+    }
+  };
+
+  const handleStartRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      const audioChunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const file = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
+        setPreviewFile({
+          file,
+          url: URL.createObjectURL(file),
+          type: 'audio'
+        });
+        
+        stream.getTracks().forEach(track => track.stop());
+        setIsRecording(false);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      setError('No se pudo acceder al micrófono. Verifica los permisos.');
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
     }
   };
 
@@ -443,13 +486,6 @@ export default function ChatPage() {
                     className="hidden"
                     accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.rar"
                   />
-                  <input
-                    type="file"
-                    ref={audioInputRef}
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    accept="audio/*"
-                  />
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -464,10 +500,14 @@ export default function ChatPage() {
 
                   <button
                     type="button"
-                    onClick={() => audioInputRef.current?.click()}
-                    className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors"
-                    disabled={sending}
-                    title="Enviar audio"
+                    onClick={isRecording ? handleStopRecording : handleStartRecording}
+                    className={`p-2.5 rounded-full transition-colors ${
+                      isRecording 
+                        ? 'bg-red-500 text-white animate-pulse' 
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                    }`}
+                    disabled={sending && !isRecording}
+                    title={isRecording ? 'Dejar de grabar' : 'Grabar audio'}
                   >
                     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3z"/>
