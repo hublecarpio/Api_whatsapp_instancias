@@ -1,0 +1,97 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  createdAt    DateTime   @default(now())
+  businesses   Business[]
+}
+
+model Business {
+  id           String             @id @default(uuid())
+  userId       String
+  name         String
+  description  String?
+  industry     String?
+  logoUrl      String?
+  openaiApiKey String?
+  openaiModel  String?            @default("gpt-4.1-mini")
+  botEnabled   Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+
+  user         User               @relation(fields: [userId], references: [id])
+  instances    WhatsAppInstance[]
+  products     Product[]
+  policy       Policy?
+  promptMaster AgentPrompt?
+  messages     MessageLog[]
+}
+
+model WhatsAppInstance {
+  id                String    @id @default(uuid())
+  businessId        String
+  instanceBackendId String
+  phoneNumber       String?
+  status            String    @default("pending_qr")
+  qr                String?
+  lastConnection    DateTime?
+  createdAt         DateTime  @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  businessId  String
+  title       String
+  description String?
+  price       Float
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Policy {
+  id             String  @id @default(uuid())
+  businessId     String  @unique
+  shippingPolicy String?
+  refundPolicy   String?
+  brandVoice     String?
+  allowedHours   String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model AgentPrompt {
+  id         String   @id @default(uuid())
+  businessId String   @unique
+  prompt     String
+  updatedAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model MessageLog {
+  id         String   @id @default(uuid())
+  businessId String
+  instanceId String?
+  direction  String
+  sender     String?
+  recipient  String?
+  message    String?
+  mediaUrl   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
