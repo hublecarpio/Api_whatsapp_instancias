@@ -65,7 +65,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`🚀 Core API running at http://0.0.0.0:${PORT}`);
   startReminderWorker();
 });
