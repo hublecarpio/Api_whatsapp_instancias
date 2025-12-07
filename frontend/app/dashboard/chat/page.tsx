@@ -185,8 +185,8 @@ export default function ChatPage() {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        const file = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunks, { type: 'audio/ogg' });
+        const file = new File([audioBlob], 'audio.ogg', { type: 'audio/ogg' });
         setPreviewFile({
           file,
           url: URL.createObjectURL(file),
@@ -509,9 +509,8 @@ export default function ChatPage() {
                     disabled={sending && !isRecording}
                     title={isRecording ? 'Dejar de grabar' : 'Grabar audio'}
                   >
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3z"/>
-                      <path d="M17 16.91c-.49.97-1.25 1.81-2.17 2.41.96.26 1.98.4 3.04.4 2.21 0 4.35-.72 6.07-2.04l-2.21-2.21c-1.43 1.23-3.3 1.95-5.37 1.95-.27 0-.54-.03-.81-.06.53-.99.83-2.11.83-3.31 0-.56-.05-1.11-.14-1.64 2.25-1.27 3.75-3.78 3.75-6.6 0-4.14-3.36-7.5-7.5-7.5S4.5 4.86 4.5 9c0 2.82 1.5 5.33 3.75 6.6-.09.53-.14 1.08-.14 1.64 0 1.2.3 2.32.83 3.31-.27.03-.54.06-.81.06-2.07 0-3.94-.72-5.37-1.95L.79 19.8c1.72 1.32 3.86 2.04 6.04 2.04 1.06 0 2.08-.14 3.04-.4-.92-.6-1.68-1.44-2.17-2.41H17z"/>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                     </svg>
                   </button>
                   
