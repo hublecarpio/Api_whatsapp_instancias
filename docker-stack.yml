@@ -12,8 +12,10 @@ services:
     networks:
       - internal
     deploy:
-      mode: replicated
       replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -38,20 +40,27 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
-    ports:
-      - "${CORE_API_PORT:-3001}:${CORE_API_PORT:-3001}"
     networks:
       - internal
+      - traefik_public
     depends_on:
       - postgres
     deploy:
-      mode: replicated
       replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
-        window: 120s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.whatsapp_core.rule=Host(`api.${DOMAIN}`)"
+        - "traefik.http.routers.whatsapp_core.entrypoints=websecure"
+        - "traefik.http.routers.whatsapp_core.tls.certresolver=le"
+        - "traefik.http.services.whatsapp_core.loadbalancer.server.port=${CORE_API_PORT:-3001}"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:${CORE_API_PORT:-3001}/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
@@ -69,20 +78,27 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
-    ports:
-      - "${WA_API_PORT:-8080}:${WA_API_PORT:-8080}"
     volumes:
       - whatsapp_sessions:/app/src/storage/sessions
     networks:
       - internal
+      - traefik_public
     deploy:
-      mode: replicated
       replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
-        window: 120s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.whatsapp_wa.rule=Host(`wa.${DOMAIN}`)"
+        - "traefik.http.routers.whatsapp_wa.entrypoints=websecure"
+        - "traefik.http.routers.whatsapp_wa.tls.certresolver=le"
+        - "traefik.http.services.whatsapp_wa.loadbalancer.server.port=${WA_API_PORT:-8080}"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:${WA_API_PORT:-8080}/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
@@ -96,20 +112,27 @@ services:
       - NODE_ENV=production
       - PORT=${FRONTEND_PORT:-3000}
       - CORE_API_URL=http://core-api:${CORE_API_PORT:-3001}
-    ports:
-      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
     networks:
       - internal
+      - traefik_public
     depends_on:
       - core-api
     deploy:
-      mode: replicated
-      replicas: 1
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
-        window: 120s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.whatsapp_frontend.rule=Host(`app.${DOMAIN}`)"
+        - "traefik.http.routers.whatsapp_frontend.entrypoints=websecure"
+        - "traefik.http.routers.whatsapp_frontend.tls.certresolver=le"
+        - "traefik.http.services.whatsapp_frontend.loadbalancer.server.port=${FRONTEND_PORT:-3000}"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:${FRONTEND_PORT:-3000}/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
@@ -127,3 +150,5 @@ networks:
   internal:
     driver: overlay
     attachable: true
+  traefik_public:
+    external: true

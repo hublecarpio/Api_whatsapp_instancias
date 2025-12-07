@@ -6,13 +6,19 @@
 
 set -e
 
+# Load .env file if it exists
+if [ -f .env ]; then
+    echo "Loading variables from .env file..."
+    export $(grep -v '^#' .env | xargs)
+fi
+
 # Check prerequisites
 if ! command -v docker &> /dev/null; then
     echo "Error: Docker is not installed or not in PATH"
     exit 1
 fi
 
-REGISTRY=${REGISTRY:-"localhost:5000"}
+REGISTRY=${REGISTRY:-"docker.io/iamhuble"}
 TAG=${TAG:-"latest"}
 DOMAIN=${DOMAIN:-"localhost"}
 
