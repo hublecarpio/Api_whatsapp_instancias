@@ -53,29 +53,40 @@ router.post('/:businessId', async (req: Request, res: Response) => {
         break;
         
       case 'message.received':
-        if (data && data.from && data.text) {
+        if (data && (data.text || data.mediaUrl)) {
           const instance = await prisma.whatsAppInstance.findFirst({
             where: { businessId }
           });
+          
+          const contactPhone = data.phoneNumber || data.sender?.replace('@s.whatsapp.net', '') || data.from;
+          const contactName = data.pushName || '';
+          const contactJid = data.from;
           
           await prisma.messageLog.create({
             data: {
               businessId,
               instanceId: instance?.id,
               direction: 'inbound',
-              sender: data.from,
-              message: data.text,
+              sender: contactPhone,
+              message: data.text || null,
               mediaUrl: data.mediaUrl || null,
-              metadata: data
+              metadata: {
+                ...data,
+                contactPhone,
+                contactName,
+                contactJid
+              }
             }
           });
           
-          if (business.botEnabled && business.openaiApiKey) {
+          if (business.botEnabled && business.openaiApiKey && data.text) {
             try {
               await axios.post(`${CORE_API_URL}/agent/think`, {
                 business_id: businessId,
                 user_message: data.text,
-                phone: data.from,
+                phone: contactJid,
+                phoneNumber: contactPhone,
+                contactName,
                 instanceId: instance?.id
               });
             } catch (err: any) {

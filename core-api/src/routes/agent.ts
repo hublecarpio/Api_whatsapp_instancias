@@ -8,11 +8,13 @@ const WA_API_URL = process.env.WA_API_URL || 'http://localhost:5000';
 
 router.post('/think', async (req: Request, res: Response) => {
   try {
-    const { business_id, user_message, phone, instanceId } = req.body;
+    const { business_id, user_message, phone, phoneNumber, contactName, instanceId } = req.body;
     
     if (!business_id || !user_message || !phone) {
       return res.status(400).json({ error: 'business_id, user_message and phone are required' });
     }
+    
+    const contactPhone = phoneNumber || phone.replace('@s.whatsapp.net', '').replace('@lid', '');
     
     const business = await prisma.business.findUnique({
       where: { id: business_id },
@@ -27,16 +29,6 @@ router.post('/think', async (req: Request, res: Response) => {
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
     }
-    
-    await prisma.messageLog.create({
-      data: {
-        businessId: business_id,
-        instanceId: instanceId || null,
-        direction: 'inbound',
-        sender: phone,
-        message: user_message
-      }
-    });
     
     if (!business.botEnabled) {
       return res.json({
@@ -78,7 +70,15 @@ router.post('/think', async (req: Request, res: Response) => {
     }
     
     const recentMessages = await prisma.messageLog.findMany({
-      where: { businessId: business_id, sender: phone },
+      where: { 
+        businessId: business_id,
+        OR: [
+          { sender: contactPhone },
+          { recipient: contactPhone },
+          { sender: phone },
+          { recipient: phone }
+        ]
+      },
       orderBy: { createdAt: 'desc' },
       take: 10
     });
@@ -115,8 +115,13 @@ router.post('/think', async (req: Request, res: Response) => {
             businessId: business_id,
             instanceId: instance.id,
             direction: 'outbound',
-            recipient: phone,
-            message: aiResponse
+            recipient: contactPhone,
+            message: aiResponse,
+            metadata: {
+              contactJid: phone,
+              contactPhone,
+              contactName: contactName || ''
+            }
           }
         });
       } catch (sendError: any) {

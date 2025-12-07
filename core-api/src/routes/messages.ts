@@ -65,6 +65,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     
     const conversationsMap = new Map<string, {
       phone: string;
+      contactName: string;
       lastMessage: string | null;
       lastMessageAt: Date;
       messageCount: number;
@@ -75,9 +76,13 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       const phone = msg.sender || msg.recipient || 'unknown';
       if (phone === 'unknown') return;
       
+      const metadata = msg.metadata as any;
+      const contactName = metadata?.contactName || metadata?.pushName || '';
+      
       if (!conversationsMap.has(phone)) {
         conversationsMap.set(phone, {
           phone,
+          contactName,
           lastMessage: msg.message,
           lastMessageAt: msg.createdAt,
           messageCount: 1,
@@ -88,6 +93,9 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
         conv.messageCount++;
         if (msg.direction === 'inbound') {
           conv.unread++;
+        }
+        if (!conv.contactName && contactName) {
+          conv.contactName = contactName;
         }
       }
     });

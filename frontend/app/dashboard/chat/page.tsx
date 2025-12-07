@@ -6,6 +6,7 @@ import { messageApi, waApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
+  contactName: string;
   lastMessage: string | null;
   lastMessageAt: string;
   messageCount: number;
@@ -25,6 +26,7 @@ export default function ChatPage() {
   const { currentBusiness } = useBusinessStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const [selectedContactName, setSelectedContactName] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -150,7 +152,10 @@ export default function ChatPage() {
               conversations.map((conv) => (
                 <button
                   key={conv.phone}
-                  onClick={() => setSelectedPhone(conv.phone)}
+                  onClick={() => {
+                    setSelectedPhone(conv.phone);
+                    setSelectedContactName(conv.contactName || '');
+                  }}
                   className={`w-full p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${
                     selectedPhone === conv.phone ? 'bg-green-50' : ''
                   }`}
@@ -161,8 +166,13 @@ export default function ChatPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 truncate">
-                        +{conv.phone}
+                        {conv.contactName || `+${conv.phone}`}
                       </p>
+                      {conv.contactName && (
+                        <p className="text-xs text-gray-400 truncate">
+                          +{conv.phone}
+                        </p>
+                      )}
                       <p className="text-sm text-gray-500 truncate">
                         {conv.lastMessage || 'Sin mensajes'}
                       </p>
@@ -185,7 +195,12 @@ export default function ChatPage() {
                   <span className="text-gray-600">👤</span>
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">+{selectedPhone}</p>
+                  <p className="font-medium text-gray-900">
+                    {selectedContactName || `+${selectedPhone}`}
+                  </p>
+                  {selectedContactName && (
+                    <p className="text-xs text-gray-500">+{selectedPhone}</p>
+                  )}
                   <p className="text-xs text-gray-500">
                     {currentBusiness.botEnabled ? '🤖 Bot activo' : '😴 Bot inactivo'}
                   </p>
