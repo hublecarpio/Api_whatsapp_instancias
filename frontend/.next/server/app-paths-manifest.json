@@ -1,1 +1,4 @@
-{}
+{
+  "/dashboard/chat/page": "app/dashboard/chat/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js"
+}

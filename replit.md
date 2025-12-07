@@ -260,3 +260,12 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
   - Files (.pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .zip, .rar) via sendFile API
   - S3 shortcodes: 6-char alphanumeric codes with optional extension (e.g., "0enb2q.png" or bare "0enb2q")
   - Full URLs with file extensions are detected and sent with correct media type
+- **Dec 7 2025**: Added Tool execution history modal - view logs and stats for each agent tool
+- **Dec 7 2025**: Redesigned chat panel with WhatsApp-style UI:
+  - Modern design with message bubbles and read receipts
+  - Collapsible sidebar (click toggle button to hide/show contact list)
+  - File/image attachment support with S3/MinIO upload
+  - Inline image and video display in conversations
+  - Document/file download links
+  - Error handling with user notifications
+- **Dec 7 2025**: Added media upload endpoint (`/media/upload`) for chat attachments
