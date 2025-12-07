@@ -14,20 +14,10 @@ services:
     deploy:
       mode: replicated
       replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-whatsapp_saas}"]
       interval: 10s
@@ -36,156 +26,92 @@ services:
       start_period: 30s
 
   core-api:
-    image: ${REGISTRY:-localhost:5000}/whatsapp-saas-core:${TAG:-latest}
+    image: ${REGISTRY}/whatsapp-saas-core:${TAG:-latest}
     environment:
       - NODE_ENV=production
-      - CORE_API_PORT=3001
+      - CORE_API_PORT=${CORE_API_PORT:-3001}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whatsapp_saas}
       - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET is required}
-      - WA_API_URL=http://whatsapp-api:8080
+      - WA_API_URL=http://whatsapp-api:${WA_API_PORT:-8080}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+    ports:
+      - "${CORE_API_PORT:-3001}:${CORE_API_PORT:-3001}"
     networks:
       - internal
-      - traefik-public
     depends_on:
       - postgres
     deploy:
       mode: replicated
       replicas: 1
-      placement:
-        constraints:
-          - node.role == worker
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
         window: 120s
-      update_config:
-        parallelism: 1
-        delay: 10s
-        failure_action: rollback
-        order: start-first
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
-      labels:
-        - "traefik.enable=true"
-        - "traefik.docker.network=traefik-public"
-        - "traefik.http.routers.core-api.rule=Host(`api.${DOMAIN:-localhost}`)"
-        - "traefik.http.routers.core-api.entrypoints=websecure"
-        - "traefik.http.routers.core-api.tls.certresolver=letsencrypt"
-        - "traefik.http.services.core-api.loadbalancer.server.port=3001"
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:${CORE_API_PORT:-3001}/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
 
   whatsapp-api:
-    image: ${REGISTRY:-localhost:5000}/whatsapp-saas-wa:${TAG:-latest}
+    image: ${REGISTRY}/whatsapp-saas-wa:${TAG:-latest}
     environment:
       - NODE_ENV=production
-      - PORT=8080
+      - PORT=${WA_API_PORT:-8080}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+    ports:
+      - "${WA_API_PORT:-8080}:${WA_API_PORT:-8080}"
     volumes:
       - whatsapp_sessions:/app/src/storage/sessions
     networks:
       - internal
-      - traefik-public
     deploy:
       mode: replicated
       replicas: 1
-      placement:
-        constraints:
-          - node.role == worker
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
         window: 120s
-      update_config:
-        parallelism: 1
-        delay: 10s
-        failure_action: rollback
-        order: start-first
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
-      labels:
-        - "traefik.enable=true"
-        - "traefik.docker.network=traefik-public"
-        - "traefik.http.routers.whatsapp-api.rule=Host(`wa.${DOMAIN:-localhost}`)"
-        - "traefik.http.routers.whatsapp-api.entrypoints=websecure"
-        - "traefik.http.routers.whatsapp-api.tls.certresolver=letsencrypt"
-        - "traefik.http.services.whatsapp-api.loadbalancer.server.port=8080"
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:${WA_API_PORT:-8080}/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
   frontend:
-    image: ${REGISTRY:-localhost:5000}/whatsapp-saas-frontend:${TAG:-latest}
+    image: ${REGISTRY}/whatsapp-saas-frontend:${TAG:-latest}
     environment:
       - NODE_ENV=production
-      - PORT=3000
-      - CORE_API_URL=http://core-api:3001
-      - NEXT_PUBLIC_API_URL=https://api.${DOMAIN:-localhost}
+      - PORT=${FRONTEND_PORT:-3000}
+      - CORE_API_URL=http://core-api:${CORE_API_PORT:-3001}
+    ports:
+      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
     networks:
       - internal
-      - traefik-public
     depends_on:
       - core-api
     deploy:
       mode: replicated
-      replicas: 2
-      placement:
-        constraints:
-          - node.role == worker
+      replicas: 1
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
         window: 120s
-      update_config:
-        parallelism: 1
-        delay: 10s
-        failure_action: rollback
-        order: start-first
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.1'
-          memory: 64M
-      labels:
-        - "traefik.enable=true"
-        - "traefik.docker.network=traefik-public"
-        - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)"
-        - "traefik.http.routers.frontend.entrypoints=websecure"
-        - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-        - "traefik.http.services.frontend.loadbalancer.server.port=3000"
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:${FRONTEND_PORT:-3000}/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -201,5 +127,3 @@ networks:
   internal:
     driver: overlay
     attachable: true
-  traefik-public:
-    external: true

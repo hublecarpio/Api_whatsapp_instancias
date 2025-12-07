@@ -1,17 +1,70 @@
 # WhatsApp SaaS Platform - Deployment Guide
 
+## Services Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         EXTERNAL                                 │
+│                    (Your Traefik/Nginx)                         │
+│         You add labels to connect to your proxy                 │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+    ┌───────────────────────┼───────────────────────┐
+    │                       │                       │
+    ▼                       ▼                       ▼
+┌─────────┐          ┌─────────────┐         ┌─────────────┐
+│Frontend │ ──────▶  │  Core API   │ ──────▶ │WhatsApp API │
+│ :3000   │          │   :3001     │         │   :8080     │
+│(Next.js)│          │  (Express)  │         │  (Baileys)  │
+└─────────┘          └──────┬──────┘         └──────┬──────┘
+                            │                       │
+                            ▼                       ▼
+                     ┌────────────┐          ┌────────────┐
+                     │ PostgreSQL │          │  Sessions  │
+                     │   :5432    │          │  (Volume)  │
+                     │ (internal) │          └────────────┘
+                     └────────────┘
+```
+
+### 4 Services Total
+
+| Service | Default Port | Configurable | Exposed | Description |
+|---------|-------------|--------------|---------|-------------|
+| **frontend** | 3000 | `FRONTEND_PORT` | Yes | Next.js UI - Put your domain here |
+| **core-api** | 3001 | `CORE_API_PORT` | Yes | Business logic, auth, AI |
+| **whatsapp-api** | 8080 | `WA_API_PORT` | Yes | Baileys multi-instance |
+| **postgres** | 5432 | No | No | Database (internal only) |
+
+### Internal Communication
+
+- `frontend` → `core-api` via `http://core-api:${CORE_API_PORT}`
+- `core-api` → `whatsapp-api` via `http://whatsapp-api:${WA_API_PORT}`
+- `core-api` → `postgres` via `postgresql://...@postgres:5432/...`
+
+### For Your Domain
+
+Only expose **frontend** to the public. The other services communicate internally.
+
+Example Traefik label for frontend:
+```yaml
+labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.whatsapp-frontend.rule=Host(`app.yourdomain.com`)"
+  - "traefik.http.services.whatsapp-frontend.loadbalancer.server.port=3000"
+```
+
+---
+
 ## Prerequisites
 
-- **Docker 20.10+** - Required for building and running containers
-- **Docker Compose 2.x** - For local development
-- **Docker Swarm initialized** (`docker swarm init`) - For production deployment
-- **Traefik** configured with `traefik-public` network - For routing and SSL
-- **A private Docker registry** (or Docker Hub) - For storing images
+- **Docker 20.10+**
+- **Docker Swarm initialized** (`docker swarm init`)
+- **Private Docker registry** (or Docker Hub)
 
-Verify Docker is installed:
+Verify Docker:
 ```bash
 docker --version
-docker compose version
+docker swarm init  # if not already
 ```
 
 ## Quick Start

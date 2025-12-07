@@ -24,8 +24,9 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/dist ./dist
+COPY entrypoint.sh ./entrypoint.sh
 
-RUN chown -R node:node /app
+RUN chmod +x ./entrypoint.sh && chown -R node:node /app
 
 ENV NODE_ENV=production
 ENV CORE_API_PORT=3001
@@ -37,4 +38,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3001/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-CMD ["node", "dist/index.js"]
+CMD ["./entrypoint.sh"]
