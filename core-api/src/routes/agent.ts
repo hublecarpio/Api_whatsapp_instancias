@@ -8,6 +8,46 @@ const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
 const activeBuffers = new Map<string, NodeJS.Timeout>();
 
+const S3_IMAGE_BASE_URL = 'https://memoriaback.iamhuble.space/n8nback';
+
+function extractS3ImageCodes(text: string): { codes: string[]; cleanedText: string } {
+  const pattern = /\b([a-z0-9]{6})\b/gi;
+  const codes: string[] = [];
+  let cleanedText = text;
+  
+  const matches = text.match(pattern) || [];
+  for (const match of matches) {
+    if (/^[a-z0-9]{6}$/i.test(match) && /[a-z]/i.test(match) && /[0-9]/.test(match)) {
+      codes.push(match.toLowerCase());
+      cleanedText = cleanedText.replace(new RegExp(`\\b${match}\\b`, 'g'), '').trim();
+    }
+  }
+  
+  cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
+  
+  return { codes, cleanedText };
+}
+
+async function sendS3Image(
+  instanceBackendId: string,
+  to: string,
+  code: string,
+  caption?: string
+): Promise<boolean> {
+  try {
+    const imageUrl = `${S3_IMAGE_BASE_URL}/${code}`;
+    await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendImage`, {
+      to,
+      imageUrl,
+      caption: caption || ''
+    });
+    return true;
+  } catch (error: any) {
+    console.error(`Failed to send S3 image ${code}:`, error.message);
+    return false;
+  }
+}
+
 function interpolateString(template: string, args: Record<string, any>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     const value = args[key];
@@ -81,35 +121,49 @@ async function sendMessageInParts(
   to: string,
   message: string,
   splitMessages: boolean
-): Promise<void> {
-  if (!splitMessages) {
-    await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
-      to,
-      message
-    });
-    return;
-  }
+): Promise<{ sentImages: string[] }> {
+  const { codes: imageCodes, cleanedText } = extractS3ImageCodes(message);
+  const sentImages: string[] = [];
   
-  const parts = message.split(/\n{2,}/).filter(p => p.trim());
-  
-  if (parts.length <= 1) {
-    await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
-      to,
-      message
-    });
-    return;
-  }
-  
-  for (let i = 0; i < parts.length; i++) {
-    await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
-      to,
-      message: parts[i].trim()
-    });
-    
-    if (i < parts.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
+  if (cleanedText) {
+    if (!splitMessages) {
+      await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
+        to,
+        message: cleanedText
+      });
+    } else {
+      const parts = cleanedText.split(/\n{2,}/).filter(p => p.trim());
+      
+      if (parts.length <= 1) {
+        await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
+          to,
+          message: cleanedText
+        });
+      } else {
+        for (let i = 0; i < parts.length; i++) {
+          await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
+            to,
+            message: parts[i].trim()
+          });
+          
+          if (i < parts.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
+          }
+        }
+      }
     }
   }
+  
+  for (const code of imageCodes) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const sent = await sendS3Image(instanceBackendId, to, code);
+    if (sent) {
+      sentImages.push(code);
+      console.log(`S3 image sent: ${code}`);
+    }
+  }
+  
+  return { sentImages };
 }
 
 async function processWithAgent(
@@ -292,7 +346,7 @@ async function processWithAgent(
   const instance = business.instances[0];
   if (instance) {
     try {
-      await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
+      const { sentImages } = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
       
       await prisma.messageLog.create({
         data: {
@@ -305,7 +359,8 @@ async function processWithAgent(
             contactJid: phone,
             contactPhone,
             contactName: contactName || '',
-            splitMessages
+            splitMessages,
+            sentImages: sentImages.length > 0 ? sentImages : undefined
           }
         }
       });
