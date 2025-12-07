@@ -8,9 +8,11 @@ const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
 router.post('/:businessId', async (req: Request, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { event, data, instanceId } = req.body;
+    const { event, payload, instanceId } = req.body;
+    const data = payload;
     
     console.log(`Webhook received for business ${businessId}:`, event);
+    console.log('Webhook payload:', JSON.stringify(payload, null, 2));
     
     const business = await prisma.business.findUnique({
       where: { id: businessId }
