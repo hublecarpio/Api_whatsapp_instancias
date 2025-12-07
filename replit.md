@@ -254,4 +254,9 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
 - **Dec 7 2025**: Created full AI Agent configuration panel in frontend with tabs for prompt, config, and tools
 - **Dec 7 2025**: Refactored tool parameters - dynamic OpenAI function schema from custom parameters per tool
 - **Dec 7 2025**: Implemented recursive interpolation for {{param}} placeholders in URL, headers, and nested body templates
-- **Dec 7 2025**: Added automatic S3 image detection and sending - 6-char alphanumeric codes (with at least one letter and one number) parsed from tool responses and sent as images via WhatsApp
+- **Dec 7 2025**: Added multimodal response handling - automatic detection and sending of:
+  - Images (.png, .jpg, .jpeg, .gif, .webp) via sendImage API
+  - Videos (.mp4, .mov, .avi, .webm) via sendVideo API
+  - Files (.pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .zip, .rar) via sendFile API
+  - S3 shortcodes: 6-char alphanumeric codes with optional extension (e.g., "0enb2q.png" or bare "0enb2q")
+  - Full URLs with file extensions are detected and sent with correct media type

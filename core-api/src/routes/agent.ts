@@ -8,42 +8,154 @@ const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
 const activeBuffers = new Map<string, NodeJS.Timeout>();
 
-const S3_IMAGE_BASE_URL = 'https://memoriaback.iamhuble.space/n8nback';
+const S3_BASE_URL = 'https://memoriaback.iamhuble.space/n8nback';
 
-function extractS3ImageCodes(text: string): { codes: string[]; cleanedText: string } {
-  const pattern = /\b([a-z0-9]{6})\b/gi;
-  const codes: string[] = [];
+interface MediaItem {
+  type: 'image' | 'file' | 'video';
+  url: string;
+  fileName?: string;
+  mimeType?: string;
+  originalMatch: string;
+}
+
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'webm'];
+const FILE_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar'];
+
+const MIME_TYPES: Record<string, string> = {
+  'png': 'image/png',
+  'jpg': 'image/jpeg',
+  'jpeg': 'image/jpeg',
+  'gif': 'image/gif',
+  'webp': 'image/webp',
+  'mp4': 'video/mp4',
+  'mov': 'video/quicktime',
+  'avi': 'video/x-msvideo',
+  'webm': 'video/webm',
+  'pdf': 'application/pdf',
+  'doc': 'application/msword',
+  'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'xls': 'application/vnd.ms-excel',
+  'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'ppt': 'application/vnd.ms-powerpoint',
+  'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'zip': 'application/zip',
+  'rar': 'application/vnd.rar'
+};
+
+function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedText: string } {
+  const mediaItems: MediaItem[] = [];
   let cleanedText = text;
   
-  const matches = text.match(pattern) || [];
-  for (const match of matches) {
-    if (/^[a-z0-9]{6}$/i.test(match) && /[a-z]/i.test(match) && /[0-9]/.test(match)) {
-      codes.push(match.toLowerCase());
-      cleanedText = cleanedText.replace(new RegExp(`\\b${match}\\b`, 'g'), '').trim();
+  const allExtensions = [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS, ...FILE_EXTENSIONS].join('|');
+  const urlPattern = new RegExp(`(https?:\\/\\/[^\\s]+\\.(${allExtensions}))(?:\\s|$|[)\\]"'])`, 'gi');
+  
+  let match;
+  while ((match = urlPattern.exec(text)) !== null) {
+    const url = match[1];
+    const ext = url.split('.').pop()?.toLowerCase() || '';
+    
+    let type: 'image' | 'file' | 'video' = 'file';
+    if (IMAGE_EXTENSIONS.includes(ext)) type = 'image';
+    else if (VIDEO_EXTENSIONS.includes(ext)) type = 'video';
+    
+    mediaItems.push({
+      type,
+      url,
+      fileName: url.split('/').pop() || `file.${ext}`,
+      mimeType: MIME_TYPES[ext] || 'application/octet-stream',
+      originalMatch: match[1]
+    });
+    
+    cleanedText = cleanedText.replace(match[1], '').trim();
+  }
+  
+  const s3CodePattern = /\b([a-z0-9]{6})\.(png|jpg|jpeg|gif|webp|pdf|mp4|mov)\b/gi;
+  while ((match = s3CodePattern.exec(text)) !== null) {
+    const code = match[1].toLowerCase();
+    const ext = match[2].toLowerCase();
+    
+    let type: 'image' | 'file' | 'video' = 'file';
+    if (IMAGE_EXTENSIONS.includes(ext)) type = 'image';
+    else if (VIDEO_EXTENSIONS.includes(ext)) type = 'video';
+    
+    mediaItems.push({
+      type,
+      url: `${S3_BASE_URL}/${code}.${ext}`,
+      fileName: `${code}.${ext}`,
+      mimeType: MIME_TYPES[ext] || 'application/octet-stream',
+      originalMatch: match[0]
+    });
+    
+    cleanedText = cleanedText.replace(match[0], '').trim();
+  }
+  
+  const bareCodePattern = /\b([a-z0-9]{6})\b/gi;
+  const existingCodes = new Set(mediaItems.map(m => m.url));
+  
+  while ((match = bareCodePattern.exec(text)) !== null) {
+    const code = match[1];
+    if (/^[a-z0-9]{6}$/i.test(code) && /[a-z]/i.test(code) && /[0-9]/.test(code)) {
+      const url = `${S3_BASE_URL}/${code.toLowerCase()}`;
+      if (!existingCodes.has(url) && !existingCodes.has(`${url}.png`)) {
+        mediaItems.push({
+          type: 'image',
+          url,
+          fileName: `${code.toLowerCase()}.png`,
+          mimeType: 'image/png',
+          originalMatch: match[0]
+        });
+        existingCodes.add(url);
+        cleanedText = cleanedText.replace(new RegExp(`\\b${code}\\b`, 'g'), '').trim();
+      }
     }
   }
   
-  cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
+  cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
   
-  return { codes, cleanedText };
+  return { mediaItems, cleanedText };
 }
 
-async function sendS3Image(
+async function sendMedia(
   instanceBackendId: string,
   to: string,
-  code: string,
-  caption?: string
+  media: MediaItem
 ): Promise<boolean> {
   try {
-    const imageUrl = `${S3_IMAGE_BASE_URL}/${code}`;
-    await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendImage`, {
-      to,
-      imageUrl,
-      caption: caption || ''
-    });
-    return true;
+    if (media.type === 'image') {
+      await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendImage`, {
+        to,
+        url: media.url,
+        caption: ''
+      });
+      console.log(`Image sent: ${media.url}`);
+      return true;
+    }
+    
+    if (media.type === 'video') {
+      await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendVideo`, {
+        to,
+        url: media.url,
+        caption: ''
+      });
+      console.log(`Video sent: ${media.url}`);
+      return true;
+    }
+    
+    if (media.type === 'file') {
+      await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendFile`, {
+        to,
+        url: media.url,
+        fileName: media.fileName || 'document.pdf',
+        mimeType: media.mimeType || 'application/pdf'
+      });
+      console.log(`File sent: ${media.url}`);
+      return true;
+    }
+    
+    return false;
   } catch (error: any) {
-    console.error(`Failed to send S3 image ${code}:`, error.message);
+    console.error(`Failed to send media ${media.url}:`, error.message);
     return false;
   }
 }
@@ -121,9 +233,9 @@ async function sendMessageInParts(
   to: string,
   message: string,
   splitMessages: boolean
-): Promise<{ sentImages: string[] }> {
-  const { codes: imageCodes, cleanedText } = extractS3ImageCodes(message);
-  const sentImages: string[] = [];
+): Promise<{ sentMedia: MediaItem[] }> {
+  const { mediaItems, cleanedText } = extractMediaFromText(message);
+  const sentMedia: MediaItem[] = [];
   
   if (cleanedText) {
     if (!splitMessages) {
@@ -154,16 +266,15 @@ async function sendMessageInParts(
     }
   }
   
-  for (const code of imageCodes) {
+  for (const media of mediaItems) {
     await new Promise(resolve => setTimeout(resolve, 500));
-    const sent = await sendS3Image(instanceBackendId, to, code);
+    const sent = await sendMedia(instanceBackendId, to, media);
     if (sent) {
-      sentImages.push(code);
-      console.log(`S3 image sent: ${code}`);
+      sentMedia.push(media);
     }
   }
   
-  return { sentImages };
+  return { sentMedia };
 }
 
 async function processWithAgent(
@@ -346,7 +457,7 @@ async function processWithAgent(
   const instance = business.instances[0];
   if (instance) {
     try {
-      const { sentImages } = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
+      const { sentMedia } = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
       
       await prisma.messageLog.create({
         data: {
@@ -360,7 +471,7 @@ async function processWithAgent(
             contactPhone,
             contactName: contactName || '',
             splitMessages,
-            sentImages: sentImages.length > 0 ? sentImages : undefined
+            sentMedia: sentMedia.length > 0 ? sentMedia.map(m => ({ type: m.type, url: m.url })) : undefined
           }
         }
       });
