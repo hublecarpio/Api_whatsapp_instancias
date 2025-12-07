@@ -94,6 +94,7 @@ model AgentTool {
   method      String  @default("POST")
   headers     Json?
   bodyTemplate Json?
+  parameters  Json?
   enabled     Boolean @default(true)
 
   prompt AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)

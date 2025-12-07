@@ -186,8 +186,10 @@ Multi-tenant WhatsApp API with AI-powered chat automation, built for integration
 - **WhatsAppInstance**: id, businessId, instanceBackendId, status, qr, phoneNumber
 - **Product**: id, businessId, title, description, price, imageUrl
 - **Policy**: id, businessId, shippingPolicy, refundPolicy, brandVoice
-- **AgentPrompt**: id, businessId, prompt
-- **MessageLog**: id, businessId, direction, sender, recipient, message, mediaUrl
+- **AgentPrompt**: id, businessId, prompt, bufferSeconds, historyLimit, splitMessages
+- **AgentTool**: id, promptId, name, description, url, method, headers, bodyTemplate, enabled
+- **MessageBuffer**: id, businessId, contactPhone, messages, expiresAt
+- **MessageLog**: id, businessId, direction, sender, recipient, message, mediaUrl, metadata
 
 ## Environment Variables
 
@@ -243,3 +245,10 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
 - Built AI pipeline with OpenAI integration
 - Added chat panel with real-time conversations
 - Configured multi-service architecture
+- **Dec 7 2025**: Fixed LID phone number resolution - messages now store clean phone numbers
+- **Dec 7 2025**: Added contact name display in chat panel from pushName
+- **Dec 7 2025**: Added AI Agent Tools system - external POST endpoints the agent can call
+- **Dec 7 2025**: Added message buffer - accumulates messages before agent responds (configurable seconds)
+- **Dec 7 2025**: Added split messages - divides long responses into multiple WhatsApp messages
+- **Dec 7 2025**: Added configurable conversation history limit (default 10, up to 50 messages)
+- **Dec 7 2025**: Created full AI Agent configuration panel in frontend with tabs for prompt, config, and tools

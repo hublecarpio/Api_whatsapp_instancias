@@ -12,7 +12,7 @@ async function checkBusinessAccess(userId: string, businessId: string) {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, prompt } = req.body;
+    const { businessId, prompt, bufferSeconds, historyLimit, splitMessages } = req.body;
     
     if (!businessId || !prompt) {
       return res.status(400).json({ error: 'businessId and prompt are required' });
@@ -25,15 +25,22 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     
     const existing = await prisma.agentPrompt.findUnique({ where: { businessId } });
     
+    const data: any = { prompt, updatedAt: new Date() };
+    if (bufferSeconds !== undefined) data.bufferSeconds = bufferSeconds;
+    if (historyLimit !== undefined) data.historyLimit = historyLimit;
+    if (splitMessages !== undefined) data.splitMessages = splitMessages;
+    
     let agentPrompt;
     if (existing) {
       agentPrompt = await prisma.agentPrompt.update({
         where: { businessId },
-        data: { prompt, updatedAt: new Date() }
+        data,
+        include: { tools: true }
       });
     } else {
       agentPrompt = await prisma.agentPrompt.create({
-        data: { businessId, prompt }
+        data: { businessId, ...data },
+        include: { tools: true }
       });
     }
     
@@ -58,7 +65,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
     
     const prompt = await prisma.agentPrompt.findUnique({
-      where: { businessId: business_id as string }
+      where: { businessId: business_id as string },
+      include: { tools: true }
     });
     
     res.json(prompt || null);
@@ -70,11 +78,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { prompt } = req.body;
-    
-    if (!prompt) {
-      return res.status(400).json({ error: 'prompt is required' });
-    }
+    const { prompt, bufferSeconds, historyLimit, splitMessages } = req.body;
     
     const existing = await prisma.agentPrompt.findUnique({
       where: { id: req.params.id },
@@ -85,9 +89,16 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Prompt not found' });
     }
     
+    const data: any = { updatedAt: new Date() };
+    if (prompt !== undefined) data.prompt = prompt;
+    if (bufferSeconds !== undefined) data.bufferSeconds = bufferSeconds;
+    if (historyLimit !== undefined) data.historyLimit = historyLimit;
+    if (splitMessages !== undefined) data.splitMessages = splitMessages;
+    
     const agentPrompt = await prisma.agentPrompt.update({
       where: { id: req.params.id },
-      data: { prompt, updatedAt: new Date() }
+      data,
+      include: { tools: true }
     });
     
     res.json(agentPrompt);

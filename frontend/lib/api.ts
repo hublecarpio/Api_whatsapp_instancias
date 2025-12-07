@@ -62,8 +62,30 @@ export const policyApi = {
 
 export const promptApi = {
   get: (businessId: string) => api.get(`/agent/prompt?business_id=${businessId}`),
-  save: (data: { businessId: string; prompt: string }) => api.post('/agent/prompt', data),
-  update: (id: string, prompt: string) => api.put(`/agent/prompt/${id}`, { prompt })
+  save: (data: { 
+    businessId: string; 
+    prompt: string; 
+    bufferSeconds?: number;
+    historyLimit?: number;
+    splitMessages?: boolean;
+  }) => api.post('/agent/prompt', data),
+  update: (id: string, data: any) => api.put(`/agent/prompt/${id}`, data)
+};
+
+export const toolsApi = {
+  list: (businessId: string) => api.get(`/agent/tools?business_id=${businessId}`),
+  create: (data: {
+    business_id: string;
+    name: string;
+    description: string;
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    bodyTemplate?: any;
+  }) => api.post('/agent/tools', data),
+  update: (id: string, data: any) => api.put(`/agent/tools/${id}`, data),
+  delete: (id: string) => api.delete(`/agent/tools/${id}`),
+  test: (id: string, testPayload?: any) => api.post(`/agent/tools/${id}/test`, { testPayload })
 };
 
 export const waApi = {
