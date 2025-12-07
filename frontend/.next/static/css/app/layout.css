@@ -625,6 +625,9 @@ video {
 .h-\[calc\(100vh-8rem\)\] {
   height: calc(100vh - 8rem);
 }
+.h-screen {
+  height: 100vh;
+}
 .max-h-24 {
   max-height: 6rem;
 }
@@ -1342,6 +1345,11 @@ body {
 .hover\:bg-green-100:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(220 252 231 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-green-200:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(187 247 208 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-green-600:hover {

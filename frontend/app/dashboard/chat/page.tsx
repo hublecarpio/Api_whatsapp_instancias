@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { messageApi, waApi, mediaApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi, businessApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
@@ -35,8 +35,10 @@ export default function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ file: File; url: string; type: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [botToggling, setBotToggling] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -149,6 +151,20 @@ export default function ChatPage() {
     if (previewFile) {
       URL.revokeObjectURL(previewFile.url);
       setPreviewFile(null);
+    }
+  };
+
+  const handleToggleBot = async () => {
+    if (!currentBusiness) return;
+    setBotToggling(true);
+    try {
+      await businessApi.toggleBot(currentBusiness.id, !currentBusiness.botEnabled);
+      const response = await businessApi.get(currentBusiness.id);
+      useBusinessStore.setState({ currentBusiness: response.data });
+    } catch (err) {
+      console.error('Failed to toggle bot:', err);
+    } finally {
+      setBotToggling(false);
     }
   };
 
@@ -325,13 +341,18 @@ export default function ChatPage() {
                   </p>
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     {selectedContactName && <span>+{selectedPhone}</span>}
-                    <span className={`px-1.5 py-0.5 rounded ${
-                      currentBusiness.botEnabled 
-                        ? 'bg-green-100 text-green-700' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
+                    <button
+                      onClick={handleToggleBot}
+                      disabled={botToggling}
+                      className={`px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                        currentBusiness.botEnabled 
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      } disabled:opacity-50`}
+                      title="Click para cambiar el estado del bot"
+                    >
                       {currentBusiness.botEnabled ? '🤖 Bot activo' : '😴 Bot inactivo'}
-                    </span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -420,7 +441,14 @@ export default function ChatPage() {
                     ref={fileInputRef}
                     onChange={handleFileSelect}
                     className="hidden"
-                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.rar"
+                    accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.rar"
+                  />
+                  <input
+                    type="file"
+                    ref={audioInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="audio/*"
                   />
                   <button
                     type="button"
@@ -431,6 +459,19 @@ export default function ChatPage() {
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => audioInputRef.current?.click()}
+                    className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors"
+                    disabled={sending}
+                    title="Enviar audio"
+                  >
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3z"/>
+                      <path d="M17 16.91c-.49.97-1.25 1.81-2.17 2.41.96.26 1.98.4 3.04.4 2.21 0 4.35-.72 6.07-2.04l-2.21-2.21c-1.43 1.23-3.3 1.95-5.37 1.95-.27 0-.54-.03-.81-.06.53-.99.83-2.11.83-3.31 0-.56-.05-1.11-.14-1.64 2.25-1.27 3.75-3.78 3.75-6.6 0-4.14-3.36-7.5-7.5-7.5S4.5 4.86 4.5 9c0 2.82 1.5 5.33 3.75 6.6-.09.53-.14 1.08-.14 1.64 0 1.2.3 2.32.83 3.31-.27.03-.54.06-.81.06-2.07 0-3.94-.72-5.37-1.95L.79 19.8c1.72 1.32 3.86 2.04 6.04 2.04 1.06 0 2.08-.14 3.04-.4-.92-.6-1.68-1.44-2.17-2.41H17z"/>
                     </svg>
                   </button>
                   

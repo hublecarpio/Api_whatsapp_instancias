@@ -16,6 +16,7 @@ export default function DashboardLayout({
   const { loadFromStorage, isAuthenticated } = useAuthStore();
   const { setBusinesses, setCurrentBusiness, businesses } = useBusinessStore();
   const [loading, setLoading] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     loadFromStorage();
@@ -60,7 +61,9 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} transition-all duration-300 overflow-hidden`}>
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      </div>
       <main className="flex-1 p-8 overflow-auto">{children}</main>
     </div>
   );
