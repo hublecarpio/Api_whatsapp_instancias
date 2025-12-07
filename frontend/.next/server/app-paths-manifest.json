@@ -1,1 +1,3 @@
-{}
+{
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js"
+}
