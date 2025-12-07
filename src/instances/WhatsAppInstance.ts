@@ -754,13 +754,25 @@ export class WhatsAppInstance {
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
+      const urlLower = url.toLowerCase();
+      let mimetype = 'audio/ogg; codecs=opus';
+      if (urlLower.includes('.webm') || urlLower.includes('.weba')) {
+        mimetype = 'audio/webm';
+      } else if (urlLower.includes('.mp3')) {
+        mimetype = 'audio/mpeg';
+      } else if (urlLower.includes('.m4a')) {
+        mimetype = 'audio/mp4';
+      } else if (urlLower.includes('.wav')) {
+        mimetype = 'audio/wav';
+      }
+
       const result = await this.socket.sendMessage(jid, {
         audio: buffer,
-        mimetype: 'audio/ogg; codecs=opus',
+        mimetype: mimetype,
         ptt: ptt
       });
 
-      this.logger.info({ to: jid, ptt }, 'Audio sent');
+      this.logger.info({ to: jid, ptt, mimetype }, 'Audio sent');
 
       await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
         to: jid,

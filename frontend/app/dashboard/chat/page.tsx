@@ -185,8 +185,8 @@ export default function ChatPage() {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/ogg' });
-        const file = new File([audioBlob], 'audio.ogg', { type: 'audio/ogg' });
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const file = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
         setPreviewFile({
           file,
           url: URL.createObjectURL(file),
