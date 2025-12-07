@@ -146,7 +146,7 @@ router.get('/:businessId/qr', async (req: AuthRequest, res: Response) => {
 
 router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
   try {
-    const { to, message, imageUrl, videoUrl, audioUrl, fileUrl, fileName } = req.body;
+    const { to, message, imageUrl, videoUrl, audioUrl, fileUrl, fileName, mimeType } = req.body;
     
     const business = await checkBusinessAccess(req.userId!, req.params.businessId);
     if (!business) {
@@ -175,7 +175,7 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
       payload = { to, url: audioUrl, ptt: true };
     } else if (fileUrl) {
       endpoint = 'sendFile';
-      payload = { to, url: fileUrl, fileName: fileName || 'file' };
+      payload = { to, url: fileUrl, fileName: fileName || 'file', mimeType: mimeType || 'application/octet-stream' };
     }
     
     const waResponse = await axios.post(

@@ -98,7 +98,7 @@ export default function ChatPage() {
       if (previewFile) {
         setUploading(true);
         const uploadRes = await mediaApi.upload(currentBusiness.id, previewFile.file);
-        const { url, type } = uploadRes.data;
+        const { url, type, mimetype } = uploadRes.data;
         
         const sendData: any = { to: selectedPhone };
         if (type === 'image') {
@@ -112,6 +112,7 @@ export default function ChatPage() {
         } else {
           sendData.fileUrl = url;
           sendData.fileName = previewFile.file.name;
+          sendData.mimeType = mimetype || previewFile.file.type;
         }
         
         await waApi.send(currentBusiness.id, sendData);

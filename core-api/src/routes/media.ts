@@ -2,9 +2,15 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { writeFile, readFile, unlink } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 
+const execAsync = promisify(exec);
 const router = Router();
 
 const storage = multer.memoryStorage();
@@ -56,7 +62,7 @@ function getExtension(mimetype: string): string {
     'audio/ogg': '.ogg',
     'audio/mpeg': '.mp3',
     'audio/mp4': '.m4a',
-    'audio/webm': '.weba',
+    'audio/webm': '.ogg',
     'application/pdf': '.pdf',
     'application/msword': '.doc',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
@@ -73,6 +79,24 @@ function getMediaType(mimetype: string): 'image' | 'video' | 'audio' | 'file' {
   if (mimetype.startsWith('video/')) return 'video';
   if (mimetype.startsWith('audio/')) return 'audio';
   return 'file';
+}
+
+async function convertAudioToOgg(inputBuffer: Buffer): Promise<Buffer> {
+  const inputPath = join(tmpdir(), `audio_input_${randomUUID()}.webm`);
+  const outputPath = join(tmpdir(), `audio_output_${randomUUID()}.ogg`);
+  
+  try {
+    await writeFile(inputPath, inputBuffer);
+    
+    await execAsync(`ffmpeg -y -i "${inputPath}" -c:a libopus -b:a 64k -vbr on -compression_level 10 "${outputPath}"`);
+    
+    const outputBuffer = await readFile(outputPath);
+    
+    return outputBuffer;
+  } finally {
+    try { await unlink(inputPath); } catch {}
+    try { await unlink(outputPath); } catch {}
+  }
 }
 
 router.use(authMiddleware);
@@ -101,28 +125,46 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
       return res.status(500).json({ error: 'Media storage not configured' });
     }
     
-    const extension = getExtension(req.file.mimetype) || 
-      (req.file.originalname ? `.${req.file.originalname.split('.').pop()}` : '');
+    let fileBuffer = req.file.buffer;
+    let fileMimetype = req.file.mimetype;
+    let extension = getExtension(req.file.mimetype);
+    
+    if (req.file.mimetype === 'audio/webm' || req.file.mimetype.startsWith('audio/')) {
+      try {
+        console.log('Converting audio to OGG format...');
+        fileBuffer = await convertAudioToOgg(req.file.buffer);
+        fileMimetype = 'audio/ogg';
+        extension = '.ogg';
+        console.log('Audio converted successfully');
+      } catch (convErr: any) {
+        console.error('Audio conversion failed, using original:', convErr.message);
+      }
+    }
+    
+    if (!extension) {
+      extension = req.file.originalname ? `.${req.file.originalname.split('.').pop()}` : '';
+    }
+    
     const fileName = `${randomUUID()}${extension}`;
     const objectPath = `chat/${businessId}/${fileName}`;
     
     await s3Client!.send(new PutObjectCommand({
       Bucket: bucketName!,
       Key: objectPath,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
+      Body: fileBuffer,
+      ContentType: fileMimetype,
       ACL: 'public-read',
     }));
     
     const publicUrl = `${publicBaseUrl}/${bucketName}/${objectPath}`;
-    const mediaType = getMediaType(req.file.mimetype);
+    const mediaType = getMediaType(fileMimetype);
     
     res.json({
       url: publicUrl,
       path: objectPath,
       type: mediaType,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
+      mimetype: fileMimetype,
+      size: fileBuffer.length,
       originalName: req.file.originalname
     });
   } catch (error: any) {
