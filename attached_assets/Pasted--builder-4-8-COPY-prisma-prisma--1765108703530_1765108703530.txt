@@ -1,0 +1,149 @@
+ => [builder 4/8] COPY prisma ./prisma/                                                                                                                                0.0s
+ => CANCELED [production  5/10] RUN npm ci --only=production && npm cache clean --force                                                                                3.0s
+ => ERROR [builder 5/8] RUN npm ci                                                                                                                                     3.0s
+------                                                                                                                                                                      
+ > [builder 5/8] RUN npm ci:                                                                                                                                                
+2.899 npm error code EUSAGE                                                                                                                                                 
+2.899 npm error                                                                                                                                                             
+2.899 npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm i
+nstall` before continuing.                                                                                                                                                  
+2.899 npm error                                                                                                                                                             
+2.899 npm error Missing: @aws-sdk/client-s3@3.946.0 from lock file
+2.899 npm error Missing: @aws-crypto/sha1-browser@5.2.0 from lock file
+2.899 npm error Missing: @aws-crypto/sha256-browser@5.2.0 from lock file
+2.899 npm error Missing: @aws-crypto/sha256-js@5.2.0 from lock file
+2.899 npm error Missing: @aws-sdk/core@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/credential-provider-node@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-bucket-endpoint@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-expect-continue@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-flexible-checksums@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-host-header@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-location-constraint@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-logger@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-recursion-detection@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-sdk-s3@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-ssec@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/middleware-user-agent@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/region-config-resolver@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/signature-v4-multi-region@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/types@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/util-endpoints@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/util-user-agent-browser@3.936.0 from lock file
+2.899 npm error Missing: @aws-sdk/util-user-agent-node@3.946.0 from lock file
+2.899 npm error Missing: @smithy/config-resolver@4.4.3 from lock file
+2.899 npm error Missing: @smithy/core@3.18.7 from lock file
+2.899 npm error Missing: @smithy/eventstream-serde-browser@4.2.5 from lock file
+2.899 npm error Missing: @smithy/eventstream-serde-config-resolver@4.3.5 from lock file
+2.899 npm error Missing: @smithy/eventstream-serde-node@4.2.5 from lock file
+2.899 npm error Missing: @smithy/fetch-http-handler@5.3.6 from lock file
+2.899 npm error Missing: @smithy/hash-blob-browser@4.2.6 from lock file
+2.899 npm error Missing: @smithy/hash-node@4.2.5 from lock file
+2.899 npm error Missing: @smithy/hash-stream-node@4.2.5 from lock file
+2.899 npm error Missing: @smithy/invalid-dependency@4.2.5 from lock file
+2.899 npm error Missing: @smithy/md5-js@4.2.5 from lock file
+2.899 npm error Missing: @smithy/middleware-content-length@4.2.5 from lock file
+2.899 npm error Missing: @smithy/middleware-endpoint@4.3.14 from lock file
+2.899 npm error Missing: @smithy/middleware-retry@4.4.14 from lock file
+2.899 npm error Missing: @smithy/middleware-serde@4.2.6 from lock file
+2.899 npm error Missing: @smithy/middleware-stack@4.2.5 from lock file
+2.899 npm error Missing: @smithy/node-config-provider@4.3.5 from lock file
+2.899 npm error Missing: @smithy/node-http-handler@4.4.5 from lock file
+2.899 npm error Missing: @smithy/protocol-http@5.3.5 from lock file
+2.899 npm error Missing: @smithy/smithy-client@4.9.10 from lock file
+2.899 npm error Missing: @smithy/types@4.9.0 from lock file
+2.899 npm error Missing: @smithy/url-parser@4.2.5 from lock file
+2.899 npm error Missing: @smithy/util-base64@4.3.0 from lock file
+2.899 npm error Missing: @smithy/util-body-length-browser@4.2.0 from lock file
+2.899 npm error Missing: @smithy/util-body-length-node@4.2.1 from lock file
+2.899 npm error Missing: @smithy/util-defaults-mode-browser@4.3.13 from lock file
+2.899 npm error Missing: @smithy/util-defaults-mode-node@4.2.16 from lock file
+2.899 npm error Missing: @smithy/util-endpoints@3.2.5 from lock file
+2.899 npm error Missing: @smithy/util-middleware@4.2.5 from lock file
+2.899 npm error Missing: @smithy/util-retry@4.2.5 from lock file
+2.899 npm error Missing: @smithy/util-stream@4.5.6 from lock file
+2.899 npm error Missing: @smithy/util-utf8@4.2.0 from lock file
+2.899 npm error Missing: @smithy/util-waiter@4.2.5 from lock file
+2.899 npm error Missing: tslib@2.8.1 from lock file
+2.899 npm error Missing: @aws-crypto/supports-web-crypto@5.2.0 from lock file
+2.899 npm error Missing: @aws-crypto/util@5.2.0 from lock file
+2.899 npm error Missing: @aws-sdk/util-locate-window@3.893.0 from lock file
+2.899 npm error Missing: @smithy/util-utf8@2.3.0 from lock file
+2.899 npm error Missing: @smithy/util-utf8@2.3.0 from lock file
+2.899 npm error Missing: @smithy/util-utf8@2.3.0 from lock file
+2.899 npm error Missing: @aws-sdk/xml-builder@3.930.0 from lock file
+2.899 npm error Missing: @smithy/property-provider@4.2.5 from lock file
+2.899 npm error Missing: @smithy/signature-v4@5.3.5 from lock file
+2.899 npm error Missing: @aws-sdk/credential-provider-env@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/credential-provider-http@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/credential-provider-ini@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/credential-provider-process@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/credential-provider-sso@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/credential-provider-web-identity@3.946.0 from lock file
+2.899 npm error Missing: @smithy/credential-provider-imds@4.2.5 from lock file
+2.899 npm error Missing: @smithy/shared-ini-file-loader@4.4.0 from lock file
+2.899 npm error Missing: @aws-sdk/credential-provider-login@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/nested-clients@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/client-sso@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/token-providers@3.946.0 from lock file
+2.899 npm error Missing: @aws-sdk/util-arn-parser@3.893.0 from lock file
+2.899 npm error Missing: @smithy/util-config-provider@4.2.0 from lock file
+2.899 npm error Missing: @aws-crypto/crc32@5.2.0 from lock file
+2.899 npm error Missing: @aws-crypto/crc32c@5.2.0 from lock file
+2.899 npm error Missing: @smithy/is-array-buffer@4.2.0 from lock file
+2.899 npm error Missing: @aws/lambda-invoke-store@0.2.2 from lock file
+2.899 npm error Missing: bowser@2.13.1 from lock file
+2.899 npm error Missing: fast-xml-parser@5.2.5 from lock file
+2.899 npm error Missing: @smithy/uuid@1.1.0 from lock file
+2.899 npm error Missing: @smithy/eventstream-serde-universal@4.2.5 from lock file
+2.899 npm error Missing: @smithy/eventstream-codec@4.2.5 from lock file
+2.899 npm error Missing: @smithy/util-hex-encoding@4.2.0 from lock file
+2.899 npm error Missing: @smithy/querystring-builder@4.2.5 from lock file
+2.899 npm error Missing: @smithy/chunked-blob-reader@5.2.0 from lock file
+2.899 npm error Missing: @smithy/chunked-blob-reader-native@4.2.1 from lock file
+2.899 npm error Missing: @smithy/util-buffer-from@4.2.0 from lock file
+2.899 npm error Missing: @smithy/service-error-classification@4.2.5 from lock file
+2.899 npm error Missing: @smithy/abort-controller@4.2.5 from lock file
+2.899 npm error Missing: @smithy/util-uri-escape@4.2.0 from lock file
+2.899 npm error Missing: @smithy/querystring-parser@4.2.5 from lock file
+2.899 npm error Missing: strnum@2.1.1 from lock file
+2.899 npm error Missing: @smithy/util-buffer-from@2.2.0 from lock file
+2.899 npm error Missing: @smithy/is-array-buffer@2.2.0 from lock file
+2.899 npm error Missing: @smithy/util-buffer-from@2.2.0 from lock file
+2.899 npm error Missing: @smithy/is-array-buffer@2.2.0 from lock file
+2.899 npm error Missing: @smithy/util-buffer-from@2.2.0 from lock file
+2.899 npm error Missing: @smithy/is-array-buffer@2.2.0 from lock file
+2.899 npm error
+2.899 npm error Clean install a project
+2.899 npm error
+2.899 npm error Usage:
+2.899 npm error npm ci
+2.899 npm error
+2.899 npm error Options:
+2.899 npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+2.899 npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+2.899 npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+2.899 npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+2.899 npm error [--no-bin-links] [--no-fund] [--dry-run]
+2.899 npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+2.899 npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+2.899 npm error
+2.899 npm error aliases: clean-install, ic, install-clean, isntall-clean
+2.899 npm error
+2.899 npm error Run "npm help ci" for more info
+2.903 npm notice
+2.903 npm notice New major version of npm available! 10.8.2 -> 11.6.4
+2.903 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.4
+2.903 npm notice To update run: npm install -g npm@11.6.4
+2.903 npm notice
+2.903 npm error A complete log of this run can be found in: /root/.npm/_logs/2025-12-07T11_57_52_743Z-debug-0.log
+------
+Dockerfile:8
+--------------------
+   6 |     COPY prisma ./prisma/
+   7 |     
+   8 | >>> RUN npm ci
+   9 |     
+  10 |     COPY . .
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci" did not complete successfully: exit code: 1
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# 
