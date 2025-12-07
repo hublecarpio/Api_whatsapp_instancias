@@ -1,0 +1,46 @@
+ => [builder 4/5] COPY . .                                                                                                                                             0.2s 
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             26.3s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+1.070                                                                                                                                                                       
+1.070 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+1.070 > next build                                                                                                                                                          
+1.070                                                                                                                                                                       
+2.371 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2.372 This information is used to shape Next.js' roadmap and prioritize features.
+2.372 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2.372 https://nextjs.org/telemetry
+2.372 
+2.478   ▲ Next.js 14.2.16
+2.479 
+2.593    Creating an optimized production build ...
+21.87  ✓ Compiled successfully
+21.87    Linting and checking validity of types ...
+26.16 Failed to compile.
+26.16 
+26.16 ./app/dashboard/prompt/page.tsx:191:9
+26.16 Type error: Object literal may only specify known properties, and 'parameters' does not exist in type '{ business_id: string; name: string; description: string; url: string; method?: string | undefined; headers?: Record<string, string> | undefined; bodyTemplate?: any; }'.
+26.16 
+26.16   189 |         headers: headers || undefined,
+26.16   190 |         bodyTemplate: bodyTemplate || undefined,
+26.16 > 191 |         parameters: newTool.parameters.length > 0 ? newTool.parameters : undefined
+26.16       |         ^
+26.16   192 |       });
+26.16   193 |       
+26.16   194 |       setShowToolForm(false);
+26.22 npm notice
+26.22 npm notice New major version of npm available! 10.8.2 -> 11.6.4
+26.22 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.4
+26.22 npm notice To update run: npm install -g npm@11.6.4
+26.22 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# 
