@@ -252,3 +252,5 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
 - **Dec 7 2025**: Added split messages - divides long responses into multiple WhatsApp messages
 - **Dec 7 2025**: Added configurable conversation history limit (default 10, up to 50 messages)
 - **Dec 7 2025**: Created full AI Agent configuration panel in frontend with tabs for prompt, config, and tools
+- **Dec 7 2025**: Refactored tool parameters - dynamic OpenAI function schema from custom parameters per tool
+- **Dec 7 2025**: Implemented recursive interpolation for {{param}} placeholders in URL, headers, and nested body templates
