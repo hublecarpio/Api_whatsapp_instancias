@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { messageApi, waApi, mediaApi, businessApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi, businessApi, tagsApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
@@ -22,6 +22,21 @@ interface Message {
   createdAt: string;
 }
 
+interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  description?: string;
+  order: number;
+  _count?: { assignments: number };
+}
+
+interface TagAssignment {
+  tagId: string;
+  contactPhone: string;
+  tag: Tag;
+}
+
 export default function ChatPage() {
   const { currentBusiness } = useBusinessStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -37,6 +52,11 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [botToggling, setBotToggling] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [assignments, setAssignments] = useState<TagAssignment[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [assigningTag, setAssigningTag] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -46,10 +66,76 @@ export default function ChatPage() {
   useEffect(() => {
     if (currentBusiness) {
       fetchConversations();
+      fetchTags();
       const interval = setInterval(fetchConversations, 10000);
       return () => clearInterval(interval);
     }
   }, [currentBusiness]);
+
+  const fetchTags = async () => {
+    if (!currentBusiness) return;
+    try {
+      const [tagsRes, assignmentsRes] = await Promise.all([
+        tagsApi.list(currentBusiness.id),
+        tagsApi.getAssignments(currentBusiness.id)
+      ]);
+      setTags(tagsRes.data);
+      setAssignments(assignmentsRes.data);
+      
+      if (tagsRes.data.length === 0) {
+        const initRes = await tagsApi.initDefaults(currentBusiness.id);
+        setTags(initRes.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch tags:', err);
+    }
+  };
+
+  const handleAssignTag = async (phone: string, tagId: string) => {
+    if (!currentBusiness) return;
+    if (!tagId) {
+      try {
+        setAssigningTag(true);
+        await tagsApi.unassign({
+          business_id: currentBusiness.id,
+          contact_phone: phone
+        });
+        fetchTags();
+      } catch (err) {
+        console.error('Failed to unassign tag:', err);
+      } finally {
+        setAssigningTag(false);
+      }
+      return;
+    }
+    setAssigningTag(true);
+    try {
+      await tagsApi.assign({
+        business_id: currentBusiness.id,
+        contact_phone: phone,
+        tag_id: tagId
+      });
+      fetchTags();
+    } catch (err) {
+      console.error('Failed to assign tag:', err);
+    } finally {
+      setAssigningTag(false);
+    }
+  };
+
+  const getContactTag = (phone: string): Tag | undefined => {
+    const assignment = assignments.find(a => a.contactPhone === phone);
+    return assignment?.tag;
+  };
+
+  const getConversationsByTag = (tagId: string | null): Conversation[] => {
+    if (!tagId) {
+      const assignedPhones = assignments.map(a => a.contactPhone);
+      return conversations.filter(c => !assignedPhones.includes(c.phone));
+    }
+    const phonesForTag = assignments.filter(a => a.tagId === tagId).map(a => a.contactPhone);
+    return conversations.filter(c => phonesForTag.includes(c.phone));
+  };
 
   useEffect(() => {
     if (selectedPhone && currentBusiness) {
@@ -329,11 +415,59 @@ export default function ChatPage() {
         <div 
           className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 overflow-hidden border-r border-gray-200 flex flex-col bg-white`}
         >
-          <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800">Chats</h2>
-            <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
-              {conversations.length}
-            </span>
+          <div className="p-3 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold text-gray-800">Chats</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                  {conversations.length}
+                </span>
+                <button
+                  onClick={() => setViewMode(viewMode === 'list' ? 'kanban' : 'list')}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    viewMode === 'kanban' ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                  title={viewMode === 'list' ? 'Vista Kanban' : 'Vista Lista'}
+                >
+                  {viewMode === 'list' ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+            {viewMode === 'kanban' && tags.length > 0 && (
+              <div className="flex gap-1 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setSelectedTag(null)}
+                  className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${
+                    selectedTag === null ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  Sin etiqueta
+                </button>
+                {tags.map(tag => (
+                  <button
+                    key={tag.id}
+                    onClick={() => setSelectedTag(tag.id)}
+                    className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${
+                      selectedTag === tag.id ? 'text-white' : 'text-gray-700 hover:opacity-80'
+                    }`}
+                    style={{ 
+                      backgroundColor: selectedTag === tag.id ? tag.color : `${tag.color}30`,
+                      color: selectedTag === tag.id ? 'white' : tag.color
+                    }}
+                  >
+                    {tag.name} ({getConversationsByTag(tag.id).length})
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           
           <div className="flex-1 overflow-y-auto">
@@ -351,35 +485,70 @@ export default function ChatPage() {
                 No hay conversaciones
               </div>
             ) : (
-              conversations.map((conv) => (
-                <button
-                  key={conv.phone}
-                  onClick={() => {
-                    setSelectedPhone(conv.phone);
-                    setSelectedContactName(conv.contactName || '');
-                  }}
-                  className={`w-full p-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 ${
-                    selectedPhone === conv.phone ? 'bg-green-50 border-l-4 border-green-500' : ''
-                  }`}
-                >
-                  <div className="w-12 h-12 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-xl">👤</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-gray-900 truncate text-sm">
-                        {conv.contactName || `+${conv.phone}`}
-                      </p>
-                      <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                        {formatDate(conv.lastMessageAt)}
-                      </span>
+              (viewMode === 'kanban' ? getConversationsByTag(selectedTag) : conversations).map((conv) => {
+                const contactTag = getContactTag(conv.phone);
+                return (
+                  <div key={conv.phone} className="relative group">
+                    <button
+                      onClick={() => {
+                        setSelectedPhone(conv.phone);
+                        setSelectedContactName(conv.contactName || '');
+                      }}
+                      className={`w-full p-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 ${
+                        selectedPhone === conv.phone ? 'bg-green-50 border-l-4 border-green-500' : ''
+                      }`}
+                    >
+                      <div className="w-12 h-12 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center flex-shrink-0 relative">
+                        <span className="text-xl">👤</span>
+                        {contactTag && (
+                          <div 
+                            className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white"
+                            style={{ backgroundColor: contactTag.color }}
+                            title={contactTag.name}
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-gray-900 truncate text-sm">
+                            {conv.contactName || `+${conv.phone}`}
+                          </p>
+                          <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                            {formatDate(conv.lastMessageAt)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-sm text-gray-500 truncate flex-1">
+                            {conv.lastMessage || 'Sin mensajes'}
+                          </p>
+                          {contactTag && viewMode === 'list' && (
+                            <span 
+                              className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: `${contactTag.color}20`, color: contactTag.color }}
+                            >
+                              {contactTag.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <select
+                        value={contactTag?.id || ''}
+                        onChange={(e) => handleAssignTag(conv.phone, e.target.value)}
+                        className="text-xs bg-white border border-gray-200 rounded px-1 py-0.5 cursor-pointer"
+                        disabled={assigningTag}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <option value="">Sin etiqueta</option>
+                        {tags.map(tag => (
+                          <option key={tag.id} value={tag.id}>{tag.name}</option>
+                        ))}
+                      </select>
                     </div>
-                    <p className="text-sm text-gray-500 truncate mt-0.5">
-                      {conv.lastMessage || 'Sin mensajes'}
-                    </p>
                   </div>
-                </button>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -423,6 +592,25 @@ export default function ChatPage() {
                     >
                       {currentBusiness.botEnabled ? '🤖 Bot activo' : '😴 Bot inactivo'}
                     </button>
+                    {selectedPhone && (
+                      <select
+                        value={getContactTag(selectedPhone)?.id || ''}
+                        onChange={(e) => handleAssignTag(selectedPhone, e.target.value)}
+                        className="px-2 py-0.5 rounded border border-gray-200 text-xs cursor-pointer"
+                        disabled={assigningTag}
+                        style={{
+                          backgroundColor: getContactTag(selectedPhone) 
+                            ? `${getContactTag(selectedPhone)?.color}20` 
+                            : 'white',
+                          color: getContactTag(selectedPhone)?.color || 'inherit'
+                        }}
+                      >
+                        <option value="">Etapa: Sin asignar</option>
+                        {tags.map(tag => (
+                          <option key={tag.id} value={tag.id}>{tag.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
               </div>

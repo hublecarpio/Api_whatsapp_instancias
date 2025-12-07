@@ -34,6 +34,7 @@ model Business {
   policy       Policy?
   promptMaster AgentPrompt?
   messages     MessageLog[]
+  tags         Tag[]
 }
 
 model WhatsAppInstance {
@@ -139,4 +140,66 @@ model MessageLog {
   createdAt  DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Tag {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  color       String   @default("#6B7280")
+  description String?
+  order       Int      @default(0)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business     Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  assignments  TagAssignment[]
+  history      TagHistory[]
+  stagePrompt  StagePrompt?
+
+  @@unique([businessId, name])
+  @@index([businessId, order])
+}
+
+model TagAssignment {
+  id           String   @id @default(uuid())
+  tagId        String
+  businessId   String
+  contactPhone String
+  assignedAt   DateTime @default(now())
+  assignedBy   String?
+  source       String   @default("manual")
+
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, contactPhone])
+  @@index([businessId, tagId])
+  @@index([tagId])
+}
+
+model TagHistory {
+  id           String    @id @default(uuid())
+  tagId        String
+  businessId   String
+  contactPhone String
+  assignedAt   DateTime  @default(now())
+  removedAt    DateTime?
+  source       String    @default("manual")
+  notes        String?
+
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, contactPhone])
+  @@index([tagId, assignedAt])
+}
+
+model StagePrompt {
+  id              String  @id @default(uuid())
+  tagId           String  @unique
+  promptOverride  String?
+  systemContext   String?
+  toolsOverride   Json?
+
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 }

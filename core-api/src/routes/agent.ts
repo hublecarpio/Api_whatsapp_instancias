@@ -338,6 +338,40 @@ async function processWithAgent(
     });
   }
   
+  const contactAssignment = await prisma.tagAssignment.findUnique({
+    where: {
+      businessId_contactPhone: {
+        businessId,
+        contactPhone: contactPhone
+      }
+    },
+    include: {
+      tag: {
+        include: {
+          stagePrompt: true
+        }
+      }
+    }
+  });
+  
+  if (contactAssignment?.tag) {
+    const tag = contactAssignment.tag;
+    systemPrompt += `\n\n## Estado actual del cliente:`;
+    systemPrompt += `\n- Etapa: ${tag.name}`;
+    if (tag.description) {
+      systemPrompt += `\n- Contexto de etapa: ${tag.description}`;
+    }
+    
+    if (tag.stagePrompt) {
+      if (tag.stagePrompt.systemContext) {
+        systemPrompt += `\n\n## Instrucciones especiales para esta etapa:\n${tag.stagePrompt.systemContext}`;
+      }
+      if (tag.stagePrompt.promptOverride) {
+        systemPrompt = tag.stagePrompt.promptOverride + `\n\n${systemPrompt}`;
+      }
+    }
+  }
+  
   const recentMessages = await prisma.messageLog.findMany({
     where: { 
       businessId,

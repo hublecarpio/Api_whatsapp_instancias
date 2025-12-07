@@ -12,6 +12,7 @@ import messageRoutes from './routes/messages.js';
 import webhookRoutes from './routes/webhook.js';
 import toolsRoutes from './routes/tools.js';
 import mediaRoutes from './routes/media.js';
+import tagsRoutes from './routes/tags.js';
 
 dotenv.config();
 
@@ -35,7 +36,8 @@ app.get('/', (req, res) => {
       whatsapp: '/wa/*',
       agent: '/agent/*',
       messages: '/messages/*',
-      webhook: '/webhook/*'
+      webhook: '/webhook/*',
+      tags: '/tags/*'
     }
   });
 });
@@ -51,6 +53,7 @@ app.use('/messages', messageRoutes);
 app.use('/webhook', webhookRoutes);
 app.use('/agent/tools', toolsRoutes);
 app.use('/media', mediaRoutes);
+app.use('/tags', tagsRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

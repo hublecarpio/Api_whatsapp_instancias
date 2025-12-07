@@ -115,3 +115,30 @@ export const mediaApi = {
     return api.post('/media/upload', formData);
   }
 };
+
+export const tagsApi = {
+  list: (businessId: string) => api.get(`/tags?business_id=${businessId}`),
+  create: (data: { business_id: string; name: string; color?: string; description?: string }) =>
+    api.post('/tags', data),
+  update: (id: string, data: { name?: string; color?: string; description?: string; order?: number }) =>
+    api.put(`/tags/${id}`, data),
+  delete: (id: string) => api.delete(`/tags/${id}`),
+  reorder: (businessId: string, tagOrders: { id: string; order: number }[]) =>
+    api.put('/tags/reorder', { business_id: businessId, tag_orders: tagOrders }),
+  initDefaults: (businessId: string) =>
+    api.post('/tags/init-defaults', { business_id: businessId }),
+  setStagePrompt: (tagId: string, data: { promptOverride?: string; systemContext?: string }) =>
+    api.post(`/tags/${tagId}/stage-prompt`, data),
+  assign: (data: { business_id: string; contact_phone: string; tag_id: string; source?: string }) =>
+    api.post('/tags/assign', data),
+  unassign: (data: { business_id: string; contact_phone: string }) =>
+    api.delete('/tags/assign', { data }),
+  getAssignments: (businessId: string, tagId?: string) =>
+    api.get(`/tags/assignments?business_id=${businessId}${tagId ? `&tag_id=${tagId}` : ''}`),
+  getContactTag: (businessId: string, contactPhone: string) =>
+    api.get(`/tags/contact/${contactPhone}?business_id=${businessId}`),
+  getHistory: (businessId: string, contactPhone: string) =>
+    api.get(`/tags/history/${contactPhone}?business_id=${businessId}`),
+  suggestStage: (businessId: string, contactPhone: string) =>
+    api.post('/tags/suggest-stage', { business_id: businessId, contact_phone: contactPhone })
+};
