@@ -7,6 +7,7 @@ interface Business {
   industry?: string;
   logoUrl?: string;
   openaiModel?: string;
+  openaiApiKey?: string;
   botEnabled: boolean;
   instances?: any[];
   policy?: any;
