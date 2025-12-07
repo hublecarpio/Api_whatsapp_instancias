@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { messageApi, waApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
@@ -31,7 +31,12 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ file: File; url: string; type: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -79,21 +84,71 @@ export default function ChatPage() {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentBusiness || !selectedPhone || !newMessage.trim()) return;
+    if (!currentBusiness || !selectedPhone || (!newMessage.trim() && !previewFile)) return;
 
     setSending(true);
+    setError(null);
 
     try {
-      await waApi.send(currentBusiness.id, {
-        to: selectedPhone,
-        message: newMessage
-      });
+      if (previewFile) {
+        setUploading(true);
+        const uploadRes = await mediaApi.upload(currentBusiness.id, previewFile.file);
+        const { url, type } = uploadRes.data;
+        
+        const sendData: any = { to: selectedPhone };
+        if (type === 'image') {
+          sendData.imageUrl = url;
+          sendData.message = newMessage || undefined;
+        } else if (type === 'video') {
+          sendData.videoUrl = url;
+          sendData.message = newMessage || undefined;
+        } else if (type === 'audio') {
+          sendData.audioUrl = url;
+        } else {
+          sendData.fileUrl = url;
+          sendData.fileName = previewFile.file.name;
+        }
+        
+        await waApi.send(currentBusiness.id, sendData);
+        setPreviewFile(null);
+        setUploading(false);
+      } else {
+        await waApi.send(currentBusiness.id, {
+          to: selectedPhone,
+          message: newMessage
+        });
+      }
+      
       setNewMessage('');
       fetchMessages(selectedPhone);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send message:', err);
+      setError(err.response?.data?.error || 'Error al enviar mensaje');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setSending(false);
+      setUploading(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const url = URL.createObjectURL(file);
+    let type = 'file';
+    if (file.type.startsWith('image/')) type = 'image';
+    else if (file.type.startsWith('video/')) type = 'video';
+    else if (file.type.startsWith('audio/')) type = 'audio';
+    
+    setPreviewFile({ file, url, type });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const cancelPreview = () => {
+    if (previewFile) {
+      URL.revokeObjectURL(previewFile.url);
+      setPreviewFile(null);
     }
   };
 
@@ -107,7 +162,7 @@ export default function ChatPage() {
     const today = new Date();
     
     if (date.toDateString() === today.toDateString()) {
-      return 'Hoy';
+      return formatTime(dateStr);
     }
     
     const yesterday = new Date(today);
@@ -116,27 +171,83 @@ export default function ChatPage() {
       return 'Ayer';
     }
     
-    return date.toLocaleDateString('es');
+    return date.toLocaleDateString('es', { day: '2-digit', month: '2-digit' });
+  };
+
+  const isImageUrl = (url: string) => {
+    return /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url);
+  };
+
+  const isVideoUrl = (url: string) => {
+    return /\.(mp4|mov|webm|avi)(\?.*)?$/i.test(url);
+  };
+
+  const renderMedia = (mediaUrl: string, isOutbound: boolean) => {
+    if (isImageUrl(mediaUrl)) {
+      return (
+        <div className="mb-2">
+          <img 
+            src={mediaUrl} 
+            alt="Media" 
+            className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+            style={{ maxHeight: '300px' }}
+            onClick={() => window.open(mediaUrl, '_blank')}
+          />
+        </div>
+      );
+    }
+    
+    if (isVideoUrl(mediaUrl)) {
+      return (
+        <div className="mb-2">
+          <video 
+            src={mediaUrl} 
+            controls 
+            className="max-w-full rounded-lg"
+            style={{ maxHeight: '300px' }}
+          />
+        </div>
+      );
+    }
+    
+    return (
+      <a
+        href={mediaUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`flex items-center gap-2 p-2 rounded-lg mb-2 ${
+          isOutbound ? 'bg-green-700/30' : 'bg-gray-100'
+        }`}
+      >
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+        <span className="text-sm underline">Ver archivo</span>
+      </a>
+    );
   };
 
   if (!currentBusiness) {
     return (
-      <div className="card text-center py-12">
-        <p className="text-gray-600">
-          Primero debes crear una empresa para ver conversaciones.
-        </p>
+      <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="text-center text-gray-500">
+          <p>Primero debes crear una empresa para ver conversaciones.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Conversaciones</h1>
-
-      <div className="flex h-[calc(100%-4rem)] gap-4">
-        <div className="w-80 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="font-semibold text-gray-900">Contactos</h2>
+    <div className="h-[calc(100vh-6rem)] flex flex-col">
+      <div className="flex-1 flex overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div 
+          className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 overflow-hidden border-r border-gray-200 flex flex-col bg-white`}
+        >
+          <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-800">Chats</h2>
+            <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+              {conversations.length}
+            </span>
           </div>
           
           <div className="flex-1 overflow-y-auto">
@@ -145,7 +256,12 @@ export default function ChatPage() {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto"></div>
               </div>
             ) : conversations.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 text-sm">
+              <div className="p-6 text-center text-gray-400 text-sm">
+                <div className="w-16 h-16 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
                 No hay conversaciones
               </div>
             ) : (
@@ -156,30 +272,25 @@ export default function ChatPage() {
                     setSelectedPhone(conv.phone);
                     setSelectedContactName(conv.contactName || '');
                   }}
-                  className={`w-full p-4 text-left border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                    selectedPhone === conv.phone ? 'bg-green-50' : ''
+                  className={`w-full p-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 ${
+                    selectedPhone === conv.phone ? 'bg-green-50 border-l-4 border-green-500' : ''
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                      <span className="text-gray-600">👤</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate">
+                  <div className="w-12 h-12 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">👤</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-gray-900 truncate text-sm">
                         {conv.contactName || `+${conv.phone}`}
                       </p>
-                      {conv.contactName && (
-                        <p className="text-xs text-gray-400 truncate">
-                          +{conv.phone}
-                        </p>
-                      )}
-                      <p className="text-sm text-gray-500 truncate">
-                        {conv.lastMessage || 'Sin mensajes'}
-                      </p>
+                      <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                        {formatDate(conv.lastMessageAt)}
+                      </span>
                     </div>
-                    <div className="text-xs text-gray-400">
-                      {formatDate(conv.lastMessageAt)}
-                    </div>
+                    <p className="text-sm text-gray-500 truncate mt-0.5">
+                      {conv.lastMessage || 'Sin mensajes'}
+                    </p>
                   </div>
                 </button>
               ))
@@ -187,56 +298,76 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           {selectedPhone ? (
             <>
-              <div className="p-4 border-b border-gray-200 flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                  <span className="text-gray-600">👤</span>
+              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-3">
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                  title={sidebarOpen ? 'Ocultar chats' : 'Mostrar chats'}
+                >
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {sidebarOpen ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    )}
+                  </svg>
+                </button>
+                
+                <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-lg">👤</span>
                 </div>
-                <div>
-                  <p className="font-medium text-gray-900">
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900">
                     {selectedContactName || `+${selectedPhone}`}
                   </p>
-                  {selectedContactName && (
-                    <p className="text-xs text-gray-500">+{selectedPhone}</p>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    {currentBusiness.botEnabled ? '🤖 Bot activo' : '😴 Bot inactivo'}
-                  </p>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    {selectedContactName && <span>+{selectedPhone}</span>}
+                    <span className={`px-1.5 py-0.5 rounded ${
+                      currentBusiness.botEnabled 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {currentBusiness.botEnabled ? '🤖 Bot activo' : '😴 Bot inactivo'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+              <div 
+                className="flex-1 overflow-y-auto p-4 space-y-2"
+                style={{ 
+                  backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23e5e7eb\' fill-opacity=\'0.4\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
+                  backgroundColor: '#f0f2f5'
+                }}
+              >
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
                     className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                      className={`max-w-[75%] rounded-2xl px-4 py-2 shadow-sm ${
                         msg.direction === 'outbound'
-                          ? 'bg-green-600 text-white'
-                          : 'bg-white border border-gray-200'
+                          ? 'bg-green-500 text-white rounded-br-md'
+                          : 'bg-white text-gray-900 rounded-bl-md'
                       }`}
                     >
-                      {msg.message && <p className="break-words">{msg.message}</p>}
-                      {msg.mediaUrl && (
-                        <a
-                          href={msg.mediaUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm underline"
-                        >
-                          📎 Ver archivo
-                        </a>
+                      {msg.mediaUrl && renderMedia(msg.mediaUrl, msg.direction === 'outbound')}
+                      {msg.message && (
+                        <p className="break-words whitespace-pre-wrap">{msg.message}</p>
                       )}
                       <p
-                        className={`text-xs mt-1 ${
-                          msg.direction === 'outbound' ? 'text-green-200' : 'text-gray-400'
+                        className={`text-xs mt-1 text-right ${
+                          msg.direction === 'outbound' ? 'text-green-100' : 'text-gray-400'
                         }`}
                       >
                         {formatTime(msg.createdAt)}
+                        {msg.direction === 'outbound' && (
+                          <span className="ml-1">✓✓</span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -244,29 +375,111 @@ export default function ChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              <form onSubmit={handleSend} className="p-4 border-t border-gray-200">
-                <div className="flex gap-2">
+              {previewFile && (
+                <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
+                  <div className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200">
+                    {previewFile.type === 'image' ? (
+                      <img src={previewFile.url} alt="Preview" className="w-16 h-16 object-cover rounded" />
+                    ) : previewFile.type === 'video' ? (
+                      <video src={previewFile.url} className="w-16 h-16 object-cover rounded" />
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-700 truncate">{previewFile.file.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {(previewFile.file.size / 1024).toFixed(1)} KB
+                      </p>
+                    </div>
+                    <button
+                      onClick={cancelPreview}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="mx-3 mb-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSend} className="p-3 border-t border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-2">
                   <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Escribe un mensaje..."
-                    className="input flex-1"
-                    disabled={sending}
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.rar"
                   />
                   <button
-                    type="submit"
-                    disabled={sending || !newMessage.trim()}
-                    className="btn btn-primary"
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors"
+                    disabled={sending}
+                    title="Adjuntar archivo"
                   >
-                    {sending ? '...' : 'Enviar'}
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  </button>
+                  
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Escribe un mensaje..."
+                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-full focus:outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all"
+                      disabled={sending}
+                    />
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    disabled={sending || (!newMessage.trim() && !previewFile)}
+                    className="p-2.5 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Enviar"
+                  >
+                    {sending ? (
+                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               </form>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-500">
-              Selecciona una conversación
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="absolute left-4 top-4 p-2 hover:bg-gray-200 rounded-lg transition-colors lg:hidden"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              
+              <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <p className="text-lg font-medium text-gray-500">WhatsApp SaaS</p>
+              <p className="text-sm mt-1">Selecciona una conversacion para comenzar</p>
             </div>
           )}
         </div>

@@ -106,3 +106,12 @@ export const messageApi = {
   conversation: (businessId: string, phone: string) => 
     api.get(`/messages/conversation/${phone}?business_id=${businessId}`)
 };
+
+export const mediaApi = {
+  upload: (businessId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('businessId', businessId);
+    return api.post('/media/upload', formData);
+  }
+};
