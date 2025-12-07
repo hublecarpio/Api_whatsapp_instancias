@@ -10,6 +10,10 @@ channel = "stable-25_05"
 [userenv.shared]
 PORT = "5000"
 BASE_URL = "http://localhost:5000"
+WA_API_URL = "http://localhost:8080"
+CORE_API_PORT = "3001"
+CORE_API_URL = "http://localhost:3001"
+WA_PORT = "8080"
 
 [workflows]
 runButton = "Project"
@@ -23,13 +27,45 @@ author = "agent"
 task = "workflow.run"
 args = "WhatsApp API"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Core API"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Frontend"
+
 [[workflows.workflow]]
 name = "WhatsApp API"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run dev"
+waitForPort = 8080
+
+[[workflows.workflow]]
+name = "Core API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd core-api && npm run dev"
+waitForPort = 3001
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Frontend"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm run dev"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -38,3 +74,7 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
