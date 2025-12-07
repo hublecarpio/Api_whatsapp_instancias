@@ -744,6 +744,29 @@ export class WhatsAppInstance {
     }
   }
 
+  private generateWaveform(buffer: Buffer): Uint8Array {
+    const waveform = new Uint8Array(64);
+    const chunkSize = Math.floor(buffer.length / 64);
+    
+    for (let i = 0; i < 64; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, buffer.length);
+      let sum = 0;
+      let count = 0;
+      
+      for (let j = start; j < end; j++) {
+        const value = Math.abs(buffer[j] - 128);
+        sum += value;
+        count++;
+      }
+      
+      const avg = count > 0 ? sum / count : 0;
+      waveform[i] = Math.min(127, Math.floor(avg));
+    }
+    
+    return waveform;
+  }
+
   async sendAudio(to: string, url: string, ptt: boolean = true): Promise<{ success: boolean; messageId?: string; error?: string }> {
     if (!this.socket || this.status !== 'connected') {
       return { success: false, error: 'Instance not connected' };
@@ -754,25 +777,18 @@ export class WhatsAppInstance {
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
-      const urlLower = url.toLowerCase();
-      let mimetype = 'audio/ogg; codecs=opus';
-      if (urlLower.includes('.webm') || urlLower.includes('.weba')) {
-        mimetype = 'audio/webm';
-      } else if (urlLower.includes('.mp3')) {
-        mimetype = 'audio/mpeg';
-      } else if (urlLower.includes('.m4a')) {
-        mimetype = 'audio/mp4';
-      } else if (urlLower.includes('.wav')) {
-        mimetype = 'audio/wav';
-      }
+      const waveform = this.generateWaveform(buffer);
 
-      const result = await this.socket.sendMessage(jid, {
+      const audioMessage: any = {
         audio: buffer,
-        mimetype: mimetype,
-        ptt: ptt
-      });
+        mimetype: 'audio/ogg; codecs=opus',
+        ptt: ptt,
+        waveform: waveform
+      };
 
-      this.logger.info({ to: jid, ptt, mimetype }, 'Audio sent');
+      const result = await this.socket.sendMessage(jid, audioMessage);
+
+      this.logger.info({ to: jid, ptt }, 'Audio sent with waveform');
 
       await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
         to: jid,
