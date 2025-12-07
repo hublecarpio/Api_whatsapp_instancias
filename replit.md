@@ -269,3 +269,11 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
   - Document/file download links
   - Error handling with user notifications
 - **Dec 7 2025**: Added media upload endpoint (`/media/upload`) for chat attachments
+- **Dec 7 2025**: Implemented group message filtering - agent ignores WhatsApp group messages (@g.us), only responds to individual chats
+- **Dec 7 2025**: Created reminder/follow-up system:
+  - FollowUpConfig table: per-business settings for automatic follow-ups (enabled, inactivity threshold, daily limit, allowed hours, pressure levels)
+  - Reminder table: stores scheduled reminders (auto or manual) with status tracking
+  - Reminder worker: background service running every minute to process scheduled reminders
+  - Automatic inactivity detection: schedules AI-generated follow-up messages when customers don't respond
+  - Manual reminders: can be scheduled from dashboard, execute regardless of auto-follow-up settings
+  - Dashboard page (/dashboard/reminders): configure follow-up settings and view/create reminders
