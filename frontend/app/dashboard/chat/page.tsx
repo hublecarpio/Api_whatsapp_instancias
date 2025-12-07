@@ -241,6 +241,10 @@ export default function ChatPage() {
     return /\.(mp4|mov|webm|avi)(\?.*)?$/i.test(url);
   };
 
+  const isAudioUrl = (url: string) => {
+    return /\.(ogg|mp3|wav|m4a|aac|opus|webm)(\?.*)?$/i.test(url);
+  };
+
   const renderMedia = (mediaUrl: string, isOutbound: boolean) => {
     if (isImageUrl(mediaUrl)) {
       return (
@@ -265,6 +269,28 @@ export default function ChatPage() {
             className="max-w-full rounded-lg"
             style={{ maxHeight: '300px' }}
           />
+        </div>
+      );
+    }
+
+    if (isAudioUrl(mediaUrl)) {
+      return (
+        <div className={`mb-2 p-2 rounded-lg ${isOutbound ? 'bg-green-700/30' : 'bg-gray-100'}`}>
+          <div className="flex items-center gap-2">
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            <audio 
+              controls 
+              preload="metadata"
+              className="h-10 w-full max-w-[200px]"
+              style={{ minWidth: '150px' }}
+            >
+              <source src={mediaUrl} type="audio/ogg" />
+              <source src={mediaUrl} type="audio/mpeg" />
+              Tu navegador no soporta audio.
+            </audio>
+          </div>
         </div>
       );
     }
@@ -446,6 +472,17 @@ export default function ChatPage() {
                       <img src={previewFile.url} alt="Preview" className="w-16 h-16 object-cover rounded" />
                     ) : previewFile.type === 'video' ? (
                       <video src={previewFile.url} className="w-16 h-16 object-cover rounded" />
+                    ) : previewFile.type === 'audio' ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                        </div>
+                        <audio controls className="h-10 flex-1" style={{ maxWidth: '200px' }}>
+                          <source src={previewFile.url} type="audio/ogg" />
+                        </audio>
+                      </div>
                     ) : (
                       <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
                         <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -453,12 +490,14 @@ export default function ChatPage() {
                         </svg>
                       </div>
                     )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-700 truncate">{previewFile.file.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {(previewFile.file.size / 1024).toFixed(1)} KB
-                      </p>
-                    </div>
+                    {previewFile.type !== 'audio' && (
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-700 truncate">{previewFile.file.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {(previewFile.file.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                    )}
                     <button
                       onClick={cancelPreview}
                       className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
