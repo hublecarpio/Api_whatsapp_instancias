@@ -117,9 +117,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4000
-      - CORE_API_URL=http://core-api:4001
     networks:
-      - frontend_network
+      - whatsapp_internal
       - traefik_public
     deploy:
       replicas: 1
@@ -148,9 +147,6 @@ volumes:
 
 networks:
   whatsapp_internal:
-    driver: overlay
-    attachable: true
-  frontend_network:
     driver: overlay
     attachable: true
   traefik_public:
