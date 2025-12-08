@@ -8,11 +8,16 @@ const prisma = new PrismaClient();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
-const PRICE_ID = process.env.STRIPE_PRICE_WEEKLY_50 || '';
+const PRICE_ID = (process.env.STRIPE_PRICE_WEEKLY_50 || '').trim();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5000';
 
 router.post('/create-checkout-session', authMiddleware, async (req: any, res) => {
   try {
+    if (!PRICE_ID) {
+      console.error('STRIPE_PRICE_WEEKLY_50 is not configured');
+      return res.status(500).json({ error: 'Stripe price not configured. Please contact support.' });
+    }
+
     const userId = req.userId;
     const user = await prisma.user.findUnique({ where: { id: userId } });
     
@@ -35,6 +40,8 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
         data: { stripeCustomerId: customerId }
       });
     }
+
+    console.log('Creating checkout session with price:', PRICE_ID);
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
