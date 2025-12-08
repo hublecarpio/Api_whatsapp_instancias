@@ -73,7 +73,31 @@ model MetaCredential {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  instance WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instance  WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  templates MetaTemplate[]
+}
+
+model MetaTemplate {
+  id             String   @id @default(uuid())
+  credentialId   String
+  metaTemplateId String
+  name           String
+  language       String   @default("es")
+  category       String   @default("UTILITY")
+  status         String   @default("PENDING")
+  components     Json
+  headerType     String?
+  bodyText       String?
+  footerText     String?
+  buttons        Json?
+  lastSynced     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  credential MetaCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  @@unique([credentialId, name])
+  @@index([credentialId, status])
 }
 
 model Product {

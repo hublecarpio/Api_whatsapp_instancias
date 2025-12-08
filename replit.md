@@ -22,10 +22,21 @@ The platform follows a microservices-like architecture comprising three main com
 **Technical Implementations**:
 *   **AI Pipeline**: Processes incoming WhatsApp messages via a webhook, leverages business context (products, policies, prompts), conversation history, and OpenAI API to generate AI responses, which are then sent back via the WhatsApp API.
 *   **Multi-Provider WhatsApp**: Supports both Baileys for direct WhatsApp Web integration and Meta Cloud API for official business accounts, offering flexibility in WhatsApp connectivity.
+*   **Meta Cloud API Integration**: 
+    - Provider selection UI with modal for choosing between Baileys (QR) or Meta Cloud (credentials form)
+    - Meta webhook routes (`/webhook/meta/:instanceId`) for receiving incoming messages
+    - MetaCloudService for sending text, images, videos, audio, documents, and approved templates
+    - 24-hour conversation window tracking - after 24h of client inactivity, only templates can be sent
+    - Message Templates page (`/dashboard/templates`) for managing Meta-approved templates
+    - Template sync from Meta Graph API
+*   **24-Hour Conversation Window**:
+    - Endpoint `/messages/conversation/:phone/window-status` checks window status
+    - Chat panel shows visual indicator of time remaining or template requirement
+    - Reminder worker automatically uses templates when window is closed
 *   **AI Agent Tools**: Allows the AI agent to call external POST endpoints with dynamic parameter interpolation based on conversation context.
 *   **Message Buffering**: Accumulates messages for a configurable duration before triggering an AI response.
 *   **Multimodal Response Handling**: Automatically detects and sends various media types (images, videos, files) and handles S3 shortcodes or full URLs.
-*   **Reminder/Follow-up System**: Background worker for automatic inactivity detection and scheduling AI-generated follow-up messages or manual reminders.
+*   **Reminder/Follow-up System**: Background worker for automatic inactivity detection and scheduling AI-generated follow-up messages or manual reminders. For Meta Cloud instances, uses approved templates when 24h window expires.
 *   **Robust Deployment**: Dockerized services with improved health checks, database wait logic, and environment variable support for flexible port configuration.
 
 **System Design Choices**:

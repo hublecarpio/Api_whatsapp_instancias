@@ -94,6 +94,16 @@ export const toolsApi = {
 
 export const waApi = {
   create: (businessId: string) => api.post('/wa/create', { businessId }),
+  createMeta: (data: {
+    businessId: string;
+    name?: string;
+    accessToken: string;
+    metaBusinessId: string;
+    phoneNumberId: string;
+    appId: string;
+    appSecret: string;
+  }) => api.post('/wa/create-meta', data),
+  instances: (businessId: string) => api.get(`/wa/instances/${businessId}`),
   status: (businessId: string) => api.get(`/wa/${businessId}/status`),
   qr: (businessId: string) => api.get(`/wa/${businessId}/qr`),
   send: (businessId: string, data: any) => api.post(`/wa/${businessId}/send`, data),
@@ -105,7 +115,9 @@ export const messageApi = {
   conversations: (businessId: string) => 
     api.get(`/messages/conversations?business_id=${businessId}`),
   conversation: (businessId: string, phone: string) => 
-    api.get(`/messages/conversation/${phone}?business_id=${businessId}`)
+    api.get(`/messages/conversation/${phone}?business_id=${businessId}`),
+  windowStatus: (businessId: string, phone: string) =>
+    api.get(`/messages/conversation/${phone}/window-status?business_id=${businessId}`)
 };
 
 export const mediaApi = {
@@ -138,6 +150,29 @@ export const remindersApi = {
   }) => api.post('/reminders', data),
   cancel: (id: string) => api.delete(`/reminders/${id}`),
   pendingCount: (businessId: string) => api.get(`/reminders/pending/count/${businessId}`)
+};
+
+export const templatesApi = {
+  list: (businessId: string) => api.get(`/templates/${businessId}`),
+  sync: (businessId: string) => api.post(`/templates/${businessId}/sync`),
+  create: (businessId: string, data: {
+    name: string;
+    language?: string;
+    category?: string;
+    headerType?: string;
+    headerText?: string;
+    headerMediaUrl?: string;
+    bodyText: string;
+    footerText?: string;
+    buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }>;
+  }) => api.post(`/templates/${businessId}/create`, data),
+  delete: (businessId: string, templateId: string) => api.delete(`/templates/${businessId}/${templateId}`),
+  send: (businessId: string, data: {
+    templateName: string;
+    to: string;
+    variables?: string[];
+    headerVariables?: string[];
+  }) => api.post(`/templates/${businessId}/send-template`, data)
 };
 
 export const tagsApi = {

@@ -142,4 +142,80 @@ router.get('/conversation/:phone', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id } = req.query;
+    const { phone } = req.params;
+    
+    if (!business_id) {
+      return res.status(400).json({ error: 'business_id is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, business_id as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { businessId: business_id as string },
+      include: { metaCredential: true }
+    });
+    
+    if (!instance) {
+      return res.json({ 
+        provider: null,
+        requiresTemplate: false,
+        windowOpen: true,
+        message: 'No WhatsApp instance'
+      });
+    }
+    
+    if (instance.provider !== 'META_CLOUD') {
+      return res.json({
+        provider: 'BAILEYS',
+        requiresTemplate: false,
+        windowOpen: true,
+        message: 'Baileys does not require templates'
+      });
+    }
+    
+    const lastInboundMessage = await prisma.messageLog.findFirst({
+      where: {
+        businessId: business_id as string,
+        sender: phone,
+        direction: 'inbound'
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    if (!lastInboundMessage) {
+      return res.json({
+        provider: 'META_CLOUD',
+        requiresTemplate: true,
+        windowOpen: false,
+        lastClientMessage: null,
+        message: 'No previous messages from client - template required to initiate'
+      });
+    }
+    
+    const hoursSinceLastMessage = (Date.now() - lastInboundMessage.createdAt.getTime()) / (1000 * 60 * 60);
+    const windowOpen = hoursSinceLastMessage < 24;
+    
+    return res.json({
+      provider: 'META_CLOUD',
+      requiresTemplate: !windowOpen,
+      windowOpen,
+      lastClientMessage: lastInboundMessage.createdAt,
+      hoursSinceLastMessage: Math.round(hoursSinceLastMessage * 10) / 10,
+      hoursRemaining: windowOpen ? Math.round((24 - hoursSinceLastMessage) * 10) / 10 : 0,
+      message: windowOpen 
+        ? `Window open - ${Math.round((24 - hoursSinceLastMessage) * 10) / 10}h remaining`
+        : 'Window closed - template required'
+    });
+  } catch (error) {
+    console.error('Get window status error:', error);
+    res.status(500).json({ error: 'Failed to get window status' });
+  }
+});
+
 export default router;

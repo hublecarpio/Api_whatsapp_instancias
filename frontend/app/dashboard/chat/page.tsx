@@ -37,6 +37,14 @@ interface TagAssignment {
   tag: Tag;
 }
 
+interface WindowStatus {
+  provider: string | null;
+  requiresTemplate: boolean;
+  windowOpen: boolean;
+  hoursRemaining?: number;
+  message: string;
+}
+
 export default function ChatPage() {
   const { currentBusiness } = useBusinessStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -57,6 +65,7 @@ export default function ChatPage() {
   const [assignments, setAssignments] = useState<TagAssignment[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [assigningTag, setAssigningTag] = useState(false);
+  const [windowStatus, setWindowStatus] = useState<WindowStatus | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -140,10 +149,24 @@ export default function ChatPage() {
   useEffect(() => {
     if (selectedPhone && currentBusiness) {
       fetchMessages(selectedPhone);
-      const interval = setInterval(() => fetchMessages(selectedPhone), 5000);
+      fetchWindowStatus(selectedPhone);
+      const interval = setInterval(() => {
+        fetchMessages(selectedPhone);
+        fetchWindowStatus(selectedPhone);
+      }, 5000);
       return () => clearInterval(interval);
     }
   }, [selectedPhone, currentBusiness]);
+
+  const fetchWindowStatus = async (phone: string) => {
+    if (!currentBusiness) return;
+    try {
+      const response = await messageApi.windowStatus(currentBusiness.id, phone);
+      setWindowStatus(response.data);
+    } catch (err) {
+      console.error('Failed to fetch window status:', err);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -592,6 +615,25 @@ export default function ChatPage() {
                     >
                       {currentBusiness.botEnabled ? '🤖 Bot activo' : '😴 Bot inactivo'}
                     </button>
+                    {windowStatus && windowStatus.provider === 'META_CLOUD' && (
+                      <span 
+                        className={`px-1.5 py-0.5 rounded ${
+                          windowStatus.windowOpen 
+                            ? 'bg-blue-100 text-blue-700' 
+                            : 'bg-orange-100 text-orange-700'
+                        }`}
+                        title={windowStatus.message}
+                      >
+                        {windowStatus.windowOpen 
+                          ? `📬 ${windowStatus.hoursRemaining}h restantes` 
+                          : '📭 Template requerido'}
+                      </span>
+                    )}
+                    {windowStatus && windowStatus.provider && (
+                      <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                        {windowStatus.provider === 'META_CLOUD' ? '☁️ Meta' : '📱 Baileys'}
+                      </span>
+                    )}
                     {selectedPhone && (
                       <select
                         value={getContactTag(selectedPhone)?.id || ''}

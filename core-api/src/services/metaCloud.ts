@@ -236,6 +236,50 @@ export class MetaCloudService {
     return response.data;
   }
 
+  async sendTemplate(options: {
+    to: string;
+    templateName: string;
+    language: string;
+    components?: Array<{
+      type: 'header' | 'body' | 'button';
+      parameters?: Array<{ type: string; text?: string; image?: { link: string }; document?: { link: string } }>;
+    }>;
+  }): Promise<any> {
+    const cleanPhone = options.to.replace(/\D/g, '');
+
+    const payload: any = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanPhone,
+      type: 'template',
+      template: {
+        name: options.templateName,
+        language: { code: options.language }
+      }
+    };
+
+    if (options.components && options.components.length > 0) {
+      payload.template.components = options.components;
+    }
+
+    const response = await axios.post(
+      `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+      payload,
+      { headers: this.headers }
+    );
+
+    return response.data;
+  }
+
+  async getTemplates(): Promise<any[]> {
+    const response = await axios.get(
+      `${META_API_URL}/${this.credentials.businessId}/message_templates`,
+      { headers: this.headers }
+    );
+
+    return response.data.data || [];
+  }
+
   static parseWebhookMessage(payload: MetaWebhookPayload): {
     phoneNumberId: string;
     messages: Array<{

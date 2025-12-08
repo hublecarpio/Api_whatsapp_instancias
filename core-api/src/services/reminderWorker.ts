@@ -1,8 +1,125 @@
 import prisma from './prisma.js';
 import axios from 'axios';
 import OpenAI from 'openai';
+import { MetaCloudService } from './metaCloud.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+
+async function checkWindowStatus(businessId: string, contactPhone: string): Promise<{
+  requiresTemplate: boolean;
+  provider: string | null;
+  hoursSinceLastMessage: number | null;
+}> {
+  const instance = await prisma.whatsAppInstance.findFirst({
+    where: { businessId },
+    include: { metaCredential: true }
+  });
+  
+  if (!instance || instance.provider !== 'META_CLOUD') {
+    return { requiresTemplate: false, provider: instance?.provider || null, hoursSinceLastMessage: null };
+  }
+  
+  const lastInboundMessage = await prisma.messageLog.findFirst({
+    where: {
+      businessId,
+      sender: contactPhone,
+      direction: 'inbound'
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+  
+  if (!lastInboundMessage) {
+    return { requiresTemplate: true, provider: 'META_CLOUD', hoursSinceLastMessage: null };
+  }
+  
+  const hoursSinceLastMessage = (Date.now() - lastInboundMessage.createdAt.getTime()) / (1000 * 60 * 60);
+  const requiresTemplate = hoursSinceLastMessage >= 24;
+  
+  return { requiresTemplate, provider: 'META_CLOUD', hoursSinceLastMessage };
+}
+
+interface TemplateData {
+  name: string;
+  language: string;
+  components?: Array<{
+    type: 'header' | 'body' | 'button';
+    parameters?: Array<{ type: string; text?: string }>;
+  }>;
+  bodyText?: string;
+}
+
+async function getDefaultTemplate(businessId: string): Promise<TemplateData | null> {
+  const instance = await prisma.whatsAppInstance.findFirst({
+    where: { businessId, provider: 'META_CLOUD' },
+    include: { metaCredential: true }
+  });
+  
+  if (!instance?.metaCredential) return null;
+  
+  const template = await prisma.metaTemplate.findFirst({
+    where: { 
+      credentialId: instance.metaCredential.id,
+      status: 'APPROVED',
+      category: { in: ['MARKETING', 'UTILITY'] }
+    },
+    orderBy: [{ category: 'asc' }, { updatedAt: 'desc' }]
+  });
+  
+  if (!template) return null;
+  
+  let components: TemplateData['components'] = undefined;
+  
+  if (template.components) {
+    let storedComponents: any[];
+    
+    if (typeof template.components === 'string') {
+      try {
+        storedComponents = JSON.parse(template.components);
+      } catch {
+        storedComponents = [];
+      }
+    } else if (Array.isArray(template.components)) {
+      storedComponents = template.components;
+    } else {
+      storedComponents = [];
+    }
+    
+    const parsedComponents: TemplateData['components'] = [];
+    
+    for (const comp of storedComponents) {
+      const compType = comp.type?.toUpperCase();
+      
+      if (compType === 'HEADER' && comp.format === 'TEXT' && comp.text) {
+        const matches = comp.text.match(/\{\{(\d+)\}\}/g) || [];
+        if (matches.length > 0) {
+          parsedComponents.push({
+            type: 'header',
+            parameters: matches.map(() => ({ type: 'text', text: 'Estimado cliente' }))
+          });
+        }
+      } else if (compType === 'BODY' && comp.text) {
+        const matches = comp.text.match(/\{\{(\d+)\}\}/g) || [];
+        if (matches.length > 0) {
+          parsedComponents.push({
+            type: 'body',
+            parameters: matches.map(() => ({ type: 'text', text: 'Cliente' }))
+          });
+        }
+      }
+    }
+    
+    if (parsedComponents.length > 0) {
+      components = parsedComponents;
+    }
+  }
+  
+  return { 
+    name: template.name, 
+    language: template.language,
+    components: components && components.length > 0 ? components : undefined,
+    bodyText: template.bodyText || undefined
+  };
+}
 
 async function generateFollowUpMessage(
   businessId: string,
@@ -155,14 +272,29 @@ export async function processReminders(): Promise<void> {
       }
       
       const instance = reminder.business.instances[0];
-      if (!instance?.instanceBackendId) {
+      if (!instance) {
         console.log(`No WhatsApp instance for business ${reminder.businessId}`);
         continue;
       }
       
-      let message = reminder.messageTemplate || reminder.generatedMessage;
+      const windowStatus = await checkWindowStatus(reminder.businessId, reminder.contactPhone);
       
-      if (!message) {
+      let message = reminder.messageTemplate || reminder.generatedMessage;
+      let usedTemplate: TemplateData | null = null;
+      
+      if (windowStatus.requiresTemplate && windowStatus.provider === 'META_CLOUD') {
+        const templateData = await getDefaultTemplate(reminder.businessId);
+        if (!templateData) {
+          console.log(`No approved template for Meta Cloud business ${reminder.businessId} - cannot send reminder outside 24h window`);
+          await prisma.reminder.update({
+            where: { id: reminder.id },
+            data: { status: 'no_template' }
+          });
+          continue;
+        }
+        usedTemplate = templateData;
+        message = templateData.bodyText || `[Template: ${templateData.name}]`;
+      } else if (!message) {
         message = await generateFollowUpMessage(
           reminder.businessId,
           reminder.contactPhone,
@@ -171,22 +303,59 @@ export async function processReminders(): Promise<void> {
         );
       }
       
-      await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendMessage`, {
-        to: reminder.contactPhone.includes('@') ? reminder.contactPhone : `${reminder.contactPhone}@s.whatsapp.net`,
-        message
-      });
+      const cleanPhone = reminder.contactPhone.replace(/\D/g, '');
+      
+      if (instance.provider === 'META_CLOUD') {
+        const metaCred = await prisma.metaCredential.findFirst({
+          where: { instanceId: instance.id }
+        });
+        
+        if (!metaCred) {
+          console.log(`No Meta credentials for instance ${instance.id}`);
+          continue;
+        }
+        
+        const metaService = new MetaCloudService({
+          accessToken: metaCred.accessToken,
+          phoneNumberId: metaCred.phoneNumberId,
+          businessId: metaCred.businessId
+        });
+        
+        if (usedTemplate) {
+          await metaService.sendTemplate({
+            to: cleanPhone,
+            templateName: usedTemplate.name,
+            language: usedTemplate.language,
+            components: usedTemplate.components
+          });
+        } else {
+          await metaService.sendMessage({ to: cleanPhone, text: message });
+        }
+      } else {
+        if (!instance.instanceBackendId) {
+          console.log(`No Baileys backend ID for instance ${instance.id}`);
+          continue;
+        }
+        
+        await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendMessage`, {
+          to: cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`,
+          message
+        });
+      }
       
       await prisma.messageLog.create({
         data: {
           businessId: reminder.businessId,
           instanceId: instance.id,
           direction: 'outbound',
-          recipient: reminder.contactPhone,
+          recipient: cleanPhone,
           message,
           metadata: {
             type: 'reminder',
             reminderId: reminder.id,
-            attemptNumber: reminder.attemptNumber
+            attemptNumber: reminder.attemptNumber,
+            provider: instance.provider,
+            usedTemplate: usedTemplate?.name || null
           }
         }
       });
@@ -200,10 +369,24 @@ export async function processReminders(): Promise<void> {
         }
       });
       
-      console.log(`Reminder executed: ${reminder.id} to ${reminder.contactPhone}`);
+      console.log(`Reminder executed: ${reminder.id} to ${cleanPhone} via ${instance.provider}${usedTemplate ? ` (template: ${usedTemplate.name})` : ''}`);
       
-    } catch (error) {
-      console.error(`Failed to process reminder ${reminder.id}:`, error);
+    } catch (error: any) {
+      let errorMessage = error?.message || 'Unknown error';
+      let metaErrorDetails = null;
+      
+      if (error?.response?.data) {
+        metaErrorDetails = error.response.data;
+        errorMessage = `Meta API Error: ${JSON.stringify(metaErrorDetails)}`;
+      }
+      
+      console.error(`Failed to process reminder ${reminder.id}:`, {
+        error: errorMessage,
+        contactPhone: reminder.contactPhone,
+        businessId: reminder.businessId,
+        provider: reminder.business.instances[0]?.provider,
+        metaError: metaErrorDetails
+      });
       
       await prisma.reminder.update({
         where: { id: reminder.id },

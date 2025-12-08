@@ -10,16 +10,39 @@ interface ConnectionEvent {
   timestamp: Date;
 }
 
+interface MetaFormData {
+  name: string;
+  accessToken: string;
+  metaBusinessId: string;
+  phoneNumberId: string;
+  appId: string;
+  appSecret: string;
+}
+
 export default function WhatsAppPage() {
   const { currentBusiness, setCurrentBusiness } = useBusinessStore();
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
+  const [provider, setProvider] = useState<string>('BAILEYS');
   const [qrCode, setQrCode] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [error, setError] = useState('');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [events, setEvents] = useState<ConnectionEvent[]>([]);
+  const [showProviderModal, setShowProviderModal] = useState(false);
+  const [showMetaForm, setShowMetaForm] = useState(false);
+  const [metaInfo, setMetaInfo] = useState<any>(null);
+  const [webhookInfo, setWebhookInfo] = useState<{ url: string; token: string } | null>(null);
+  
+  const [metaForm, setMetaForm] = useState<MetaFormData>({
+    name: '',
+    accessToken: '',
+    metaBusinessId: '',
+    phoneNumberId: '',
+    appId: '',
+    appSecret: ''
+  });
 
   const addEvent = useCallback((type: string, message: string) => {
     setEvents(prev => [{
@@ -41,10 +64,21 @@ export default function WhatsAppPage() {
       }
       
       setStatus(newStatus);
+      setProvider(response.data.provider || 'BAILEYS');
       setPhoneNumber(response.data.phoneNumber || '');
       setLastUpdate(new Date());
       
-      if (newStatus === 'pending_qr') {
+      if (response.data.metaInfo) {
+        setMetaInfo(response.data.metaInfo);
+      }
+      if (response.data.webhookUrl && response.data.webhookVerifyToken) {
+        setWebhookInfo({
+          url: response.data.webhookUrl,
+          token: response.data.webhookVerifyToken
+        });
+      }
+      
+      if (newStatus === 'pending_qr' && response.data.provider !== 'META_CLOUD') {
         const qrResponse = await waApi.qr(currentBusiness.id);
         setQrCode(qrResponse.data.qr || '');
       } else {
@@ -62,8 +96,10 @@ export default function WhatsAppPage() {
       'not_created': 'Sin configurar',
       'pending_qr': 'Esperando QR',
       'open': 'Conectado',
+      'connected': 'Conectado',
       'closed': 'Desconectado',
-      'connecting': 'Conectando'
+      'connecting': 'Conectando',
+      'error': 'Error'
     };
     return texts[s] || s;
   };
@@ -74,22 +110,79 @@ export default function WhatsAppPage() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  const handleCreate = async () => {
+  const handleCreateBaileys = async () => {
     if (!currentBusiness) return;
     
     setLoading(true);
     setError('');
-    addEvent('action', 'Creando instancia...');
+    setShowProviderModal(false);
+    addEvent('action', 'Creando instancia Baileys...');
     
     try {
       await waApi.create(currentBusiness.id);
-      addEvent('success', 'Instancia creada');
+      addEvent('success', 'Instancia Baileys creada');
       const refreshed = await businessApi.get(currentBusiness.id);
       setCurrentBusiness(refreshed.data);
       await fetchStatus();
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Error al crear instancia';
       setError(errorMsg);
+      addEvent('error', errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateMeta = async () => {
+    if (!currentBusiness) return;
+    
+    if (!metaForm.accessToken || !metaForm.metaBusinessId || !metaForm.phoneNumberId || !metaForm.appId || !metaForm.appSecret) {
+      setError('Todos los campos son obligatorios');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    addEvent('action', 'Creando instancia Meta Cloud...');
+    
+    try {
+      const response = await waApi.createMeta({
+        businessId: currentBusiness.id,
+        name: metaForm.name || 'Meta WhatsApp',
+        accessToken: metaForm.accessToken,
+        metaBusinessId: metaForm.metaBusinessId,
+        phoneNumberId: metaForm.phoneNumberId,
+        appId: metaForm.appId,
+        appSecret: metaForm.appSecret
+      });
+      
+      addEvent('success', 'Instancia Meta Cloud creada');
+      setShowMetaForm(false);
+      setShowProviderModal(false);
+      
+      if (response.data.webhookUrl) {
+        setWebhookInfo({
+          url: response.data.webhookUrl,
+          token: response.data.instance.webhookVerifyToken
+        });
+      }
+      
+      const refreshed = await businessApi.get(currentBusiness.id);
+      setCurrentBusiness(refreshed.data);
+      await fetchStatus();
+      
+      setMetaForm({
+        name: '',
+        accessToken: '',
+        metaBusinessId: '',
+        phoneNumberId: '',
+        appId: '',
+        appSecret: ''
+      });
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error || 'Error al crear instancia Meta';
+      const details = err.response?.data?.details;
+      setError(details ? `${errorMsg}: ${details}` : errorMsg);
       addEvent('error', errorMsg);
     } finally {
       setLoading(false);
@@ -139,7 +232,7 @@ export default function WhatsAppPage() {
 
   const handleDelete = async () => {
     if (!currentBusiness) return;
-    if (!confirm('¿Eliminar conexión de WhatsApp? Tendrás que escanear el QR de nuevo.')) return;
+    if (!confirm('¿Eliminar conexión de WhatsApp? Tendrás que configurar de nuevo.')) return;
     
     setActionLoading('delete');
     setError('');
@@ -153,6 +246,8 @@ export default function WhatsAppPage() {
       setStatus('not_created');
       setQrCode('');
       setPhoneNumber('');
+      setMetaInfo(null);
+      setWebhookInfo(null);
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Error al eliminar';
       setError(errorMsg);
@@ -167,14 +262,31 @@ export default function WhatsAppPage() {
       'not_created': { bg: 'bg-gray-100', dot: 'bg-gray-400', text: 'Sin configurar' },
       'pending_qr': { bg: 'bg-yellow-100', dot: 'bg-yellow-500', text: 'Esperando QR' },
       'open': { bg: 'bg-green-100', dot: 'bg-green-500', text: 'Conectado' },
+      'connected': { bg: 'bg-green-100', dot: 'bg-green-500', text: 'Conectado' },
       'closed': { bg: 'bg-red-100', dot: 'bg-red-500', text: 'Desconectado' },
-      'connecting': { bg: 'bg-blue-100', dot: 'bg-blue-500', text: 'Conectando' }
+      'connecting': { bg: 'bg-blue-100', dot: 'bg-blue-500', text: 'Conectando' },
+      'error': { bg: 'bg-red-100', dot: 'bg-red-500', text: 'Error' }
     };
     const badge = badges[status] || { bg: 'bg-gray-100', dot: 'bg-gray-400', text: status };
     return (
       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${badge.bg}`}>
-        <span className={`w-2 h-2 rounded-full ${badge.dot} ${status === 'open' ? 'animate-pulse' : ''}`}></span>
+        <span className={`w-2 h-2 rounded-full ${badge.dot} ${status === 'open' || status === 'connected' ? 'animate-pulse' : ''}`}></span>
         {badge.text}
+      </span>
+    );
+  };
+
+  const getProviderBadge = () => {
+    if (provider === 'META_CLOUD') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+          <span>📱</span> Meta Cloud API
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+        <span>📲</span> Baileys
       </span>
     );
   };
@@ -199,6 +311,11 @@ export default function WhatsAppPage() {
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    addEvent('success', 'Copiado al portapapeles');
+  };
+
   if (!currentBusiness) {
     return (
       <div className="card text-center py-8">
@@ -212,9 +329,14 @@ export default function WhatsAppPage() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-gray-900">WhatsApp</h1>
-          {status !== 'not_created' && getStatusBadge()}
+          {status !== 'not_created' && (
+            <>
+              {getStatusBadge()}
+              {getProviderBadge()}
+            </>
+          )}
         </div>
-        {phoneNumber && status === 'open' && (
+        {phoneNumber && (status === 'open' || status === 'connected') && (
           <span className="text-sm text-gray-600">+{phoneNumber}</span>
         )}
       </div>
@@ -233,14 +355,14 @@ export default function WhatsAppPage() {
               <div className="text-center py-6">
                 <div className="text-4xl mb-3">💬</div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-1">Conecta tu WhatsApp</h2>
-                <p className="text-gray-600 text-sm mb-4">Crea una instancia para empezar a recibir mensajes.</p>
-                <button onClick={handleCreate} disabled={loading} className="btn btn-primary">
+                <p className="text-gray-600 text-sm mb-4">Elige cómo quieres conectar tu cuenta de WhatsApp.</p>
+                <button onClick={() => setShowProviderModal(true)} disabled={loading} className="btn btn-primary">
                   {loading ? 'Creando...' : 'Crear instancia'}
                 </button>
               </div>
             )}
 
-            {status === 'pending_qr' && (
+            {status === 'pending_qr' && provider !== 'META_CLOUD' && (
               <div className="py-2">
                 <div className="text-center mb-3">
                   <h2 className="text-lg font-semibold text-gray-900">Escanea el código QR</h2>
@@ -284,22 +406,52 @@ export default function WhatsAppPage() {
               </div>
             )}
 
-            {status === 'open' && (
+            {(status === 'open' || status === 'connected') && (
               <div className="py-2">
                 <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg mb-4">
                   <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
                     <span className="text-xl">✓</span>
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h2 className="font-semibold text-gray-900">WhatsApp Conectado</h2>
                     <p className="text-xs text-gray-500">Tu cuenta está activa y recibiendo mensajes</p>
+                    {metaInfo && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        {metaInfo.verifiedName && `Nombre: ${metaInfo.verifiedName}`}
+                        {metaInfo.qualityRating && ` • Calidad: ${metaInfo.qualityRating}`}
+                      </p>
+                    )}
                   </div>
                 </div>
+
+                {provider === 'META_CLOUD' && webhookInfo && (
+                  <div className="bg-blue-50 p-3 rounded-lg mb-4">
+                    <h3 className="text-sm font-semibold text-blue-800 mb-2">Configuración de Webhook</h3>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs text-blue-600">URL del Webhook:</label>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-white px-2 py-1 rounded flex-1 overflow-x-auto">{webhookInfo.url}</code>
+                          <button onClick={() => copyToClipboard(webhookInfo.url)} className="text-blue-600 hover:text-blue-800 text-xs">📋</button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-blue-600">Token de verificación:</label>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-white px-2 py-1 rounded flex-1">{webhookInfo.token}</code>
+                          <button onClick={() => copyToClipboard(webhookInfo.token)} className="text-blue-600 hover:text-blue-800 text-xs">📋</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm">
-                    {actionLoading === 'restart' ? '...' : '🔁 Reiniciar'}
-                  </button>
+                  {provider !== 'META_CLOUD' && (
+                    <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm">
+                      {actionLoading === 'restart' ? '...' : '🔁 Reiniciar'}
+                    </button>
+                  )}
                   <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm">
                     {actionLoading === 'delete' ? '...' : '🗑️ Eliminar'}
                   </button>
@@ -368,13 +520,178 @@ export default function WhatsAppPage() {
           <div className="card p-3 mt-3">
             <h3 className="text-sm font-semibold text-gray-700 mb-2">💡 Ayuda</h3>
             <ul className="text-xs text-gray-500 space-y-1">
+              <li><strong>Baileys:</strong> Conexión vía QR (WhatsApp Web)</li>
+              <li><strong>Meta Cloud:</strong> API oficial de WhatsApp Business</li>
               <li>• <strong>QR no carga:</strong> Refrescar</li>
               <li>• <strong>QR expiró:</strong> Reiniciar</li>
-              <li>• <strong>Errores:</strong> Eliminar y crear nuevo</li>
             </ul>
           </div>
         </div>
       </div>
+
+      {showProviderModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Elige el tipo de conexión</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <button
+                onClick={handleCreateBaileys}
+                disabled={loading}
+                className="p-4 border-2 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all text-left group"
+              >
+                <div className="text-3xl mb-2">📲</div>
+                <h3 className="font-semibold text-gray-900 group-hover:text-green-700">Baileys</h3>
+                <p className="text-xs text-gray-500 mt-1">Conexión vía código QR. Usa la sesión de WhatsApp Web.</p>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Gratis</span>
+                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">Rápido</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setShowMetaForm(true)}
+                disabled={loading}
+                className="p-4 border-2 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+              >
+                <div className="text-3xl mb-2">📱</div>
+                <h3 className="font-semibold text-gray-900 group-hover:text-blue-700">Meta Cloud API</h3>
+                <p className="text-xs text-gray-500 mt-1">API oficial de WhatsApp Business. Requiere cuenta de Meta.</p>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Oficial</span>
+                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">Templates</span>
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowProviderModal(false)}
+              className="w-full btn btn-secondary"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showMetaForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Configurar Meta Cloud API</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Ingresa las credenciales de tu aplicación de Meta Business.
+              <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener" className="text-blue-600 hover:underline ml-1">
+                Ver documentación →
+              </a>
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre (opcional)</label>
+                <input
+                  type="text"
+                  value={metaForm.name}
+                  onChange={(e) => setMetaForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Mi WhatsApp Business"
+                  className="input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Access Token <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={metaForm.accessToken}
+                  onChange={(e) => setMetaForm(prev => ({ ...prev, accessToken: e.target.value }))}
+                  placeholder="EAAG..."
+                  className="input"
+                />
+                <p className="text-xs text-gray-400 mt-1">Token de acceso permanente o temporal</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone Number ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={metaForm.phoneNumberId}
+                  onChange={(e) => setMetaForm(prev => ({ ...prev, phoneNumberId: e.target.value }))}
+                  placeholder="123456789012345"
+                  className="input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  WhatsApp Business Account ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={metaForm.metaBusinessId}
+                  onChange={(e) => setMetaForm(prev => ({ ...prev, metaBusinessId: e.target.value }))}
+                  placeholder="123456789012345"
+                  className="input"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    App ID <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={metaForm.appId}
+                    onChange={(e) => setMetaForm(prev => ({ ...prev, appId: e.target.value }))}
+                    placeholder="123456789"
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    App Secret <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={metaForm.appSecret}
+                    onChange={(e) => setMetaForm(prev => ({ ...prev, appSecret: e.target.value }))}
+                    placeholder="abc123..."
+                    className="input"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowMetaForm(false);
+                  setError('');
+                }}
+                className="flex-1 btn btn-secondary"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateMeta}
+                disabled={loading}
+                className="flex-1 btn btn-primary"
+              >
+                {loading ? 'Conectando...' : 'Conectar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

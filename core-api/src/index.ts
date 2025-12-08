@@ -15,6 +15,7 @@ import mediaRoutes from './routes/media.js';
 import tagsRoutes from './routes/tags.js';
 import remindersRoutes from './routes/reminders.js';
 import metaWebhookRoutes from './routes/metaWebhook.js';
+import templatesRoutes from './routes/templates.js';
 import { startReminderWorker } from './services/reminderWorker.js';
 
 dotenv.config();
@@ -60,6 +61,7 @@ app.use('/media', mediaRoutes);
 app.use('/tags', tagsRoutes);
 app.use('/reminders', remindersRoutes);
 app.use('/webhook/meta', metaWebhookRoutes);
+app.use('/templates', templatesRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
