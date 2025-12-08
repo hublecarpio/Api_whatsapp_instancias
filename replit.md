@@ -37,6 +37,14 @@ The platform follows a microservices-like architecture comprising three main com
 *   **Message Buffering**: Accumulates messages for a configurable duration before triggering an AI response.
 *   **Multimodal Response Handling**: Automatically detects and sends various media types (images, videos, files) and handles S3 shortcodes or full URLs.
 *   **Reminder/Follow-up System**: Background worker for automatic inactivity detection and scheduling AI-generated follow-up messages or manual reminders. For Meta Cloud instances, uses approved templates when 24h window expires.
+*   **Stripe Billing Integration**:
+    - 7-day free trial with credit card required upfront
+    - Weekly recurring payment of $50 USD
+    - Stripe Checkout for subscription creation
+    - Webhook handler for payment events (success, failure, cancellation)
+    - Automatic account suspension on payment failure
+    - Billing page showing subscription status, next payment, cancel/reactivate options
+    - Subscription status indicator in dashboard sidebar
 *   **Robust Deployment**: Dockerized services with improved health checks, database wait logic, and environment variable support for flexible port configuration.
 
 **System Design Choices**:
