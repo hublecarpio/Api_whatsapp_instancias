@@ -94,7 +94,7 @@ export default function ProductsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este producto?')) return;
+    if (!confirm('Estas seguro de eliminar este producto?')) return;
 
     try {
       await productApi.delete(id);
@@ -107,7 +107,7 @@ export default function ProductsPage() {
   if (!currentBusiness) {
     return (
       <div className="card text-center py-12">
-        <p className="text-gray-600">
+        <p className="text-gray-400">
           Primero debes crear una empresa para gestionar productos.
         </p>
       </div>
@@ -115,33 +115,33 @@ export default function ProductsPage() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
+    <div className="p-4 sm:p-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Productos</h1>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="btn btn-primary"
+          className="btn btn-primary w-full sm:w-auto"
         >
           {showForm ? 'Cancelar' : '+ Agregar producto'}
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-4">
+        <div className="bg-accent-error/10 border border-accent-error/20 text-accent-error px-4 py-3 rounded-lg mb-4">
           {error}
         </div>
       )}
 
       {showForm && (
         <div className="card mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          <h2 className="text-lg font-semibold text-white mb-4">
             {editingProduct ? 'Editar producto' : 'Nuevo producto'}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Título *
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Titulo *
                 </label>
                 <input
                   type="text"
@@ -152,7 +152,7 @@ export default function ProductsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Precio *
                 </label>
                 <input
@@ -167,18 +167,18 @@ export default function ProductsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descripción
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Descripcion
               </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="input"
+                className="input resize-none"
                 rows={2}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
                 URL de imagen
               </label>
               <input
@@ -189,7 +189,7 @@ export default function ProductsPage() {
                 placeholder="https://..."
               />
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button type="submit" className="btn btn-primary">
                 {editingProduct ? 'Actualizar' : 'Crear producto'}
               </button>
@@ -207,17 +207,17 @@ export default function ProductsPage() {
 
       {loading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue mx-auto"></div>
         </div>
       ) : products.length === 0 ? (
         <div className="card text-center py-12">
           <div className="text-6xl mb-4">📦</div>
-          <p className="text-gray-600">No tienes productos todavía.</p>
+          <p className="text-gray-400">No tienes productos todavia.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {products.map((product) => (
-            <div key={product.id} className="card">
+            <div key={product.id} className="card card-hover">
               {product.imageUrl && (
                 <img
                   src={product.imageUrl}
@@ -225,23 +225,23 @@ export default function ProductsPage() {
                   className="w-full h-40 object-cover rounded-lg mb-3"
                 />
               )}
-              <h3 className="font-semibold text-gray-900">{product.title}</h3>
+              <h3 className="font-semibold text-white">{product.title}</h3>
               {product.description && (
-                <p className="text-sm text-gray-600 mt-1">{product.description}</p>
+                <p className="text-sm text-gray-400 mt-1">{product.description}</p>
               )}
-              <p className="text-lg font-bold text-green-600 mt-2">
+              <p className="text-lg font-bold text-neon-blue mt-2">
                 ${product.price.toFixed(2)}
               </p>
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={() => handleEdit(product)}
-                  className="btn btn-secondary text-sm flex-1"
+                  className="btn btn-secondary btn-sm flex-1"
                 >
                   Editar
                 </button>
                 <button
                   onClick={() => handleDelete(product.id)}
-                  className="btn btn-danger text-sm"
+                  className="btn btn-danger btn-sm"
                 >
                   Eliminar
                 </button>

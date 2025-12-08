@@ -108,7 +108,7 @@ export default function TemplatesPage() {
         footerText: newTemplate.footerText || undefined,
         buttons: newTemplate.buttons.length > 0 ? newTemplate.buttons : undefined
       });
-      setSuccess('Template creado y enviado para aprobación');
+      setSuccess('Template creado y enviado para aprobacion');
       setShowCreateModal(false);
       setNewTemplate({
         name: '',
@@ -130,7 +130,7 @@ export default function TemplatesPage() {
   };
 
   const handleDelete = async (templateId: string) => {
-    if (!confirm('¿Eliminar este template? Esta acción no se puede deshacer.')) return;
+    if (!confirm('Eliminar este template? Esta accion no se puede deshacer.')) return;
 
     try {
       setError('');
@@ -169,14 +169,14 @@ export default function TemplatesPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; text: string }> = {
-      'APPROVED': { bg: 'bg-green-100 text-green-700', text: 'Aprobado' },
-      'PENDING': { bg: 'bg-yellow-100 text-yellow-700', text: 'Pendiente' },
-      'REJECTED': { bg: 'bg-red-100 text-red-700', text: 'Rechazado' },
-      'DISABLED': { bg: 'bg-gray-100 text-gray-700', text: 'Deshabilitado' }
+      'APPROVED': { bg: 'bg-accent-success', text: 'Aprobado' },
+      'PENDING': { bg: 'bg-accent-warning', text: 'Pendiente' },
+      'REJECTED': { bg: 'bg-accent-error', text: 'Rechazado' },
+      'DISABLED': { bg: 'bg-gray-500', text: 'Deshabilitado' }
     };
-    const badge = badges[status] || { bg: 'bg-gray-100 text-gray-600', text: status };
+    const badge = badges[status] || { bg: 'bg-gray-500', text: status };
     return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.bg}`}>
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium text-white ${badge.bg}`}>
         {badge.text}
       </span>
     );
@@ -186,7 +186,7 @@ export default function TemplatesPage() {
     const categories: Record<string, string> = {
       'UTILITY': 'Utilidad',
       'MARKETING': 'Marketing',
-      'AUTHENTICATION': 'Autenticación'
+      'AUTHENTICATION': 'Autenticacion'
     };
     return categories[category] || category;
   };
@@ -194,7 +194,7 @@ export default function TemplatesPage() {
   if (!currentBusiness) {
     return (
       <div className="card text-center py-8">
-        <p className="text-gray-600">Primero debes seleccionar una empresa.</p>
+        <p className="text-gray-400">Primero debes seleccionar una empresa.</p>
       </div>
     );
   }
@@ -203,11 +203,11 @@ export default function TemplatesPage() {
     return (
       <div className="card text-center py-8">
         <div className="text-4xl mb-3">📱</div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">Meta Cloud API requerida</h2>
-        <p className="text-gray-600 mb-4">
-          Los templates solo están disponibles cuando usas Meta Cloud API.
+        <h2 className="text-lg font-semibold text-white mb-2">Meta Cloud API requerida</h2>
+        <p className="text-gray-400 mb-4">
+          Los templates solo estan disponibles cuando usas Meta Cloud API.
           <br />
-          Conecta tu cuenta de Meta Business para usar esta función.
+          Conecta tu cuenta de Meta Business para usar esta funcion.
         </p>
         <a href="/dashboard/whatsapp" className="btn btn-primary">
           Ir a WhatsApp
@@ -217,21 +217,21 @@ export default function TemplatesPage() {
   }
 
   return (
-    <div className="h-full">
-      <div className="flex items-center justify-between mb-4">
+    <div className="p-4 sm:p-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Templates de WhatsApp</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Templates de WhatsApp</h1>
+          <p className="text-sm text-gray-400 mt-1">
             Plantillas aprobadas por Meta para mensajes iniciales y seguimientos
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={handleSync}
             disabled={syncing}
             className="btn btn-secondary"
           >
-            {syncing ? '🔄 Sincronizando...' : '🔄 Sincronizar desde Meta'}
+            {syncing ? 'Sincronizando...' : 'Sincronizar desde Meta'}
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -243,39 +243,39 @@ export default function TemplatesPage() {
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-4 flex justify-between items-center">
+        <div className="bg-accent-error/10 border border-accent-error/20 text-accent-error px-4 py-3 rounded-lg mb-4 flex justify-between items-center">
           <span>{error}</span>
-          <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
+          <button onClick={() => setError('')} className="text-accent-error/70 hover:text-accent-error ml-2">✕</button>
         </div>
       )}
 
       {success && (
-        <div className="bg-green-50 text-green-600 px-4 py-3 rounded-lg mb-4 flex justify-between items-center">
-          <span>✓ {success}</span>
-          <button onClick={() => setSuccess('')} className="text-green-400 hover:text-green-600">✕</button>
+        <div className="bg-accent-success/10 border border-accent-success/20 text-accent-success px-4 py-3 rounded-lg mb-4 flex justify-between items-center">
+          <span>{success}</span>
+          <button onClick={() => setSuccess('')} className="text-accent-success/70 hover:text-accent-success ml-2">✕</button>
         </div>
       )}
 
-      <div className="bg-blue-50 text-blue-700 px-4 py-3 rounded-lg mb-4 text-sm">
-        <strong>📋 Importante:</strong> Los templates son obligatorios para enviar el primer mensaje a un cliente 
-        o cuando han pasado más de 24 horas desde su última respuesta. Meta debe aprobar cada template.
+      <div className="bg-neon-blue/10 border border-neon-blue/30 text-neon-blue px-4 py-3 rounded-lg mb-4 text-sm">
+        <strong>Importante:</strong> Los templates son obligatorios para enviar el primer mensaje a un cliente 
+        o cuando han pasado mas de 24 horas desde su ultima respuesta. Meta debe aprobar cada template.
       </div>
 
       {loading ? (
         <div className="card text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-3 text-gray-500">Cargando templates...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue mx-auto"></div>
+          <p className="mt-3 text-gray-400">Cargando templates...</p>
         </div>
       ) : templates.length === 0 ? (
         <div className="card text-center py-8">
           <div className="text-4xl mb-3">📄</div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">No hay templates</h2>
-          <p className="text-gray-500 mb-4">
+          <h2 className="text-lg font-semibold text-white mb-2">No hay templates</h2>
+          <p className="text-gray-400 mb-4">
             Sincroniza desde Meta o crea tu primer template
           </p>
           <div className="flex justify-center gap-2">
             <button onClick={handleSync} disabled={syncing} className="btn btn-secondary">
-              🔄 Sincronizar
+              Sincronizar
             </button>
             <button onClick={() => setShowCreateModal(true)} className="btn btn-primary">
               + Crear Template
@@ -285,28 +285,28 @@ export default function TemplatesPage() {
       ) : (
         <div className="grid gap-4">
           {templates.map(template => (
-            <div key={template.id} className="card p-4">
+            <div key={template.id} className="card">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold text-gray-900">{template.name}</h3>
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <h3 className="font-semibold text-white">{template.name}</h3>
                     {getStatusBadge(template.status)}
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                    <span className="text-xs text-gray-500 bg-dark-hover px-2 py-0.5 rounded">
                       {getCategoryBadge(template.category)}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-500">
                       {template.language.toUpperCase()}
                     </span>
                   </div>
                   
                   {template.bodyText && (
-                    <p className="text-gray-600 text-sm mb-2 bg-gray-50 p-2 rounded">
+                    <p className="text-gray-300 text-sm mb-2 bg-dark-hover p-2 rounded">
                       {template.bodyText}
                     </p>
                   )}
 
                   {template.footerText && (
-                    <p className="text-gray-400 text-xs italic">
+                    <p className="text-gray-500 text-xs italic">
                       {template.footerText}
                     </p>
                   )}
@@ -314,21 +314,21 @@ export default function TemplatesPage() {
                   {template.buttons && template.buttons.length > 0 && (
                     <div className="flex gap-2 mt-2">
                       {template.buttons.map((btn: any, i: number) => (
-                        <span key={i} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                        <span key={i} className="text-xs bg-neon-blue/20 text-neon-blue px-2 py-1 rounded">
                           {btn.type === 'URL' ? '🔗' : '↩️'} {btn.text}
                         </span>
                       ))}
                     </div>
                   )}
 
-                  <p className="text-xs text-gray-400 mt-2">
-                    Última sincronización: {new Date(template.lastSynced).toLocaleString()}
+                  <p className="text-xs text-gray-500 mt-2">
+                    Ultima sincronizacion: {new Date(template.lastSynced).toLocaleString()}
                   </p>
                 </div>
 
                 <button
                   onClick={() => handleDelete(template.id)}
-                  className="text-red-500 hover:text-red-700 p-2"
+                  className="text-accent-error hover:text-red-400 p-2"
                   title="Eliminar"
                 >
                   🗑️
@@ -340,15 +340,15 @@ export default function TemplatesPage() {
       )}
 
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Crear Template</h2>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-white mb-4">Crear Template</h2>
             
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Nombre <span className="text-accent-error">*</span>
                   </label>
                   <input
                     type="text"
@@ -357,12 +357,12 @@ export default function TemplatesPage() {
                     placeholder="mi_template"
                     className="input"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Solo letras, números y guiones bajos</p>
+                  <p className="text-xs text-gray-500 mt-1">Solo letras, numeros y guiones bajos</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Idioma</label>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Idioma</label>
                     <select
                       value={newTemplate.language}
                       onChange={e => setNewTemplate(prev => ({ ...prev, language: e.target.value }))}
@@ -372,11 +372,11 @@ export default function TemplatesPage() {
                       <option value="es_MX">Español (MX)</option>
                       <option value="es_AR">Español (AR)</option>
                       <option value="en">English</option>
-                      <option value="pt_BR">Português (BR)</option>
+                      <option value="pt_BR">Portugues (BR)</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Categoria</label>
                     <select
                       value={newTemplate.category}
                       onChange={e => setNewTemplate(prev => ({ ...prev, category: e.target.value }))}
@@ -384,14 +384,14 @@ export default function TemplatesPage() {
                     >
                       <option value="UTILITY">Utilidad</option>
                       <option value="MARKETING">Marketing</option>
-                      <option value="AUTHENTICATION">Autenticación</option>
+                      <option value="AUTHENTICATION">Autenticacion</option>
                     </select>
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Encabezado</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Encabezado</label>
                 <select
                   value={newTemplate.headerType}
                   onChange={e => setNewTemplate(prev => ({ ...prev, headerType: e.target.value }))}
@@ -415,23 +415,23 @@ export default function TemplatesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cuerpo del mensaje <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Cuerpo del mensaje <span className="text-accent-error">*</span>
                 </label>
                 <textarea
                   value={newTemplate.bodyText}
                   onChange={e => setNewTemplate(prev => ({ ...prev, bodyText: e.target.value }))}
-                  placeholder="Hola {{1}}, tu pedido #{{2}} está listo para recoger."
-                  className="input min-h-[100px]"
+                  placeholder="Hola {{1}}, tu pedido #{{2}} esta listo para recoger."
+                  className="input resize-none"
                   rows={4}
                 />
-                <p className="text-xs text-gray-400 mt-1">
-                  Usa {"{{1}}"}, {"{{2}}"}, etc. para variables dinámicas
+                <p className="text-xs text-gray-500 mt-1">
+                  Usa {"{{1}}"}, {"{{2}}"}, etc. para variables dinamicas
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Pie de página</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Pie de pagina</label>
                 <input
                   type="text"
                   value={newTemplate.footerText}
@@ -444,14 +444,14 @@ export default function TemplatesPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Botones (máx. 3)</label>
+                  <label className="block text-sm font-medium text-gray-300">Botones (max. 3)</label>
                   {newTemplate.buttons.length < 3 && (
                     <button
                       type="button"
                       onClick={addButton}
-                      className="text-sm text-blue-600 hover:text-blue-700"
+                      className="text-sm text-neon-blue hover:text-cyan-400"
                     >
-                      + Agregar botón
+                      + Agregar boton
                     </button>
                   )}
                 </div>
@@ -464,13 +464,13 @@ export default function TemplatesPage() {
                     >
                       <option value="QUICK_REPLY">Respuesta</option>
                       <option value="URL">URL</option>
-                      <option value="PHONE_NUMBER">Teléfono</option>
+                      <option value="PHONE_NUMBER">Telefono</option>
                     </select>
                     <input
                       type="text"
                       value={btn.text}
                       onChange={e => updateButton(i, 'text', e.target.value)}
-                      placeholder="Texto del botón"
+                      placeholder="Texto del boton"
                       className="input flex-1"
                       maxLength={25}
                     />
@@ -486,7 +486,7 @@ export default function TemplatesPage() {
                     <button
                       type="button"
                       onClick={() => removeButton(i)}
-                      className="text-red-500 hover:text-red-700 px-2"
+                      className="text-accent-error hover:text-red-400 px-2"
                     >
                       ✕
                     </button>

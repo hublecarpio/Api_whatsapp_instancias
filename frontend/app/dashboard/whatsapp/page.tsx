@@ -215,11 +215,11 @@ export default function WhatsAppPage() {
     
     setActionLoading('restart');
     setError('');
-    addEvent('action', 'Reiniciando conexión...');
+    addEvent('action', 'Reiniciando conexion...');
     
     try {
       await waApi.restart(currentBusiness.id);
-      addEvent('success', 'Conexión reiniciada');
+      addEvent('success', 'Conexion reiniciada');
       await fetchStatus();
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Error al reiniciar';
@@ -232,7 +232,7 @@ export default function WhatsAppPage() {
 
   const handleDelete = async () => {
     if (!currentBusiness) return;
-    if (!confirm('¿Eliminar conexión de WhatsApp? Tendrás que configurar de nuevo.')) return;
+    if (!confirm('Eliminar conexion de WhatsApp? Tendras que configurar de nuevo.')) return;
     
     setActionLoading('delete');
     setError('');
@@ -259,17 +259,17 @@ export default function WhatsAppPage() {
 
   const getStatusBadge = () => {
     const badges: Record<string, { bg: string; dot: string; text: string }> = {
-      'not_created': { bg: 'bg-gray-100', dot: 'bg-gray-400', text: 'Sin configurar' },
-      'pending_qr': { bg: 'bg-yellow-100', dot: 'bg-yellow-500', text: 'Esperando QR' },
-      'open': { bg: 'bg-green-100', dot: 'bg-green-500', text: 'Conectado' },
-      'connected': { bg: 'bg-green-100', dot: 'bg-green-500', text: 'Conectado' },
-      'closed': { bg: 'bg-red-100', dot: 'bg-red-500', text: 'Desconectado' },
-      'connecting': { bg: 'bg-blue-100', dot: 'bg-blue-500', text: 'Conectando' },
-      'error': { bg: 'bg-red-100', dot: 'bg-red-500', text: 'Error' }
+      'not_created': { bg: 'bg-gray-700', dot: 'bg-gray-400', text: 'Sin configurar' },
+      'pending_qr': { bg: 'bg-accent-warning/20', dot: 'bg-accent-warning', text: 'Esperando QR' },
+      'open': { bg: 'bg-accent-success/20', dot: 'bg-accent-success', text: 'Conectado' },
+      'connected': { bg: 'bg-accent-success/20', dot: 'bg-accent-success', text: 'Conectado' },
+      'closed': { bg: 'bg-accent-error/20', dot: 'bg-accent-error', text: 'Desconectado' },
+      'connecting': { bg: 'bg-neon-blue/20', dot: 'bg-neon-blue', text: 'Conectando' },
+      'error': { bg: 'bg-accent-error/20', dot: 'bg-accent-error', text: 'Error' }
     };
-    const badge = badges[status] || { bg: 'bg-gray-100', dot: 'bg-gray-400', text: status };
+    const badge = badges[status] || { bg: 'bg-gray-700', dot: 'bg-gray-400', text: status };
     return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${badge.bg}`}>
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-white ${badge.bg}`}>
         <span className={`w-2 h-2 rounded-full ${badge.dot} ${status === 'open' || status === 'connected' ? 'animate-pulse' : ''}`}></span>
         {badge.text}
       </span>
@@ -279,13 +279,13 @@ export default function WhatsAppPage() {
   const getProviderBadge = () => {
     if (provider === 'META_CLOUD') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-neon-blue/20 text-neon-blue">
           <span>📱</span> Meta Cloud API
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-accent-success/20 text-accent-success">
         <span>📲</span> Baileys
       </span>
     );
@@ -303,10 +303,10 @@ export default function WhatsAppPage() {
 
   const getEventColor = (type: string) => {
     switch (type) {
-      case 'success': return 'text-green-600';
-      case 'error': return 'text-red-600';
-      case 'action': return 'text-blue-600';
-      case 'status': return 'text-gray-600';
+      case 'success': return 'text-accent-success';
+      case 'error': return 'text-accent-error';
+      case 'action': return 'text-neon-blue';
+      case 'status': return 'text-gray-400';
       default: return 'text-gray-500';
     }
   };
@@ -319,16 +319,16 @@ export default function WhatsAppPage() {
   if (!currentBusiness) {
     return (
       <div className="card text-center py-8">
-        <p className="text-gray-600">Primero debes crear una empresa para conectar WhatsApp.</p>
+        <p className="text-gray-400">Primero debes crear una empresa para conectar WhatsApp.</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-gray-900">WhatsApp</h1>
+    <div className="p-4 sm:p-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">WhatsApp</h1>
           {status !== 'not_created' && (
             <>
               {getStatusBadge()}
@@ -337,25 +337,25 @@ export default function WhatsAppPage() {
           )}
         </div>
         {phoneNumber && (status === 'open' || status === 'connected') && (
-          <span className="text-sm text-gray-600">+{phoneNumber}</span>
+          <span className="text-sm text-gray-400">+{phoneNumber}</span>
         )}
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg mb-3 flex items-center justify-between text-sm">
+        <div className="bg-accent-error/10 border border-accent-error/20 text-accent-error px-3 py-2 rounded-lg mb-3 flex items-center justify-between text-sm">
           <span>{error}</span>
-          <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2">✕</button>
+          <button onClick={() => setError('')} className="text-accent-error/70 hover:text-accent-error ml-2">✕</button>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <div className="card p-4">
+          <div className="card">
             {status === 'not_created' && (
               <div className="text-center py-6">
                 <div className="text-4xl mb-3">💬</div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Conecta tu WhatsApp</h2>
-                <p className="text-gray-600 text-sm mb-4">Elige cómo quieres conectar tu cuenta de WhatsApp.</p>
+                <h2 className="text-lg font-semibold text-white mb-1">Conecta tu WhatsApp</h2>
+                <p className="text-gray-400 text-sm mb-4">Elige como quieres conectar tu cuenta de WhatsApp.</p>
                 <button onClick={() => setShowProviderModal(true)} disabled={loading} className="btn btn-primary">
                   {loading ? 'Creando...' : 'Crear instancia'}
                 </button>
@@ -365,42 +365,42 @@ export default function WhatsAppPage() {
             {status === 'pending_qr' && provider !== 'META_CLOUD' && (
               <div className="py-2">
                 <div className="text-center mb-3">
-                  <h2 className="text-lg font-semibold text-gray-900">Escanea el código QR</h2>
-                  <p className="text-gray-500 text-xs">WhatsApp → Menú → Dispositivos vinculados → Vincular</p>
+                  <h2 className="text-lg font-semibold text-white">Escanea el codigo QR</h2>
+                  <p className="text-gray-500 text-xs">WhatsApp → Menu → Dispositivos vinculados → Vincular</p>
                 </div>
                 
                 <div className="flex justify-center mb-3">
                   {qrCode ? (
-                    <div className="relative p-2 bg-white rounded-lg border">
+                    <div className="relative p-2 bg-white rounded-lg">
                       <img src={qrCode} alt="QR Code" className="w-48 h-48" />
                       {actionLoading === 'qr' && (
                         <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-neon-blue"></div>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="w-48 h-48 bg-gray-100 rounded-lg flex items-center justify-center border">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                    <div className="w-48 h-48 bg-dark-hover rounded-lg flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-neon-blue"></div>
                     </div>
                   )}
                 </div>
 
                 {lastUpdate && (
-                  <p className="text-center text-xs text-gray-400 mb-3">
+                  <p className="text-center text-xs text-gray-500 mb-3">
                     Actualizado: {lastUpdate.toLocaleTimeString()}
                   </p>
                 )}
 
                 <div className="flex flex-wrap justify-center gap-2">
                   <button onClick={handleRefreshQR} disabled={actionLoading !== null} className="btn btn-secondary btn-sm">
-                    {actionLoading === 'qr' ? '...' : '🔄 Refrescar'}
+                    {actionLoading === 'qr' ? '...' : 'Refrescar'}
                   </button>
                   <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm">
-                    {actionLoading === 'restart' ? '...' : '🔁 Reiniciar'}
+                    {actionLoading === 'restart' ? '...' : 'Reiniciar'}
                   </button>
                   <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm">
-                    {actionLoading === 'delete' ? '...' : '🗑️ Eliminar'}
+                    {actionLoading === 'delete' ? '...' : 'Eliminar'}
                   </button>
                 </div>
               </div>
@@ -408,38 +408,38 @@ export default function WhatsAppPage() {
 
             {(status === 'open' || status === 'connected') && (
               <div className="py-2">
-                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg mb-4">
-                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-xl">✓</span>
+                <div className="flex items-center gap-3 p-3 bg-accent-success/10 border border-accent-success/20 rounded-lg mb-4">
+                  <div className="w-10 h-10 bg-accent-success/20 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl text-accent-success">✓</span>
                   </div>
                   <div className="flex-1">
-                    <h2 className="font-semibold text-gray-900">WhatsApp Conectado</h2>
-                    <p className="text-xs text-gray-500">Tu cuenta está activa y recibiendo mensajes</p>
+                    <h2 className="font-semibold text-white">WhatsApp Conectado</h2>
+                    <p className="text-xs text-gray-400">Tu cuenta esta activa y recibiendo mensajes</p>
                     {metaInfo && (
-                      <p className="text-xs text-blue-600 mt-1">
+                      <p className="text-xs text-neon-blue mt-1">
                         {metaInfo.verifiedName && `Nombre: ${metaInfo.verifiedName}`}
-                        {metaInfo.qualityRating && ` • Calidad: ${metaInfo.qualityRating}`}
+                        {metaInfo.qualityRating && ` - Calidad: ${metaInfo.qualityRating}`}
                       </p>
                     )}
                   </div>
                 </div>
 
                 {provider === 'META_CLOUD' && webhookInfo && (
-                  <div className="bg-blue-50 p-3 rounded-lg mb-4">
-                    <h3 className="text-sm font-semibold text-blue-800 mb-2">Configuración de Webhook</h3>
+                  <div className="bg-neon-blue/10 border border-neon-blue/30 p-3 rounded-lg mb-4">
+                    <h3 className="text-sm font-semibold text-neon-blue mb-2">Configuracion de Webhook</h3>
                     <div className="space-y-2">
                       <div>
-                        <label className="text-xs text-blue-600">URL del Webhook:</label>
+                        <label className="text-xs text-neon-blue/70">URL del Webhook:</label>
                         <div className="flex items-center gap-2">
-                          <code className="text-xs bg-white px-2 py-1 rounded flex-1 overflow-x-auto">{webhookInfo.url}</code>
-                          <button onClick={() => copyToClipboard(webhookInfo.url)} className="text-blue-600 hover:text-blue-800 text-xs">📋</button>
+                          <code className="text-xs bg-dark-hover text-gray-300 px-2 py-1 rounded flex-1 overflow-x-auto">{webhookInfo.url}</code>
+                          <button onClick={() => copyToClipboard(webhookInfo.url)} className="text-neon-blue hover:text-cyan-400 text-xs">📋</button>
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-blue-600">Token de verificación:</label>
+                        <label className="text-xs text-neon-blue/70">Token de verificacion:</label>
                         <div className="flex items-center gap-2">
-                          <code className="text-xs bg-white px-2 py-1 rounded flex-1">{webhookInfo.token}</code>
-                          <button onClick={() => copyToClipboard(webhookInfo.token)} className="text-blue-600 hover:text-blue-800 text-xs">📋</button>
+                          <code className="text-xs bg-dark-hover text-gray-300 px-2 py-1 rounded flex-1">{webhookInfo.token}</code>
+                          <button onClick={() => copyToClipboard(webhookInfo.token)} className="text-neon-blue hover:text-cyan-400 text-xs">📋</button>
                         </div>
                       </div>
                     </div>
@@ -449,11 +449,11 @@ export default function WhatsAppPage() {
                 <div className="flex flex-wrap gap-2">
                   {provider !== 'META_CLOUD' && (
                     <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm">
-                      {actionLoading === 'restart' ? '...' : '🔁 Reiniciar'}
+                      {actionLoading === 'restart' ? '...' : 'Reiniciar'}
                     </button>
                   )}
                   <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm">
-                    {actionLoading === 'delete' ? '...' : '🗑️ Eliminar'}
+                    {actionLoading === 'delete' ? '...' : 'Eliminar'}
                   </button>
                 </div>
               </div>
@@ -461,22 +461,22 @@ export default function WhatsAppPage() {
 
             {status === 'closed' && (
               <div className="py-2">
-                <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg mb-4">
-                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="flex items-center gap-3 p-3 bg-accent-error/10 border border-accent-error/20 rounded-lg mb-4">
+                  <div className="w-10 h-10 bg-accent-error/20 rounded-full flex items-center justify-center flex-shrink-0">
                     <span className="text-xl">⚠️</span>
                   </div>
                   <div>
-                    <h2 className="font-semibold text-gray-900">Conexión perdida</h2>
-                    <p className="text-xs text-gray-500">Reconecta o elimina para empezar de nuevo</p>
+                    <h2 className="font-semibold text-white">Conexion perdida</h2>
+                    <p className="text-xs text-gray-400">Reconecta o elimina para empezar de nuevo</p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-primary btn-sm">
-                    {actionLoading === 'restart' ? '...' : '🔁 Reconectar'}
+                    {actionLoading === 'restart' ? '...' : 'Reconectar'}
                   </button>
                   <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm">
-                    {actionLoading === 'delete' ? '...' : '🗑️ Eliminar'}
+                    {actionLoading === 'delete' ? '...' : 'Eliminar'}
                   </button>
                 </div>
               </div>
@@ -484,22 +484,22 @@ export default function WhatsAppPage() {
 
             {status === 'connecting' && (
               <div className="text-center py-6">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-3"></div>
-                <h2 className="font-semibold text-gray-900">Conectando...</h2>
-                <p className="text-gray-500 text-xs">Estableciendo conexión con WhatsApp</p>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue mx-auto mb-3"></div>
+                <h2 className="font-semibold text-white">Conectando...</h2>
+                <p className="text-gray-400 text-xs">Estableciendo conexion con WhatsApp</p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="lg:col-span-1">
-          <div className="card p-3">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+        <div className="lg:col-span-1 space-y-4">
+          <div className="card">
+            <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
               <span>📋</span> Actividad
             </h3>
             
             {events.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">Sin actividad reciente</p>
+              <p className="text-xs text-gray-500 text-center py-4">Sin actividad reciente</p>
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {events.map((event, i) => (
@@ -508,8 +508,8 @@ export default function WhatsAppPage() {
                       {getEventIcon(event.type)}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-gray-700 truncate">{event.message}</p>
-                      <p className="text-gray-400">{event.timestamp.toLocaleTimeString()}</p>
+                      <p className="text-gray-300 truncate">{event.message}</p>
+                      <p className="text-gray-500">{event.timestamp.toLocaleTimeString()}</p>
                     </div>
                   </div>
                 ))}
@@ -517,49 +517,49 @@ export default function WhatsAppPage() {
             )}
           </div>
 
-          <div className="card p-3 mt-3">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">💡 Ayuda</h3>
-            <ul className="text-xs text-gray-500 space-y-1">
-              <li><strong>Baileys:</strong> Conexión vía QR (WhatsApp Web)</li>
-              <li><strong>Meta Cloud:</strong> API oficial de WhatsApp Business</li>
-              <li>• <strong>QR no carga:</strong> Refrescar</li>
-              <li>• <strong>QR expiró:</strong> Reiniciar</li>
+          <div className="card">
+            <h3 className="text-sm font-semibold text-gray-300 mb-2">💡 Ayuda</h3>
+            <ul className="text-xs text-gray-400 space-y-1">
+              <li><strong className="text-gray-300">Baileys:</strong> Conexion via QR (WhatsApp Web)</li>
+              <li><strong className="text-gray-300">Meta Cloud:</strong> API oficial de WhatsApp Business</li>
+              <li>• <strong className="text-gray-300">QR no carga:</strong> Refrescar</li>
+              <li>• <strong className="text-gray-300">QR expiro:</strong> Reiniciar</li>
             </ul>
           </div>
         </div>
       </div>
 
       {showProviderModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Elige el tipo de conexión</h2>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-lg w-full">
+            <h2 className="text-xl font-bold text-white mb-4">Elige el tipo de conexion</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <button
                 onClick={handleCreateBaileys}
                 disabled={loading}
-                className="p-4 border-2 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all text-left group"
+                className="p-4 border-2 border-dark-hover rounded-xl hover:border-accent-success hover:bg-accent-success/10 transition-all text-left group"
               >
                 <div className="text-3xl mb-2">📲</div>
-                <h3 className="font-semibold text-gray-900 group-hover:text-green-700">Baileys</h3>
-                <p className="text-xs text-gray-500 mt-1">Conexión vía código QR. Usa la sesión de WhatsApp Web.</p>
+                <h3 className="font-semibold text-white group-hover:text-accent-success">Baileys</h3>
+                <p className="text-xs text-gray-400 mt-1">Conexion via codigo QR. Usa la sesion de WhatsApp Web.</p>
                 <div className="mt-3 flex flex-wrap gap-1">
-                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Gratis</span>
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">Rápido</span>
+                  <span className="px-2 py-0.5 bg-accent-success/20 text-accent-success rounded text-xs">Gratis</span>
+                  <span className="px-2 py-0.5 bg-dark-hover text-gray-400 rounded text-xs">Rapido</span>
                 </div>
               </button>
 
               <button
                 onClick={() => setShowMetaForm(true)}
                 disabled={loading}
-                className="p-4 border-2 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+                className="p-4 border-2 border-dark-hover rounded-xl hover:border-neon-blue hover:bg-neon-blue/10 transition-all text-left group"
               >
                 <div className="text-3xl mb-2">📱</div>
-                <h3 className="font-semibold text-gray-900 group-hover:text-blue-700">Meta Cloud API</h3>
-                <p className="text-xs text-gray-500 mt-1">API oficial de WhatsApp Business. Requiere cuenta de Meta.</p>
+                <h3 className="font-semibold text-white group-hover:text-neon-blue">Meta Cloud API</h3>
+                <p className="text-xs text-gray-400 mt-1">API oficial de WhatsApp Business. Requiere cuenta de Meta.</p>
                 <div className="mt-3 flex flex-wrap gap-1">
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Oficial</span>
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">Templates</span>
+                  <span className="px-2 py-0.5 bg-neon-blue/20 text-neon-blue rounded text-xs">Oficial</span>
+                  <span className="px-2 py-0.5 bg-dark-hover text-gray-400 rounded text-xs">Templates</span>
                 </div>
               </button>
             </div>
@@ -575,107 +575,91 @@ export default function WhatsAppPage() {
       )}
 
       {showMetaForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Configurar Meta Cloud API</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Ingresa las credenciales de tu aplicación de Meta Business.
-              <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener" className="text-blue-600 hover:underline ml-1">
-                Ver documentación →
-              </a>
-            </p>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-white mb-4">Configurar Meta Cloud API</h2>
+            
+            <div className="bg-neon-blue/10 border border-neon-blue/30 text-neon-blue px-3 py-2 rounded-lg mb-4 text-xs">
+              Necesitas una cuenta de Meta Business Suite y una app de WhatsApp configurada.
+            </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre (opcional)</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Nombre (opcional)</label>
                 <input
                   type="text"
                   value={metaForm.name}
-                  onChange={(e) => setMetaForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Mi WhatsApp Business"
+                  onChange={e => setMetaForm(prev => ({ ...prev, name: e.target.value }))}
                   className="input"
+                  placeholder="Mi WhatsApp Business"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Access Token <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Access Token *</label>
                 <input
                   type="password"
                   value={metaForm.accessToken}
-                  onChange={(e) => setMetaForm(prev => ({ ...prev, accessToken: e.target.value }))}
-                  placeholder="EAAG..."
+                  onChange={e => setMetaForm(prev => ({ ...prev, accessToken: e.target.value }))}
                   className="input"
-                />
-                <p className="text-xs text-gray-400 mt-1">Token de acceso permanente o temporal</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={metaForm.phoneNumberId}
-                  onChange={(e) => setMetaForm(prev => ({ ...prev, phoneNumberId: e.target.value }))}
-                  placeholder="123456789012345"
-                  className="input"
+                  placeholder="EAAGm..."
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  WhatsApp Business Account ID <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Meta Business ID *</label>
                 <input
                   type="text"
                   value={metaForm.metaBusinessId}
-                  onChange={(e) => setMetaForm(prev => ({ ...prev, metaBusinessId: e.target.value }))}
-                  placeholder="123456789012345"
+                  onChange={e => setMetaForm(prev => ({ ...prev, metaBusinessId: e.target.value }))}
                   className="input"
+                  placeholder="123456789..."
                 />
               </div>
-
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Phone Number ID *</label>
+                <input
+                  type="text"
+                  value={metaForm.phoneNumberId}
+                  onChange={e => setMetaForm(prev => ({ ...prev, phoneNumberId: e.target.value }))}
+                  className="input"
+                  placeholder="123456789..."
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    App ID <span className="text-red-500">*</span>
-                  </label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">App ID *</label>
                   <input
                     type="text"
                     value={metaForm.appId}
-                    onChange={(e) => setMetaForm(prev => ({ ...prev, appId: e.target.value }))}
-                    placeholder="123456789"
+                    onChange={e => setMetaForm(prev => ({ ...prev, appId: e.target.value }))}
                     className="input"
+                    placeholder="123456..."
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    App Secret <span className="text-red-500">*</span>
-                  </label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">App Secret *</label>
                   <input
                     type="password"
                     value={metaForm.appSecret}
-                    onChange={(e) => setMetaForm(prev => ({ ...prev, appSecret: e.target.value }))}
-                    placeholder="abc123..."
+                    onChange={e => setMetaForm(prev => ({ ...prev, appSecret: e.target.value }))}
                     className="input"
+                    placeholder="abc123..."
                   />
                 </div>
               </div>
-
-              {error && (
-                <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
             </div>
 
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => {
                   setShowMetaForm(false);
-                  setError('');
+                  setMetaForm({
+                    name: '',
+                    accessToken: '',
+                    metaBusinessId: '',
+                    phoneNumberId: '',
+                    appId: '',
+                    appSecret: ''
+                  });
                 }}
                 className="flex-1 btn btn-secondary"
               >

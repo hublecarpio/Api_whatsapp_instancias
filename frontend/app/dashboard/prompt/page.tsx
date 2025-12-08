@@ -39,16 +39,16 @@ interface ToolStats {
   lastCall: string | null;
 }
 
-const DEFAULT_PROMPT = `Eres un asistente de atención al cliente amable y profesional.
+const DEFAULT_PROMPT = `Eres un asistente de atencion al cliente amable y profesional.
 
-Tu objetivo es ayudar a los clientes con sus consultas, proporcionar información sobre productos y servicios, y resolver cualquier problema que puedan tener.
+Tu objetivo es ayudar a los clientes con sus consultas, proporcionar informacion sobre productos y servicios, y resolver cualquier problema que puedan tener.
 
 Directrices:
-- Sé siempre cortés y profesional
+- Se siempre cortes y profesional
 - Responde de manera clara y concisa
-- Si no sabes algo, indícalo honestamente
+- Si no sabes algo, indicalo honestamente
 - Ofrece alternativas cuando sea posible
-- Usa el catálogo de productos para dar información precisa`;
+- Usa el catalogo de productos para dar informacion precisa`;
 
 export default function PromptPage() {
   const { currentBusiness, updateBusiness } = useBusinessStore();
@@ -336,7 +336,7 @@ export default function PromptPage() {
   if (!currentBusiness) {
     return (
       <div className="card text-center py-12">
-        <p className="text-gray-600">
+        <p className="text-gray-400">
           Primero debes crear una empresa para configurar el agente IA.
         </p>
       </div>
@@ -344,25 +344,25 @@ export default function PromptPage() {
   }
 
   return (
-    <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Agente IA</h1>
+    <div className="max-w-4xl p-4 sm:p-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-white mb-6">Agente IA</h1>
 
       {success && (
-        <div className="bg-green-50 text-green-600 px-4 py-3 rounded-lg mb-4">
+        <div className="bg-accent-success/10 border border-accent-success/20 text-accent-success px-4 py-3 rounded-lg mb-4">
           {success}
         </div>
       )}
       {error && (
-        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-4">
+        <div className="bg-accent-error/10 border border-accent-error/20 text-accent-error px-4 py-3 rounded-lg mb-4">
           {error}
         </div>
       )}
 
       <div className="card mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Estado del Bot</h2>
-            <p className="text-sm text-gray-600">
+            <h2 className="text-lg font-semibold text-white">Estado del Bot</h2>
+            <p className="text-sm text-gray-400">
               {botEnabled 
                 ? 'El bot respondera automaticamente a los mensajes'
                 : 'Los mensajes se registraran pero no habra respuesta automatica'}
@@ -373,8 +373,8 @@ export default function PromptPage() {
             disabled={loading}
             className={`px-6 py-3 rounded-full font-medium transition-colors ${
               botEnabled
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                ? 'bg-accent-success text-white hover:bg-green-600'
+                : 'bg-dark-hover text-gray-400 hover:bg-gray-600'
             }`}
           >
             {botEnabled ? 'Activo' : 'Inactivo'}
@@ -382,27 +382,27 @@ export default function PromptPage() {
         </div>
       </div>
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         <button
           onClick={() => setActiveTab('prompt')}
-          className={`px-4 py-2 rounded-lg font-medium ${
-            activeTab === 'prompt' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'prompt' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
           }`}
         >
           Prompt Maestro
         </button>
         <button
           onClick={() => setActiveTab('config')}
-          className={`px-4 py-2 rounded-lg font-medium ${
-            activeTab === 'config' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'config' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
           }`}
         >
           Configuracion
         </button>
         <button
           onClick={() => setActiveTab('tools')}
-          className={`px-4 py-2 rounded-lg font-medium ${
-            activeTab === 'tools' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'tools' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
           }`}
         >
           Tools ({tools.length})
@@ -411,31 +411,31 @@ export default function PromptPage() {
 
       {activeTab === 'prompt' && (
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Prompt maestro</h2>
-          <p className="text-sm text-gray-600 mb-4">
+          <h2 className="text-lg font-semibold text-white mb-4">Prompt maestro</h2>
+          <p className="text-sm text-gray-400 mb-4">
             Este es el prompt que define como se comporta tu agente de IA. 
-            El contexto de productos y politicas se añadira automaticamente.
+            El contexto de productos y politicas se anadira automaticamente.
           </p>
           
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            className="input font-mono text-sm"
+            className="input font-mono text-sm resize-none"
             rows={15}
             placeholder="Escribe las instrucciones para tu agente IA..."
           />
 
-          <div className="flex items-center justify-between mt-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
             <button
               onClick={() => setPrompt(DEFAULT_PROMPT)}
-              className="btn btn-secondary"
+              className="btn btn-secondary w-full sm:w-auto"
             >
               Restaurar por defecto
             </button>
             <button
               onClick={handleSavePrompt}
               disabled={loading || !prompt}
-              className="btn btn-primary"
+              className="btn btn-primary w-full sm:w-auto"
             >
               {loading ? 'Guardando...' : 'Guardar'}
             </button>
@@ -446,8 +446,8 @@ export default function PromptPage() {
       {activeTab === 'config' && (
         <div className="space-y-6">
           <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Buffer de Mensajes</h2>
-            <p className="text-sm text-gray-600 mb-4">
+            <h2 className="text-lg font-semibold text-white mb-4">Buffer de Mensajes</h2>
+            <p className="text-sm text-gray-400 mb-4">
               Tiempo de espera para acumular mensajes antes de que el agente responda.
               Util cuando el usuario envia varios mensajes seguidos.
             </p>
@@ -459,9 +459,9 @@ export default function PromptPage() {
                 max="30"
                 value={bufferSeconds}
                 onChange={(e) => setBufferSeconds(parseInt(e.target.value))}
-                className="flex-1"
+                className="flex-1 accent-neon-blue"
               />
-              <span className="font-mono text-lg w-20 text-center">
+              <span className="font-mono text-lg w-20 text-center text-white">
                 {bufferSeconds}s
               </span>
             </div>
@@ -473,8 +473,8 @@ export default function PromptPage() {
           </div>
 
           <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Historial de Conversacion</h2>
-            <p className="text-sm text-gray-600 mb-4">
+            <h2 className="text-lg font-semibold text-white mb-4">Historial de Conversacion</h2>
+            <p className="text-sm text-gray-400 mb-4">
               Cantidad de mensajes anteriores que el agente recuerda para dar contexto.
             </p>
             
@@ -485,9 +485,9 @@ export default function PromptPage() {
                 max="50"
                 value={historyLimit}
                 onChange={(e) => setHistoryLimit(parseInt(e.target.value))}
-                className="flex-1"
+                className="flex-1 accent-neon-blue"
               />
-              <span className="font-mono text-lg w-20 text-center">
+              <span className="font-mono text-lg w-20 text-center text-white">
                 {historyLimit}
               </span>
             </div>
@@ -497,8 +497,8 @@ export default function PromptPage() {
           </div>
 
           <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Division de Mensajes</h2>
-            <p className="text-sm text-gray-600 mb-4">
+            <h2 className="text-lg font-semibold text-white mb-4">Division de Mensajes</h2>
+            <p className="text-sm text-gray-400 mb-4">
               Dividir respuestas largas en multiples mensajes para parecer mas humano.
             </p>
             
@@ -507,9 +507,9 @@ export default function PromptPage() {
                 type="checkbox"
                 checked={splitMessages}
                 onChange={(e) => setSplitMessages(e.target.checked)}
-                className="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                className="w-5 h-5 rounded border-gray-600 bg-dark-hover text-neon-blue focus:ring-neon-blue"
               />
-              <span className="text-gray-700">
+              <span className="text-gray-300">
                 Dividir respuestas por parrafos
               </span>
             </label>
@@ -530,17 +530,17 @@ export default function PromptPage() {
       {activeTab === 'tools' && (
         <div className="space-y-4">
           <div className="card">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Tools Externos</h2>
-                <p className="text-sm text-gray-600">
+                <h2 className="text-lg font-semibold text-white">Tools Externos</h2>
+                <p className="text-sm text-gray-400">
                   Agrega endpoints externos que el agente puede usar para obtener informacion.
                 </p>
               </div>
               {!showToolForm && (
                 <button
                   onClick={() => setShowToolForm(true)}
-                  className="btn btn-primary"
+                  className="btn btn-primary w-full sm:w-auto"
                 >
                   + Nuevo Tool
                 </button>
@@ -548,20 +548,20 @@ export default function PromptPage() {
             </div>
 
             {showToolForm && (
-              <div className="border border-gray-200 rounded-lg p-4 mb-4 space-y-4">
+              <div className="border border-dark-hover rounded-lg p-4 mb-4 space-y-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-900">
+                  <h3 className="text-sm font-semibold text-white">
                     {editingTool ? 'Editar Tool' : 'Nuevo Tool'}
                   </h3>
                   <button
                     onClick={handleCancelToolForm}
-                    className="text-sm text-gray-500 hover:text-gray-700"
+                    className="text-sm text-gray-400 hover:text-white"
                   >
                     Cancelar
                   </button>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
                     Nombre
                   </label>
                   <input
@@ -573,7 +573,7 @@ export default function PromptPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
                     Descripcion
                   </label>
                   <input
@@ -584,9 +584,9 @@ export default function PromptPage() {
                     placeholder="Busca productos en el inventario externo"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
                       URL
                     </label>
                     <input
@@ -598,7 +598,7 @@ export default function PromptPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
                       Metodo
                     </label>
                     <select
@@ -612,7 +612,7 @@ export default function PromptPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
                     Headers (JSON opcional)
                   </label>
                   <input
@@ -624,13 +624,13 @@ export default function PromptPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
                     Body Template (JSON opcional)
                   </label>
                   <textarea
                     value={newTool.bodyTemplate}
                     onChange={(e) => setNewTool({ ...newTool, bodyTemplate: e.target.value })}
-                    className="input font-mono text-sm"
+                    className="input font-mono text-sm resize-none"
                     rows={3}
                     placeholder='{"orderId": "{{orderId}}", "email": "{{email}}"}'
                   />
@@ -641,7 +641,7 @@ export default function PromptPage() {
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-300">
                       Parametros
                     </label>
                     <button
@@ -650,7 +650,7 @@ export default function PromptPage() {
                         ...newTool,
                         parameters: [...newTool.parameters, { name: '', type: 'string', description: '', required: true }]
                       })}
-                      className="text-sm text-green-600 hover:text-green-700"
+                      className="text-sm text-neon-blue hover:text-cyan-400"
                     >
                       + Agregar Parametro
                     </button>
@@ -660,13 +660,11 @@ export default function PromptPage() {
                   </p>
                   
                   {newTool.parameters.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic py-2">
-                      Sin parametros (usara "query" por defecto)
-                    </p>
+                    <p className="text-sm text-gray-500 text-center py-2">Sin parametros definidos</p>
                   ) : (
                     <div className="space-y-2">
                       {newTool.parameters.map((param, index) => (
-                        <div key={index} className="flex items-start gap-2 p-2 bg-gray-50 rounded">
+                        <div key={index} className="flex flex-wrap gap-2 items-center bg-dark-hover p-2 rounded">
                           <input
                             type="text"
                             value={param.name}
@@ -675,8 +673,8 @@ export default function PromptPage() {
                               params[index].name = e.target.value;
                               setNewTool({ ...newTool, parameters: params });
                             }}
-                            className="input flex-1 text-sm"
-                            placeholder="orderId"
+                            className="input flex-1 min-w-[100px]"
+                            placeholder="nombre"
                           />
                           <select
                             value={param.type}
@@ -685,7 +683,7 @@ export default function PromptPage() {
                               params[index].type = e.target.value;
                               setNewTool({ ...newTool, parameters: params });
                             }}
-                            className="input w-24 text-sm"
+                            className="input w-24"
                           >
                             <option value="string">string</option>
                             <option value="number">number</option>
@@ -699,10 +697,10 @@ export default function PromptPage() {
                               params[index].description = e.target.value;
                               setNewTool({ ...newTool, parameters: params });
                             }}
-                            className="input flex-1 text-sm"
+                            className="input flex-1 min-w-[150px]"
                             placeholder="Descripcion"
                           />
-                          <label className="flex items-center gap-1 text-xs text-gray-600">
+                          <label className="flex items-center gap-1 text-xs text-gray-400">
                             <input
                               type="checkbox"
                               checked={param.required}
@@ -711,7 +709,7 @@ export default function PromptPage() {
                                 params[index].required = e.target.checked;
                                 setNewTool({ ...newTool, parameters: params });
                               }}
-                              className="w-4 h-4"
+                              className="w-4 h-4 rounded border-gray-600 bg-dark-surface text-neon-blue"
                             />
                             Req
                           </label>
@@ -721,9 +719,9 @@ export default function PromptPage() {
                               const params = newTool.parameters.filter((_, i) => i !== index);
                               setNewTool({ ...newTool, parameters: params });
                             }}
-                            className="text-red-500 hover:text-red-700 px-2"
+                            className="text-accent-error hover:text-red-400"
                           >
-                            x
+                            ✕
                           </button>
                         </div>
                       ))}
@@ -731,106 +729,106 @@ export default function PromptPage() {
                   )}
                 </div>
 
-                <button
-                  onClick={editingTool ? handleUpdateTool : handleCreateTool}
-                  disabled={loading || !newTool.name || !newTool.description || !newTool.url}
-                  className="btn btn-primary w-full"
-                >
-                  {loading 
-                    ? (editingTool ? 'Actualizando...' : 'Creando...') 
-                    : (editingTool ? 'Actualizar Tool' : 'Crear Tool')}
-                </button>
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={handleCancelToolForm}
+                    className="btn btn-secondary flex-1"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={editingTool ? handleUpdateTool : handleCreateTool}
+                    disabled={loading || !newTool.name || !newTool.url}
+                    className="btn btn-primary flex-1"
+                  >
+                    {loading ? 'Guardando...' : editingTool ? 'Actualizar' : 'Crear'}
+                  </button>
+                </div>
               </div>
             )}
 
-            {tools.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No hay tools configurados
+            {tools.length === 0 && !showToolForm ? (
+              <div className="text-center py-8">
+                <div className="text-4xl mb-2">🔧</div>
+                <p className="text-gray-400">No tienes tools configurados.</p>
+                <p className="text-sm text-gray-500">Agrega endpoints externos para que el agente pueda consultar informacion.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {tools.map((tool) => (
-                  <div
-                    key={tool.id}
-                    className={`border rounded-lg p-4 ${
-                      tool.enabled ? 'border-green-200 bg-green-50' : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
+                {tools.map(tool => (
+                  <div key={tool.id} className="border border-dark-hover rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{tool.name}</span>
-                          <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-white">{tool.name}</h3>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            tool.enabled ? 'bg-accent-success/20 text-accent-success' : 'bg-gray-700 text-gray-400'
+                          }`}>
+                            {tool.enabled ? 'Activo' : 'Inactivo'}
+                          </span>
+                          <span className="px-2 py-0.5 bg-dark-hover text-gray-400 rounded text-xs">
                             {tool.method}
                           </span>
                         </div>
-                        <p className="text-sm text-gray-600 mt-1">{tool.description}</p>
-                        <p className="text-xs text-gray-400 mt-1 font-mono">{tool.url}</p>
-                        
+                        <p className="text-sm text-gray-400">{tool.description}</p>
+                        <p className="text-xs text-gray-500 mt-1 truncate">{tool.url}</p>
                         {tool.parameters && tool.parameters.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {tool.parameters.map((param, idx) => (
-                              <span
-                                key={idx}
-                                className={`text-xs px-2 py-0.5 rounded ${
-                                  param.required 
-                                    ? 'bg-blue-100 text-blue-700' 
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}
-                              >
-                                {param.name}: {param.type}
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {tool.parameters.map((p, i) => (
+                              <span key={i} className="text-xs bg-neon-blue/20 text-neon-blue px-2 py-0.5 rounded">
+                                {p.name}{p.required ? '*' : ''}
                               </span>
                             ))}
                           </div>
                         )}
-                        
-                        {testResult && testResult.toolId === tool.id && (
-                          <div className="mt-2 p-2 bg-gray-100 rounded text-xs font-mono overflow-auto max-h-32">
-                            {testResult.error ? (
-                              <span className="text-red-600">{testResult.error}</span>
-                            ) : (
-                              <pre>{JSON.stringify(testResult.data, null, 2)}</pre>
-                            )}
-                          </div>
-                        )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row gap-1">
                         <button
-                          onClick={() => handleViewLogs(tool)}
-                          className="text-sm px-3 py-1 text-purple-600 hover:bg-purple-50 rounded"
+                          onClick={() => handleToggleTool(tool)}
+                          className="btn btn-secondary btn-sm"
+                          title={tool.enabled ? 'Desactivar' : 'Activar'}
                         >
-                          Historial
+                          {tool.enabled ? '⏸' : '▶'}
                         </button>
                         <button
-                          onClick={() => handleEditTool(tool)}
-                          className="text-sm px-3 py-1 text-gray-600 hover:bg-gray-100 rounded"
+                          onClick={() => handleViewLogs(tool)}
+                          className="btn btn-secondary btn-sm"
+                          title="Ver logs"
                         >
-                          Editar
+                          📋
                         </button>
                         <button
                           onClick={() => handleTestTool(tool)}
-                          className="text-sm px-3 py-1 text-blue-600 hover:bg-blue-50 rounded"
+                          className="btn btn-secondary btn-sm"
+                          title="Probar"
                         >
-                          Test
+                          🧪
                         </button>
                         <button
-                          onClick={() => handleToggleTool(tool)}
-                          className={`text-sm px-3 py-1 rounded ${
-                            tool.enabled 
-                              ? 'text-green-600 hover:bg-green-100' 
-                              : 'text-gray-500 hover:bg-gray-100'
-                          }`}
+                          onClick={() => handleEditTool(tool)}
+                          className="btn btn-secondary btn-sm"
+                          title="Editar"
                         >
-                          {tool.enabled ? 'Activo' : 'Inactivo'}
+                          ✏️
                         </button>
                         <button
                           onClick={() => handleDeleteTool(tool.id)}
-                          className="text-sm px-3 py-1 text-red-600 hover:bg-red-50 rounded"
+                          className="btn btn-danger btn-sm"
+                          title="Eliminar"
                         >
-                          Eliminar
+                          🗑️
                         </button>
                       </div>
                     </div>
+                    {testResult && testResult.toolId === tool.id && (
+                      <div className={`mt-3 p-2 rounded text-sm ${
+                        testResult.error ? 'bg-accent-error/10 text-accent-error' : 'bg-accent-success/10 text-accent-success'
+                      }`}>
+                        <pre className="whitespace-pre-wrap text-xs">
+                          {JSON.stringify(testResult, null, 2)}
+                        </pre>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -839,102 +837,79 @@ export default function PromptPage() {
         </div>
       )}
 
-      <div className="card mt-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Configuracion de IA</h2>
-        <div className="space-y-3 text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-600">Modelo:</span>
-            <span className="font-medium">{currentBusiness.openaiModel || 'No configurado'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">API Key:</span>
-            <span className="font-medium">
-              {currentBusiness.openaiApiKey ? '********' : 'No configurada'}
-            </span>
-          </div>
-        </div>
-        <p className="text-xs text-gray-500 mt-4">
-          Para cambiar la configuracion de IA, ve a la seccion "Mi Empresa"
-        </p>
-      </div>
-
       {showLogsModal && selectedToolForLogs && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Historial: {selectedToolForLogs.name}
-                </h3>
-                {toolStats && (
-                  <div className="flex gap-4 mt-1 text-sm text-gray-600">
-                    <span>Total: <strong>{toolStats.totalCalls}</strong> llamadas</span>
-                    <span>Promedio: <strong>{toolStats.avgDuration}ms</strong></span>
-                    {toolStats.lastCall && (
-                      <span>Ultima: <strong>{new Date(toolStats.lastCall).toLocaleString()}</strong></span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={handleCloseLogsModal}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
-              >
-                &times;
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white">
+                Logs: {selectedToolForLogs.name}
+              </h2>
+              <button onClick={handleCloseLogsModal} className="text-gray-400 hover:text-white">
+                ✕
               </button>
             </div>
-            
-            <div className="p-4 overflow-auto max-h-[70vh]">
+
+            {toolStats && (
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="bg-dark-hover rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-white">{toolStats.totalCalls}</p>
+                  <p className="text-xs text-gray-400">Llamadas totales</p>
+                </div>
+                <div className="bg-dark-hover rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-white">{toolStats.avgDuration?.toFixed(0) || 0}ms</p>
+                  <p className="text-xs text-gray-400">Tiempo promedio</p>
+                </div>
+                <div className="bg-dark-hover rounded-lg p-3 text-center">
+                  <p className="text-sm font-medium text-white">
+                    {toolStats.lastCall ? new Date(toolStats.lastCall).toLocaleDateString() : '-'}
+                  </p>
+                  <p className="text-xs text-gray-400">Ultima llamada</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto">
               {loadingLogs ? (
-                <div className="text-center py-8 text-gray-500">Cargando...</div>
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue mx-auto"></div>
+                </div>
               ) : toolLogs.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No hay registros de uso para este tool
+                <div className="text-center py-8 text-gray-400">
+                  No hay logs disponibles
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {toolLogs.map((log) => (
-                    <div key={log.id} className="border border-gray-200 rounded-lg p-3">
+                <div className="space-y-2">
+                  {toolLogs.map(log => (
+                    <div key={log.id} className="bg-dark-hover rounded-lg p-3 text-sm">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <span className={`px-2 py-0.5 rounded text-xs ${
-                            log.status === 'success' 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-red-100 text-red-700'
-                          }`}>
-                            {log.status}
-                          </span>
-                          {log.duration && (
-                            <span className="text-xs text-gray-500">{log.duration}ms</span>
-                          )}
-                          {log.contactPhone && (
-                            <span className="text-xs text-gray-500">Tel: {log.contactPhone}</span>
-                          )}
-                        </div>
-                        <span className="text-xs text-gray-400">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          log.status === 'success' ? 'bg-accent-success/20 text-accent-success' : 'bg-accent-error/20 text-accent-error'
+                        }`}>
+                          {log.status}
+                        </span>
+                        <span className="text-xs text-gray-500">
                           {new Date(log.createdAt).toLocaleString()}
+                          {log.duration && ` - ${log.duration}ms`}
                         </span>
                       </div>
-                      
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-xs font-medium text-gray-700 mb-1">Request:</p>
-                          <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-24 font-mono">
-                            {JSON.stringify(log.request, null, 2)}
-                          </pre>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-gray-700 mb-1">Response:</p>
-                          <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-24 font-mono">
-                            {JSON.stringify(log.response, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
+                      {log.contactPhone && (
+                        <p className="text-xs text-gray-400 mb-1">Tel: {log.contactPhone}</p>
+                      )}
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-gray-400 hover:text-white">Ver detalles</summary>
+                        <pre className="mt-2 p-2 bg-dark-surface rounded overflow-x-auto text-gray-300">
+                          {JSON.stringify({ request: log.request, response: log.response }, null, 2)}
+                        </pre>
+                      </details>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+
+            <button onClick={handleCloseLogsModal} className="btn btn-secondary mt-4">
+              Cerrar
+            </button>
           </div>
         </div>
       )}
