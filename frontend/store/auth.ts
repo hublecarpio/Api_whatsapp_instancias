@@ -4,6 +4,8 @@ interface User {
   id: string;
   name: string;
   email: string;
+  subscriptionStatus?: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled';
+  needsSubscription?: boolean;
 }
 
 interface AuthState {

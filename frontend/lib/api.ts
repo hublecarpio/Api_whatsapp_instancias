@@ -175,6 +175,13 @@ export const templatesApi = {
   }) => api.post(`/templates/${businessId}/send-template`, data)
 };
 
+export const billingApi = {
+  createCheckoutSession: () => api.post('/billing/create-checkout-session'),
+  getSubscriptionStatus: () => api.get('/billing/subscription-status'),
+  cancelSubscription: () => api.post('/billing/cancel-subscription'),
+  reactivateSubscription: () => api.post('/billing/reactivate-subscription')
+};
+
 export const tagsApi = {
   list: (businessId: string) => api.get(`/tags?business_id=${businessId}`),
   create: (data: { business_id: string; name: string; color?: string; description?: string }) =>

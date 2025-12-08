@@ -25,7 +25,8 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     { href: '/dashboard/prompt', label: 'Agente IA', icon: '🤖' },
     { href: '/dashboard/chat', label: 'Chat', icon: '💭' },
     { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' },
-    { href: '/dashboard/reminders', label: 'Seguimientos', icon: '⏰' }
+    { href: '/dashboard/reminders', label: 'Seguimientos', icon: '⏰' },
+    { href: '/dashboard/billing', label: 'Facturacion', icon: '💳' }
   ];
 
   return (
@@ -102,11 +103,45 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
               <p className="text-xs text-gray-500 truncate">{user?.email}</p>
             </div>
           </div>
+          
+          {user?.subscriptionStatus && (
+            <div className="mb-3">
+              <Link
+                href="/dashboard/billing"
+                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                  user.subscriptionStatus === 'active' 
+                    ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                    : user.subscriptionStatus === 'trial'
+                    ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : user.subscriptionStatus === 'past_due'
+                    ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                    : 'bg-red-50 text-red-700 hover:bg-red-100'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${
+                    user.subscriptionStatus === 'active' ? 'bg-green-500' :
+                    user.subscriptionStatus === 'trial' ? 'bg-blue-500' :
+                    user.subscriptionStatus === 'past_due' ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}></span>
+                  {user.subscriptionStatus === 'active' && 'Plan Activo'}
+                  {user.subscriptionStatus === 'trial' && 'Periodo de Prueba'}
+                  {user.subscriptionStatus === 'past_due' && 'Pago Pendiente'}
+                  {user.subscriptionStatus === 'pending' && 'Sin Suscripcion'}
+                  {user.subscriptionStatus === 'canceled' && 'Cancelado'}
+                </span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+          )}
+          
           <button
             onClick={handleLogout}
             className="btn btn-secondary w-full text-sm"
           >
-            Cerrar sesión
+            Cerrar sesion
           </button>
         </div>
       )}

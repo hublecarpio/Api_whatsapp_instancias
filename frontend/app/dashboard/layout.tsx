@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
-import { businessApi } from '@/lib/api';
+import { businessApi, authApi } from '@/lib/api';
 
 export default function DashboardLayout({
   children
@@ -13,7 +13,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { loadFromStorage, isAuthenticated } = useAuthStore();
+  const { loadFromStorage, isAuthenticated, setAuth, token } = useAuthStore();
   const { setBusinesses, setCurrentBusiness, businesses } = useBusinessStore();
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -29,23 +29,31 @@ export default function DashboardLayout({
   }, [isAuthenticated, loading, router]);
 
   useEffect(() => {
-    const fetchBusinesses = async () => {
-      if (isAuthenticated) {
+    const fetchData = async () => {
+      if (isAuthenticated && token) {
         try {
-          const response = await businessApi.list();
-          setBusinesses(response.data);
-          if (response.data.length > 0) {
-            setCurrentBusiness(response.data[0]);
+          const [businessResponse, userResponse] = await Promise.all([
+            businessApi.list(),
+            authApi.me()
+          ]);
+          
+          setBusinesses(businessResponse.data);
+          if (businessResponse.data.length > 0) {
+            setCurrentBusiness(businessResponse.data[0]);
+          }
+          
+          if (userResponse.data) {
+            setAuth(userResponse.data, token);
           }
         } catch (error) {
-          console.error('Failed to fetch businesses:', error);
+          console.error('Failed to fetch data:', error);
         }
       }
       setLoading(false);
     };
 
-    fetchBusinesses();
-  }, [isAuthenticated, setBusinesses, setCurrentBusiness]);
+    fetchData();
+  }, [isAuthenticated, token, setBusinesses, setCurrentBusiness, setAuth]);
 
   if (loading) {
     return (

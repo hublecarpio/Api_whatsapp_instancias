@@ -85,14 +85,26 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { id: true, name: true, email: true, createdAt: true }
+      select: { 
+        id: true, 
+        name: true, 
+        email: true, 
+        createdAt: true,
+        subscriptionStatus: true,
+        trialEndAt: true,
+        stripeCustomerId: true
+      }
     });
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    res.json(user);
+    res.json({
+      ...user,
+      subscriptionStatus: user.subscriptionStatus.toLowerCase(),
+      needsSubscription: user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED'
+    });
   } catch (error) {
     console.error('Get me error:', error);
     res.status(500).json({ error: 'Failed to get user' });

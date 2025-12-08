@@ -16,6 +16,7 @@ import tagsRoutes from './routes/tags.js';
 import remindersRoutes from './routes/reminders.js';
 import metaWebhookRoutes from './routes/metaWebhook.js';
 import templatesRoutes from './routes/templates.js';
+import billingRoutes from './routes/billing.js';
 import { startReminderWorker } from './services/reminderWorker.js';
 
 dotenv.config();
@@ -24,6 +25,9 @@ const app = express();
 const PORT = process.env.CORE_API_PORT || 3001;
 
 app.use(cors());
+
+app.use('/billing/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 
 app.get('/', (req, res) => {
@@ -62,6 +66,7 @@ app.use('/tags', tagsRoutes);
 app.use('/reminders', remindersRoutes);
 app.use('/webhook/meta', metaWebhookRoutes);
 app.use('/templates', templatesRoutes);
+app.use('/billing', billingRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

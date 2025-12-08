@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { authApi } from '@/lib/api';
+import { authApi, billingApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 
 export default function RegisterPage() {
@@ -23,6 +23,17 @@ export default function RegisterPage() {
     try {
       const response = await authApi.register({ name, email, password });
       setAuth(response.data.user, response.data.token);
+      
+      try {
+        const checkoutResponse = await billingApi.createCheckoutSession();
+        if (checkoutResponse.data.url) {
+          window.location.href = checkoutResponse.data.url;
+          return;
+        }
+      } catch (checkoutErr) {
+        console.error('Error creating checkout session:', checkoutErr);
+      }
+      
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al registrarse');
