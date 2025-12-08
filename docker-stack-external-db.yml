@@ -8,6 +8,7 @@ services:
     environment:
       - NODE_ENV=production
       - CORE_API_PORT=4001
+      - CORE_API_URL=http://core-api:4001
       - DATABASE_URL=${DATABASE_URL}
       - SESSION_SECRET=${SESSION_SECRET}
       - WA_API_URL=http://whatsapp-api:4080
