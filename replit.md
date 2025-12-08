@@ -45,6 +45,14 @@ The platform follows a microservices-like architecture comprising three main com
     - Automatic account suspension on payment failure
     - Billing page showing subscription status, next payment, cancel/reactivate options
     - Subscription status indicator in dashboard sidebar
+*   **Email Verification System**:
+    - Users must verify email before creating WhatsApp instances
+    - Server-side enforcement via `requireEmailVerified` middleware on `/wa/create` and `/wa/create-meta` endpoints
+    - Frontend UI: EmailVerificationBanner in dashboard, verify-email page with token validation
+    - SMTP integration via Nodemailer with branded dark-theme HTML template matching EfficoreChat design
+    - Verification token with 24-hour expiry, hashed before storage
+    - Rate-limited resend functionality (2 minutes throttle)
+    - Access tiers: Without email verification - CRM/Chat/Instances blocked; After verification - full access to free tier features
 *   **Robust Deployment**: Dockerized services with improved health checks, database wait logic, and environment variable support for flexible port configuration.
 
 **System Design Choices**:
