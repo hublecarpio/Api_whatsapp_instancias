@@ -289,3 +289,4 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
   - Added extra_hosts for host.docker.internal access
   - Created diagnose-stack.sh diagnostic script
   - Created deploy.env.example template
+  - Changed bcrypt to bcryptjs (pure JavaScript, no native compilation issues on Alpine Linux)
