@@ -179,7 +179,11 @@ export const billingApi = {
   createCheckoutSession: () => api.post('/billing/create-checkout-session'),
   getSubscriptionStatus: () => api.get('/billing/subscription-status'),
   cancelSubscription: () => api.post('/billing/cancel-subscription'),
-  reactivateSubscription: () => api.post('/billing/reactivate-subscription')
+  reactivateSubscription: () => api.post('/billing/reactivate-subscription'),
+  getAccessStatus: (businessId?: string) => 
+    api.get(`/billing/access-status${businessId ? `?businessId=${businessId}` : ''}`),
+  getContactsToday: (businessId?: string) =>
+    api.get(`/billing/contacts-today${businessId ? `?businessId=${businessId}` : ''}`)
 };
 
 export const tagsApi = {
