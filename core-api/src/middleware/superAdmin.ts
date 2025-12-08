@@ -27,13 +27,8 @@ async function initRedis(): Promise<void> {
   try {
     redisClient = new Redis(REDIS_URL, {
       maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 500,
-      lazyConnect: true
+      retryStrategy: (times: number) => Math.min(times * 500, 2000)
     });
-    
-    await redisClient.connect();
-    redisConnected = true;
-    console.log('Super Admin sessions: Redis connected');
     
     redisClient.on('error', (err) => {
       console.log('Super Admin sessions: Redis error', err.message);

@@ -464,11 +464,12 @@ async function processWithAgent(
     const toolMessages: any[] = [completion.choices[0].message];
     
     for (const toolCall of toolCalls) {
-      const toolName = toolCall.function.name;
+      const fn = (toolCall as any).function;
+      const toolName = fn.name;
       const tool = tools.find(t => t.name.replace(/[^a-zA-Z0-9_-]/g, '_') === toolName);
       
       if (tool) {
-        const args = JSON.parse(toolCall.function.arguments);
+        const args = JSON.parse(fn.arguments);
         const startTime = Date.now();
         
         console.log(`[TOOL CALL] ${tool.name}:`, JSON.stringify(args));
