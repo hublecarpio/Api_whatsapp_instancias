@@ -290,7 +290,13 @@ export class WhatsAppInstance {
       const remoteJid = message.key?.remoteJid || '';
       const pushName = message.pushName || '';
       const isGroup = remoteJid.endsWith('@g.us');
+      const isBroadcast = remoteJid.endsWith('@broadcast');
       const isLid = remoteJid.endsWith('@lid');
+      
+      if (isBroadcast) {
+        this.logger.debug({ remoteJid }, 'Skipping - broadcast/status message');
+        continue;
+      }
       
       let from = remoteJid;
       let sender = isGroup ? message.key?.participant : remoteJid;

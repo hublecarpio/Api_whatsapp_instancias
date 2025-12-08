@@ -296,3 +296,4 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
   - Persistent action bar with Refresh QR, Restart, and Delete buttons (btn-sm)
   - State-specific panels for QR code, connection info, etc.
 - **Dec 8 2025**: Fixed Next.js middleware Content-Length mismatch error using native streaming proxy pattern with `duplex: 'half'`
+- **Dec 8 2025**: Added broadcast/status message filtering - WhatsApp status updates (@broadcast) are now ignored and won't appear in chat history or trigger AI responses
