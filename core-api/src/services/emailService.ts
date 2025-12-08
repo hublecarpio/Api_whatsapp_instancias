@@ -49,7 +49,9 @@ export function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-function getVerificationEmailHTML(name: string, verificationLink: string): string {
+function getVerificationEmailHTML(name: string, verificationLink: string, appDomain: string): string {
+  const logoUrl = `${appDomain}/icon-192.png`;
+  
   return `
 <!DOCTYPE html>
 <html lang="es">
@@ -69,10 +71,8 @@ function getVerificationEmailHTML(name: string, verificationLink: string): strin
             <td align="center" style="padding-bottom: 30px;">
               <table role="presentation" style="border-collapse: collapse;">
                 <tr>
-                  <td style="vertical-align: middle; padding-right: 10px;">
-                    <div style="width: 40px; height: 40px; border: 2px solid #00D4FF; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;">
-                      <span style="color: #00D4FF; font-size: 20px;">▶</span>
-                    </div>
+                  <td style="vertical-align: middle; padding-right: 12px;">
+                    <img src="${logoUrl}" alt="EfficoreChat" width="44" height="44" style="display: block; border-radius: 8px;" />
                   </td>
                   <td style="vertical-align: middle;">
                     <span style="font-size: 24px; font-weight: bold; color: #FFFFFF;">Efficore</span><span style="font-size: 24px; font-weight: bold; color: #00D4FF;">Chat</span>
@@ -191,7 +191,7 @@ export async function sendVerificationEmail(
       from: `"${fromName}" <${fromEmail}>`,
       to: email,
       subject: 'Confirma tu correo electrónico - EfficoreChat',
-      html: getVerificationEmailHTML(name, verificationLink)
+      html: getVerificationEmailHTML(name, verificationLink, appDomain)
     });
     
     console.log(`Verification email sent successfully to ${email}`, {
