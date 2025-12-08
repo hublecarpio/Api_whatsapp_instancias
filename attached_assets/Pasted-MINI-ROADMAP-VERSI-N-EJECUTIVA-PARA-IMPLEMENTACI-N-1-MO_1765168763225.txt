@@ -1,0 +1,182 @@
+MINI-ROADMAP (VERSIÓN EJECUTIVA PARA IMPLEMENTACIÓN)
+1. MODELO DE NEGOCIO A IMPLEMENTAR
+
+Trial: 7 días gratis, obligatorio registrar tarjeta.
+
+Cobro recurrente: 50 USD semanales.
+
+Suspensión automática si falla el pago.
+
+Cancelación manual desde el panel.
+
+2. ENTREGABLES TÉCNICOS QUE DEBE CREAR REPLIT
+2.1. Integración Stripe (Backend Node/Express)
+
+Variables de entorno:
+
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_WEEKLY_50=
+
+
+Dependencias:
+
+npm install stripe express body-parser cors
+
+2.2. Endpoints necesarios
+1. Crear sesión de Checkout para nuevo usuario
+
+POST /billing/create-checkout-session
+
+Lógica:
+
+Crear Customer si no existe
+
+Crear suscripción con:
+
+trial_period_days: 7
+
+price semanal 50 USD
+
+Redirigir al frontend con session.url
+
+2. Webhook Stripe (OBLIGATORIO)
+
+POST /billing/webhook
+
+Eventos a manejar:
+
+checkout.session.completed
+
+Guardar stripe_customer_id y stripe_subscription_id en DB
+
+Activar acceso del usuario
+
+invoice.payment_succeeded
+
+Confirmar renovación del ciclo semanal
+
+invoice.payment_failed
+
+Suspender cuenta (bloquear envío de mensajes / cerrar instancias)
+
+customer.subscription.deleted
+
+Eliminar o desactivar componentes del servicio
+
+3. Endpoint de Status
+
+GET /billing/subscription-status
+
+Devuelve:
+
+{
+  subscriptionStatus: "trial" | "active" | "past_due" | "canceled",
+  nextPayment: date
+}
+
+4. Endpoint de Cancelación
+
+POST /billing/cancel-subscription
+
+Acciones:
+
+Cancelar en Stripe al final del período actual
+
+Desactivar acceso interno
+
+3. BASE DE DATOS (Campos mínimos)
+
+Tabla users:
+
+id
+email
+password_hash
+stripe_customer_id
+stripe_subscription_id
+subscription_status
+trial_end_at
+created_at
+
+4. FLUJO COMPLETO DE USUARIO
+PASO 1 — Signup (crear cuenta)
+
+Crear usuario base en DB
+
+Redirigir a Checkout para activar trial
+
+PASO 2 — Checkout de Stripe
+
+Usuario ingresa tarjeta
+
+Se crea: Customer + Subscription
+
+Trial = 7 días sin cargo
+
+PASO 3 — Webhook confirma suscripción
+
+Backend activa el acceso
+
+Permitir conectar QR de WhatsApp
+
+PASO 4 — Al día 7 Stripe cobra 50 USD
+
+Si cobra → renovar acceso una semana más
+
+Si falla → suspensión automática
+
+PASO 5 — Cancelación opcional
+
+El usuario puede cancelar en cualquier momento
+
+Stripe mantiene acceso hasta el fin del período pagado
+
+5. CONFIGURACIÓN DEL PRICE EN STRIPE
+
+Crear en Stripe:
+
+Price semanal 50 USD
+
+Type: Recurring
+
+Interval: Weekly
+
+Amount: 50.00 USD
+
+ID: price_weekly_50
+
+6. CONTROL DE ACCESO INTERNO (Middleware)
+
+Cada request debe validar:
+
+Si está en trial → permitir
+
+Si está activo → permitir
+
+Si está past_due o canceled → bloquear
+
+7. CRONJOB OPCIONAL
+
+Cada 1 hora:
+
+Consultar Stripe Subscription Status
+
+Actualizar estado local
+
+Suspender cuentas vencidas
+
+8. RESUMEN EJECUTIVO PARA REPLIT
+
+Implementar Stripe Checkout con trial_period_days: 7.
+
+Plan recurrente semanal de 50 USD.
+
+Webhook Stripe con manejo de 4 eventos clave.
+
+Guardar customer + subscription IDs en DB.
+
+Middleware de acceso basado en estado de suscripción.
+
+Cancelación desde API.
+
+Trial requiere tarjeta siempre.
