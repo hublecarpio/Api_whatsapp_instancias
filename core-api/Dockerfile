@@ -16,7 +16,7 @@ RUN npm run build
 
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl netcat-openbsd
 
 WORKDIR /app
 
@@ -27,19 +27,20 @@ RUN npm ci --only=production && npm cache clean --force
 
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/dist ./dist
 COPY entrypoint.sh ./entrypoint.sh
 
 RUN chmod +x ./entrypoint.sh && chown -R node:node /app
 
 ENV NODE_ENV=production
-ENV CORE_API_PORT=3001
+ENV CORE_API_PORT=4001
 
 USER node
 
 EXPOSE 3001 4001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD node -e "const port = process.env.CORE_API_PORT || 3001; require('http').get('http://localhost:' + port + '/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
+  CMD node -e "const port = process.env.CORE_API_PORT || 4001; require('http').get('http://localhost:' + port + '/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
 
 CMD ["./entrypoint.sh"]

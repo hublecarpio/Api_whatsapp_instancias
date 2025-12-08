@@ -280,3 +280,12 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
 - **Dec 8 2025**: Fixed user registration to auto-create starter Business using Prisma transaction for atomicity
 - **Dec 8 2025**: Cleaned up orphan WhatsApp instances that were causing webhook 404 errors
 - **Dec 8 2025**: Fixed Docker healthchecks to use dynamic ports from environment variables (supports custom ports 4000, 4001, 4080)
+- **Dec 8 2025**: Complete Docker deployment overhaul:
+  - Created docker-stack-external-db.yml for external PostgreSQL usage
+  - Fixed Prisma CLI availability in production image (copy from builder)
+  - Added netcat-openbsd for database connectivity checks
+  - Improved entrypoint.sh with robust DB wait logic (30 retries, 2s intervals)
+  - Set default ports to 4000/4001/4080 in all Dockerfiles
+  - Added extra_hosts for host.docker.internal access
+  - Created diagnose-stack.sh diagnostic script
+  - Created deploy.env.example template

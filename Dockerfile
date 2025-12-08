@@ -24,13 +24,13 @@ RUN mkdir -p /app/src/storage/sessions && \
     chown -R node:node /app
 
 ENV NODE_ENV=production
-ENV PORT=8080
+ENV PORT=4080
 
 USER node
 
-EXPOSE 8080 4080
+EXPOSE 4080 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD node -e "const port = process.env.PORT || 8080; require('http').get('http://localhost:' + port + '/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
+  CMD node -e "const port = process.env.PORT || 4080; require('http').get('http://localhost:' + port + '/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
 
 CMD ["node", "dist/index.js"]
