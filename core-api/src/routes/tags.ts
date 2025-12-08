@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import prisma from '../services/prisma';
-import axios from 'axios';
+import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from '../services/openaiService.js';
 
 const router = Router();
 
@@ -527,10 +527,6 @@ router.post('/suggest-stage', authMiddleware, async (req: AuthRequest, res: Resp
       return;
     }
 
-    if (!business.openaiApiKey) {
-      res.status(400).json({ error: 'OpenAI API key not configured' });
-      return;
-    }
 
     const messages = await prisma.messageLog.findMany({
       where: {
@@ -568,25 +564,35 @@ ${conversationHistory}
 
 Responde SOLO con el nombre exacto de la etapa que mejor describe la situación actual del cliente. No agregues explicaciones.`;
 
-    const openaiResponse = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: business.openaiModel || 'gpt-4.1-mini',
-        messages: [
-          { role: 'system', content: 'Eres un asistente que clasifica clientes en etapas de venta.' },
-          { role: 'user', content: prompt }
-        ],
-        max_tokens: 50
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${business.openaiApiKey}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    if (!isOpenAIConfigured()) {
+      res.status(400).json({ error: 'OpenAI not configured. Contact administrator.' });
+      return;
+    }
 
-    const suggestedStageName = openaiResponse.data.choices[0]?.message?.content?.trim();
+    const openai = getOpenAIClient();
+    const modelToUse = getDefaultModel();
+    
+    const openaiResponse = await openai.chat.completions.create({
+      model: modelToUse,
+      messages: [
+        { role: 'system', content: 'Eres un asistente que clasifica clientes en etapas de venta.' },
+        { role: 'user', content: prompt }
+      ],
+      max_tokens: 50
+    });
+
+    if (openaiResponse.usage) {
+      await logTokenUsage({
+        businessId: business_id,
+        feature: 'stage_suggestion',
+        model: modelToUse,
+        promptTokens: openaiResponse.usage.prompt_tokens,
+        completionTokens: openaiResponse.usage.completion_tokens,
+        totalTokens: openaiResponse.usage.total_tokens
+      });
+    }
+
+    const suggestedStageName = openaiResponse.choices[0]?.message?.content?.trim();
     
     const matchedTag = business.tags.find(t => 
       t.name.toLowerCase() === suggestedStageName?.toLowerCase()

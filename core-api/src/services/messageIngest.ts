@@ -67,11 +67,6 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     return;
   }
 
-  if (!business.openaiApiKey) {
-    console.log('No OpenAI API key for business:', businessId);
-    return;
-  }
-
   const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
   try {
     await axios.post(`${CORE_API_URL}/agent/think`, {

@@ -4,6 +4,7 @@ import axios from 'axios';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/billing.js';
+import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from '../services/openaiService.js';
 
 const router = Router();
 
@@ -308,11 +309,11 @@ async function processWithAgent(
     return { response: '' };
   }
   
-  if (!business.openaiApiKey) {
-    throw new Error('OpenAI API key not configured');
+  if (!isOpenAIConfigured()) {
+    throw new Error('OpenAI API key not configured. Contact administrator.');
   }
   
-  const openai = new OpenAI({ apiKey: business.openaiApiKey });
+  const openai = getOpenAIClient();
   const promptConfig = business.promptMaster;
   const historyLimit = promptConfig?.historyLimit || 10;
   const splitMessages = promptConfig?.splitMessages ?? true;
@@ -434,8 +435,10 @@ async function processWithAgent(
     };
   });
   
+  const modelToUse = getDefaultModel();
+  
   const chatParams: any = {
-    model: business.openaiModel || 'gpt-4.1-mini',
+    model: modelToUse,
     messages: [
       { role: 'system', content: systemPrompt },
       ...conversationHistory
@@ -451,6 +454,10 @@ async function processWithAgent(
   
   let completion = await openai.chat.completions.create(chatParams);
   let totalTokens = completion.usage?.total_tokens || 0;
+  let totalPromptTokens = completion.usage?.prompt_tokens || 0;
+  let totalCompletionTokens = completion.usage?.completion_tokens || 0;
+  
+  const userId = business.userId;
   
   while (completion.choices[0]?.message?.tool_calls) {
     const toolCalls = completion.choices[0].message.tool_calls;
@@ -506,7 +513,7 @@ async function processWithAgent(
     }
     
     const nextParams: any = {
-      model: business.openaiModel || 'gpt-4.1-mini',
+      model: modelToUse,
       messages: [
         { role: 'system', content: systemPrompt },
         ...conversationHistory,
@@ -522,6 +529,20 @@ async function processWithAgent(
     
     completion = await openai.chat.completions.create(nextParams);
     totalTokens += completion.usage?.total_tokens || 0;
+    totalPromptTokens += completion.usage?.prompt_tokens || 0;
+    totalCompletionTokens += completion.usage?.completion_tokens || 0;
+  }
+  
+  if (totalTokens > 0) {
+    await logTokenUsage({
+      businessId,
+      userId,
+      feature: 'chat_agent',
+      model: modelToUse,
+      promptTokens: totalPromptTokens,
+      completionTokens: totalCompletionTokens,
+      totalTokens
+    });
   }
   
   const aiResponse = completion.choices[0]?.message?.content || 'Lo siento, no pude procesar tu mensaje.';

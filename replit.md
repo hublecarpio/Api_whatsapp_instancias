@@ -61,6 +61,21 @@ The platform follows a microservices-like architecture comprising three main com
     - Rate-limited resend functionality (2 minutes throttle)
     - Access tiers: Without email verification - CRM/Chat/Instances blocked; After verification - full access to free tier features
 *   **Robust Deployment**: Dockerized services with improved health checks, database wait logic, and environment variable support for flexible port configuration.
+*   **Super Admin Panel**:
+    - Centralized administration panel at `/super-admin` for platform monitoring
+    - Environment-based authentication using `SUPER_ADMIN_USER` and `SUPER_ADMIN_PASS`
+    - Separate session management with Redis-backed tokens
+    - Dashboard tabs: Overview, Users, Businesses, Token Usage, Messages, Billing, System
+    - Real-time platform metrics: total users, active instances, message counts
+    - Token usage tracking per business and per feature (AI agent, reminders, etc.)
+    - Billing overview with subscription status and trial expiration warnings
+    - System health monitoring: database, OpenAI, Stripe, Redis connectivity
+*   **Centralized OpenAI API Management**:
+    - Single platform-wide OpenAI API key configured via `OPENAI_API_KEY` environment variable
+    - Model selection via `OPENAI_MODEL` (defaults to gpt-4o-mini)
+    - Token usage automatically logged to `TokenUsage` table for each API call
+    - Cost tracking based on prompt/completion tokens
+    - Usage breakdown by business and by feature
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM for type-safe database access and schema management.

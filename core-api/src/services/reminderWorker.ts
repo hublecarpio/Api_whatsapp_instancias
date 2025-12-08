@@ -1,7 +1,7 @@
 import prisma from './prisma.js';
 import axios from 'axios';
-import OpenAI from 'openai';
 import { MetaCloudService } from './metaCloud.js';
+import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from './openaiService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -132,7 +132,7 @@ async function generateFollowUpMessage(
     include: { promptMaster: true }
   });
   
-  if (!business?.openaiApiKey) {
+  if (!business || !isOpenAIConfigured()) {
     const templates = [
       'Hola! Solo queria dar seguimiento a nuestra conversacion anterior. Tienes alguna pregunta?',
       'Hola! Me gustaria saber si pudiste revisar la informacion que te envie. Estoy aqui para ayudarte.',
@@ -165,10 +165,11 @@ async function generateFollowUpMessage(
   
   const pressureDesc = pressureDescriptions[Math.min(pressureLevel - 1, 4)];
   
-  const openai = new OpenAI({ apiKey: business.openaiApiKey });
+  const openai = getOpenAIClient();
+  const modelToUse = getDefaultModel();
   
   const response = await openai.chat.completions.create({
-    model: business.openaiModel || 'gpt-4.1-mini',
+    model: modelToUse,
     messages: [
       {
         role: 'system',
@@ -187,6 +188,18 @@ NO uses saludos largos. NO uses emojis. Maximo 50 palabras.`
     max_tokens: 150,
     temperature: 0.7
   });
+  
+  if (response.usage) {
+    await logTokenUsage({
+      businessId,
+      userId: business.userId,
+      feature: 'follow_up',
+      model: modelToUse,
+      promptTokens: response.usage.prompt_tokens,
+      completionTokens: response.usage.completion_tokens,
+      totalTokens: response.usage.total_tokens
+    });
+  }
   
   return response.choices[0]?.message?.content || 'Hola! Tienes alguna pregunta?';
 }

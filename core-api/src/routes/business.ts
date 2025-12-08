@@ -95,10 +95,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.put('/:id/openai', async (req: AuthRequest, res: Response) => {
+router.get('/:id/openai', async (req: AuthRequest, res: Response) => {
   try {
-    const { openaiApiKey, openaiModel } = req.body;
-    
     const existing = await prisma.business.findFirst({
       where: { id: req.params.id, userId: req.userId }
     });
@@ -107,22 +105,18 @@ router.put('/:id/openai', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const business = await prisma.business.update({
-      where: { id: req.params.id },
-      data: { 
-        openaiApiKey: openaiApiKey || existing.openaiApiKey,
-        openaiModel: openaiModel || existing.openaiModel
-      }
-    });
+    const openaiConfigured = !!process.env.OPENAI_API_KEY;
+    const openaiModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
     
     res.json({ 
-      id: business.id, 
-      openaiModel: business.openaiModel,
-      hasApiKey: !!business.openaiApiKey 
+      id: existing.id,
+      openaiConfigured,
+      openaiModel,
+      message: 'OpenAI is managed centrally by administrator'
     });
   } catch (error) {
-    console.error('Update OpenAI config error:', error);
-    res.status(500).json({ error: 'Failed to update OpenAI config' });
+    console.error('Get OpenAI config error:', error);
+    res.status(500).json({ error: 'Failed to get OpenAI config' });
   }
 });
 

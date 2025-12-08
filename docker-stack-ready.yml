@@ -64,6 +64,10 @@ services:
       - MINIO_SECRET_KEY=tuSecretKey
       - MINIO_BUCKET=whatsapp-media
       - MINIO_PUBLIC_URL=https://tu-minio-publico.com
+      - OPENAI_API_KEY=sk-tu-clave-openai-maestra
+      - OPENAI_MODEL=gpt-4.1-mini
+      - SUPER_ADMIN_USER=superadmin
+      - SUPER_ADMIN_PASS=CambiaEstoPasswordAdmin123
     networks:
       - whatsapp_internal
       - traefik_public

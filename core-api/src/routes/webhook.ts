@@ -85,7 +85,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             }
           });
           
-          if (business.botEnabled && business.openaiApiKey && data.text) {
+          if (business.botEnabled && data.text) {
             try {
               await axios.post(`${CORE_API_URL}/agent/think`, {
                 business_id: businessId,

@@ -17,6 +17,7 @@ import remindersRoutes from './routes/reminders.js';
 import metaWebhookRoutes from './routes/metaWebhook.js';
 import templatesRoutes from './routes/templates.js';
 import billingRoutes from './routes/billing.js';
+import superAdminRoutes from './routes/superAdmin.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
 
@@ -80,6 +81,7 @@ app.use('/reminders', remindersRoutes);
 app.use('/webhook/meta', metaWebhookRoutes);
 app.use('/templates', templatesRoutes);
 app.use('/billing', billingRoutes);
+app.use('/super-admin', superAdminRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

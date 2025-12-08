@@ -310,3 +310,20 @@ model Reminder {
   @@index([businessId, status, scheduledAt])
   @@index([businessId, contactPhone])
 }
+
+model TokenUsage {
+  id               String   @id @default(uuid())
+  businessId       String
+  userId           String?
+  feature          String
+  model            String
+  promptTokens     Int
+  completionTokens Int
+  totalTokens      Int
+  costUsd          Float    @default(0)
+  createdAt        DateTime @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
