@@ -142,10 +142,7 @@ services:
         - "traefik.http.routers.whatsapp_frontend.rule=Host(`app.efficore.es`)"
         - "traefik.http.routers.whatsapp_frontend.entrypoints=websecure"
         - "traefik.http.routers.whatsapp_frontend.tls.certresolver=le"
-        - "traefik.http.routers.whatsapp_frontend.priority=100"
         - "traefik.http.services.whatsapp_frontend.loadbalancer.server.port=4000"
-        - "traefik.http.services.whatsapp_frontend.loadbalancer.healthcheck.path=/"
-        - "traefik.http.services.whatsapp_frontend.loadbalancer.healthcheck.interval=10s"
 
 volumes:
   whatsapp_sessions:
