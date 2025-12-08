@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const CORE_API_URL = 'https://api.efficore.es';
+const CORE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/api/')) {
