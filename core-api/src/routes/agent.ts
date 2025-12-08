@@ -2,8 +2,13 @@ import { Router, Request, Response } from 'express';
 import OpenAI from 'openai';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requireActiveSubscription } from '../middleware/billing.js';
 
 const router = Router();
+
+router.use(authMiddleware);
+router.use(requireActiveSubscription);
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
 const activeBuffers = new Map<string, NodeJS.Timeout>();

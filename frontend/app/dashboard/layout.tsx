@@ -11,6 +11,14 @@ import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
 import { businessApi, authApi, billingApi } from '@/lib/api';
 
+const AI_PREMIUM_PAGES = [
+  '/dashboard/agent',
+  '/dashboard/stages',
+  '/dashboard/reminders',
+  '/dashboard/follow-ups',
+  '/dashboard/kanban'
+];
+
 export default function DashboardLayout({
   children
 }: {
@@ -26,6 +34,9 @@ export default function DashboardLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [canAccess, setCanAccess] = useState(false);
+  const [canUseCrm, setCanUseCrm] = useState(false);
+  const [canUseAi, setCanUseAi] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState('pending');
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
   const initRef = useRef(false);
@@ -47,13 +58,16 @@ export default function DashboardLayout({
 
     try {
       const accessResponse = await billingApi.getAccessStatus();
-      const hasAccess = accessResponse.data.canAccess;
+      const data = accessResponse.data;
       
-      setCanAccess(hasAccess);
-      setSubscriptionStatus(accessResponse.data.subscriptionStatus);
-      setTrialDaysRemaining(accessResponse.data.trialDaysRemaining);
+      setCanAccess(data.canAccess);
+      setCanUseCrm(data.canUseCrm);
+      setCanUseAi(data.canUseAi);
+      setEmailVerified(data.emailVerified);
+      setSubscriptionStatus(data.subscriptionStatus);
+      setTrialDaysRemaining(data.trialDaysRemaining);
 
-      if (hasAccess) {
+      if (data.canUseCrm) {
         try {
           const [businessResponse, userResponse] = await Promise.all([
             businessApi.list(),
@@ -91,6 +105,9 @@ export default function DashboardLayout({
       }
       
       setCanAccess(false);
+      setCanUseCrm(false);
+      setCanUseAi(false);
+      setEmailVerified(false);
       setSubscriptionStatus('pending');
       clearBusinesses();
       setIsReady(true);
@@ -106,14 +123,16 @@ export default function DashboardLayout({
       
       try {
         const accessResponse = await billingApi.getAccessStatus();
-        const hasAccess = accessResponse.data.canAccess;
+        const data = accessResponse.data;
         
-        setSubscriptionStatus(accessResponse.data.subscriptionStatus);
-        setTrialDaysRemaining(accessResponse.data.trialDaysRemaining);
+        setCanAccess(data.canAccess);
+        setCanUseCrm(data.canUseCrm);
+        setCanUseAi(data.canUseAi);
+        setEmailVerified(data.emailVerified);
+        setSubscriptionStatus(data.subscriptionStatus);
+        setTrialDaysRemaining(data.trialDaysRemaining);
         
-        if (hasAccess && !canAccess) {
-          setCanAccess(true);
-          
+        if (data.canUseCrm && !canUseCrm) {
           try {
             const [businessResponse, userResponse] = await Promise.all([
               businessApi.list(),
@@ -131,8 +150,7 @@ export default function DashboardLayout({
           } catch (e) {
             console.error('Failed to reload data after access restored:', e);
           }
-        } else if (!hasAccess && canAccess) {
-          setCanAccess(false);
+        } else if (!data.canUseCrm && canUseCrm) {
           clearBusinesses();
         }
       } catch (e) {
@@ -163,9 +181,12 @@ export default function DashboardLayout({
   }
 
   const isBillingPage = pathname === '/dashboard/billing';
-  const showPaymentGate = !canAccess && !isBillingPage;
   const isChatPage = pathname === '/dashboard/chat';
   const isWhatsAppPage = pathname === '/dashboard/whatsapp';
+  const isAiPremiumPage = AI_PREMIUM_PAGES.some(page => pathname?.startsWith(page));
+  
+  const showEmailVerificationRequired = !emailVerified && !isBillingPage;
+  const showPaymentGateForAi = isAiPremiumPage && !canUseAi && !isBillingPage;
   const showEmailBanner = user && user.emailVerified === false;
 
   return (
@@ -180,7 +201,24 @@ export default function DashboardLayout({
       <MobileDrawer isOpen={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} />
 
       <main className={`flex-1 overflow-auto ${isChatPage ? 'p-0 sm:p-4' : 'p-4 sm:p-8'} pt-[calc(56px+1rem)] sm:pt-8`}>
-        {showPaymentGate ? (
+        {showEmailVerificationRequired ? (
+          <div className="min-h-[60vh] flex items-center justify-center p-4">
+            <div className="card max-w-md w-full text-center">
+              <div className="w-16 h-16 mx-auto mb-6 bg-neon-blue/10 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-neon-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-3">
+                Verifica tu correo electronico
+              </h2>
+              <p className="text-gray-400 mb-6">
+                Para acceder a las funciones de la plataforma, necesitas verificar tu correo electronico.
+              </p>
+              <EmailVerificationBanner email={user?.email || ''} />
+            </div>
+          </div>
+        ) : showPaymentGateForAi ? (
           <PaymentGate 
             isOpen={true} 
             subscriptionStatus={subscriptionStatus}

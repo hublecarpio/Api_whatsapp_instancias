@@ -100,7 +100,8 @@ export const toolsApi = {
 };
 
 export const waApi = {
-  create: (businessId: string) => api.post('/wa/create', { businessId }),
+  create: (businessId: string, phoneNumber?: string) => 
+    api.post('/wa/create', { businessId, phoneNumber }),
   createMeta: (data: {
     businessId: string;
     name?: string;
@@ -109,6 +110,7 @@ export const waApi = {
     phoneNumberId: string;
     appId: string;
     appSecret: string;
+    phoneNumber?: string;
   }) => api.post('/wa/create-meta', data),
   instances: (businessId: string) => api.get(`/wa/instances/${businessId}`),
   status: (businessId: string) => api.get(`/wa/${businessId}/status`),

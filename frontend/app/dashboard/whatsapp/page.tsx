@@ -18,7 +18,30 @@ interface MetaFormData {
   phoneNumberId: string;
   appId: string;
   appSecret: string;
+  displayPhoneNumber: string;
 }
+
+const COUNTRY_CODES = [
+  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
+  { code: '+52', country: 'Mexico', flag: '🇲🇽' },
+  { code: '+34', country: 'España', flag: '🇪🇸' },
+  { code: '+57', country: 'Colombia', flag: '🇨🇴' },
+  { code: '+54', country: 'Argentina', flag: '🇦🇷' },
+  { code: '+55', country: 'Brasil', flag: '🇧🇷' },
+  { code: '+56', country: 'Chile', flag: '🇨🇱' },
+  { code: '+51', country: 'Peru', flag: '🇵🇪' },
+  { code: '+58', country: 'Venezuela', flag: '🇻🇪' },
+  { code: '+593', country: 'Ecuador', flag: '🇪🇨' },
+  { code: '+502', country: 'Guatemala', flag: '🇬🇹' },
+  { code: '+503', country: 'El Salvador', flag: '🇸🇻' },
+  { code: '+504', country: 'Honduras', flag: '🇭🇳' },
+  { code: '+505', country: 'Nicaragua', flag: '🇳🇮' },
+  { code: '+506', country: 'Costa Rica', flag: '🇨🇷' },
+  { code: '+507', country: 'Panama', flag: '🇵🇦' },
+  { code: '+591', country: 'Bolivia', flag: '🇧🇴' },
+  { code: '+595', country: 'Paraguay', flag: '🇵🇾' },
+  { code: '+598', country: 'Uruguay', flag: '🇺🇾' },
+];
 
 export default function WhatsAppPage() {
   const { currentBusiness, setCurrentBusiness } = useBusinessStore();
@@ -33,9 +56,13 @@ export default function WhatsAppPage() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [events, setEvents] = useState<ConnectionEvent[]>([]);
   const [showProviderModal, setShowProviderModal] = useState(false);
+  const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [showMetaForm, setShowMetaForm] = useState(false);
   const [metaInfo, setMetaInfo] = useState<any>(null);
   const [webhookInfo, setWebhookInfo] = useState<{ url: string; token: string } | null>(null);
+  
+  const [countryCode, setCountryCode] = useState('+52');
+  const [phoneInput, setPhoneInput] = useState('');
   
   const [metaForm, setMetaForm] = useState<MetaFormData>({
     name: '',
@@ -43,7 +70,8 @@ export default function WhatsAppPage() {
     metaBusinessId: '',
     phoneNumberId: '',
     appId: '',
-    appSecret: ''
+    appSecret: '',
+    displayPhoneNumber: ''
   });
 
   const addEvent = useCallback((type: string, message: string) => {
@@ -112,24 +140,38 @@ export default function WhatsAppPage() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
+  const handleSelectBaileys = () => {
+    setShowProviderModal(false);
+    setShowPhoneInput(true);
+  };
+
   const handleCreateBaileys = async () => {
     if (!currentBusiness) return;
     
+    const fullPhone = phoneInput ? `${countryCode.replace('+', '')}${phoneInput.replace(/\D/g, '')}` : '';
+    
+    if (!fullPhone) {
+      setError('Por favor ingresa tu numero de telefono');
+      return;
+    }
+    
     setLoading(true);
     setError('');
-    setShowProviderModal(false);
+    setShowPhoneInput(false);
     addEvent('action', 'Creando instancia Baileys...');
     
     try {
-      await waApi.create(currentBusiness.id);
+      await waApi.create(currentBusiness.id, fullPhone);
       addEvent('success', 'Instancia Baileys creada');
       const refreshed = await businessApi.get(currentBusiness.id);
       setCurrentBusiness(refreshed.data);
       await fetchStatus();
+      setPhoneInput('');
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Error al crear instancia';
       setError(errorMsg);
       addEvent('error', errorMsg);
+      setShowPhoneInput(true);
     } finally {
       setLoading(false);
     }
@@ -140,6 +182,11 @@ export default function WhatsAppPage() {
     
     if (!metaForm.accessToken || !metaForm.metaBusinessId || !metaForm.phoneNumberId || !metaForm.appId || !metaForm.appSecret) {
       setError('Todos los campos son obligatorios');
+      return;
+    }
+    
+    if (!metaForm.displayPhoneNumber) {
+      setError('El numero de telefono es obligatorio');
       return;
     }
     
@@ -155,7 +202,8 @@ export default function WhatsAppPage() {
         metaBusinessId: metaForm.metaBusinessId,
         phoneNumberId: metaForm.phoneNumberId,
         appId: metaForm.appId,
-        appSecret: metaForm.appSecret
+        appSecret: metaForm.appSecret,
+        phoneNumber: metaForm.displayPhoneNumber.replace(/\D/g, '')
       });
       
       addEvent('success', 'Instancia Meta Cloud creada');
@@ -179,7 +227,8 @@ export default function WhatsAppPage() {
         metaBusinessId: '',
         phoneNumberId: '',
         appId: '',
-        appSecret: ''
+        appSecret: '',
+        displayPhoneNumber: ''
       });
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Error al crear instancia Meta';
@@ -545,7 +594,7 @@ export default function WhatsAppPage() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <button
-                onClick={handleCreateBaileys}
+                onClick={handleSelectBaileys}
                 disabled={loading}
                 className="p-4 border-2 border-dark-hover rounded-xl hover:border-accent-success hover:bg-accent-success/10 transition-all text-left group"
               >
@@ -579,6 +628,68 @@ export default function WhatsAppPage() {
             >
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {showPhoneInput && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-md w-full">
+            <h2 className="text-xl font-bold text-white mb-2">Ingresa tu numero de WhatsApp</h2>
+            <p className="text-gray-400 text-sm mb-4">Este numero se guardara para identificar tu instancia.</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Codigo de pais</label>
+                <select
+                  value={countryCode}
+                  onChange={e => setCountryCode(e.target.value)}
+                  className="input w-full"
+                >
+                  {COUNTRY_CODES.map(cc => (
+                    <option key={cc.code} value={cc.code}>
+                      {cc.flag} {cc.code} - {cc.country}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Numero de telefono</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 font-medium">{countryCode}</span>
+                  <input
+                    type="tel"
+                    value={phoneInput}
+                    onChange={e => setPhoneInput(e.target.value.replace(/\D/g, ''))}
+                    className="input flex-1"
+                    placeholder="1234567890"
+                    maxLength={15}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Solo numeros, sin espacios ni guiones</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowPhoneInput(false);
+                  setPhoneInput('');
+                  setShowProviderModal(true);
+                }}
+                className="flex-1 btn btn-secondary"
+              >
+                Volver
+              </button>
+              <button
+                onClick={handleCreateBaileys}
+                disabled={loading || !phoneInput}
+                className="flex-1 btn btn-primary"
+              >
+                {loading ? 'Creando...' : 'Continuar'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -655,6 +766,17 @@ export default function WhatsAppPage() {
                   />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Numero de telefono de WhatsApp *</label>
+                <input
+                  type="tel"
+                  value={metaForm.displayPhoneNumber}
+                  onChange={e => setMetaForm(prev => ({ ...prev, displayPhoneNumber: e.target.value.replace(/\D/g, '') }))}
+                  className="input"
+                  placeholder="521234567890 (incluye codigo de pais)"
+                />
+                <p className="text-xs text-gray-500 mt-1">Incluye el codigo de pais, ejemplo: 521234567890 para Mexico</p>
+              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -667,7 +789,8 @@ export default function WhatsAppPage() {
                     metaBusinessId: '',
                     phoneNumberId: '',
                     appId: '',
-                    appSecret: ''
+                    appSecret: '',
+                    displayPhoneNumber: ''
                   });
                 }}
                 className="flex-1 btn btn-secondary"

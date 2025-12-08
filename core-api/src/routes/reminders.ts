@@ -1,7 +1,12 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../services/prisma.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requireActiveSubscription } from '../middleware/billing.js';
 
 const router = Router();
+
+router.use(authMiddleware);
+router.use(requireActiveSubscription);
 
 router.get('/config/:businessId', async (req: Request, res: Response) => {
   try {

@@ -339,7 +339,11 @@ router.get('/access-status', authMiddleware, async (req: AuthRequest, res) => {
     const contactStats = await getDailyContactStats(userId, businessId);
 
     const hasPaymentMethod = user.subscriptionStatus !== 'PENDING';
-    const canAccess = ['TRIAL', 'ACTIVE'].includes(user.subscriptionStatus);
+    const hasActiveSubscription = ['TRIAL', 'ACTIVE'].includes(user.subscriptionStatus);
+    
+    const canUseCrm = user.emailVerified === true;
+    const canUseAi = hasActiveSubscription;
+    const canAccess = canUseCrm;
     
     let daysRemaining: number | null = null;
     if (user.trialEndAt && user.subscriptionStatus === 'TRIAL') {
@@ -349,7 +353,11 @@ router.get('/access-status', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     res.json({
+      emailVerified: user.emailVerified,
       hasPaymentMethod,
+      hasActiveSubscription,
+      canUseCrm,
+      canUseAi,
       canAccess,
       subscriptionStatus: user.subscriptionStatus.toLowerCase(),
       trialEndAt: user.trialEndAt,

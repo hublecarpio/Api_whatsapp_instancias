@@ -1,10 +1,12 @@
 import { Router, Response } from 'express';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requireActiveSubscription } from '../middleware/billing.js';
 
 const router = Router();
 
 router.use(authMiddleware);
+router.use(requireActiveSubscription);
 
 async function checkBusinessAccess(userId: string, businessId: string) {
   return prisma.business.findFirst({ where: { id: businessId, userId } });
