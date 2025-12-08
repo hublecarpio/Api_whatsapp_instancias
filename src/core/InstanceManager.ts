@@ -18,13 +18,29 @@ export class InstanceManager {
     }
 
     const savedMetadata = this.loadMetadata();
+    let metadataUpdated = false;
     
     for (const metadata of savedMetadata) {
       try {
         logger.info({ instanceId: metadata.id }, 'Restoring instance...');
+        
+        let webhook = metadata.webhook;
+        if (metadata.id.startsWith('biz_') && webhook && webhook.includes('localhost')) {
+          const coreApiUrl = process.env.CORE_API_URL;
+          if (coreApiUrl && !coreApiUrl.includes('localhost')) {
+            const businessId = webhook.match(/\/webhook\/([a-f0-9-]+)/)?.[1];
+            if (businessId) {
+              webhook = `${coreApiUrl}/webhook/${businessId}`;
+              logger.info({ instanceId: metadata.id, oldWebhook: metadata.webhook, newWebhook: webhook }, 
+                'Auto-correcting webhook URL from localhost to CORE_API_URL');
+              metadataUpdated = true;
+            }
+          }
+        }
+        
         const instance = new WhatsAppInstance({
           id: metadata.id,
-          webhook: metadata.webhook,
+          webhook: webhook,
           createdAt: metadata.createdAt ? new Date(metadata.createdAt) : undefined,
           lastConnection: metadata.lastConnection ? new Date(metadata.lastConnection) : null
         });
@@ -34,6 +50,11 @@ export class InstanceManager {
       } catch (error: any) {
         logger.error({ instanceId: metadata.id, error: error.message }, 'Failed to restore instance');
       }
+    }
+
+    if (metadataUpdated) {
+      this.saveMetadata();
+      logger.info('Metadata updated with corrected webhook URLs');
     }
 
     logger.info({ count: this.instances.size }, 'InstanceManager initialized');

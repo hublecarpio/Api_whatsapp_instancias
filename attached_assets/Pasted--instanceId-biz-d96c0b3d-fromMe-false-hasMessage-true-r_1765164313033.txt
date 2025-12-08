@@ -1,0 +1,200 @@
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:23:35.452 +0000] ERROR: Webhook delivery failed after max retries
+
+    instanceId: "biz_d96c0b3d"
+
+    event: "connection.open"
+
+    webhook: "http://localhost:3001/webhook/d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11"
+
+    error: "Error"
+
+[2025-12-08 03:23:41.406 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:23:41.407 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:23:47.777 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:23:47.777 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:23:54.803 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:23:54.803 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:24:01.257 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:24:01.257 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:24:06.872 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:24:06.872 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:24:13.935 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:24:13.935 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:24:21.039 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:24:21.039 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:24:27.670 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:24:27.670 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
+[2025-12-08 03:24:33.659 +0000] INFO: messages.upsert event received
+
+    instanceId: "biz_d96c0b3d"
+
+    type: "notify"
+
+    count: 1
+
+[2025-12-08 03:24:33.659 +0000] DEBUG: Processing message
+
+    instanceId: "biz_d96c0b3d"
+
+    fromMe: false
+
+    hasMessage: true
+
+    remoteJid: "51992544801@s.whatsapp.net"
+
+    participant: ""
+
