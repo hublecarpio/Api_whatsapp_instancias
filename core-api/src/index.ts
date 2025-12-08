@@ -14,6 +14,7 @@ import toolsRoutes from './routes/tools.js';
 import mediaRoutes from './routes/media.js';
 import tagsRoutes from './routes/tags.js';
 import remindersRoutes from './routes/reminders.js';
+import metaWebhookRoutes from './routes/metaWebhook.js';
 import { startReminderWorker } from './services/reminderWorker.js';
 
 dotenv.config();
@@ -39,6 +40,7 @@ app.get('/', (req, res) => {
       agent: '/agent/*',
       messages: '/messages/*',
       webhook: '/webhook/*',
+      metaWebhook: '/webhook/meta/*',
       tags: '/tags/*'
     }
   });
@@ -57,6 +59,7 @@ app.use('/agent/tools', toolsRoutes);
 app.use('/media', mediaRoutes);
 app.use('/tags', tagsRoutes);
 app.use('/reminders', remindersRoutes);
+app.use('/webhook/meta', metaWebhookRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

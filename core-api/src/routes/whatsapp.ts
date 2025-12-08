@@ -2,9 +2,11 @@ import { Router, Response } from 'express';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { MetaCloudService } from '../services/metaCloud.js';
 
 const router = Router();
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:5000';
+const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
 
 router.use(authMiddleware);
 
@@ -60,6 +62,128 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/create-meta', async (req: AuthRequest, res: Response) => {
+  try {
+    const { 
+      businessId, 
+      name,
+      accessToken, 
+      metaBusinessId, 
+      phoneNumberId, 
+      appId, 
+      appSecret 
+    } = req.body;
+    
+    if (!businessId || !accessToken || !metaBusinessId || !phoneNumberId || !appId || !appSecret) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: businessId, accessToken, metaBusinessId, phoneNumberId, appId, appSecret' 
+      });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const existing = await prisma.whatsAppInstance.findFirst({
+      where: { businessId }
+    });
+    
+    if (existing) {
+      return res.status(400).json({ error: 'Instance already exists for this business. Delete it first.' });
+    }
+    
+    const metaService = new MetaCloudService({
+      accessToken,
+      phoneNumberId,
+      businessId: metaBusinessId
+    });
+    
+    let phoneInfo;
+    try {
+      phoneInfo = await metaService.getPhoneNumberInfo();
+    } catch (error: any) {
+      console.error('Meta API validation failed:', error.response?.data || error.message);
+      return res.status(400).json({ 
+        error: 'Invalid Meta credentials. Please check your access token and phone number ID.',
+        details: error.response?.data?.error?.message || error.message
+      });
+    }
+    
+    const instance = await prisma.whatsAppInstance.create({
+      data: {
+        businessId,
+        name: name || 'Meta WhatsApp',
+        provider: 'META_CLOUD',
+        instanceBackendId: null,
+        phoneNumber: phoneInfo.display_phone_number || phoneInfo.verified_name,
+        status: 'connected',
+        isActive: true,
+        lastConnection: new Date(),
+        metaCredential: {
+          create: {
+            accessToken,
+            businessId: metaBusinessId,
+            phoneNumberId,
+            appId,
+            appSecret
+          }
+        }
+      },
+      include: { metaCredential: true }
+    });
+    
+    const webhookUrl = `${CORE_API_URL}/webhook/meta/${instance.id}`;
+    
+    res.status(201).json({
+      instance: {
+        id: instance.id,
+        name: instance.name,
+        provider: instance.provider,
+        phoneNumber: instance.phoneNumber,
+        status: instance.status,
+        webhookVerifyToken: instance.metaCredential?.webhookVerifyToken
+      },
+      webhookUrl,
+      instructions: `Configure your Meta App webhook to: ${webhookUrl} with verify token: ${instance.metaCredential?.webhookVerifyToken}`
+    });
+  } catch (error: any) {
+    console.error('Create Meta instance error:', error);
+    res.status(500).json({ error: 'Failed to create Meta WhatsApp instance' });
+  }
+});
+
+router.get('/instances/:businessId', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instances = await prisma.whatsAppInstance.findMany({
+      where: { businessId: req.params.businessId },
+      include: { metaCredential: { select: { webhookVerifyToken: true, phoneNumberId: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json(instances.map(inst => ({
+      id: inst.id,
+      name: inst.name,
+      provider: inst.provider,
+      phoneNumber: inst.phoneNumber,
+      status: inst.status,
+      isActive: inst.isActive,
+      lastConnection: inst.lastConnection,
+      createdAt: inst.createdAt,
+      webhookUrl: inst.provider === 'META_CLOUD' ? `${CORE_API_URL}/webhook/meta/${inst.id}` : null,
+      webhookVerifyToken: inst.metaCredential?.webhookVerifyToken
+    })));
+  } catch (error) {
+    console.error('Get instances error:', error);
+    res.status(500).json({ error: 'Failed to get instances' });
+  }
+});
+
 router.get('/:businessId/status', async (req: AuthRequest, res: Response) => {
   try {
     const business = await checkBusinessAccess(req.userId!, req.params.businessId);
@@ -68,11 +192,58 @@ router.get('/:businessId/status', async (req: AuthRequest, res: Response) => {
     }
     
     const instance = await prisma.whatsAppInstance.findFirst({
-      where: { businessId: req.params.businessId }
+      where: { businessId: req.params.businessId },
+      include: { metaCredential: true }
     });
     
     if (!instance) {
       return res.status(404).json({ error: 'No WhatsApp instance for this business' });
+    }
+    
+    if (instance.provider === 'META_CLOUD') {
+      if (!instance.metaCredential) {
+        return res.status(500).json({ error: 'Meta credentials not found' });
+      }
+      
+      try {
+        const metaService = new MetaCloudService({
+          accessToken: instance.metaCredential.accessToken,
+          phoneNumberId: instance.metaCredential.phoneNumberId,
+          businessId: instance.metaCredential.businessId
+        });
+        
+        const phoneInfo = await metaService.getPhoneNumberInfo();
+        
+        res.json({
+          id: instance.id,
+          name: instance.name,
+          provider: instance.provider,
+          phoneNumber: phoneInfo.display_phone_number || instance.phoneNumber,
+          status: 'connected',
+          isActive: instance.isActive,
+          lastConnection: instance.lastConnection,
+          webhookUrl: `${CORE_API_URL}/webhook/meta/${instance.id}`,
+          webhookVerifyToken: instance.metaCredential.webhookVerifyToken,
+          metaInfo: {
+            verifiedName: phoneInfo.verified_name,
+            qualityRating: phoneInfo.quality_rating,
+            codeVerificationStatus: phoneInfo.code_verification_status
+          }
+        });
+      } catch (error: any) {
+        console.error('Meta API check failed:', error.response?.data || error.message);
+        res.json({
+          id: instance.id,
+          name: instance.name,
+          provider: instance.provider,
+          phoneNumber: instance.phoneNumber,
+          status: 'error',
+          error: 'Failed to verify Meta connection',
+          webhookUrl: `${CORE_API_URL}/webhook/meta/${instance.id}`,
+          webhookVerifyToken: instance.metaCredential.webhookVerifyToken
+        });
+      }
+      return;
     }
     
     try {
@@ -154,47 +325,78 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
     }
     
     const instance = await prisma.whatsAppInstance.findFirst({
-      where: { businessId: req.params.businessId }
+      where: { businessId: req.params.businessId },
+      include: { metaCredential: true }
     });
     
     if (!instance) {
       return res.status(404).json({ error: 'No WhatsApp instance for this business' });
     }
     
-    let endpoint = 'sendMessage';
-    let payload: any = { to, message };
+    const cleanTo = to.replace(/\D/g, '');
+    let response;
     
-    if (imageUrl) {
-      endpoint = 'sendImage';
-      payload = { to, url: imageUrl, caption: message };
-    } else if (videoUrl) {
-      endpoint = 'sendVideo';
-      payload = { to, url: videoUrl, caption: message };
-    } else if (audioUrl) {
-      endpoint = 'sendAudio';
-      payload = { to, url: audioUrl, ptt: true };
-    } else if (fileUrl) {
-      endpoint = 'sendFile';
-      payload = { to, url: fileUrl, fileName: fileName || 'file', mimeType: mimeType || 'application/octet-stream' };
+    if (instance.provider === 'META_CLOUD') {
+      if (!instance.metaCredential) {
+        return res.status(500).json({ error: 'Meta credentials not found' });
+      }
+      
+      const metaService = new MetaCloudService({
+        accessToken: instance.metaCredential.accessToken,
+        phoneNumberId: instance.metaCredential.phoneNumberId,
+        businessId: instance.metaCredential.businessId
+      });
+      
+      if (imageUrl) {
+        response = await metaService.sendImageMessage(cleanTo, imageUrl, message);
+      } else if (videoUrl) {
+        response = await metaService.sendVideoMessage(cleanTo, videoUrl, message);
+      } else if (audioUrl) {
+        response = await metaService.sendAudioMessage(cleanTo, audioUrl);
+      } else if (fileUrl) {
+        response = await metaService.sendDocumentMessage(cleanTo, fileUrl, fileName, message);
+      } else if (message) {
+        response = await metaService.sendTextMessage(cleanTo, message);
+      }
+    } else {
+      const recipient = `${cleanTo}@s.whatsapp.net`;
+      let endpoint = 'sendMessage';
+      let payload: any = { to: recipient, message };
+      
+      if (imageUrl) {
+        endpoint = 'sendImage';
+        payload = { to: recipient, url: imageUrl, caption: message };
+      } else if (videoUrl) {
+        endpoint = 'sendVideo';
+        payload = { to: recipient, url: videoUrl, caption: message };
+      } else if (audioUrl) {
+        endpoint = 'sendAudio';
+        payload = { to: recipient, url: audioUrl, ptt: true };
+      } else if (fileUrl) {
+        endpoint = 'sendFile';
+        payload = { to: recipient, url: fileUrl, fileName: fileName || 'file', mimeType: mimeType || 'application/octet-stream' };
+      }
+      
+      const waResponse = await axios.post(
+        `${WA_API_URL}/instances/${instance.instanceBackendId}/${endpoint}`,
+        payload
+      );
+      response = waResponse.data;
     }
-    
-    const waResponse = await axios.post(
-      `${WA_API_URL}/instances/${instance.instanceBackendId}/${endpoint}`,
-      payload
-    );
     
     await prisma.messageLog.create({
       data: {
         businessId: req.params.businessId,
         instanceId: instance.id,
         direction: 'outbound',
-        recipient: to,
+        recipient: cleanTo,
         message: message || null,
-        mediaUrl: imageUrl || videoUrl || audioUrl || fileUrl || null
+        mediaUrl: imageUrl || videoUrl || audioUrl || fileUrl || null,
+        metadata: { provider: instance.provider }
       }
     });
     
-    res.json(waResponse.data);
+    res.json(response);
   } catch (error: any) {
     console.error('Send message error:', error.response?.data || error.message);
     res.status(500).json({ error: 'Failed to send message' });

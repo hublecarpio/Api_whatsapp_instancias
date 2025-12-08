@@ -39,17 +39,41 @@ model Business {
   reminders      Reminder[]
 }
 
-model WhatsAppInstance {
-  id                String    @id @default(uuid())
-  businessId        String
-  instanceBackendId String
-  phoneNumber       String?
-  status            String    @default("pending_qr")
-  qr                String?
-  lastConnection    DateTime?
-  createdAt         DateTime  @default(now())
+enum WhatsAppProvider {
+  BAILEYS
+  META_CLOUD
+}
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+model WhatsAppInstance {
+  id                String           @id @default(uuid())
+  businessId        String
+  name              String           @default("WhatsApp")
+  provider          WhatsAppProvider @default(BAILEYS)
+  instanceBackendId String?
+  phoneNumber       String?
+  status            String           @default("pending_qr")
+  qr                String?
+  isActive          Boolean          @default(true)
+  lastConnection    DateTime?
+  createdAt         DateTime         @default(now())
+
+  business       Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  metaCredential MetaCredential?
+}
+
+model MetaCredential {
+  id                 String   @id @default(uuid())
+  instanceId         String   @unique
+  accessToken        String
+  businessId         String
+  phoneNumberId      String
+  appId              String
+  appSecret          String
+  webhookVerifyToken String   @default(uuid())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  instance WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 }
 
 model Product {
