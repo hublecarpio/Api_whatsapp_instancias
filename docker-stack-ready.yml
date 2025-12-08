@@ -32,29 +32,29 @@ services:
       - NODE_ENV=production
       - CORE_API_PORT=4001
       - CORE_API_URL=http://core-api:4001
-      - DATABASE_URL=${DATABASE_URL}
-      - SESSION_SECRET=${SESSION_SECRET}
+      - DATABASE_URL=postgresql://USUARIO:PASSWORD@HOST_POSTGRES:5432/NOMBRE_DB
+      - SESSION_SECRET=CAMBIA_ESTO_POR_UN_SECRETO_LARGO_32_CARACTERES
       - WA_API_URL=http://whatsapp-api:4080
       - REDIS_URL=redis://efficore_redis:6389
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET}
-      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - STRIPE_PRICE_WEEKLY_50=${STRIPE_PRICE_WEEKLY_50}
-      - FRONTEND_URL=${FRONTEND_URL}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
-      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
-      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
-      - SUPER_ADMIN_USER=${SUPER_ADMIN_USER}
-      - SUPER_ADMIN_PASS=${SUPER_ADMIN_PASS}
+      - MINIO_ENDPOINT=https://TU_MINIO_ENDPOINT
+      - MINIO_ACCESS_KEY=TU_MINIO_ACCESS_KEY
+      - MINIO_SECRET_KEY=TU_MINIO_SECRET_KEY
+      - MINIO_BUCKET=whatsapp-media
+      - MINIO_PUBLIC_URL=https://TU_MINIO_PUBLIC_URL
+      - STRIPE_SECRET_KEY=sk_live_TU_STRIPE_SECRET_KEY
+      - STRIPE_WEBHOOK_SECRET=whsec_TU_STRIPE_WEBHOOK_SECRET
+      - STRIPE_PRICE_WEEKLY_50=price_TU_STRIPE_PRICE_ID
+      - FRONTEND_URL=https://app.efficore.es
+      - SMTP_HOST=smtp.tuservidor.com
+      - SMTP_PORT=587
+      - SMTP_USER=correo@tudominio.com
+      - SMTP_PASS=TU_SMTP_PASSWORD
+      - SMTP_FROM_EMAIL=noreply@efficore.es
+      - SMTP_FROM_NAME=EfficoreChat
+      - OPENAI_API_KEY=sk-TU_OPENAI_API_KEY
+      - OPENAI_MODEL=gpt-4o-mini
+      - SUPER_ADMIN_USER=admin
+      - SUPER_ADMIN_PASS=TU_SUPER_ADMIN_PASSWORD
     networks:
       - whatsapp_internal
       - traefik_public
@@ -83,11 +83,11 @@ services:
       - NODE_ENV=production
       - PORT=4080
       - CORE_API_URL=http://core-api:4001
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET}
-      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+      - MINIO_ENDPOINT=https://TU_MINIO_ENDPOINT
+      - MINIO_ACCESS_KEY=TU_MINIO_ACCESS_KEY
+      - MINIO_SECRET_KEY=TU_MINIO_SECRET_KEY
+      - MINIO_BUCKET=whatsapp-media
+      - MINIO_PUBLIC_URL=https://TU_MINIO_PUBLIC_URL
     volumes:
       - whatsapp_sessions:/app/src/storage/sessions
     networks:
