@@ -8,16 +8,20 @@ generator client {
 }
 
 model User {
-  id                     String              @id @default(uuid())
-  name                   String
-  email                  String              @unique
-  passwordHash           String
-  stripeCustomerId       String?
-  stripeSubscriptionId   String?
-  subscriptionStatus     SubscriptionStatus  @default(PENDING)
-  trialEndAt             DateTime?
-  createdAt              DateTime            @default(now())
-  businesses             Business[]
+  id                          String              @id @default(uuid())
+  name                        String
+  email                       String              @unique
+  passwordHash                String
+  emailVerified               Boolean             @default(false)
+  verificationToken           String?
+  verificationTokenExpiresAt  DateTime?
+  lastVerificationSentAt      DateTime?
+  stripeCustomerId            String?
+  stripeSubscriptionId        String?
+  subscriptionStatus          SubscriptionStatus  @default(PENDING)
+  trialEndAt                  DateTime?
+  createdAt                   DateTime            @default(now())
+  businesses                  Business[]
 }
 
 enum SubscriptionStatus {
