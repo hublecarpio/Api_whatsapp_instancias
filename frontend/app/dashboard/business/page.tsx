@@ -13,8 +13,6 @@ export default function BusinessPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [industry, setIndustry] = useState('');
-  const [openaiApiKey, setOpenaiApiKey] = useState('');
-  const [openaiModel, setOpenaiModel] = useState('gpt-4.1-mini');
   
   const [shippingPolicy, setShippingPolicy] = useState('');
   const [refundPolicy, setRefundPolicy] = useState('');
@@ -26,7 +24,6 @@ export default function BusinessPage() {
       setName(currentBusiness.name);
       setDescription(currentBusiness.description || '');
       setIndustry(currentBusiness.industry || '');
-      setOpenaiModel(currentBusiness.openaiModel || 'gpt-4.1-mini');
       
       policyApi.get(currentBusiness.id).then((res) => {
         if (res.data) {
@@ -47,10 +44,6 @@ export default function BusinessPage() {
     try {
       if (currentBusiness) {
         await businessApi.update(currentBusiness.id, { name, description, industry });
-        
-        if (openaiApiKey) {
-          await businessApi.updateOpenAI(currentBusiness.id, { openaiApiKey, openaiModel });
-        }
         
         const refreshed = await businessApi.get(currentBusiness.id);
         setCurrentBusiness(refreshed.data);
@@ -148,42 +141,6 @@ export default function BusinessPage() {
               className="input"
               placeholder="Ej: Tecnologia, Retail, Servicios..."
             />
-          </div>
-        </div>
-      </div>
-
-      <div className="card mb-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Configuracion de IA</h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              API Key de OpenAI
-            </label>
-            <input
-              type="password"
-              value={openaiApiKey}
-              onChange={(e) => setOpenaiApiKey(e.target.value)}
-              className="input"
-              placeholder="sk-..."
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Obten tu API key en platform.openai.com
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Modelo
-            </label>
-            <select
-              value={openaiModel}
-              onChange={(e) => setOpenaiModel(e.target.value)}
-              className="input"
-            >
-              <option value="gpt-4.1-mini">GPT-4.1 Mini (recomendado)</option>
-              <option value="gpt-4o-mini">GPT-4o Mini</option>
-              <option value="gpt-4o">GPT-4o</option>
-              <option value="gpt-4-turbo">GPT-4 Turbo</option>
-            </select>
           </div>
         </div>
       </div>
