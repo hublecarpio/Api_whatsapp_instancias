@@ -1,7 +1,8 @@
 import express from 'express';
 import Stripe from 'stripe';
 import { PrismaClient } from '@prisma/client';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { getDailyContactStats } from '../middleware/billing.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -298,6 +299,65 @@ router.post('/reactivate-subscription', authMiddleware, async (req: any, res) =>
     });
   } catch (error: any) {
     console.error('Error reactivating subscription:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/contacts-today', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const businessId = req.query.businessId as string | undefined;
+    const stats = await getDailyContactStats(userId, businessId);
+    
+    res.json(stats);
+  } catch (error: any) {
+    console.error('Error fetching daily contact stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/access-status', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const businessId = req.query.businessId as string | undefined;
+    const contactStats = await getDailyContactStats(userId, businessId);
+
+    const hasPaymentMethod = user.subscriptionStatus !== 'PENDING';
+    const canAccess = ['TRIAL', 'ACTIVE'].includes(user.subscriptionStatus);
+    
+    let daysRemaining: number | null = null;
+    if (user.trialEndAt && user.subscriptionStatus === 'TRIAL') {
+      const now = new Date();
+      const trialEnd = new Date(user.trialEndAt);
+      daysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    res.json({
+      hasPaymentMethod,
+      canAccess,
+      subscriptionStatus: user.subscriptionStatus.toLowerCase(),
+      trialEndAt: user.trialEndAt,
+      trialDaysRemaining: daysRemaining,
+      dailyContacts: contactStats
+    });
+  } catch (error: any) {
+    console.error('Error fetching access status:', error);
     res.status(500).json({ error: error.message });
   }
 });
