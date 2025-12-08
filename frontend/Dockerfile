@@ -26,7 +26,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=4000
-ENV CORE_API_URL=http://core-api:4001
+ENV CORE_API_URL=https://api.efficore.es
 ENV NEXT_PUBLIC_API_URL=https://api.efficore.es
 
 RUN addgroup --system --gid 1001 nodejs
