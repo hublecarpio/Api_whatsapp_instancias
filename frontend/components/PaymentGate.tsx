@@ -39,7 +39,7 @@ export default function PaymentGate({ isOpen, subscriptionStatus, trialDaysRemai
       case 'pending':
         return {
           title: 'Activa tu cuenta',
-          description: 'Para acceder a todas las funciones de EfficioreChat, necesitas registrar un metodo de pago.',
+          description: 'Para acceder a todas las funciones de EfficoreChat, necesitas registrar un metodo de pago.',
           action: 'Iniciar periodo de prueba',
           highlight: 'Prueba gratis por 7 dias, luego $50 USD/semana'
         };
