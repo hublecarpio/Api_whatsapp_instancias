@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const CORE_API_URL = 'http://core-api:4001';
+
 export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/api/')) {
-    const apiUrl = process.env.NEXT_PUBLIC_CORE_API_URL || 'http://core-api:4001';
+    const apiUrl = CORE_API_URL;
     const path = request.nextUrl.pathname.replace('/api', '');
     const targetUrl = `${apiUrl}${path}${request.nextUrl.search}`;
     
