@@ -20,14 +20,29 @@ router.post('/register', async (req: Request, res: Response) => {
     
     const passwordHash = await bcrypt.hash(password, 10);
     
-    const user = await prisma.user.create({
-      data: { name, email, passwordHash }
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { name, email, passwordHash }
+      });
+      
+      const business = await tx.business.create({
+        data: {
+          userId: user.id,
+          name: 'Mi Empresa',
+          description: 'Configura los datos de tu empresa',
+          botEnabled: true
+        }
+      });
+      
+      console.log(`Created starter business ${business.id} for user ${user.id}`);
+      
+      return { user, business };
     });
     
-    const token = generateToken(user.id);
+    const token = generateToken(result.user.id);
     
     res.status(201).json({
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: result.user.id, name: result.user.name, email: result.user.email },
       token
     });
   } catch (error) {
