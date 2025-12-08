@@ -576,7 +576,8 @@ router.post('/instances/:id/sendContact', async (req: Request, res: Response) =>
 router.post('/instances/:id/restart', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const instance = await InstanceManager.restartInstance(id);
+    const { webhook } = req.body;
+    const instance = await InstanceManager.restartInstance(id, webhook);
 
     if (!instance) {
       return res.status(404).json({
@@ -590,6 +591,7 @@ router.post('/instances/:id/restart', async (req: Request, res: Response) => {
       data: {
         instanceId: id,
         status: instance.status,
+        webhook: instance.webhook,
         message: 'Instance restarted successfully'
       }
     } as ApiResponse);

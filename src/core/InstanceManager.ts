@@ -106,14 +106,19 @@ export class InstanceManager {
     return true;
   }
 
-  static async restartInstance(id: string): Promise<WhatsAppInstance | undefined> {
+  static async restartInstance(id: string, newWebhook?: string): Promise<WhatsAppInstance | undefined> {
     const instance = this.instances.get(id);
     
     if (!instance) {
       return undefined;
     }
 
-    logger.info({ instanceId: id }, 'Restarting instance');
+    logger.info({ instanceId: id, newWebhook: newWebhook || 'unchanged' }, 'Restarting instance');
+
+    if (newWebhook) {
+      instance.webhook = newWebhook;
+      this.saveMetadata();
+    }
 
     await instance.close();
     await instance.connect();

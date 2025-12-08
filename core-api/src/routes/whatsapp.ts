@@ -216,8 +216,12 @@ router.post('/:businessId/restart', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'No WhatsApp instance for this business' });
     }
     
+    const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
+    const webhookUrl = `${coreApiUrl}/webhook/${req.params.businessId}`;
+    
     const waResponse = await axios.post(
-      `${WA_API_URL}/instances/${instance.instanceBackendId}/restart`
+      `${WA_API_URL}/instances/${instance.instanceBackendId}/restart`,
+      { webhook: webhookUrl }
     );
     
     await prisma.whatsAppInstance.update({
@@ -225,6 +229,7 @@ router.post('/:businessId/restart', async (req: AuthRequest, res: Response) => {
       data: { status: 'pending_qr', qr: null }
     });
     
+    console.log(`Instance ${instance.instanceBackendId} restarted with webhook: ${webhookUrl}`);
     res.json(waResponse.data);
   } catch (error: any) {
     console.error('Restart instance error:', error.response?.data || error.message);

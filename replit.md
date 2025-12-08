@@ -290,3 +290,9 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
   - Created diagnose-stack.sh diagnostic script
   - Created deploy.env.example template
   - Changed bcrypt to bcryptjs (pure JavaScript, no native compilation issues on Alpine Linux)
+- **Dec 8 2025**: Fixed webhook URL update on instance restart - when restarting a WhatsApp instance, the webhook URL is now updated to the correct CORE_API_URL value. This fixes the issue where instances created with wrong webhook URLs would fail to deliver webhooks in Docker environment.
+- **Dec 8 2025**: Improved WhatsApp page with compact two-column layout:
+  - Connection summary header with status badges
+  - Persistent action bar with Refresh QR, Restart, and Delete buttons (btn-sm)
+  - State-specific panels for QR code, connection info, etc.
+- **Dec 8 2025**: Fixed Next.js middleware Content-Length mismatch error using native streaming proxy pattern with `duplex: 'half'`
