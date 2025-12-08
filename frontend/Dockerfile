@@ -45,6 +45,6 @@ EXPOSE 4000 3000
 ENV HOSTNAME="0.0.0.0"
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD node -e "const port = process.env.PORT || 4000; require('http').get('http://localhost:' + port + '/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
+  CMD node -e "const port = process.env.PORT || 4000; require('http').get('http://localhost:' + port + '/login', (r) => {process.exit(r.statusCode >= 200 && r.statusCode < 400 ? 0 : 1)}).on('error', () => process.exit(1))"
 
 CMD ["node", "server.js"]
