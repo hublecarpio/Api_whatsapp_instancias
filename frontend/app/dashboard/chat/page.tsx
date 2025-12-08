@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { messageApi, waApi, mediaApi, businessApi, tagsApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
@@ -45,6 +45,12 @@ interface WindowStatus {
   message: string;
 }
 
+interface DailyContactStats {
+  count: number;
+  limit: number;
+  remaining: number;
+}
+
 export default function ChatPage() {
   const { currentBusiness } = useBusinessStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -66,6 +72,7 @@ export default function ChatPage() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [assigningTag, setAssigningTag] = useState(false);
   const [windowStatus, setWindowStatus] = useState<WindowStatus | null>(null);
+  const [dailyContacts, setDailyContacts] = useState<DailyContactStats | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -76,10 +83,24 @@ export default function ChatPage() {
     if (currentBusiness) {
       fetchConversations();
       fetchTags();
-      const interval = setInterval(fetchConversations, 10000);
+      fetchDailyContacts();
+      const interval = setInterval(() => {
+        fetchConversations();
+        fetchDailyContacts();
+      }, 10000);
       return () => clearInterval(interval);
     }
   }, [currentBusiness]);
+
+  const fetchDailyContacts = async () => {
+    if (!currentBusiness) return;
+    try {
+      const response = await billingApi.getContactsToday(currentBusiness.id);
+      setDailyContacts(response.data);
+    } catch (err) {
+      console.error('Failed to fetch daily contacts:', err);
+    }
+  };
 
   const fetchTags = async () => {
     if (!currentBusiness) return;
@@ -464,6 +485,25 @@ export default function ChatPage() {
                 </button>
               </div>
             </div>
+            {dailyContacts && (
+              <div className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg mb-2 ${
+                dailyContacts.remaining <= 10 
+                  ? 'bg-red-50 text-red-700' 
+                  : dailyContacts.remaining <= 25 
+                  ? 'bg-yellow-50 text-yellow-700' 
+                  : 'bg-green-50 text-green-700'
+              }`}>
+                <span className="flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Contactos hoy
+                </span>
+                <span className="font-medium">
+                  {dailyContacts.count}/{dailyContacts.limit}
+                </span>
+              </div>
+            )}
             {viewMode === 'kanban' && tags.length > 0 && (
               <div className="flex gap-1 overflow-x-auto pb-1">
                 <button

@@ -64,11 +64,9 @@ export default function PaymentGate({ isOpen, subscriptionStatus, trialDaysRemai
   const content = getContent();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-white/80 backdrop-blur-sm" />
-      
-      <div className="relative z-10 w-full max-w-md mx-4">
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+    <div className="flex items-center justify-center min-h-[calc(100vh-10rem)]">
+      <div className="w-full max-w-md mx-auto">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
           <div className="p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

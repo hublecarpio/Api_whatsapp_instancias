@@ -21,6 +21,7 @@ interface BusinessState {
   setBusinesses: (businesses: Business[]) => void;
   setCurrentBusiness: (business: Business | null) => void;
   updateBusiness: (id: string, data: Partial<Business>) => void;
+  clearBusinesses: () => void;
 }
 
 export const useBusinessStore = create<BusinessState>((set) => ({
@@ -38,5 +39,7 @@ export const useBusinessStore = create<BusinessState>((set) => ({
     currentBusiness: state.currentBusiness?.id === id 
       ? { ...state.currentBusiness, ...data } 
       : state.currentBusiness
-  }))
+  })),
+
+  clearBusinesses: () => set({ businesses: [], currentBusiness: null })
 }));
