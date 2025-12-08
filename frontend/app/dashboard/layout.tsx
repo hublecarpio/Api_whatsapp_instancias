@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import TopBar from '@/components/TopBar';
+import MobileDrawer from '@/components/MobileDrawer';
 import PaymentGate from '@/components/PaymentGate';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
@@ -21,6 +23,7 @@ export default function DashboardLayout({
   const clearBusinesses = useBusinessStore(state => state.clearBusinesses);
   const [isReady, setIsReady] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [canAccess, setCanAccess] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState('pending');
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
@@ -143,23 +146,37 @@ export default function DashboardLayout({
     initializeDashboard();
   }, [initializeDashboard]);
 
+  useEffect(() => {
+    setMobileDrawerOpen(false);
+  }, [pathname]);
+
   if (!isReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-dark-bg">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-400 text-sm">Cargando...</p>
+        </div>
       </div>
     );
   }
 
   const isBillingPage = pathname === '/dashboard/billing';
   const showPaymentGate = !canAccess && !isBillingPage;
+  const isChatPage = pathname === '/dashboard/chat';
 
   return (
-    <div className="flex min-h-screen">
-      <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} transition-all duration-300 overflow-hidden`}>
-        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+    <div className="flex min-h-screen bg-dark-bg">
+      <div className="hidden sm:block">
+        <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} transition-all duration-300 overflow-hidden`}>
+          <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+        </div>
       </div>
-      <main className="flex-1 p-8 overflow-auto">
+
+      <TopBar onMenuClick={() => setMobileDrawerOpen(true)} />
+      <MobileDrawer isOpen={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} />
+
+      <main className={`flex-1 overflow-auto ${isChatPage ? 'p-0 sm:p-4' : 'p-4 sm:p-8'} pt-[calc(56px+1rem)] sm:pt-8`}>
         {showPaymentGate ? (
           <PaymentGate 
             isOpen={true} 

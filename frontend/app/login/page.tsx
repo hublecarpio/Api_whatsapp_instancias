@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import Logo from '@/components/Logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,50 +25,54 @@ export default function LoginPage() {
       setAuth(response.data.user, response.data.token);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al iniciar sesión');
+      setError(err.response?.data?.error || 'Error al iniciar sesion');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full mx-4">
+    <div className="min-h-screen flex items-center justify-center bg-dark-bg p-4">
+      <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">WhatsApp SaaS</h1>
-          <p className="text-gray-600 mt-2">Inicia sesión en tu cuenta</p>
+          <div className="flex justify-center mb-4">
+            <Logo size="lg" />
+          </div>
+          <p className="text-gray-400 mt-2">Inicia sesion en tu cuenta</p>
         </div>
 
         <div className="card">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+              <div className="bg-accent-error/10 border border-accent-error/20 text-accent-error px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Correo electrónico
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Correo electronico
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input"
+                placeholder="tu@email.com"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Contraseña
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Contrasena
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
+                placeholder="••••••••"
                 required
               />
             </div>
@@ -77,16 +82,28 @@ export default function LoginPage() {
               disabled={loading}
               className="btn btn-primary w-full"
             >
-              {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Iniciando sesion...
+                </span>
+              ) : (
+                'Iniciar sesion'
+              )}
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-600 mt-4">
-            ¿No tienes cuenta?{' '}
-            <Link href="/register" className="text-green-600 hover:underline">
-              Regístrate
-            </Link>
-          </p>
+          <div className="mt-6 pt-6 border-t border-dark-border text-center">
+            <p className="text-sm text-gray-400">
+              ¿No tienes cuenta?{' '}
+              <Link href="/register" className="text-neon-blue hover:text-neon-blue-light transition-colors">
+                Registrate
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
