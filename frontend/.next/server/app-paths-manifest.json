@@ -1,3 +1,8 @@
 {
-  "/page": "app/page.js"
+  "/login/page": "app/login/page.js",
+  "/dashboard/tags/page": "app/dashboard/tags/page.js",
+  "/dashboard/reminders/page": "app/dashboard/reminders/page.js",
+  "/dashboard/chat/page": "app/dashboard/chat/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
+  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js"
 }
