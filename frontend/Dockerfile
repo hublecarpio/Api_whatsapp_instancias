@@ -14,7 +14,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ARG NEXT_PUBLIC_API_URL
+ARG CORE_API_URL=http://core-api:4001
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV CORE_API_URL=$CORE_API_URL
 
 RUN npm run build
 

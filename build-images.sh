@@ -39,6 +39,7 @@ echo ""
 echo "=== Building Frontend ==="
 docker build -t $REGISTRY/whatsapp-saas-frontend:$TAG \
   --build-arg NEXT_PUBLIC_API_URL=https://api.$DOMAIN \
+  --build-arg CORE_API_URL=http://core-api:4001 \
   -f frontend/Dockerfile ./frontend
 
 echo ""
