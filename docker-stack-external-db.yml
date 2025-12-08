@@ -42,6 +42,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4080
+      - CORE_API_URL=http://core-api:4001
       - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}

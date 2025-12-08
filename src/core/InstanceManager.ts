@@ -9,8 +9,42 @@ const METADATA_FILE = path.join(process.cwd(), 'src', 'storage', 'instances.json
 export class InstanceManager {
   private static instances: Map<string, WhatsAppInstance> = new Map();
 
+  static normalizeWebhook(instanceId: string, webhook: string): string {
+    if (!webhook) return webhook;
+    
+    const coreApiUrl = process.env.CORE_API_URL;
+    
+    if (instanceId.startsWith('biz_')) {
+      const businessIdMatch = webhook.match(/\/webhook\/([a-f0-9-]+)/);
+      if (businessIdMatch) {
+        const businessId = businessIdMatch[1];
+        
+        if (coreApiUrl) {
+          const normalizedUrl = coreApiUrl.replace(/\/$/, '');
+          const newWebhook = `${normalizedUrl}/webhook/${businessId}`;
+          
+          if (newWebhook !== webhook) {
+            logger.info({ 
+              instanceId, 
+              oldWebhook: webhook, 
+              newWebhook,
+              coreApiUrl 
+            }, 'Normalizing webhook URL to use CORE_API_URL');
+          }
+          
+          return newWebhook;
+        }
+      }
+    }
+    
+    return webhook;
+  }
+
   static async initialize(): Promise<void> {
-    logger.info('Initializing InstanceManager...');
+    logger.info({ 
+      CORE_API_URL: process.env.CORE_API_URL || 'NOT SET',
+      NODE_ENV: process.env.NODE_ENV || 'development'
+    }, 'Initializing InstanceManager...');
     
     const storagePath = path.dirname(METADATA_FILE);
     if (!fs.existsSync(storagePath)) {
@@ -24,23 +58,16 @@ export class InstanceManager {
       try {
         logger.info({ instanceId: metadata.id }, 'Restoring instance...');
         
-        let webhook = metadata.webhook;
-        if (metadata.id.startsWith('biz_') && webhook && webhook.includes('localhost')) {
-          const coreApiUrl = process.env.CORE_API_URL;
-          if (coreApiUrl && !coreApiUrl.includes('localhost')) {
-            const businessId = webhook.match(/\/webhook\/([a-f0-9-]+)/)?.[1];
-            if (businessId) {
-              webhook = `${coreApiUrl}/webhook/${businessId}`;
-              logger.info({ instanceId: metadata.id, oldWebhook: metadata.webhook, newWebhook: webhook }, 
-                'Auto-correcting webhook URL from localhost to CORE_API_URL');
-              metadataUpdated = true;
-            }
-          }
+        const originalWebhook = metadata.webhook;
+        const normalizedWebhook = this.normalizeWebhook(metadata.id, originalWebhook);
+        
+        if (normalizedWebhook !== originalWebhook) {
+          metadataUpdated = true;
         }
         
         const instance = new WhatsAppInstance({
           id: metadata.id,
-          webhook: webhook,
+          webhook: normalizedWebhook,
           createdAt: metadata.createdAt ? new Date(metadata.createdAt) : undefined,
           lastConnection: metadata.lastConnection ? new Date(metadata.lastConnection) : null
         });
@@ -94,9 +121,10 @@ export class InstanceManager {
       throw new Error(`Instance with ID '${id}' already exists`);
     }
 
-    logger.info({ instanceId: id, webhook }, 'Creating new instance');
+    const normalizedWebhook = this.normalizeWebhook(id, webhook);
+    logger.info({ instanceId: id, originalWebhook: webhook, normalizedWebhook }, 'Creating new instance');
 
-    const instance = new WhatsAppInstance(id, webhook);
+    const instance = new WhatsAppInstance(id, normalizedWebhook);
     this.instances.set(id, instance);
     this.saveMetadata();
 
@@ -134,12 +162,17 @@ export class InstanceManager {
       return undefined;
     }
 
-    logger.info({ instanceId: id, newWebhook: newWebhook || 'unchanged' }, 'Restarting instance');
+    const webhookToUse = newWebhook || instance.webhook;
+    const normalizedWebhook = this.normalizeWebhook(id, webhookToUse);
+    
+    logger.info({ 
+      instanceId: id, 
+      originalWebhook: webhookToUse, 
+      normalizedWebhook 
+    }, 'Restarting instance');
 
-    if (newWebhook) {
-      instance.webhook = newWebhook;
-      this.saveMetadata();
-    }
+    instance.webhook = normalizedWebhook;
+    this.saveMetadata();
 
     await instance.close();
     await instance.connect();

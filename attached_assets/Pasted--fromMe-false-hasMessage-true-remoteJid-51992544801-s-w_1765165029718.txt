@@ -1,0 +1,100 @@
+    fromMe: false
+    hasMessage: true
+    remoteJid: "51992544801@s.whatsapp.net"
+    participant: ""
+[2025-12-08 03:36:14.163 +0000] INFO: messages.upsert event received
+    instanceId: "biz_4320efac"
+    type: "notify"
+    count: 1
+[2025-12-08 03:36:14.163 +0000] DEBUG: Processing message
+    instanceId: "biz_4320efac"
+    fromMe: false
+    hasMessage: true
+    remoteJid: "51992544801@s.whatsapp.net"
+    participant: ""
+[2025-12-08 03:36:20.296 +0000] INFO: messages.upsert event received
+    instanceId: "biz_4320efac"
+    type: "notify"
+    count: 1
+[2025-12-08 03:36:20.296 +0000] DEBUG: Processing message
+    instanceId: "biz_4320efac"
+    fromMe: false
+    hasMessage: true
+    remoteJid: "51992544801@s.whatsapp.net"
+    participant: ""
+[2025-12-08 03:36:27.360 +0000] INFO: messages.upsert event received
+    instanceId: "biz_4320efac"
+    type: "notify"
+    count: 1
+[2025-12-08 03:36:27.360 +0000] DEBUG: Processing message
+    instanceId: "biz_4320efac"
+    fromMe: false
+    hasMessage: true
+    remoteJid: "51992544801@s.whatsapp.net"
+    participant: ""
+[2025-12-08 03:36:33.717 +0000] INFO: messages.upsert event received
+    instanceId: "biz_4320efac"
+    type: "notify"
+    count: 1
+[2025-12-08 03:36:33.717 +0000] DEBUG: Processing message
+    instanceId: "biz_4320efac"
+    fromMe: false
+    hasMessage: true
+    remoteJid: "51992544801@s.whatsapp.net"
+    participant: ""
+[2025-12-08 03:36:40.826 +0000] INFO: messages.upsert event received
+    instanceId: "biz_4320efac"
+    type: "notify"
+    count: 1
+[2025-12-08 03:36:40.826 +0000] DEBUG: Processing message
+    instanceId: "biz_4320efac"
+    fromMe: false
+    hasMessage: true
+    remoteJid: "51992544801@s.whatsapp.net"
+    participant: ""
+[2025-12-08 03:36:45.815 +0000] INFO: Restarting instance
+    instanceId: "biz_4320efac"
+    newWebhook: "http://localhost:3001/webhook/4320efac-68b6-4d30-b021-9366cab75f53"
+[2025-12-08 03:36:45.816 +0000] DEBUG: Instance metadata saved
+[2025-12-08 03:36:45.816 +0000] INFO: Closing connection...
+    instanceId: "biz_4320efac"
+[2025-12-08 03:36:45.816 +0000] INFO: Starting WhatsApp connection...
+    instanceId: "biz_4320efac"
+[2025-12-08 03:36:47.367 +0000] INFO: Connected to WhatsApp!
+    instanceId: "biz_4320efac"
+[2025-12-08 03:36:47.372 +0000] WARN: Webhook delivery failed, retrying...
+    instanceId: "biz_4320efac"
+    event: "connection.open"
+    webhook: "http://localhost:3001/webhook/4320efac-68b6-4d30-b021-9366cab75f53"
+    retry: 1
+    backoffMs: 1000
+    error: "Error"
+[2025-12-08 03:36:48.375 +0000] WARN: Webhook delivery failed, retrying...
+    instanceId: "biz_4320efac"
+    event: "connection.open"
+    webhook: "http://localhost:3001/webhook/4320efac-68b6-4d30-b021-9366cab75f53"
+    retry: 2
+    backoffMs: 2000
+    error: "Error"
+[2025-12-08 03:36:50.379 +0000] WARN: Webhook delivery failed, retrying...
+    instanceId: "biz_4320efac"
+    event: "connection.open"
+    webhook: "http://localhost:3001/webhook/4320efac-68b6-4d30-b021-9366cab75f53"
+    retry: 3
+    backoffMs: 4000
+    error: "Error"
+[2025-12-08 03:36:51.143 +0000] INFO: messages.upsert event received
+    instanceId: "biz_4320efac"
+    type: "notify"
+    count: 1
+[2025-12-08 03:36:51.143 +0000] DEBUG: Processing message
+    instanceId: "biz_4320efac"
+    fromMe: false
+    hasMessage: true
+    remoteJid: "51992544801@s.whatsapp.net"
+    participant: ""
+[2025-12-08 03:36:54.384 +0000] ERROR: Webhook delivery failed after max retries
+    instanceId: "biz_4320efac"
+    event: "connection.open"
+    webhook: "http://localhost:3001/webhook/4320efac-68b6-4d30-b021-9366cab75f53"
+    error: "Error"
