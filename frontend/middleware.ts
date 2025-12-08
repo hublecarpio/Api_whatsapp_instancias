@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const CORE_API_URL = 'http://core-api:4001';
+const CORE_API_URL = 'https://api.efficore.es';
 
 export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/api/')) {
