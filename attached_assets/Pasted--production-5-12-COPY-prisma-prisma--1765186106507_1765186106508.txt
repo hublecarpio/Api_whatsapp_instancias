@@ -1,0 +1,85 @@
+ => [production  5/12] COPY prisma ./prisma/                                                                                                                           0.1s
+ => [builder 5/9] COPY prisma ./prisma/                                                                                                                                0.0s
+ => ERROR [production  6/12] RUN npm ci --only=production && npm cache clean --force                                                                                   3.5s
+ => ERROR [builder 6/9] RUN npm ci                                                                                                                                     3.5s
+------                                                                                                                                                                      
+ > [production  6/12] RUN npm ci --only=production && npm cache clean --force:                                                                                              
+0.401 npm warn config only Use `--omit=dev` to omit dev dependencies from the install.
+3.372 npm error code EUSAGE
+3.374 npm error
+3.374 npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+3.374 npm error
+3.374 npm error Missing: @types/nodemailer@6.4.21 from lock file
+3.374 npm error Missing: nodemailer@6.10.1 from lock file
+3.374 npm error Missing: @aws-sdk/client-ses@3.946.0 from lock file
+3.374 npm error
+3.374 npm error Clean install a project
+3.374 npm error
+3.374 npm error Usage:
+3.374 npm error npm ci
+3.374 npm error
+3.374 npm error Options:
+3.374 npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+3.374 npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+3.374 npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+3.374 npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+3.374 npm error [--no-bin-links] [--no-fund] [--dry-run]
+3.374 npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+3.374 npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+3.374 npm error
+3.374 npm error aliases: clean-install, ic, install-clean, isntall-clean
+3.374 npm error
+3.374 npm error Run "npm help ci" for more info
+3.376 npm notice
+3.376 npm notice New major version of npm available! 10.8.2 -> 11.6.4
+3.376 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.4
+3.376 npm notice To update run: npm install -g npm@11.6.4
+3.376 npm notice
+3.377 npm error A complete log of this run can be found in: /root/.npm/_logs/2025-12-08T09_27_58_163Z-debug-0.log
+------
+------
+ > [builder 6/9] RUN npm ci:
+3.403 npm error code EUSAGE
+3.403 npm error
+3.403 npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+3.403 npm error
+3.403 npm error Missing: @types/nodemailer@6.4.21 from lock file
+3.403 npm error Missing: nodemailer@6.10.1 from lock file
+3.403 npm error Missing: @aws-sdk/client-ses@3.946.0 from lock file
+3.403 npm error
+3.403 npm error Clean install a project
+3.403 npm error
+3.403 npm error Usage:
+3.403 npm error npm ci
+3.403 npm error
+3.403 npm error Options:
+3.403 npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+3.403 npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+3.403 npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+3.403 npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+3.403 npm error [--no-bin-links] [--no-fund] [--dry-run]
+3.403 npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+3.403 npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+3.403 npm error
+3.403 npm error aliases: clean-install, ic, install-clean, isntall-clean
+3.403 npm error
+3.403 npm error Run "npm help ci" for more info
+3.406 npm notice
+3.406 npm notice New major version of npm available! 10.8.2 -> 11.6.4
+3.406 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.4
+3.406 npm notice To update run: npm install -g npm@11.6.4
+3.406 npm notice
+3.406 npm error A complete log of this run can be found in: /root/.npm/_logs/2025-12-08T09_27_58_270Z-debug-0.log
+------
+Dockerfile:26
+--------------------
+  24 |     COPY prisma ./prisma/
+  25 |     
+  26 | >>> RUN npm ci --only=production && npm cache clean --force
+  27 |     
+  28 |     COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci --only=production && npm cache clean --force" did not complete successfully: exit code: 1
+The push refers to repository [docker.io/iamhuble/whatsapp-saas-core]
+tag does not exist: iamhuble/whatsapp-saas-core:latest
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# 
