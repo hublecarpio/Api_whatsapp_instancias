@@ -48,12 +48,14 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
 
   return (
     <aside className="bg-dark-surface border-r border-dark-border min-h-screen flex flex-col h-screen">
-      <div className={`${collapsed ? 'p-2' : 'p-4'} border-b border-dark-border flex items-center justify-between`}>
+      <div className={`${collapsed ? 'p-2' : 'p-4'} border-b border-dark-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} relative`}>
         {!collapsed && (
           <Logo size="md" />
         )}
         {collapsed && (
-          <Logo size="sm" showText={false} />
+          <div className="flex flex-col items-center gap-2">
+            <Logo size="sm" showText={false} />
+          </div>
         )}
         {onToggle && !collapsed && (
           <button
@@ -63,6 +65,17 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
+        )}
+        {onToggle && collapsed && (
+          <button
+            onClick={onToggle}
+            className="absolute right-0 top-3 p-1.5 text-gray-500 hover:text-gray-300 transition-colors"
+            title="Mostrar panel"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
             </svg>
           </button>
         )}
@@ -143,19 +156,6 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
         </div>
       )}
 
-      {collapsed && onToggle && (
-        <div className="p-2 border-t border-dark-border flex justify-center">
-          <button
-            onClick={onToggle}
-            className="p-2 text-gray-500 hover:text-gray-300 transition-colors"
-            title="Mostrar panel"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-      )}
-    </aside>
+          </aside>
   );
 }

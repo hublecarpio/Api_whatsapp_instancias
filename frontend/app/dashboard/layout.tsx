@@ -171,10 +171,27 @@ export default function DashboardLayout({
 
   if (!isReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dark-bg">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-400 text-sm">Cargando...</p>
+      <div className="min-h-screen flex bg-dark-bg">
+        <div className="hidden sm:block w-64 bg-dark-surface border-r border-dark-border animate-pulse">
+          <div className="p-4 border-b border-dark-border">
+            <div className="h-8 bg-dark-hover rounded-lg w-32 shimmer" />
+          </div>
+          <div className="p-4 space-y-3">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-10 bg-dark-hover rounded-lg shimmer" style={{ animationDelay: `${i * 50}ms` }} />
+            ))}
+          </div>
+        </div>
+        <div className="flex-1">
+          <div className="h-14 sm:hidden bg-dark-surface border-b border-dark-border" />
+          <div className="p-4 sm:p-8 space-y-4">
+            <div className="h-8 bg-dark-hover rounded-lg w-48 shimmer" />
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-32 bg-dark-surface rounded-xl shimmer" style={{ animationDelay: `${i * 100}ms` }} />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );

@@ -210,3 +210,23 @@ input, textarea, select {
     height: calc(100dvh - var(--topbar-height) - 70px);
   }
 }
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-hover) 0%,
+    var(--color-card) 50%,
+    var(--color-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
