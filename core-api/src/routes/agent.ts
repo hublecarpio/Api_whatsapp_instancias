@@ -531,7 +531,7 @@ async function processWithAgent(
   }
   
   const instance = business.instances[0];
-  if (instance) {
+  if (instance && instance.instanceBackendId) {
     try {
       const { sentMedia } = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
       

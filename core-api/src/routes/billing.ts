@@ -111,7 +111,10 @@ router.post('/webhook', async (req, res) => {
 
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = invoice.subscription as string;
+        const subscriptionRef = (invoice as any).subscription;
+        const subscriptionId = typeof subscriptionRef === 'string' 
+          ? subscriptionRef 
+          : subscriptionRef?.id;
 
         if (subscriptionId) {
           const user = await prisma.user.findFirst({
@@ -134,7 +137,10 @@ router.post('/webhook', async (req, res) => {
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = invoice.subscription as string;
+        const subscriptionRef = (invoice as any).subscription;
+        const subscriptionId = typeof subscriptionRef === 'string' 
+          ? subscriptionRef 
+          : subscriptionRef?.id;
 
         if (subscriptionId) {
           const user = await prisma.user.findFirst({
@@ -220,9 +226,10 @@ router.get('/subscription-status', authMiddleware, async (req: any, res) => {
 
     if (user.stripeSubscriptionId) {
       try {
-        const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-        if (subscription.current_period_end) {
-          nextPayment = new Date(subscription.current_period_end * 1000);
+        const subscriptionData = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        const periodEnd = (subscriptionData as any).current_period_end;
+        if (periodEnd) {
+          nextPayment = new Date(periodEnd * 1000);
         }
       } catch (err) {
         console.error('Error fetching subscription from Stripe:', err);
