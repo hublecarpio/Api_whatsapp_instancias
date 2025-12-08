@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { requireActiveSubscription } from '../middleware/billing.js';
+import { requireActiveSubscription, requireEmailVerified } from '../middleware/billing.js';
 import { MetaCloudService } from '../services/metaCloud.js';
 
 const router = Router();
@@ -16,7 +16,7 @@ async function checkBusinessAccess(userId: string, businessId: string) {
   return prisma.business.findFirst({ where: { id: businessId, userId } });
 }
 
-router.post('/create', async (req: AuthRequest, res: Response) => {
+router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, webhook } = req.body;
     
@@ -64,7 +64,7 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/create-meta', async (req: AuthRequest, res: Response) => {
+router.post('/create-meta', requireEmailVerified, async (req: AuthRequest, res: Response) => {
   try {
     const { 
       businessId, 

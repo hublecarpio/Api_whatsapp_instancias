@@ -3,12 +3,14 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
+import { useAuthStore } from '@/store/auth';
 import api from '@/lib/api';
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get('token');
+  const { user, updateUser } = useAuthStore();
   
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
@@ -26,9 +28,17 @@ function VerifyEmailContent() {
         setStatus('success');
         setMessage(response.data.message || 'Email verificado correctamente');
         
+        if (user) {
+          updateUser({ emailVerified: true });
+        }
+        
         setTimeout(() => {
-          router.push('/login');
-        }, 3000);
+          if (user) {
+            router.push('/dashboard/whatsapp');
+          } else {
+            router.push('/login');
+          }
+        }, 2000);
       } catch (error: any) {
         setStatus('error');
         setMessage(error.response?.data?.error || 'Error al verificar el email');
@@ -36,7 +46,7 @@ function VerifyEmailContent() {
     };
 
     verifyEmail();
-  }, [token, router]);
+  }, [token, router, user, updateUser]);
 
   return (
     <div className="min-h-screen bg-dark-bg flex items-center justify-center p-4">
@@ -74,13 +84,13 @@ function VerifyEmailContent() {
                 {message}
               </p>
               <p className="text-sm text-gray-500">
-                Serás redirigido al login en unos segundos...
+                {user ? 'Redirigiendo al panel de WhatsApp...' : 'Serás redirigido al login en unos segundos...'}
               </p>
               <button
-                onClick={() => router.push('/login')}
+                onClick={() => router.push(user ? '/dashboard/whatsapp' : '/login')}
                 className="btn btn-primary mt-4"
               >
-                Ir al Login
+                {user ? 'Ir a WhatsApp' : 'Ir al Login'}
               </button>
             </>
           )}

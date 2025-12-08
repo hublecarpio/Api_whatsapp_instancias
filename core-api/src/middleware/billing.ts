@@ -6,6 +6,35 @@ const prisma = new PrismaClient();
 
 const MAX_DAILY_CONTACTS = 50;
 
+export async function requireEmailVerified(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.emailVerified) {
+      return res.status(403).json({ 
+        error: 'Email verification required',
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email address to create WhatsApp instances'
+      });
+    }
+
+    next();
+  } catch (error: any) {
+    console.error('Error in requireEmailVerified middleware:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 export async function requirePaymentMethod(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
+import { useAuthStore } from '@/store/auth';
 import { waApi, businessApi } from '@/lib/api';
 
 interface ConnectionEvent {
@@ -21,6 +22,7 @@ interface MetaFormData {
 
 export default function WhatsAppPage() {
   const { currentBusiness, setCurrentBusiness } = useBusinessStore();
+  const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
@@ -356,9 +358,16 @@ export default function WhatsAppPage() {
                 <div className="text-4xl mb-3">💬</div>
                 <h2 className="text-lg font-semibold text-white mb-1">Conecta tu WhatsApp</h2>
                 <p className="text-gray-400 text-sm mb-4">Elige como quieres conectar tu cuenta de WhatsApp.</p>
-                <button onClick={() => setShowProviderModal(true)} disabled={loading} className="btn btn-primary">
-                  {loading ? 'Creando...' : 'Crear instancia'}
-                </button>
+                {user?.emailVerified === false ? (
+                  <div className="bg-accent-warning/10 border border-accent-warning/20 rounded-lg p-4 max-w-sm mx-auto">
+                    <p className="text-accent-warning text-sm mb-2">Verifica tu correo electrónico para crear instancias de WhatsApp</p>
+                    <p className="text-gray-500 text-xs">Revisa tu bandeja de entrada o spam</p>
+                  </div>
+                ) : (
+                  <button onClick={() => setShowProviderModal(true)} disabled={loading} className="btn btn-primary">
+                    {loading ? 'Creando...' : 'Crear instancia'}
+                  </button>
+                )}
               </div>
             )}
 
