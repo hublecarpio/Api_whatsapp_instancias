@@ -1,0 +1,200 @@
+Failed to proxy http://localhost:3001/auth/register AggregateError [ECONNREFUSED]: 
+
+    at internalConnectMultiple (node:net:1122:18)
+
+    at afterConnectMultiple (node:net:1689:7) {
+
+  code: 'ECONNREFUSED',
+
+  [errors]: [
+
+    Error: connect ECONNREFUSED ::1:3001
+
+        at createConnectionError (node:net:1652:14)
+
+        at afterConnectMultiple (node:net:1682:16) {
+
+      errno: -111,
+
+      code: 'ECONNREFUSED',
+
+      syscall: 'connect',
+
+      address: '::1',
+
+      port: 3001
+
+    },
+
+    Error: connect ECONNREFUSED 127.0.0.1:3001
+
+        at createConnectionError (node:net:1652:14)
+
+        at afterConnectMultiple (node:net:1682:16) {
+
+      errno: -111,
+
+      code: 'ECONNREFUSED',
+
+      syscall: 'connect',
+
+      address: '127.0.0.1',
+
+      port: 3001
+
+    }
+
+  ]
+
+}
+
+AggregateError [ECONNREFUSED]: 
+
+    at internalConnectMultiple (node:net:1122:18)
+
+    at afterConnectMultiple (node:net:1689:7) {
+
+  code: 'ECONNREFUSED',
+
+  [errors]: [
+
+    Error: connect ECONNREFUSED ::1:3001
+
+        at createConnectionError (node:net:1652:14)
+
+        at afterConnectMultiple (node:net:1682:16) {
+
+      errno: -111,
+
+      code: 'ECONNREFUSED',
+
+      syscall: 'connect',
+
+      address: '::1',
+
+      port: 3001
+
+    },
+
+    Error: connect ECONNREFUSED 127.0.0.1:3001
+
+        at createConnectionError (node:net:1652:14)
+
+        at afterConnectMultiple (node:net:1682:16) {
+
+      errno: -111,
+
+      code: 'ECONNREFUSED',
+
+      syscall: 'connect',
+
+      address: '127.0.0.1',
+
+      port: 3001
+
+    }
+
+  ]
+
+}
+
+Failed to proxy http://localhost:3001/auth/login AggregateError [ECONNREFUSED]: 
+
+    at internalConnectMultiple (node:net:1122:18)
+
+    at afterConnectMultiple (node:net:1689:7) {
+
+  code: 'ECONNREFUSED',
+
+  [errors]: [
+
+    Error: connect ECONNREFUSED ::1:3001
+
+        at createConnectionError (node:net:1652:14)
+
+        at afterConnectMultiple (node:net:1682:16) {
+
+      errno: -111,
+
+      code: 'ECONNREFUSED',
+
+      syscall: 'connect',
+
+      address: '::1',
+
+      port: 3001
+
+    },
+
+    Error: connect ECONNREFUSED 127.0.0.1:3001
+
+        at createConnectionError (node:net:1652:14)
+
+        at afterConnectMultiple (node:net:1682:16) {
+
+      errno: -111,
+
+      code: 'ECONNREFUSED',
+
+      syscall: 'connect',
+
+      address: '127.0.0.1',
+
+      port: 3001
+
+    }
+
+  ]
+
+}
+
+AggregateError [ECONNREFUSED]: 
+
+    at internalConnectMultiple (node:net:1122:18)
+
+    at afterConnectMultiple (node:net:1689:7) {
+
+  code: 'ECONNREFUSED',
+
+  [errors]: [
+
+    Error: connect ECONNREFUSED ::1:3001
+
+        at createConnectionError (node:net:1652:14)
+
+        at afterConnectMultiple (node:net:1682:16) {
+
+      errno: -111,
+
+      code: 'ECONNREFUSED',
+
+      syscall: 'connect',
+
+      address: '::1',
+
+      port: 3001
+
+    },
+
+    Error: connect ECONNREFUSED 127.0.0.1:3001
+
+        at createConnectionError (node:net:1652:14)
+
+        at afterConnectMultiple (node:net:1682:16) {
+
+      errno: -111,
+
+      code: 'ECONNREFUSED',
+
+      syscall: 'connect',
+
+      address: '127.0.0.1',
+
+      port: 3001
+
+    }
+
+  ]
+
+}
+
