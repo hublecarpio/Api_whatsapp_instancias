@@ -2,8 +2,13 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../services/prisma.js';
 import { authMiddleware, generateToken, AuthRequest } from '../middleware/auth.js';
+import { generateVerificationToken, hashToken, sendVerificationEmail } from '../services/emailService.js';
 
 const router = Router();
+
+const APP_DOMAIN = process.env.APP_DOMAIN || `https://${process.env.REPLIT_DEV_DOMAIN}`;
+const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
+const RESEND_THROTTLE_MINUTES = 2;
 
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -19,10 +24,21 @@ router.post('/register', async (req: Request, res: Response) => {
     }
     
     const passwordHash = await bcrypt.hash(password, 10);
+    const rawToken = generateVerificationToken();
+    const hashedToken = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
     
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
-        data: { name, email, passwordHash }
+        data: { 
+          name, 
+          email, 
+          passwordHash,
+          emailVerified: false,
+          verificationToken: hashedToken,
+          verificationTokenExpiresAt: expiresAt,
+          lastVerificationSentAt: new Date()
+        }
       });
       
       const business = await tx.business.create({
@@ -39,11 +55,19 @@ router.post('/register', async (req: Request, res: Response) => {
       return { user, business };
     });
     
+    await sendVerificationEmail(email, name, rawToken, APP_DOMAIN);
+    
     const token = generateToken(result.user.id);
     
     res.status(201).json({
-      user: { id: result.user.id, name: result.user.name, email: result.user.email },
-      token
+      user: { 
+        id: result.user.id, 
+        name: result.user.name, 
+        email: result.user.email,
+        emailVerified: false
+      },
+      token,
+      message: 'Registration successful. Please check your email to verify your account.'
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -72,12 +96,110 @@ router.post('/login', async (req: Request, res: Response) => {
     const token = generateToken(user.id);
     
     res.json({
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email,
+        emailVerified: user.emailVerified
+      },
       token
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+router.get('/verify-email', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.query;
+    
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Invalid verification token' });
+    }
+    
+    const hashedToken = hashToken(token);
+    
+    const user = await prisma.user.findFirst({
+      where: {
+        verificationToken: hashedToken,
+        verificationTokenExpiresAt: { gte: new Date() }
+      }
+    });
+    
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired verification token' });
+    }
+    
+    if (user.emailVerified) {
+      return res.json({ success: true, message: 'Email already verified' });
+    }
+    
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        verificationToken: null,
+        verificationTokenExpiresAt: null
+      }
+    });
+    
+    console.log(`Email verified for user ${user.id}`);
+    
+    res.json({ success: true, message: 'Email verified successfully' });
+  } catch (error) {
+    console.error('Verify email error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+router.post('/resend-verification', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (user.emailVerified) {
+      return res.status(400).json({ error: 'Email already verified' });
+    }
+    
+    if (user.lastVerificationSentAt) {
+      const minutesSinceLastSent = (Date.now() - user.lastVerificationSentAt.getTime()) / (1000 * 60);
+      if (minutesSinceLastSent < RESEND_THROTTLE_MINUTES) {
+        const waitSeconds = Math.ceil((RESEND_THROTTLE_MINUTES - minutesSinceLastSent) * 60);
+        return res.status(429).json({ 
+          error: `Please wait ${waitSeconds} seconds before requesting another verification email` 
+        });
+      }
+    }
+    
+    const rawToken = generateVerificationToken();
+    const hashedToken = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
+    
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationToken: hashedToken,
+        verificationTokenExpiresAt: expiresAt,
+        lastVerificationSentAt: new Date()
+      }
+    });
+    
+    const sent = await sendVerificationEmail(user.email, user.name, rawToken, APP_DOMAIN);
+    
+    if (!sent) {
+      return res.status(500).json({ error: 'Failed to send verification email' });
+    }
+    
+    res.json({ success: true, message: 'Verification email sent' });
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ error: 'Failed to resend verification' });
   }
 });
 
@@ -88,7 +210,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       select: { 
         id: true, 
         name: true, 
-        email: true, 
+        email: true,
+        emailVerified: true,
         createdAt: true,
         subscriptionStatus: true,
         trialEndAt: true,

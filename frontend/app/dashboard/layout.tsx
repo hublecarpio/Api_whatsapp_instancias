@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import MobileDrawer from '@/components/MobileDrawer';
 import PaymentGate from '@/components/PaymentGate';
+import EmailVerificationBanner from '@/components/EmailVerificationBanner';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
 import { businessApi, authApi, billingApi } from '@/lib/api';
@@ -17,7 +18,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { loadFromStorage, setAuth, logout } = useAuthStore();
+  const { user, loadFromStorage, setAuth, updateUser, logout } = useAuthStore();
   const setBusinesses = useBusinessStore(state => state.setBusinesses);
   const setCurrentBusiness = useBusinessStore(state => state.setCurrentBusiness);
   const clearBusinesses = useBusinessStore(state => state.clearBusinesses);
@@ -164,6 +165,8 @@ export default function DashboardLayout({
   const isBillingPage = pathname === '/dashboard/billing';
   const showPaymentGate = !canAccess && !isBillingPage;
   const isChatPage = pathname === '/dashboard/chat';
+  const isWhatsAppPage = pathname === '/dashboard/whatsapp';
+  const showEmailBanner = user && user.emailVerified === false;
 
   return (
     <div className="flex min-h-screen bg-dark-bg">
@@ -184,7 +187,12 @@ export default function DashboardLayout({
             trialDaysRemaining={trialDaysRemaining}
           />
         ) : (
-          children
+          <>
+            {showEmailBanner && isWhatsAppPage && (
+              <EmailVerificationBanner email={user?.email || ''} />
+            )}
+            {children}
+          </>
         )}
       </main>
     </div>

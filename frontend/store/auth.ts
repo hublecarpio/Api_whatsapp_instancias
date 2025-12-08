@@ -4,6 +4,7 @@ interface User {
   id: string;
   name: string;
   email: string;
+  emailVerified?: boolean;
   subscriptionStatus?: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled';
   needsSubscription?: boolean;
 }
@@ -13,12 +14,13 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   setAuth: (user: User, token: string) => void;
+  updateUser: (user: Partial<User>) => void;
   logout: () => void;
   clearUserData: () => void;
   loadFromStorage: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   isAuthenticated: false,
@@ -29,6 +31,17 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.setItem('user', JSON.stringify(user));
     }
     set({ user, token, isAuthenticated: true });
+  },
+  
+  updateUser: (userData) => {
+    const currentUser = get().user;
+    if (currentUser) {
+      const updatedUser = { ...currentUser, ...userData };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
+      set({ user: updatedUser });
+    }
   },
   
   logout: () => {

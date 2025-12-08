@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { authApi, billingApi } from '@/lib/api';
+import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Logo from '@/components/Logo';
 
@@ -15,6 +15,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,24 +25,56 @@ export default function RegisterPage() {
     try {
       const response = await authApi.register({ name, email, password });
       setAuth(response.data.user, response.data.token);
-      
-      try {
-        const checkoutResponse = await billingApi.createCheckoutSession();
-        if (checkoutResponse.data.url) {
-          window.location.href = checkoutResponse.data.url;
-          return;
-        }
-      } catch (checkoutErr) {
-        console.error('Error creating checkout session:', checkoutErr);
-      }
-      
-      router.push('/dashboard');
+      setRegistered(true);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al registrarse');
     } finally {
       setLoading(false);
     }
   };
+
+  if (registered) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-dark-bg p-4">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-4">
+              <Logo size="lg" />
+            </div>
+          </div>
+
+          <div className="card text-center py-10">
+            <div className="w-16 h-16 bg-neon-blue/20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-neon-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-white mb-3">
+              ¡Revisa tu correo!
+            </h2>
+            <p className="text-gray-400 mb-6">
+              Hemos enviado un enlace de verificación a <strong className="text-white">{email}</strong>. 
+              Haz clic en el enlace para activar tu cuenta.
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              El enlace expira en 24 horas
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="btn btn-primary w-full"
+              >
+                Continuar al Dashboard
+              </button>
+              <p className="text-xs text-gray-500">
+                Podrás usar el CRM y chat, pero necesitarás verificar tu correo para crear instancias de WhatsApp
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-bg p-4">
