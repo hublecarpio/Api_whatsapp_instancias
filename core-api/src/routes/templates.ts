@@ -2,11 +2,13 @@ import { Router, Response } from 'express';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requireActiveSubscription } from '../middleware/billing.js';
 
 const router = Router();
 const META_API_URL = 'https://graph.facebook.com/v18.0';
 
 router.use(authMiddleware);
+router.use(requireActiveSubscription);
 
 async function getMetaCredentialForBusiness(userId: string, businessId: string) {
   const business = await prisma.business.findFirst({

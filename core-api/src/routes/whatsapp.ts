@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requireActiveSubscription } from '../middleware/billing.js';
 import { MetaCloudService } from '../services/metaCloud.js';
 
 const router = Router();
@@ -9,6 +10,7 @@ const WA_API_URL = process.env.WA_API_URL || 'http://localhost:5000';
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
 
 router.use(authMiddleware);
+router.use(requireActiveSubscription);
 
 async function checkBusinessAccess(userId: string, businessId: string) {
   return prisma.business.findFirst({ where: { id: businessId, userId } });
