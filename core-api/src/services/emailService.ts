@@ -1,15 +1,45 @@
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_PORT === '465',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
+let transporter: nodemailer.Transporter | null = null;
+
+function getTransporter(): nodemailer.Transporter {
+  if (!transporter) {
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    
+    console.log('Initializing SMTP transporter:', {
+      host: smtpHost,
+      port: smtpPort,
+      user: smtpUser ? `${smtpUser.substring(0, 3)}...` : 'NOT SET',
+      secure: smtpPort === 465
+    });
+    
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      console.error('SMTP configuration incomplete:', {
+        host: !!smtpHost,
+        user: !!smtpUser,
+        pass: !!smtpPass
+      });
+    }
+    
+    transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000
+    });
   }
-});
+  return transporter;
+}
 
 export function generateVerificationToken(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -147,28 +177,54 @@ export async function sendVerificationEmail(
   const verificationLink = `${appDomain}/verify-email?token=${token}`;
   
   try {
-    await transporter.sendMail({
-      from: `"${process.env.SMTP_FROM_NAME || 'EfficoreChat'}" <${process.env.SMTP_FROM_EMAIL}>`,
+    const transport = getTransporter();
+    const fromEmail = process.env.SMTP_FROM_EMAIL;
+    const fromName = process.env.SMTP_FROM_NAME || 'EfficoreChat';
+    
+    console.log('Attempting to send verification email:', {
+      to: email,
+      from: `${fromName} <${fromEmail}>`,
+      link: verificationLink.substring(0, 50) + '...'
+    });
+    
+    const result = await transport.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
       to: email,
       subject: 'Confirma tu correo electrónico - EfficoreChat',
       html: getVerificationEmailHTML(name, verificationLink)
     });
     
-    console.log(`Verification email sent to ${email}`);
+    console.log(`Verification email sent successfully to ${email}`, {
+      messageId: result.messageId,
+      response: result.response
+    });
     return true;
-  } catch (error) {
-    console.error('Failed to send verification email:', error);
+  } catch (error: any) {
+    console.error('Failed to send verification email:', {
+      to: email,
+      errorCode: error.code,
+      errorMessage: error.message,
+      errorResponse: error.response,
+      errorCommand: error.command,
+      fullError: error.toString()
+    });
     return false;
   }
 }
 
 export async function testSMTPConnection(): Promise<boolean> {
   try {
-    await transporter.verify();
+    const transport = getTransporter();
+    await transport.verify();
     console.log('SMTP connection verified successfully');
     return true;
-  } catch (error) {
-    console.error('SMTP connection failed:', error);
+  } catch (error: any) {
+    console.error('SMTP connection failed:', {
+      code: error.code,
+      message: error.message,
+      response: error.response,
+      command: error.command
+    });
     return false;
   }
 }

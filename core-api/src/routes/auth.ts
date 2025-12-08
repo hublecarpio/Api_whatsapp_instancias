@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../services/prisma.js';
 import { authMiddleware, generateToken, AuthRequest } from '../middleware/auth.js';
-import { generateVerificationToken, hashToken, sendVerificationEmail } from '../services/emailService.js';
+import { generateVerificationToken, hashToken, sendVerificationEmail, testSMTPConnection } from '../services/emailService.js';
 
 const router = Router();
 
@@ -231,6 +231,45 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Get me error:', error);
     res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+router.get('/test-smtp', async (req: Request, res: Response) => {
+  try {
+    console.log('Testing SMTP connection...');
+    console.log('SMTP Config:', {
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      user: process.env.SMTP_USER ? `${process.env.SMTP_USER.substring(0, 5)}...` : 'NOT SET',
+      pass: process.env.SMTP_PASS ? '****' : 'NOT SET',
+      fromEmail: process.env.SMTP_FROM_EMAIL,
+      fromName: process.env.SMTP_FROM_NAME
+    });
+    
+    const success = await testSMTPConnection();
+    
+    if (success) {
+      res.json({ 
+        success: true, 
+        message: 'SMTP connection successful',
+        config: {
+          host: process.env.SMTP_HOST,
+          port: process.env.SMTP_PORT,
+          user: process.env.SMTP_USER ? `${process.env.SMTP_USER.substring(0, 5)}...` : 'NOT SET'
+        }
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        message: 'SMTP connection failed - check logs for details' 
+      });
+    }
+  } catch (error: any) {
+    console.error('SMTP test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 });
 
