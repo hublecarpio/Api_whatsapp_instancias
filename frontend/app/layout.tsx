@@ -2,8 +2,34 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  title: 'EfficioreChat - WhatsApp Business Platform',
-  description: 'Plataforma de automatizacion de WhatsApp con IA'
+  title: 'EfficoreChat - WhatsApp Business Platform',
+  description: 'Plataforma de automatizacion de WhatsApp con IA',
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' }
+    ],
+    apple: [
+      { url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }
+    ],
+    shortcut: '/icon.svg'
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'EfficoreChat'
+  },
+  applicationName: 'EfficoreChat',
+  keywords: ['WhatsApp', 'Business', 'Automatizacion', 'IA', 'Chatbot', 'CRM'],
+  authors: [{ name: 'EfficoreChat' }],
+  openGraph: {
+    type: 'website',
+    title: 'EfficoreChat - WhatsApp Business Platform',
+    description: 'Plataforma de automatizacion de WhatsApp con IA',
+    siteName: 'EfficoreChat'
+  }
 };
 
 export const viewport: Viewport = {
@@ -11,7 +37,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: 'cover'
+  viewportFit: 'cover',
+  themeColor: '#00D4FF'
 };
 
 export default function RootLayout({
@@ -21,11 +48,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className="dark">
-      <head>
-        <meta name="theme-color" content="#0A0F1C" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-      </head>
       <body className="bg-dark-bg text-white min-h-screen antialiased">
         {children}
       </body>
