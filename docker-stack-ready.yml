@@ -24,55 +24,41 @@ services:
       retries: 5
       start_period: 10s
 
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_DB=whatsapp_saas
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=CambiaEstoPassword123
-    volumes:
-      - whatsapp_postgres_data:/var/lib/postgresql/data
-    networks:
-      - whatsapp_internal
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d whatsapp_saas"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   core-api:
     image: docker.io/iamhuble/whatsapp-saas-core:latest
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=production
       - CORE_API_PORT=4001
-      - DATABASE_URL=postgresql://postgres:CambiaEstoPassword123@postgres:5432/whatsapp_saas
-      - SESSION_SECRET=CambiaEstoSecretLargoDeAlMenos32Caracteres
+      - CORE_API_URL=http://core-api:4001
+      - DATABASE_URL=${DATABASE_URL}
+      - SESSION_SECRET=${SESSION_SECRET}
       - WA_API_URL=http://whatsapp-api:4080
       - REDIS_URL=redis://efficore_redis:6389
-      - MINIO_ENDPOINT=https://tu-minio.com
-      - MINIO_ACCESS_KEY=tuAccessKey
-      - MINIO_SECRET_KEY=tuSecretKey
-      - MINIO_BUCKET=whatsapp-media
-      - MINIO_PUBLIC_URL=https://tu-minio-publico.com
-      - OPENAI_API_KEY=sk-tu-clave-openai-maestra
-      - OPENAI_MODEL=gpt-4.1-mini
-      - SUPER_ADMIN_USER=superadmin
-      - SUPER_ADMIN_PASS=CambiaEstoPasswordAdmin123
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${MINIO_BUCKET}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_PRICE_WEEKLY_50=${STRIPE_PRICE_WEEKLY_50}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - SUPER_ADMIN_USER=${SUPER_ADMIN_USER}
+      - SUPER_ADMIN_PASS=${SUPER_ADMIN_PASS}
     networks:
       - whatsapp_internal
       - traefik_public
     depends_on:
-      - postgres
       - efficore_redis
     deploy:
       replicas: 1
@@ -82,8 +68,8 @@ services:
         failure_action: rollback
       restart_policy:
         condition: on-failure
-        delay: 5s
-        max_attempts: 3
+        delay: 10s
+        max_attempts: 5
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.whatsapp_core.rule=Host(`api.efficore.es`)"
@@ -96,11 +82,12 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4080
-      - MINIO_ENDPOINT=https://tu-minio.com
-      - MINIO_ACCESS_KEY=tuAccessKey
-      - MINIO_SECRET_KEY=tuSecretKey
-      - MINIO_BUCKET=whatsapp-media
-      - MINIO_PUBLIC_URL=https://tu-minio-publico.com
+      - CORE_API_URL=http://core-api:4001
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${MINIO_BUCKET}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL}
     volumes:
       - whatsapp_sessions:/app/src/storage/sessions
     networks:
@@ -114,8 +101,8 @@ services:
         failure_action: rollback
       restart_policy:
         condition: on-failure
-        delay: 5s
-        max_attempts: 3
+        delay: 10s
+        max_attempts: 5
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.whatsapp_wa.rule=Host(`wa.efficore.es`)"
@@ -135,15 +122,15 @@ services:
     depends_on:
       - core-api
     deploy:
-      replicas: 2
+      replicas: 1
       update_config:
         parallelism: 1
         delay: 10s
         failure_action: rollback
       restart_policy:
         condition: on-failure
-        delay: 5s
-        max_attempts: 3
+        delay: 10s
+        max_attempts: 5
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.whatsapp_frontend.rule=Host(`app.efficore.es`)"
@@ -152,8 +139,6 @@ services:
         - "traefik.http.services.whatsapp_frontend.loadbalancer.server.port=4000"
 
 volumes:
-  whatsapp_postgres_data:
-    driver: local
   whatsapp_sessions:
     driver: local
   efficore_redis_data:
