@@ -1,0 +1,24 @@
+ => CACHED [production  2/12] RUN apk add --no-cache openssl netcat-openbsd                                                                                            0.0s
+ => CACHED [production  3/12] WORKDIR /app                                                                                                                             0.0s
+ => CACHED [production  4/12] COPY package*.json ./                                                                                                                    0.0s
+ => CACHED [production  5/12] COPY prisma ./prisma/                                                                                                                    0.0s
+ => CACHED [production  6/12] RUN npm ci --only=production && npm cache clean --force                                                                                  0.0s
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                              6.3s
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.378                                                                                                                                                                       
+0.378 > core-api@1.0.0 build
+0.378 > tsc
+0.378 
+6.145 src/services/emailService.ts(1,24): error TS2307: Cannot find module 'nodemailer' or its corresponding type declarations.
+------
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# 
