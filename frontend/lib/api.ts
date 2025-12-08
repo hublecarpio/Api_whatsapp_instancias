@@ -1,57 +1,13 @@
-import axios, { AxiosError } from 'axios';
-
-let accessBlocked = false;
-let onAccessDenied: (() => void) | null = null;
-
-export const setAccessBlocked = (blocked: boolean) => {
-  accessBlocked = blocked;
-  if (blocked) {
-    delete api.defaults.headers.common['Authorization'];
-  }
-};
-
-export const isAccessBlocked = () => accessBlocked;
-
-export const setOnAccessDenied = (callback: (() => void) | null) => {
-  onAccessDenied = callback;
-};
-
-export const clearAuthHeaders = () => {
-  delete api.defaults.headers.common['Authorization'];
-};
+import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api'
 });
 
-const UNBLOCKED_ENDPOINTS = [
-  '/billing/access-status',
-  '/billing/subscription-status',
-  '/billing/create-checkout-session',
-  '/billing/cancel-subscription',
-  '/billing/reactivate-subscription',
-  '/auth/login',
-  '/auth/register'
-];
-
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const url = config.url || '';
-    const isUnblocked = UNBLOCKED_ENDPOINTS.some(endpoint => url.includes(endpoint));
-    
-    if (accessBlocked && !isUnblocked) {
-      const error = new AxiosError(
-        'Access blocked - payment required',
-        'ERR_PAYMENT_REQUIRED',
-        config,
-        null,
-        { status: 402, statusText: 'Payment Required', data: { error: 'Payment required' }, headers: {}, config } as any
-      );
-      return Promise.reject(error);
-    }
-    
     const token = localStorage.getItem('token');
-    if (token && !accessBlocked) {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
   }
@@ -63,16 +19,11 @@ api.interceptors.response.use(
   (error) => {
     if (typeof window !== 'undefined') {
       if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        clearAuthHeaders();
-        window.location.href = '/login';
-      }
-      if (error.response?.status === 402) {
-        setAccessBlocked(true);
-        clearAuthHeaders();
-        if (onAccessDenied) {
-          onAccessDenied();
+        const currentPath = window.location.pathname;
+        if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
         }
       }
     }

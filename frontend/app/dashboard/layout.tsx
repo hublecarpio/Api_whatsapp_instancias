@@ -6,7 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import PaymentGate from '@/components/PaymentGate';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
-import { businessApi, authApi, billingApi, setAccessBlocked, setOnAccessDenied } from '@/lib/api';
+import { businessApi, authApi, billingApi } from '@/lib/api';
 
 export default function DashboardLayout({
   children
@@ -26,17 +26,6 @@ export default function DashboardLayout({
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
   const initRef = useRef(false);
 
-  const handleAccessDenied = useCallback(() => {
-    setCanAccess(false);
-    setAccessBlocked(true);
-    clearBusinesses();
-  }, [clearBusinesses]);
-
-  useEffect(() => {
-    setOnAccessDenied(handleAccessDenied);
-    return () => setOnAccessDenied(null);
-  }, [handleAccessDenied]);
-
   const initializeDashboard = useCallback(async () => {
     if (initRef.current) return;
     initRef.current = true;
@@ -48,7 +37,6 @@ export default function DashboardLayout({
     const storedToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     
     if (!storedToken) {
-      setIsReady(true);
       router.push('/login');
       return;
     }
@@ -62,8 +50,6 @@ export default function DashboardLayout({
       setTrialDaysRemaining(accessResponse.data.trialDaysRemaining);
 
       if (hasAccess) {
-        setAccessBlocked(false);
-
         try {
           const [businessResponse, userResponse] = await Promise.all([
             businessApi.list(),
@@ -79,38 +65,38 @@ export default function DashboardLayout({
             setAuth(userResponse.data, storedToken);
           }
         } catch (dataError: any) {
+          console.error('Failed to fetch protected data:', dataError);
           if (dataError.response?.status === 401) {
             logout();
-            setIsReady(true);
             router.push('/login');
             return;
           }
         }
       } else {
-        setAccessBlocked(true);
         clearBusinesses();
       }
       
       setIsReady(true);
     } catch (error: any) {
-      setAccessBlocked(true);
-      setCanAccess(false);
-      setSubscriptionStatus(error.response?.data?.status || 'pending');
-      clearBusinesses();
+      console.error('Failed to check access status:', error);
       
       if (error.response?.status === 401) {
         logout();
-        setIsReady(true);
         router.push('/login');
         return;
       }
       
+      setCanAccess(false);
+      setSubscriptionStatus('pending');
+      clearBusinesses();
       setIsReady(true);
     }
   }, [loadFromStorage, router, setBusinesses, setCurrentBusiness, setAuth, clearBusinesses, logout]);
 
   useEffect(() => {
     const recheckAccess = async () => {
+      if (!isReady) return;
+      
       const storedToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       if (!storedToken) return;
       
@@ -118,11 +104,11 @@ export default function DashboardLayout({
         const accessResponse = await billingApi.getAccessStatus();
         const hasAccess = accessResponse.data.canAccess;
         
+        setSubscriptionStatus(accessResponse.data.subscriptionStatus);
+        setTrialDaysRemaining(accessResponse.data.trialDaysRemaining);
+        
         if (hasAccess && !canAccess) {
-          setAccessBlocked(false);
           setCanAccess(true);
-          setSubscriptionStatus(accessResponse.data.subscriptionStatus);
-          setTrialDaysRemaining(accessResponse.data.trialDaysRemaining);
           
           try {
             const [businessResponse, userResponse] = await Promise.all([
@@ -142,22 +128,16 @@ export default function DashboardLayout({
             console.error('Failed to reload data after access restored:', e);
           }
         } else if (!hasAccess && canAccess) {
-          setAccessBlocked(true);
           setCanAccess(false);
           clearBusinesses();
         }
-        
-        setSubscriptionStatus(accessResponse.data.subscriptionStatus);
-        setTrialDaysRemaining(accessResponse.data.trialDaysRemaining);
       } catch (e) {
         console.error('Failed to recheck access:', e);
       }
     };
 
-    if (isReady) {
-      recheckAccess();
-    }
-  }, [pathname, isReady, canAccess, setBusinesses, setCurrentBusiness, setAuth, clearBusinesses]);
+    recheckAccess();
+  }, [pathname]);
 
   useEffect(() => {
     initializeDashboard();
