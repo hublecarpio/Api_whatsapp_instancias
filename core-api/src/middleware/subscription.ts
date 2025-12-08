@@ -5,12 +5,12 @@ const prisma = new PrismaClient();
 
 export async function subscriptionMiddleware(req: any, res: Response, next: NextFunction) {
   try {
-    if (!req.user || !req.user.id) {
+    if (!req.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id }
+      where: { id: req.userId }
     });
 
     if (!user) {
@@ -71,13 +71,13 @@ export async function subscriptionMiddleware(req: any, res: Response, next: Next
 
 export async function optionalSubscriptionCheck(req: any, res: Response, next: NextFunction) {
   try {
-    if (!req.user || !req.user.id) {
+    if (!req.userId) {
       req.subscriptionStatus = null;
       return next();
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id }
+      where: { id: req.userId }
     });
 
     if (!user) {

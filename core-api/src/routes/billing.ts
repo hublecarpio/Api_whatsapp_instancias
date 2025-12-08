@@ -13,7 +13,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5000';
 
 router.post('/create-checkout-session', authMiddleware, async (req: any, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
     const user = await prisma.user.findUnique({ where: { id: userId } });
     
     if (!user) {
@@ -202,7 +202,7 @@ router.post('/webhook', async (req, res) => {
 
 router.get('/subscription-status', authMiddleware, async (req: any, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -236,7 +236,7 @@ router.get('/subscription-status', authMiddleware, async (req: any, res) => {
 
 router.post('/cancel-subscription', authMiddleware, async (req: any, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
@@ -263,7 +263,7 @@ router.post('/cancel-subscription', authMiddleware, async (req: any, res) => {
 
 router.post('/reactivate-subscription', authMiddleware, async (req: any, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
     const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
