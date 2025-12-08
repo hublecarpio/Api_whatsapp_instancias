@@ -37,6 +37,13 @@ The platform follows a microservices-like architecture comprising three main com
 *   **Message Buffering**: Accumulates messages for a configurable duration before triggering an AI response.
 *   **Multimodal Response Handling**: Automatically detects and sends various media types (images, videos, files) and handles S3 shortcodes or full URLs.
 *   **Reminder/Follow-up System**: Background worker for automatic inactivity detection and scheduling AI-generated follow-up messages or manual reminders. For Meta Cloud instances, uses approved templates when 24h window expires.
+*   **Redis + BullMQ Queue System**:
+    - Redis service `efficore_redis` on port 6389 (custom port to avoid conflicts)
+    - BullMQ queues for: reminders, message buffering, WhatsApp incoming messages, inactivity checks
+    - Automatic fallback to legacy setInterval worker when Redis is unavailable (development mode)
+    - Retry logic with exponential backoff for failed jobs
+    - Graceful shutdown with proper cleanup of workers and connections
+    - Environment variable: `REDIS_URL=redis://efficore_redis:6389`
 *   **Stripe Billing Integration**:
     - 7-day free trial with credit card required upfront
     - Weekly recurring payment of $50 USD
@@ -70,3 +77,4 @@ The platform follows a microservices-like architecture comprising three main com
 *   **Meta Cloud API (WhatsApp Business Platform)**: Integrated for official WhatsApp Business Account interactions.
 *   **n8n**: The platform is built for integration with n8n for workflow automation.
 *   **Docker / Docker Swarm**: For containerization and orchestration of all services.
+*   **Redis**: Message queue backend using BullMQ for robust job processing, reminders, and message buffering. Service name: `efficore_redis`, port: `6389`, volume: `efficore_redis_data`.
