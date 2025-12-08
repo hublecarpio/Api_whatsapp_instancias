@@ -277,3 +277,5 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
   - Automatic inactivity detection: schedules AI-generated follow-up messages when customers don't respond
   - Manual reminders: can be scheduled from dashboard, execute regardless of auto-follow-up settings
   - Dashboard page (/dashboard/reminders): configure follow-up settings and view/create reminders
+- **Dec 8 2025**: Fixed user registration to auto-create starter Business using Prisma transaction for atomicity
+- **Dec 8 2025**: Cleaned up orphan WhatsApp instances that were causing webhook 404 errors
