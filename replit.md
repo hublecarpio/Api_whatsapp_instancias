@@ -279,3 +279,4 @@ docker stack deploy -c docker-stack.yml whatsapp-saas
   - Dashboard page (/dashboard/reminders): configure follow-up settings and view/create reminders
 - **Dec 8 2025**: Fixed user registration to auto-create starter Business using Prisma transaction for atomicity
 - **Dec 8 2025**: Cleaned up orphan WhatsApp instances that were causing webhook 404 errors
+- **Dec 8 2025**: Fixed Docker healthchecks to use dynamic ports from environment variables (supports custom ports 4000, 4001, 4080)
