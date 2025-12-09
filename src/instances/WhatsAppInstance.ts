@@ -38,6 +38,20 @@ function sanitizePhone(value: string | undefined | null): string {
   return '';
 }
 
+// Helper for random delays (humanized behavior)
+function randomDelay(minMs: number, maxMs: number): Promise<void> {
+  const delay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+  return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+// Calculate typing delay based on message length (simulates human typing speed)
+function calculateTypingDelay(messageLength: number): number {
+  // Average typing speed: 40-60 words per minute = ~200-300 chars per minute
+  // So roughly 200-500ms per character, but we cap it
+  const baseDelay = Math.min(messageLength * 50, 3000); // Max 3 seconds
+  return Math.max(baseDelay, 1000); // Min 1 second
+}
+
 export interface InstanceOptions {
   id: string;
   webhook?: string;
@@ -631,6 +645,29 @@ export class WhatsAppInstance {
     return this.status;
   }
 
+  // Simulate human typing behavior before sending a message
+  private async simulateTyping(jid: string, messageLength: number = 50): Promise<void> {
+    if (!this.socket) return;
+    
+    try {
+      // Show "composing" (typing indicator)
+      await this.socket.sendPresenceUpdate('composing', jid);
+      
+      // Wait based on message length (humanized delay)
+      const typingDelay = calculateTypingDelay(messageLength);
+      await randomDelay(typingDelay * 0.8, typingDelay * 1.2);
+      
+      // Stop typing indicator
+      await this.socket.sendPresenceUpdate('paused', jid);
+      
+      // Small delay before sending (like a human reviewing before hitting send)
+      await randomDelay(200, 500);
+    } catch (error: any) {
+      // Don't fail if presence update fails, just log it
+      this.logger.debug({ error: error.message }, 'Failed to send presence update');
+    }
+  }
+
   async sendText(to: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     if (!this.socket || this.status !== 'connected') {
       return { success: false, error: 'Instance not connected' };
@@ -638,6 +675,10 @@ export class WhatsAppInstance {
 
     try {
       const jid = this.formatJid(to);
+      
+      // Simulate human typing behavior
+      await this.simulateTyping(jid, message.length);
+      
       const result = await this.socket.sendMessage(jid, { text: message });
       
       this.logger.info({ to: jid }, 'Text message sent');
@@ -662,6 +703,10 @@ export class WhatsAppInstance {
 
     try {
       const jid = this.formatJid(to);
+      
+      // Simulate human behavior (shorter for media)
+      await this.simulateTyping(jid, 30);
+      
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
@@ -692,6 +737,10 @@ export class WhatsAppInstance {
 
     try {
       const jid = this.formatJid(to);
+      
+      // Simulate human behavior (shorter for media)
+      await this.simulateTyping(jid, 30);
+      
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
@@ -724,6 +773,10 @@ export class WhatsAppInstance {
 
     try {
       const jid = this.formatJid(to);
+      
+      // Simulate human behavior (shorter for media)
+      await this.simulateTyping(jid, 30);
+      
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
@@ -778,6 +831,10 @@ export class WhatsAppInstance {
 
     try {
       const jid = this.formatJid(to);
+      
+      // Simulate human behavior - for audio, show "recording" indicator
+      await this.simulateTyping(jid, 30);
+      
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
