@@ -4,6 +4,7 @@ import prisma from '../services/prisma.js';
 
 const router = Router();
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
+const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
 
 router.post('/:businessId', async (req: Request, res: Response) => {
   try {
@@ -67,25 +68,28 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           const contactPhone = data.phoneNumber || data.sender?.replace('@s.whatsapp.net', '') || data.from;
           const contactName = data.pushName || '';
           const contactJid = data.from;
+          const isFromMe = data.isFromMe || false;
           
           await prisma.messageLog.create({
             data: {
               businessId,
               instanceId: instance?.id,
-              direction: 'inbound',
-              sender: contactPhone,
+              direction: isFromMe ? 'outbound' : 'inbound',
+              sender: isFromMe ? undefined : contactPhone,
+              recipient: isFromMe ? contactPhone : undefined,
               message: data.text || null,
               mediaUrl: data.mediaUrl || null,
               metadata: {
                 ...data,
                 contactPhone,
                 contactName,
-                contactJid
+                contactJid,
+                isFromMe
               }
             }
           });
           
-          if (business.botEnabled && data.text) {
+          if (!isFromMe && business.botEnabled && data.text) {
             try {
               await axios.post(`${CORE_API_URL}/agent/think`, {
                 business_id: businessId,
@@ -94,6 +98,8 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                 phoneNumber: contactPhone,
                 contactName,
                 instanceId: instance?.id
+              }, {
+                headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
               });
             } catch (err: any) {
               console.error('Agent think failed:', err.response?.data || err.message);

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import OpenAI from 'openai';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
@@ -8,9 +8,51 @@ import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } f
 
 const router = Router();
 
-router.use(authMiddleware);
-router.use(requireActiveSubscription);
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
+
+interface InternalRequest extends Request {
+  isInternal?: boolean;
+  userId?: string;
+}
+
+async function internalOrAuthMiddleware(req: InternalRequest, res: Response, next: NextFunction) {
+  const internalSecret = req.headers['x-internal-secret'];
+  
+  if (internalSecret === INTERNAL_AGENT_SECRET) {
+    const { business_id } = req.body;
+    if (!business_id) {
+      return res.status(400).json({ error: 'business_id is required for internal calls' });
+    }
+    
+    const business = await prisma.business.findUnique({
+      where: { id: business_id },
+      include: { user: true }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!business.botEnabled) {
+      return res.json({ action: 'manual', message: 'Bot is disabled', botEnabled: false });
+    }
+    
+    const subscriptionStatus = business.user.subscriptionStatus;
+    if (!['TRIAL', 'ACTIVE'].includes(subscriptionStatus)) {
+      return res.status(403).json({ error: 'Active subscription required for AI agent' });
+    }
+    
+    req.isInternal = true;
+    req.userId = business.userId;
+    return next();
+  }
+  
+  authMiddleware(req as AuthRequest, res, (err?: any) => {
+    if (err) return next(err);
+    requireActiveSubscription(req as AuthRequest, res, next);
+  });
+}
 
 const activeBuffers = new Map<string, NodeJS.Timeout>();
 
@@ -586,7 +628,7 @@ async function processWithAgent(
   return { response: aiResponse, tokensUsed: totalTokens };
 }
 
-router.post('/think', async (req: Request, res: Response) => {
+router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Response) => {
   try {
     const { business_id, user_message, phone, phoneNumber, contactName, instanceId } = req.body;
     
@@ -710,7 +752,7 @@ router.post('/think', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/config', async (req: Request, res: Response) => {
+router.get('/config', authMiddleware, requireActiveSubscription, async (req: Request, res: Response) => {
   try {
     const { business_id } = req.query;
     

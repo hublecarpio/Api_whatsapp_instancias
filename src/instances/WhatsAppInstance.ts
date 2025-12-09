@@ -276,10 +276,7 @@ export class WhatsAppInstance {
         participant: message.key?.participant
       }, 'Processing message');
 
-      if (message.key?.fromMe) {
-        this.logger.debug('Skipping - message from self');
-        continue;
-      }
+      const isFromMe = message.key?.fromMe || false;
 
       const msg = message.message;
       if (!msg) {
@@ -397,7 +394,8 @@ export class WhatsAppInstance {
         messageId: message.key?.id,
         timestamp: message.messageTimestamp,
         isGroup,
-        isLid
+        isLid,
+        isFromMe
       };
 
       const actualMessage = this.extractActualMessage(msg);
