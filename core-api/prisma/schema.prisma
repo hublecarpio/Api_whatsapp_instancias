@@ -327,3 +327,16 @@ model TokenUsage {
   @@index([userId, createdAt])
   @@index([createdAt])
 }
+
+model ContactSettings {
+  id           String   @id @default(uuid())
+  businessId   String
+  contactPhone String
+  botDisabled  Boolean  @default(false)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([businessId, contactPhone])
+  @@index([businessId, botDisabled])
+}

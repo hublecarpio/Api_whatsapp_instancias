@@ -623,4 +623,75 @@ Responde SOLO con el nombre exacto de la etapa que mejor describe la situación 
   }
 });
 
+router.get('/contact/:contact_phone/bot-status', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { contact_phone } = req.params;
+    const { business_id } = req.query;
+    
+    if (!business_id) {
+      res.status(400).json({ error: 'business_id is required' });
+      return;
+    }
+    
+    const settings = await prisma.contactSettings.findUnique({
+      where: {
+        businessId_contactPhone: {
+          businessId: business_id as string,
+          contactPhone: contact_phone
+        }
+      }
+    });
+    
+    res.json({
+      botDisabled: settings?.botDisabled || false,
+      notes: settings?.notes || null
+    });
+  } catch (error: any) {
+    console.error('Get contact bot status error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/contact/:contact_phone/bot-toggle', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { contact_phone } = req.params;
+    const { business_id, botDisabled } = req.body;
+    
+    if (!business_id) {
+      res.status(400).json({ error: 'business_id is required' });
+      return;
+    }
+    
+    if (typeof botDisabled !== 'boolean') {
+      res.status(400).json({ error: 'botDisabled must be a boolean' });
+      return;
+    }
+    
+    const settings = await prisma.contactSettings.upsert({
+      where: {
+        businessId_contactPhone: {
+          businessId: business_id,
+          contactPhone: contact_phone
+        }
+      },
+      create: {
+        businessId: business_id,
+        contactPhone: contact_phone,
+        botDisabled
+      },
+      update: {
+        botDisabled
+      }
+    });
+    
+    res.json({
+      success: true,
+      botDisabled: settings.botDisabled
+    });
+  } catch (error: any) {
+    console.error('Toggle contact bot error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
