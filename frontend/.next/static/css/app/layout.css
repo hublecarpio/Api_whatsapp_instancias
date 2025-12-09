@@ -971,8 +971,8 @@ video {
 .h-8 {
   height: 2rem;
 }
-.h-\[calc\(100vh-120px\)\] {
-  height: calc(100vh - 120px);
+.h-\[calc\(100dvh-120px\)\] {
+  height: calc(100dvh - 120px);
 }
 .h-\[calc\(100vh-8rem\)\] {
   height: calc(100vh - 8rem);
@@ -1145,6 +1145,9 @@ video {
 }
 .resize-none {
   resize: none;
+}
+.resize {
+  resize: both;
 }
 .grid-cols-1 {
   grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -1747,6 +1750,9 @@ video {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
+.duration-150 {
+  transition-duration: 150ms;
+}
 .duration-300 {
   transition-duration: 300ms;
 }
@@ -1825,6 +1831,32 @@ input, textarea, select {
   .chat-container {
     height: calc(100vh - var(--topbar-height) - 70px);
     height: calc(100dvh - var(--topbar-height) - 70px);
+  }
+  
+  html, body {
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  input[type="text"]:focus,
+  textarea:focus {
+    font-size: 16px !important;
+  }
+}
+
+@supports (height: 100dvh) {
+  .chat-height-mobile {
+    height: 100dvh;
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  .ios-keyboard-fix {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    transform: translateZ(0);
   }
 }
 

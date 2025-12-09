@@ -209,6 +209,32 @@ input, textarea, select {
     height: calc(100vh - var(--topbar-height) - 70px);
     height: calc(100dvh - var(--topbar-height) - 70px);
   }
+  
+  html, body {
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  input[type="text"]:focus,
+  textarea:focus {
+    font-size: 16px !important;
+  }
+}
+
+@supports (height: 100dvh) {
+  .chat-height-mobile {
+    height: 100dvh;
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  .ios-keyboard-fix {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    transform: translateZ(0);
+  }
 }
 
 @keyframes shimmer {

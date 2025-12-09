@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi } from '@/lib/api';
 
@@ -77,8 +77,44 @@ export default function ChatPage() {
   const [contactBotToggling, setContactBotToggling] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
+  useEffect(() => {
+    const handleViewportResize = () => {
+      if (typeof window !== 'undefined' && window.visualViewport) {
+        const viewport = window.visualViewport;
+        const windowHeight = window.innerHeight;
+        const viewportHeight = viewport.height;
+        const newKeyboardHeight = windowHeight - viewportHeight;
+        
+        if (newKeyboardHeight > 100) {
+          setKeyboardHeight(newKeyboardHeight);
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          }, 100);
+        } else {
+          setKeyboardHeight(0);
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportResize);
+      window.visualViewport.addEventListener('scroll', handleViewportResize);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined' && window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportResize);
+        window.visualViewport.removeEventListener('scroll', handleViewportResize);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -346,6 +382,17 @@ export default function ChatPage() {
     if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
   };
 
+  const handleInputFocus = useCallback(() => {
+    setIsInputFocused(true);
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, 300);
+  }, []);
+
+  const handleInputBlur = useCallback(() => {
+    setIsInputFocused(false);
+  }, []);
+
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
@@ -408,8 +455,16 @@ export default function ChatPage() {
 
   const showChatList = chatListOpen || !selectedPhone;
 
+  const containerStyle = keyboardHeight > 0 
+    ? { height: `calc(100vh - 120px - ${keyboardHeight}px)` } 
+    : undefined;
+
   return (
-    <div className="h-[calc(100vh-120px)] sm:h-[calc(100vh-6rem)] flex flex-col bg-dark-bg">
+    <div 
+      ref={chatContainerRef}
+      className="h-[calc(100dvh-120px)] sm:h-[calc(100vh-6rem)] flex flex-col bg-dark-bg transition-all duration-150"
+      style={containerStyle}
+    >
       <div className="flex-1 flex overflow-hidden sm:rounded-2xl border border-dark-border bg-dark-surface shadow-dark-lg">
         <div className={`${showChatList ? 'w-full sm:w-80' : 'hidden sm:block sm:w-0'} transition-all duration-300 overflow-hidden border-r border-dark-border flex flex-col`}>
           <div className="p-3 border-b border-dark-border bg-dark-card">
@@ -571,7 +626,20 @@ export default function ChatPage() {
                   <button type="button" onClick={isRecording ? handleStopRecording : handleStartRecording} className={`p-2.5 rounded-full transition-colors ${isRecording ? 'bg-accent-error text-white animate-pulse' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`} disabled={sending && !isRecording}>
                     <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
                   </button>
-                  <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Escribe un mensaje..." className="flex-1 px-4 py-2.5 bg-dark-surface border border-dark-border rounded-full text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue/50 text-sm sm:text-base" disabled={sending} />
+                  <input 
+                    ref={inputRef}
+                    type="text" 
+                    value={newMessage} 
+                    onChange={(e) => setNewMessage(e.target.value)} 
+                    onFocus={handleInputFocus}
+                    onBlur={handleInputBlur}
+                    placeholder="Escribe un mensaje..." 
+                    className="flex-1 px-4 py-2.5 bg-dark-surface border border-dark-border rounded-full text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue/50 text-sm sm:text-base" 
+                    disabled={sending}
+                    enterKeyHint="send"
+                    autoComplete="off"
+                    autoCorrect="on"
+                  />
                   <button type="submit" disabled={sending || (!newMessage.trim() && !previewFile)} className="p-2.5 bg-neon-blue text-dark-bg rounded-full hover:bg-neon-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-neon-sm">
                     {sending ? <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-dark-bg border-t-transparent rounded-full animate-spin" /> : <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>}
                   </button>
