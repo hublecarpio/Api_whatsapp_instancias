@@ -208,8 +208,8 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-dark-bg">
-      <div className="hidden sm:block">
-        <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} transition-all duration-300 overflow-hidden`}>
+      <div className="hidden sm:flex flex-shrink-0">
+        <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} transition-all duration-300`}>
           <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
         </div>
       </div>
@@ -217,7 +217,7 @@ export default function DashboardLayout({
       <TopBar onMenuClick={() => setMobileDrawerOpen(true)} />
       <MobileDrawer isOpen={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} />
 
-      <main className={`flex-1 overflow-auto ${isChatPage ? 'p-0 sm:p-4' : 'p-4 sm:p-8'} pt-[calc(56px+1rem)] sm:pt-8`}>
+      <main className={`flex-1 min-w-0 overflow-auto ${isChatPage ? 'p-0 sm:p-4' : 'p-4 sm:p-8'} pt-[calc(56px+1rem)] sm:pt-8`}>
         {showEmailVerificationRequired ? (
           <div className="min-h-[60vh] flex items-center justify-center p-4">
             <div className="card max-w-md w-full text-center">

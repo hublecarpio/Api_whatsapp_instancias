@@ -816,6 +816,9 @@ video {
 .relative {
   position: relative;
 }
+.sticky {
+  position: sticky;
+}
 .inset-0 {
   inset: 0px;
 }
@@ -827,6 +830,9 @@ video {
 }
 .right-0 {
   right: 0px;
+}
+.top-0 {
+  top: 0px;
 }
 .top-3 {
   top: 0.75rem;
@@ -898,9 +904,6 @@ video {
 }
 .mt-8 {
   margin-top: 2rem;
-}
-.mt-auto {
-  margin-top: auto;
 }
 .block {
   display: block;
@@ -985,6 +988,9 @@ video {
 }
 .max-h-\[90vh\] {
   max-height: 90vh;
+}
+.min-h-0 {
+  min-height: 0px;
 }
 .min-h-\[60vh\] {
   min-height: 60vh;

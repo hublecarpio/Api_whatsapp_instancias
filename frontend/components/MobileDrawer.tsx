@@ -77,8 +77,8 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
         onClick={onClose}
       />
       
-      <aside className="mobile-drawer animate-slide-in">
-        <div className="p-4 border-b border-dark-border flex items-center justify-between">
+      <aside className="mobile-drawer animate-slide-in flex flex-col">
+        <div className="p-4 border-b border-dark-border flex items-center justify-between flex-shrink-0">
           <Logo size="md" />
           <button
             onClick={onClose}
@@ -91,13 +91,13 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
         </div>
 
         {currentBusiness && (
-          <div className="px-4 py-3 border-b border-dark-border">
+          <div className="px-4 py-3 border-b border-dark-border flex-shrink-0">
             <p className="text-sm text-gray-400">Empresa</p>
             <p className="text-white font-medium truncate">{currentBusiness.name}</p>
           </div>
         )}
 
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-thin">
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-thin min-h-0">
           {links.map((link) => (
             <Link
               key={link.href}
@@ -111,9 +111,9 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-dark-border mt-auto">
+        <div className="p-4 border-t border-dark-border flex-shrink-0 bg-dark-surface">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-neon-blue/20 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-neon-blue/20 rounded-full flex items-center justify-center flex-shrink-0">
               <span className="text-neon-blue font-medium">
                 {user?.name?.charAt(0).toUpperCase()}
               </span>
@@ -130,7 +130,7 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
           
           <button
             onClick={handleLogout}
-            className="btn btn-secondary w-full text-sm"
+            className="btn btn-secondary w-full text-sm py-3"
           >
             Cerrar sesion
           </button>

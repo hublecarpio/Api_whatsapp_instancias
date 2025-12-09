@@ -47,8 +47,8 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   const statusInfo = getStatusInfo();
 
   return (
-    <aside className="bg-dark-surface border-r border-dark-border min-h-screen flex flex-col h-screen">
-      <div className={`${collapsed ? 'p-2' : 'p-4'} border-b border-dark-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} relative`}>
+    <aside className="bg-dark-surface border-r border-dark-border h-screen flex flex-col sticky top-0">
+      <div className={`${collapsed ? 'p-2' : 'p-4'} border-b border-dark-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} relative flex-shrink-0`}>
         {!collapsed && (
           <Logo size="md" />
         )}
@@ -82,13 +82,13 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
       </div>
 
       {!collapsed && currentBusiness && (
-        <div className="px-4 py-3 border-b border-dark-border">
+        <div className="px-4 py-3 border-b border-dark-border flex-shrink-0">
           <p className="text-xs text-gray-500 uppercase tracking-wider">Empresa</p>
           <p className="text-sm text-white font-medium truncate mt-1">{currentBusiness.name}</p>
         </div>
       )}
 
-      <nav className="flex-1 overflow-y-auto scrollbar-thin">
+      <nav className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
         {!collapsed && (
           <div className="p-4 space-y-1">
             {links.map((link) => (
@@ -122,9 +122,9 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
       </nav>
 
       {!collapsed && (
-        <div className="p-4 border-t border-dark-border">
+        <div className="p-4 border-t border-dark-border flex-shrink-0 bg-dark-surface">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-neon-blue/20 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-neon-blue/20 rounded-full flex items-center justify-center flex-shrink-0">
               <span className="text-neon-blue font-medium">
                 {user?.name?.charAt(0).toUpperCase()}
               </span>
@@ -149,13 +149,31 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
           
           <button
             onClick={handleLogout}
-            className="btn btn-secondary w-full text-sm"
+            className="btn btn-secondary w-full text-sm py-3"
           >
             Cerrar sesion
           </button>
         </div>
       )}
 
-          </aside>
+      {collapsed && (
+        <div className="p-2 border-t border-dark-border flex-shrink-0 flex flex-col items-center gap-2">
+          <div className="w-8 h-8 bg-neon-blue/20 rounded-full flex items-center justify-center">
+            <span className="text-neon-blue text-sm font-medium">
+              {user?.name?.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg transition-colors"
+            title="Cerrar sesion"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+        </div>
+      )}
+    </aside>
   );
 }
