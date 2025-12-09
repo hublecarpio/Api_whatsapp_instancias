@@ -9,6 +9,16 @@ const router = Router();
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:5000';
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
 
+function getPublicWebhookUrl(path: string): string {
+  if (process.env.PUBLIC_API_URL) {
+    return `${process.env.PUBLIC_API_URL}${path}`;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}/api${path}`;
+  }
+  return `${CORE_API_URL}${path}`;
+}
+
 router.use(authMiddleware);
 
 async function checkBusinessAccess(userId: string, businessId: string) {
@@ -136,7 +146,7 @@ router.post('/create-meta', requireEmailVerified, async (req: AuthRequest, res: 
       include: { metaCredential: true }
     });
     
-    const webhookUrl = `${CORE_API_URL}/webhook/meta/${instance.id}`;
+    const webhookUrl = getPublicWebhookUrl(`/webhook/meta/${instance.id}`);
     
     res.status(201).json({
       instance: {
@@ -178,7 +188,7 @@ router.get('/instances/:businessId', async (req: AuthRequest, res: Response) => 
       isActive: inst.isActive,
       lastConnection: inst.lastConnection,
       createdAt: inst.createdAt,
-      webhookUrl: inst.provider === 'META_CLOUD' ? `${CORE_API_URL}/webhook/meta/${inst.id}` : null,
+      webhookUrl: inst.provider === 'META_CLOUD' ? getPublicWebhookUrl(`/webhook/meta/${inst.id}`) : null,
       webhookVerifyToken: inst.metaCredential?.webhookVerifyToken
     })));
   } catch (error) {
@@ -225,7 +235,7 @@ router.get('/:businessId/status', async (req: AuthRequest, res: Response) => {
           status: 'connected',
           isActive: instance.isActive,
           lastConnection: instance.lastConnection,
-          webhookUrl: `${CORE_API_URL}/webhook/meta/${instance.id}`,
+          webhookUrl: getPublicWebhookUrl(`/webhook/meta/${instance.id}`),
           webhookVerifyToken: instance.metaCredential.webhookVerifyToken,
           metaInfo: {
             verifiedName: phoneInfo.verified_name,
@@ -242,7 +252,7 @@ router.get('/:businessId/status', async (req: AuthRequest, res: Response) => {
           phoneNumber: instance.phoneNumber,
           status: 'error',
           error: 'Failed to verify Meta connection',
-          webhookUrl: `${CORE_API_URL}/webhook/meta/${instance.id}`,
+          webhookUrl: getPublicWebhookUrl(`/webhook/meta/${instance.id}`),
           webhookVerifyToken: instance.metaCredential.webhookVerifyToken
         });
       }

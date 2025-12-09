@@ -2,6 +2,7 @@ import prisma from './prisma.js';
 import axios from 'axios';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
 
 export interface IncomingMessage {
   businessId: string;
@@ -84,13 +85,16 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
   const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
   try {
     await axios.post(`${CORE_API_URL}/agent/think`, {
-      businessId,
+      business_id: businessId,
       instanceId,
       provider,
-      contactPhone: cleanPhone,
+      phone: `${cleanPhone}@s.whatsapp.net`,
+      phoneNumber: cleanPhone,
       contactName: pushName,
-      message: messageText,
+      user_message: messageText,
       mediaUrl
+    }, {
+      headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
     });
   } catch (error: any) {
     console.error('Failed to process with AI agent:', error.message);
