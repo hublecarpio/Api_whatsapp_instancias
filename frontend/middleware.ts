@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const CORE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+function getCoreApiUrl(): string {
+  return process.env.CORE_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+}
 
 export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/api/')) {
-    const apiUrl = CORE_API_URL;
+    const apiUrl = getCoreApiUrl();
     const path = request.nextUrl.pathname.replace('/api', '');
     const targetUrl = `${apiUrl}${path}${request.nextUrl.search}`;
     
