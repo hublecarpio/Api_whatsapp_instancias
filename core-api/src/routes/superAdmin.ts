@@ -149,6 +149,7 @@ router.get('/users', superAdminMiddleware, async (req: SuperAdminRequest, res: R
           emailVerified: true,
           subscriptionStatus: true,
           trialEndAt: true,
+          isPro: true,
           createdAt: true,
           _count: {
             select: { businesses: true }
@@ -209,6 +210,68 @@ router.get('/users/:id', superAdminMiddleware, async (req: SuperAdminRequest, re
   } catch (error: any) {
     console.error('User detail error:', error);
     res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+router.delete('/users/:id', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const userId = req.params.id;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { businesses: { include: { instances: true } } }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    await prisma.user.delete({
+      where: { id: userId }
+    });
+    
+    console.log(`[Super Admin] User deleted: ${user.email}`);
+    
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error: any) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+router.patch('/users/:id/pro', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const userId = req.params.id;
+    const { isPro } = req.body;
+    
+    if (typeof isPro !== 'boolean') {
+      return res.status(400).json({ error: 'isPro must be a boolean' });
+    }
+    
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { isPro },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isPro: true
+      }
+    });
+    
+    if (isPro) {
+      console.log(`[Super Admin] User upgraded to Pro: ${user.email}`);
+    } else {
+      console.log(`[Super Admin] User downgraded from Pro: ${user.email}`);
+    }
+    
+    res.json({ success: true, user });
+  } catch (error: any) {
+    console.error('Toggle Pro error:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.status(500).json({ error: 'Failed to toggle Pro status' });
   }
 });
 

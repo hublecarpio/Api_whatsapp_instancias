@@ -215,7 +215,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         createdAt: true,
         subscriptionStatus: true,
         trialEndAt: true,
-        stripeCustomerId: true
+        stripeCustomerId: true,
+        isPro: true
       }
     });
     
@@ -226,7 +227,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     res.json({
       ...user,
       subscriptionStatus: user.subscriptionStatus.toLowerCase(),
-      needsSubscription: user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED'
+      needsSubscription: user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED',
+      isPro: user.isPro
     });
   } catch (error) {
     console.error('Get me error:', error);

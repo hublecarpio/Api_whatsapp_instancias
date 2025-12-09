@@ -83,6 +83,17 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    if (agentVersion === 'v2') {
+      const user = await prisma.user.findUnique({
+        where: { id: req.userId },
+        select: { isPro: true }
+      });
+      
+      if (!user?.isPro) {
+        return res.status(403).json({ error: 'Agent V2 solo esta disponible para usuarios Pro. Contacta a soporte para actualizar tu plan.' });
+      }
+    }
+    
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;

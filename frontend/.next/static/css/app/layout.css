@@ -1143,6 +1143,9 @@ video {
 .cursor-pointer {
   cursor: pointer;
 }
+.cursor-not-allowed {
+  cursor: not-allowed;
+}
 .resize-none {
   resize: none;
 }
@@ -1354,6 +1357,10 @@ video {
   --tw-border-opacity: 1;
   border-color: rgb(255 255 255 / var(--tw-border-opacity, 1));
 }
+.border-gray-700 {
+  --tw-border-opacity: 1;
+  border-color: rgb(55 65 81 / var(--tw-border-opacity, 1));
+}
 .border-t-transparent {
   border-top-color: transparent;
 }
@@ -1424,6 +1431,9 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(55 65 81 / var(--tw-bg-opacity, 1));
 }
+.bg-gray-700\/50 {
+  background-color: rgb(55 65 81 / 0.5);
+}
 .bg-neon-blue {
   --tw-bg-opacity: 1;
   background-color: rgb(0 212 255 / var(--tw-bg-opacity, 1));
@@ -1443,6 +1453,12 @@ video {
 }
 .bg-white\/80 {
   background-color: rgb(255 255 255 / 0.8);
+}
+.bg-dark-hover\/50 {
+  background-color: rgb(45 55 72 / 0.5);
+}
+.bg-gray-800\/50 {
+  background-color: rgb(31 41 55 / 0.5);
 }
 .object-cover {
   -o-object-fit: cover;
@@ -1671,6 +1687,10 @@ video {
 }
 .text-neon-blue\/70 {
   color: rgb(0 212 255 / 0.7);
+}
+.text-red-400 {
+  --tw-text-opacity: 1;
+  color: rgb(248 113 113 / var(--tw-text-opacity, 1));
 }
 .text-white {
   --tw-text-opacity: 1;
@@ -1978,6 +1998,10 @@ input, textarea, select {
   background-color: rgb(75 85 99 / var(--tw-bg-opacity, 1));
 }
 
+.hover\:bg-gray-600\/50:hover {
+  background-color: rgb(75 85 99 / 0.5);
+}
+
 .hover\:bg-green-600:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(22 163 74 / var(--tw-bg-opacity, 1));
@@ -2024,6 +2048,11 @@ input, textarea, select {
 .hover\:text-neon-blue-light:hover {
   --tw-text-opacity: 1;
   color: rgb(51 221 255 / var(--tw-text-opacity, 1));
+}
+
+.hover\:text-red-300:hover {
+  --tw-text-opacity: 1;
+  color: rgb(252 165 165 / var(--tw-text-opacity, 1));
 }
 
 .hover\:text-red-400:hover {

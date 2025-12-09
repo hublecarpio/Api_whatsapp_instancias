@@ -7,6 +7,7 @@ interface User {
   emailVerified?: boolean;
   subscriptionStatus?: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled';
   needsSubscription?: boolean;
+  isPro?: boolean;
 }
 
 interface AuthState {

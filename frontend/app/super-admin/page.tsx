@@ -271,8 +271,9 @@ function OverviewTab({ data }: { data: OverviewData }) {
 function UsersTab({ token }: { token: string }) {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchUsers = () => {
     fetch('/api/super-admin/users', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -282,7 +283,60 @@ function UsersTab({ token }: { token: string }) {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchUsers();
   }, [token]);
+
+  const handleTogglePro = async (userId: string, currentIsPro: boolean) => {
+    if (actionLoading) return;
+    setActionLoading(userId);
+    
+    try {
+      const response = await fetch(`/api/super-admin/users/${userId}/pro`, {
+        method: 'PATCH',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isPro: !currentIsPro })
+      });
+      
+      if (response.ok) {
+        setUsers(users.map(u => u.id === userId ? { ...u, isPro: !currentIsPro } : u));
+      }
+    } catch (err) {
+      console.error('Failed to toggle Pro:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (actionLoading) return;
+    
+    if (!confirm(`¿Estas seguro de eliminar al usuario ${email}? Esta accion no se puede deshacer.`)) {
+      return;
+    }
+    
+    setActionLoading(userId);
+    
+    try {
+      const response = await fetch(`/api/super-admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        setUsers(users.filter(u => u.id !== userId));
+      }
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   if (loading) return <div className="text-gray-400">Cargando usuarios...</div>;
 
@@ -294,8 +348,10 @@ function UsersTab({ token }: { token: string }) {
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Nombre</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Email</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Estado</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-medium">Pro</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Negocios</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Registro</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-medium">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -312,8 +368,30 @@ function UsersTab({ token }: { token: string }) {
                   {user.subscriptionStatus}
                 </span>
               </td>
+              <td className="py-3 px-4">
+                <button
+                  onClick={() => handleTogglePro(user.id, user.isPro)}
+                  disabled={actionLoading === user.id}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    user.isPro 
+                      ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30 hover:bg-accent-primary/30' 
+                      : 'bg-gray-700/50 text-gray-400 border border-gray-600 hover:bg-gray-600/50'
+                  }`}
+                >
+                  {actionLoading === user.id ? '...' : user.isPro ? 'PRO' : 'Standard'}
+                </button>
+              </td>
               <td className="py-3 px-4 text-gray-300">{user._count?.businesses || 0}</td>
               <td className="py-3 px-4 text-gray-400 text-sm">{new Date(user.createdAt).toLocaleDateString()}</td>
+              <td className="py-3 px-4">
+                <button
+                  onClick={() => handleDeleteUser(user.id, user.email)}
+                  disabled={actionLoading === user.id}
+                  className="text-red-400 hover:text-red-300 text-sm font-medium disabled:opacity-50"
+                >
+                  {actionLoading === user.id ? '...' : 'Eliminar'}
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
+import { useAuthStore } from '@/store/auth';
 import { promptApi, toolsApi, businessApi } from '@/lib/api';
 
 interface ToolParameter {
@@ -52,6 +53,8 @@ Directrices:
 
 export default function PromptPage() {
   const { currentBusiness, updateBusiness } = useBusinessStore();
+  const { user } = useAuthStore();
+  const isPro = user?.isPro ?? false;
   const [prompt, setPrompt] = useState('');
   const [promptId, setPromptId] = useState<string | null>(null);
   const [bufferSeconds, setBufferSeconds] = useState(0);
@@ -154,6 +157,11 @@ export default function PromptPage() {
 
   const handleChangeAgentVersion = async (version: 'v1' | 'v2') => {
     if (!currentBusiness || version === agentVersion) return;
+    
+    if (version === 'v2' && !isPro) {
+      setError('El Agente V2 solo esta disponible para usuarios Pro. Contacta a soporte para actualizar tu plan.');
+      return;
+    }
     
     setLoading(true);
     setError('');
@@ -426,14 +434,19 @@ export default function PromptPage() {
             </button>
             <button
               onClick={() => handleChangeAgentVersion('v2')}
-              disabled={loading}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              disabled={loading || (!isPro && agentVersion !== 'v2')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
                 agentVersion === 'v2'
                   ? 'bg-neon-purple text-white'
-                  : 'bg-dark-hover text-gray-400 hover:text-white'
+                  : !isPro 
+                    ? 'bg-dark-hover/50 text-gray-500 cursor-not-allowed'
+                    : 'bg-dark-hover text-gray-400 hover:text-white'
               }`}
             >
               V2 Avanzado
+              {!isPro && agentVersion !== 'v2' && (
+                <span className="text-xs bg-neon-purple/30 text-neon-purple px-2 py-0.5 rounded-full">PRO</span>
+              )}
             </button>
           </div>
         </div>
@@ -441,6 +454,13 @@ export default function PromptPage() {
           <div className="mt-4 p-3 bg-neon-purple/10 border border-neon-purple/20 rounded-lg">
             <p className="text-sm text-neon-purple">
               El Agente V2 usa procesamiento avanzado con LangGraph para respuestas mas contextuales y memoria mejorada.
+            </p>
+          </div>
+        )}
+        {!isPro && agentVersion !== 'v2' && (
+          <div className="mt-4 p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
+            <p className="text-sm text-gray-400">
+              El Agente V2 Avanzado solo esta disponible para usuarios Pro. Contacta a soporte para actualizar tu plan.
             </p>
           </div>
         )}

@@ -20,6 +20,7 @@ model User {
   stripeSubscriptionId        String?
   subscriptionStatus          SubscriptionStatus  @default(PENDING)
   trialEndAt                  DateTime?
+  isPro                       Boolean             @default(false)
   createdAt                   DateTime            @default(now())
   businesses                  Business[]
 }
