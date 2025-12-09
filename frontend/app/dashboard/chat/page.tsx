@@ -96,6 +96,8 @@ export default function ChatPage() {
   const [newChatTemplates, setNewChatTemplates] = useState<Template[]>([]);
   const [newChatUseTemplate, setNewChatUseTemplate] = useState(false);
   const [selectedNewChatTemplate, setSelectedNewChatTemplate] = useState<Template | null>(null);
+  const [templateVariables, setTemplateVariables] = useState<string[]>([]);
+  const [newChatTemplateVariables, setNewChatTemplateVariables] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -277,15 +279,37 @@ export default function ChatPage() {
     }
   };
 
-  const handleSendTemplate = async (template: Template) => {
+  const getTemplateVariableCount = (template: Template): number => {
+    const bodyComponent = template.components?.find((c: any) => c.type === 'BODY');
+    if (!bodyComponent?.text) return 0;
+    const matches = bodyComponent.text.match(/\{\{\d+\}\}/g) || [];
+    return matches.length;
+  };
+
+  const [selectedTemplateForSend, setSelectedTemplateForSend] = useState<Template | null>(null);
+
+  const handleSelectTemplate = (template: Template) => {
+    const varCount = getTemplateVariableCount(template);
+    if (varCount > 0) {
+      setSelectedTemplateForSend(template);
+      setTemplateVariables(Array(varCount).fill(''));
+    } else {
+      handleSendTemplate(template, []);
+    }
+  };
+
+  const handleSendTemplate = async (template: Template, variables: string[]) => {
     if (!currentBusiness || !selectedPhone) return;
     setSendingTemplate(true);
     try {
       await templatesApi.send(currentBusiness.id, {
         templateName: template.name,
-        to: selectedPhone
+        to: selectedPhone,
+        variables: variables.length > 0 ? variables : undefined
       });
       setShowTemplateModal(false);
+      setSelectedTemplateForSend(null);
+      setTemplateVariables([]);
       fetchMessages(selectedPhone);
     } catch (err: any) {
       console.error('Failed to send template:', err);
@@ -353,6 +377,15 @@ export default function ChatPage() {
       return;
     }
 
+    if (newChatUseTemplate && selectedNewChatTemplate) {
+      const varCount = getTemplateVariableCount(selectedNewChatTemplate);
+      if (varCount > 0 && newChatTemplateVariables.some(v => !v.trim())) {
+        setError('Completa todas las variables de la plantilla');
+        setTimeout(() => setError(null), 3000);
+        return;
+      }
+    }
+
     setNewChatSending(true);
     setError(null);
 
@@ -360,7 +393,8 @@ export default function ChatPage() {
       if (newChatUseTemplate && selectedNewChatTemplate) {
         await templatesApi.send(currentBusiness.id, {
           templateName: selectedNewChatTemplate.name,
-          to: cleanPhone
+          to: cleanPhone,
+          variables: newChatTemplateVariables.length > 0 ? newChatTemplateVariables : undefined
         });
       } else if (newChatMessage.trim()) {
         await waApi.send(currentBusiness.id, { 
@@ -374,6 +408,7 @@ export default function ChatPage() {
       }
 
       setShowNewChatModal(false);
+      setNewChatTemplateVariables([]);
       fetchConversations();
       setSelectedPhone(cleanPhone);
       setSelectedContactName('');
@@ -842,37 +877,90 @@ export default function ChatPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-dark-card border border-dark-border rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden">
             <div className="p-4 border-b border-dark-border flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-white">Seleccionar Plantilla</h3>
-              <button onClick={() => setShowTemplateModal(false)} className="p-1 text-gray-400 hover:text-white transition-colors">
+              <h3 className="text-lg font-semibold text-white">
+                {selectedTemplateForSend ? 'Completar Variables' : 'Seleccionar Plantilla'}
+              </h3>
+              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplateForSend(null); setTemplateVariables([]); }} className="p-1 text-gray-400 hover:text-white transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="p-4 overflow-y-auto max-h-[60vh]">
-              {templates.length === 0 ? (
+              {selectedTemplateForSend ? (
+                <div className="space-y-4">
+                  <div className="p-3 bg-dark-surface border border-dark-border rounded-lg">
+                    <p className="font-medium text-white mb-1">{selectedTemplateForSend.name}</p>
+                    <p className="text-sm text-gray-400">
+                      {selectedTemplateForSend.components?.find((c: any) => c.type === 'BODY')?.text || ''}
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-400">Completa los valores para las variables:</p>
+                    {templateVariables.map((value, index) => (
+                      <div key={index}>
+                        <label className="block text-xs text-gray-500 mb-1">Variable {`{{${index + 1}}}`}</label>
+                        <input
+                          type="text"
+                          value={value}
+                          onChange={(e) => {
+                            const newVars = [...templateVariables];
+                            newVars[index] = e.target.value;
+                            setTemplateVariables(newVars);
+                          }}
+                          placeholder={`Valor para {{${index + 1}}}`}
+                          className="w-full px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setSelectedTemplateForSend(null); setTemplateVariables([]); }}
+                      className="flex-1 py-2 bg-dark-surface border border-dark-border rounded-lg text-gray-400 hover:text-white transition-colors"
+                    >
+                      Volver
+                    </button>
+                    <button
+                      onClick={() => handleSendTemplate(selectedTemplateForSend, templateVariables)}
+                      disabled={sendingTemplate || templateVariables.some(v => !v.trim())}
+                      className="flex-1 py-2 bg-neon-blue text-dark-bg rounded-lg font-medium hover:bg-neon-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {sendingTemplate ? 'Enviando...' : 'Enviar'}
+                    </button>
+                  </div>
+                </div>
+              ) : templates.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-400">No hay plantillas aprobadas</p>
                   <p className="text-gray-500 text-sm mt-2">Ve a Plantillas para sincronizar desde Meta</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {templates.map((template) => (
-                    <button
-                      key={template.id}
-                      onClick={() => handleSendTemplate(template)}
-                      disabled={sendingTemplate}
-                      className="w-full p-3 bg-dark-surface border border-dark-border rounded-lg text-left hover:border-neon-blue transition-colors disabled:opacity-50"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-white">{template.name}</span>
-                        <span className="text-xs px-2 py-0.5 bg-accent-success/20 text-accent-success rounded">{template.category}</span>
-                      </div>
-                      <p className="text-sm text-gray-400">
-                        {template.components?.find((c: any) => c.type === 'BODY')?.text?.substring(0, 100) || 'Sin contenido de cuerpo'}
-                        {(template.components?.find((c: any) => c.type === 'BODY')?.text?.length || 0) > 100 && '...'}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">Idioma: {template.language}</p>
-                    </button>
-                  ))}
+                  {templates.map((template) => {
+                    const varCount = getTemplateVariableCount(template);
+                    return (
+                      <button
+                        key={template.id}
+                        onClick={() => handleSelectTemplate(template)}
+                        disabled={sendingTemplate}
+                        className="w-full p-3 bg-dark-surface border border-dark-border rounded-lg text-left hover:border-neon-blue transition-colors disabled:opacity-50"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-white">{template.name}</span>
+                          <div className="flex items-center gap-2">
+                            {varCount > 0 && (
+                              <span className="text-xs px-2 py-0.5 bg-accent-warning/20 text-accent-warning rounded">{varCount} var{varCount > 1 ? 's' : ''}</span>
+                            )}
+                            <span className="text-xs px-2 py-0.5 bg-accent-success/20 text-accent-success rounded">{template.category}</span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-400">
+                          {template.components?.find((c: any) => c.type === 'BODY')?.text?.substring(0, 100) || 'Sin contenido de cuerpo'}
+                          {(template.components?.find((c: any) => c.type === 'BODY')?.text?.length || 0) > 100 && '...'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">Idioma: {template.language}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -908,29 +996,63 @@ export default function ChatPage() {
                     <input
                       type="checkbox"
                       checked={newChatUseTemplate}
-                      onChange={(e) => setNewChatUseTemplate(e.target.checked)}
+                      onChange={(e) => { 
+                        setNewChatUseTemplate(e.target.checked); 
+                        setSelectedNewChatTemplate(null); 
+                        setNewChatTemplateVariables([]); 
+                      }}
                       className="w-4 h-4 rounded bg-dark-surface border-dark-border text-neon-blue focus:ring-neon-blue"
                     />
                     Usar plantilla (Meta Cloud)
                   </label>
                   {newChatUseTemplate && (
                     <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {newChatTemplates.map((template) => (
-                        <button
-                          key={template.id}
-                          type="button"
-                          onClick={() => setSelectedNewChatTemplate(template)}
-                          className={`w-full p-2 text-left rounded-lg border transition-colors ${
-                            selectedNewChatTemplate?.id === template.id 
-                              ? 'border-neon-blue bg-neon-blue/10' 
-                              : 'border-dark-border bg-dark-surface hover:border-gray-600'
-                          }`}
-                        >
-                          <span className="text-sm text-white">{template.name}</span>
-                          <p className="text-xs text-gray-500 truncate">
-                            {template.components?.find((c: any) => c.type === 'BODY')?.text?.substring(0, 50) || ''}
-                          </p>
-                        </button>
+                      {newChatTemplates.map((template) => {
+                        const varCount = getTemplateVariableCount(template);
+                        return (
+                          <button
+                            key={template.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedNewChatTemplate(template);
+                              setNewChatTemplateVariables(Array(varCount).fill(''));
+                            }}
+                            className={`w-full p-2 text-left rounded-lg border transition-colors ${
+                              selectedNewChatTemplate?.id === template.id 
+                                ? 'border-neon-blue bg-neon-blue/10' 
+                                : 'border-dark-border bg-dark-surface hover:border-gray-600'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-white">{template.name}</span>
+                              {varCount > 0 && (
+                                <span className="text-xs px-1.5 py-0.5 bg-accent-warning/20 text-accent-warning rounded">{varCount} var</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 truncate">
+                              {template.components?.find((c: any) => c.type === 'BODY')?.text?.substring(0, 50) || ''}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {selectedNewChatTemplate && newChatTemplateVariables.length > 0 && (
+                    <div className="mt-3 space-y-2 p-3 bg-dark-surface rounded-lg border border-dark-border">
+                      <p className="text-xs text-gray-400">Variables para {selectedNewChatTemplate.name}:</p>
+                      {newChatTemplateVariables.map((value, index) => (
+                        <input
+                          key={index}
+                          type="text"
+                          value={value}
+                          onChange={(e) => {
+                            const newVars = [...newChatTemplateVariables];
+                            newVars[index] = e.target.value;
+                            setNewChatTemplateVariables(newVars);
+                          }}
+                          placeholder={`Valor para {{${index + 1}}}`}
+                          className="w-full px-2 py-1.5 bg-dark-bg border border-dark-border rounded text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-blue"
+                        />
                       ))}
                     </div>
                   )}
@@ -958,7 +1080,7 @@ export default function ChatPage() {
 
               <button
                 onClick={handleSendNewChat}
-                disabled={newChatSending || !newChatPhone.trim() || (!newChatMessage.trim() && !selectedNewChatTemplate)}
+                disabled={newChatSending || !newChatPhone.trim() || (!newChatMessage.trim() && !selectedNewChatTemplate) || (selectedNewChatTemplate && newChatTemplateVariables.length > 0 && newChatTemplateVariables.some(v => !v.trim()))}
                 className="w-full py-2.5 bg-neon-blue text-dark-bg rounded-lg font-medium hover:bg-neon-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {newChatSending ? (
