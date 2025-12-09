@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { InstanceManager } from './core/InstanceManager';
 import { MediaStorage } from './core/MediaStorage';
+import { initRedis, closeRedis, isRedisEnabled } from './core/RedisClient';
 import routes from './api/routes';
 import logger from './utils/logger';
 
@@ -55,11 +56,19 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 async function start() {
   try {
+    const redisConnected = await initRedis();
+    if (redisConnected) {
+      logger.info('Redis available for session storage');
+    } else {
+      logger.info('Using file-based session storage (Redis not configured)');
+    }
+
     await InstanceManager.initialize();
 
     app.listen(PORT, '0.0.0.0', () => {
       logger.info({ port: PORT }, 'WhatsApp Multi-Instance API started');
       console.log(`\n🚀 WhatsApp API running at http://0.0.0.0:${PORT}`);
+      console.log(`Session storage: ${isRedisEnabled() ? 'Redis' : 'Files'}`);
       console.log(`\nAvailable endpoints:`);
       console.log(`  POST   /instances              - Create new instance`);
       console.log(`  GET    /instances              - List all instances`);
@@ -75,12 +84,14 @@ async function start() {
     process.on('SIGINT', async () => {
       logger.info('Received SIGINT, shutting down...');
       await InstanceManager.shutdown();
+      await closeRedis();
       process.exit(0);
     });
 
     process.on('SIGTERM', async () => {
       logger.info('Received SIGTERM, shutting down...');
       await InstanceManager.shutdown();
+      await closeRedis();
       process.exit(0);
     });
 

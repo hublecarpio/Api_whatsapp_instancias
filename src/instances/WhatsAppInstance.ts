@@ -17,6 +17,8 @@ import { createInstanceLogger } from '../utils/logger';
 import { WebhookDispatcher } from '../core/WebhookDispatcher';
 import { MediaStorage } from '../core/MediaStorage';
 import { ConnectionStatus } from '../utils/types';
+import { isRedisEnabled } from '../core/RedisClient';
+import { useRedisAuthState } from '../core/RedisAuthState';
 
 const SESSIONS_PATH = path.join(process.cwd(), 'src', 'storage', 'sessions');
 
@@ -74,6 +76,20 @@ export class WhatsAppInstance {
   private isClosing: boolean = false;
   private isDeleted: boolean = false;
   private lidMappings: Map<string, string> = new Map();
+  private clearSessionState: (() => Promise<void>) | null = null;
+  private usingRedis: boolean = false;
+  
+  private watchdogInterval: NodeJS.Timeout | null = null;
+  private lastActivity: Date = new Date();
+  private messagesSentThisMinute: number = 0;
+  private rateLimitResetTime: Date = new Date();
+  private postConnectReady: boolean = false;
+  
+  private static readonly WATCHDOG_INTERVAL_MS = 60000;
+  private static readonly RATE_LIMIT_PER_MINUTE = 25;
+  private static readonly POST_CONNECT_DELAY_MS = parseInt(process.env.POST_CONNECT_DELAY_MS || '3000', 10);
+  private static readonly ENABLE_WATCHDOG = process.env.ENABLE_WATCHDOG === 'true';
+  private static readonly RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_ENABLED === 'true';
 
   constructor(options: InstanceOptions | string, webhook: string = '') {
     if (typeof options === 'string') {
@@ -102,13 +118,38 @@ export class WhatsAppInstance {
     this.status = 'connecting';
     this.logger.info('Starting WhatsApp connection...');
 
-    const sessionPath = this.getSessionPath();
-    
-    if (!fs.existsSync(sessionPath)) {
-      fs.mkdirSync(sessionPath, { recursive: true });
-    }
+    let state: any;
+    let saveCreds: () => Promise<void>;
 
-    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+    if (isRedisEnabled()) {
+      try {
+        const redisAuth = await useRedisAuthState(this.id);
+        state = redisAuth.state;
+        saveCreds = redisAuth.saveCreds;
+        this.clearSessionState = redisAuth.clearState;
+        this.usingRedis = true;
+        this.logger.info('Using Redis for session storage');
+      } catch (error: any) {
+        this.logger.warn({ error: error.message }, 'Redis auth failed, falling back to file storage');
+        const sessionPath = this.getSessionPath();
+        if (!fs.existsSync(sessionPath)) {
+          fs.mkdirSync(sessionPath, { recursive: true });
+        }
+        const fileAuth = await useMultiFileAuthState(sessionPath);
+        state = fileAuth.state;
+        saveCreds = fileAuth.saveCreds;
+        this.usingRedis = false;
+      }
+    } else {
+      const sessionPath = this.getSessionPath();
+      if (!fs.existsSync(sessionPath)) {
+        fs.mkdirSync(sessionPath, { recursive: true });
+      }
+      const fileAuth = await useMultiFileAuthState(sessionPath);
+      state = fileAuth.state;
+      saveCreds = fileAuth.saveCreds;
+      this.usingRedis = false;
+    }
 
     const silentLogger = pino({ level: 'silent' });
 
@@ -171,9 +212,68 @@ export class WhatsAppInstance {
           }
         }
       });
+
+      this.socket.ev.on('messages.update', (updates) => {
+        this.handleMessageUpdates(updates);
+      });
     } catch (error: any) {
       this.logger.error({ error: error.message }, 'Failed to create socket');
       this.status = 'disconnected';
+    }
+  }
+
+  private async handleMessageUpdates(updates: any[]): Promise<void> {
+    if (this.isDeleted || this.isClosing) return;
+
+    for (const update of updates) {
+      const { key, update: messageUpdate } = update;
+      
+      if (messageUpdate?.status) {
+        const statusMap: { [key: number]: string } = {
+          0: 'error',
+          1: 'pending',
+          2: 'sent',
+          3: 'delivered',
+          4: 'read',
+          5: 'played'
+        };
+        
+        const statusName = statusMap[messageUpdate.status] || 'unknown';
+        this.logger.debug({ 
+          messageId: key?.id, 
+          status: statusName,
+          remoteJid: key?.remoteJid 
+        }, 'Message status updated');
+
+        if (!this.isDeleted && !this.isClosing) {
+          await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.status', {
+            messageId: key?.id,
+            remoteJid: key?.remoteJid,
+            status: statusName,
+            statusCode: messageUpdate.status
+          });
+        }
+      }
+    }
+  }
+
+  async sendReadReceipt(remoteJid: string, messageIds: string[]): Promise<{ success: boolean; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Instance not connected' };
+    }
+
+    try {
+      await this.socket.readMessages([{
+        remoteJid,
+        id: messageIds[0],
+        participant: undefined
+      }]);
+      
+      this.logger.debug({ remoteJid, messageIds }, 'Read receipt sent');
+      return { success: true };
+    } catch (error: any) {
+      this.logger.warn({ error: error.message }, 'Failed to send read receipt');
+      return { success: false, error: error.message };
     }
   }
 
@@ -195,14 +295,37 @@ export class WhatsAppInstance {
       }
 
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut && !this.isClosing && !this.isDeleted;
+      
+      const requiresNewQR = statusCode === 410 || statusCode === 408;
+      const sessionInvalid = statusCode === 401 || statusCode === DisconnectReason.loggedOut;
+      const shouldReconnect = !sessionInvalid && !requiresNewQR && !this.isClosing && !this.isDeleted;
 
-      this.logger.warn({ statusCode, shouldReconnect }, 'Connection closed');
+      this.logger.warn({ statusCode, shouldReconnect, requiresNewQR, sessionInvalid }, 'Connection closed');
 
-      if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (requiresNewQR) {
+        this.logger.info('QR code expired or restart required, will generate new QR on next connect');
+        this.status = 'disconnected';
+        this.qrCode = null;
+        await this.clearSession();
+        
+        if (!this.isDeleted && !this.isClosing) {
+          setTimeout(() => {
+            this.connect().catch(err => {
+              this.logger.error({ error: err.message }, 'Reconnection for new QR failed');
+            });
+          }, 2000);
+        }
+      } else if (sessionInvalid) {
+        this.logger.info('Session invalid or logged out, clearing session data');
+        this.status = 'disconnected';
+        this.qrCode = null;
+        await this.clearSession();
+      } else if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
         this.status = 'connecting';
-        this.logger.info({ attempt: this.reconnectAttempts }, 'Attempting reconnection...');
+        
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
+        this.logger.info({ attempt: this.reconnectAttempts, delayMs: delay }, 'Attempting reconnection with exponential backoff...');
         
         setTimeout(() => {
           if (!this.isDeleted && !this.isClosing) {
@@ -210,15 +333,10 @@ export class WhatsAppInstance {
               this.logger.error({ error: err.message }, 'Reconnection failed');
             });
           }
-        }, 3000 * this.reconnectAttempts);
+        }, delay);
       } else {
         this.status = 'disconnected';
         this.qrCode = null;
-        
-        if (statusCode === DisconnectReason.loggedOut) {
-          this.logger.info('Session logged out, clearing session data');
-          this.clearSession();
-        }
       }
 
       if (!this.isDeleted && !this.isClosing) {
@@ -232,9 +350,19 @@ export class WhatsAppInstance {
     } else if (connection === 'open') {
       this.status = 'connected';
       this.lastConnection = new Date();
+      this.lastActivity = new Date();
       this.reconnectAttempts = 0;
       this.qrCode = null;
+      this.postConnectReady = false;
       this.logger.info('Connected to WhatsApp!');
+
+      this.performPostConnectResync();
+      this.startWatchdog();
+      
+      setTimeout(() => {
+        this.postConnectReady = true;
+        this.logger.debug('Post-connect delay completed, ready to send messages');
+      }, WhatsAppInstance.POST_CONNECT_DELAY_MS);
 
       if (!this.isDeleted && !this.isClosing) {
         await WebhookDispatcher.dispatch(this.webhook, this.id, 'connection.open', {
@@ -242,6 +370,81 @@ export class WhatsAppInstance {
           timestamp: this.lastConnection.toISOString()
         });
       }
+    }
+  }
+
+  private startWatchdog(): void {
+    if (!WhatsAppInstance.ENABLE_WATCHDOG) return;
+    
+    this.stopWatchdog();
+    
+    this.watchdogInterval = setInterval(() => {
+      this.checkConnectionHealth();
+    }, WhatsAppInstance.WATCHDOG_INTERVAL_MS);
+    
+    this.logger.debug('Watchdog started');
+  }
+
+  private stopWatchdog(): void {
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval);
+      this.watchdogInterval = null;
+    }
+  }
+
+  private async checkConnectionHealth(): Promise<void> {
+    if (this.isDeleted || this.isClosing || this.status !== 'connected') return;
+    
+    if (!this.socket) {
+      this.logger.warn('Watchdog: Socket is null but status is connected, attempting reconnection');
+      this.connect().catch(err => this.logger.error({ error: err.message }, 'Watchdog reconnection failed'));
+      return;
+    }
+
+    const ws = (this.socket as any).ws;
+    if (ws && ws.readyState !== 1) {
+      this.logger.warn({ readyState: ws.readyState }, 'Watchdog: WebSocket not in OPEN state, attempting reconnection');
+      this.disconnect();
+      setTimeout(() => {
+        if (!this.isDeleted && !this.isClosing) {
+          this.connect().catch(err => this.logger.error({ error: err.message }, 'Watchdog reconnection failed'));
+        }
+      }, 2000);
+    }
+  }
+
+  private checkRateLimit(): boolean {
+    if (!WhatsAppInstance.RATE_LIMIT_ENABLED) return true;
+    
+    const now = new Date();
+    if (now.getTime() - this.rateLimitResetTime.getTime() >= 60000) {
+      this.messagesSentThisMinute = 0;
+      this.rateLimitResetTime = now;
+    }
+    
+    if (this.messagesSentThisMinute >= WhatsAppInstance.RATE_LIMIT_PER_MINUTE) {
+      this.logger.warn({ limit: WhatsAppInstance.RATE_LIMIT_PER_MINUTE }, 'Rate limit reached');
+      return false;
+    }
+    
+    return true;
+  }
+
+  private incrementMessageCount(): void {
+    this.messagesSentThisMinute++;
+    this.lastActivity = new Date();
+  }
+
+  private async performPostConnectResync(): Promise<void> {
+    if (!this.socket || this.isDeleted || this.isClosing) return;
+
+    try {
+      if (typeof (this.socket as any).resyncAppState === 'function') {
+        await (this.socket as any).resyncAppState(['critical_unblock_low']);
+        this.logger.debug('App state resync completed');
+      }
+    } catch (error: any) {
+      this.logger.debug({ error: error.message }, 'App state resync failed (non-critical)');
     }
   }
 
@@ -696,19 +899,36 @@ export class WhatsAppInstance {
     }
   }
 
-  async sendText(to: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  private preSendCheck(): { canSend: boolean; error?: string } {
     if (!this.socket || this.status !== 'connected') {
-      return { success: false, error: 'Instance not connected' };
+      return { canSend: false, error: 'Instance not connected' };
+    }
+    
+    if (!this.postConnectReady) {
+      return { canSend: false, error: 'Instance still initializing, please wait' };
+    }
+    
+    if (!this.checkRateLimit()) {
+      return { canSend: false, error: 'Rate limit exceeded, please wait' };
+    }
+    
+    return { canSend: true };
+  }
+
+  async sendText(to: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    const check = this.preSendCheck();
+    if (!check.canSend) {
+      return { success: false, error: check.error };
     }
 
     try {
       const jid = this.formatJid(to);
       
-      // Simulate human typing behavior
       await this.simulateTyping(jid, message.length);
       
-      const result = await this.socket.sendMessage(jid, { text: message });
+      const result = await this.socket!.sendMessage(jid, { text: message });
       
+      this.incrementMessageCount();
       this.logger.info({ to: jid }, 'Text message sent');
       
       await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
@@ -725,24 +945,25 @@ export class WhatsAppInstance {
   }
 
   async sendImage(to: string, url: string, caption?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    if (!this.socket || this.status !== 'connected') {
-      return { success: false, error: 'Instance not connected' };
+    const check = this.preSendCheck();
+    if (!check.canSend) {
+      return { success: false, error: check.error };
     }
 
     try {
       const jid = this.formatJid(to);
       
-      // Simulate human behavior (shorter for media)
       await this.simulateTyping(jid, 30);
       
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
-      const result = await this.socket.sendMessage(jid, {
+      const result = await this.socket!.sendMessage(jid, {
         image: buffer,
         caption: caption || ''
       });
 
+      this.incrementMessageCount();
       this.logger.info({ to: jid }, 'Image sent');
 
       await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
@@ -759,25 +980,26 @@ export class WhatsAppInstance {
   }
 
   async sendFile(to: string, url: string, fileName: string, mimeType: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    if (!this.socket || this.status !== 'connected') {
-      return { success: false, error: 'Instance not connected' };
+    const check = this.preSendCheck();
+    if (!check.canSend) {
+      return { success: false, error: check.error };
     }
 
     try {
       const jid = this.formatJid(to);
       
-      // Simulate human behavior (shorter for media)
       await this.simulateTyping(jid, 30);
       
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
-      const result = await this.socket.sendMessage(jid, {
+      const result = await this.socket!.sendMessage(jid, {
         document: buffer,
         mimetype: mimeType,
         fileName: fileName
       });
 
+      this.incrementMessageCount();
       this.logger.info({ to: jid, fileName }, 'File sent');
 
       await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
@@ -795,25 +1017,26 @@ export class WhatsAppInstance {
   }
 
   async sendVideo(to: string, url: string, caption?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    if (!this.socket || this.status !== 'connected') {
-      return { success: false, error: 'Instance not connected' };
+    const check = this.preSendCheck();
+    if (!check.canSend) {
+      return { success: false, error: check.error };
     }
 
     try {
       const jid = this.formatJid(to);
       
-      // Simulate human behavior (shorter for media)
       await this.simulateTyping(jid, 30);
       
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const buffer = Buffer.from(response.data);
 
-      const result = await this.socket.sendMessage(jid, {
+      const result = await this.socket!.sendMessage(jid, {
         video: buffer,
         caption: caption || '',
         gifPlayback: false
       });
 
+      this.incrementMessageCount();
       this.logger.info({ to: jid }, 'Video sent');
 
       await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
@@ -853,14 +1076,14 @@ export class WhatsAppInstance {
   }
 
   async sendAudio(to: string, url: string, ptt: boolean = true): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    if (!this.socket || this.status !== 'connected') {
-      return { success: false, error: 'Instance not connected' };
+    const check = this.preSendCheck();
+    if (!check.canSend) {
+      return { success: false, error: check.error };
     }
 
     try {
       const jid = this.formatJid(to);
       
-      // Simulate human behavior - for audio, show "recording" indicator
       await this.simulateTyping(jid, 30);
       
       const response = await axios.get(url, { responseType: 'arraybuffer' });
@@ -875,8 +1098,9 @@ export class WhatsAppInstance {
         waveform: waveform
       };
 
-      const result = await this.socket.sendMessage(jid, audioMessage);
+      const result = await this.socket!.sendMessage(jid, audioMessage);
 
+      this.incrementMessageCount();
       this.logger.info({ to: jid, ptt }, 'Audio sent with waveform');
 
       await WebhookDispatcher.dispatch(this.webhook, this.id, 'message.sent', {
@@ -1039,6 +1263,8 @@ export class WhatsAppInstance {
   }
 
   async disconnect(): Promise<void> {
+    this.stopWatchdog();
+    
     if (this.socket) {
       this.isClosing = true;
       this.logger.info('Disconnecting...');
@@ -1055,6 +1281,7 @@ export class WhatsAppInstance {
   }
 
   async close(): Promise<void> {
+    this.stopWatchdog();
     this.isClosing = true;
     
     if (this.socket) {
@@ -1076,6 +1303,7 @@ export class WhatsAppInstance {
   }
 
   async destroy(): Promise<void> {
+    this.stopWatchdog();
     this.isClosing = true;
     this.isDeleted = true;
     
@@ -1097,11 +1325,20 @@ export class WhatsAppInstance {
     this.webhook = '';
   }
 
-  clearSession(): void {
+  async clearSession(): Promise<void> {
+    if (this.usingRedis && this.clearSessionState) {
+      try {
+        await this.clearSessionState();
+        this.logger.info('Session data cleared from Redis');
+      } catch (error: any) {
+        this.logger.warn({ error: error.message }, 'Failed to clear Redis session');
+      }
+    }
+    
     const sessionPath = this.getSessionPath();
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true, force: true });
-      this.logger.info('Session data cleared');
+      this.logger.info('Session data cleared from files');
     }
   }
 

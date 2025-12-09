@@ -1,0 +1,164 @@
+GUÍA PRÁCTICA DE ESTABILIDAD PARA BAILEYS (PRODUCCIÓN)
+
+(Sesiones, Persistencia, Reconexión, Auto-Healing, Anti-Ban)
+
+1. MANEJO DE SESIONES (OBLIGATORIO)
+Tools / funciones que DEBE usar:
+
+useMultiFileAuthState()
+
+Persistencia inmediata:
+
+creds.update → guardar cambios en Redis/Postgres en cada evento
+
+Reconexión limpia:
+
+connection.update → si connection === 'close' evaluar el cierre
+
+Manejo de desconexión crítica:
+
+Si lastDisconnect.error?.output?.statusCode === 410 → regenerar QR
+
+Si statusCode === 401 → invalidar sesión y reset
+
+Clave: no recrear sesiones desde cero si no es necesario.
+2. RE-SINCRONIZACIÓN / AUTO-HEALING
+Funciones obligatorias para estabilidad:
+
+await sock.resyncMainAppState()
+
+await sock.resyncAppState()
+
+Eventos obligatorios:
+
+messages.upsert → recuperar mensajes
+
+messages.update → actualizar estados
+
+sendReceipt() → evitar desync
+
+Watchdog recomendado:
+
+Cada 60–120s:
+
+si no hay actividad → sock.ws.readyState !== OPEN → reconnect()
+
+verificar latidos del WebSocket
+
+3. PERSISTENCIA INTELIGENTE
+Debe guardar:
+
+claves (creds)
+
+sesiones
+
+appState (keys de sincronización)
+
+counters / msgIDs para correlación
+
+Reglas:
+
+Nunca guardar en archivo JSON simple.
+
+Siempre persistir en Redis o Postgres.
+
+Guardar cada actualización de credenciales, no solo al cierre.
+
+4. AUTO-RECOVERY
+Debe implementar:
+
+retry inteligente (backoff 200ms → 500ms → 1s) para envíos fallidos
+
+reconnect automático si:
+
+socket drop
+
+bad-mac
+
+stale
+
+unavailable
+
+Casos críticos:
+
+Si loggedOut → destruir instancia + regenerar QR
+
+Si multidevice mismatch → resync completo + refresh keys
+
+5. AISLAMIENTO DE INSTANCIAS
+Reglas clave:
+
+UNA instancia Baileys = UN proceso aislado
+
+No compartir sesión entre procesos
+
+No abrir dos conexiones simultáneas con mismas credenciales
+
+Cada instancia debe tener su propio canal Redis para pub/sub
+
+6. ANTI-BAN / ANTI-BOT (COSAS PROHIBIDAS)
+Tu programador debe evitar:
+A. Anti-ban técnico
+
+No enviar más de 20–30 mensajes por minuto por cuenta
+
+No enviar multimedia repetitiva
+
+No enviar mensajes al mismo segundo (simular humano)
+
+No enviar bursts masivos inmediatamente después de conectar
+
+No usar user-agent de navegador sospechoso
+
+No usar plantillas “fake” (solo Business API las soporta)
+
+B. Anti-ban de comportamiento
+
+Evitar mensajes idénticos repetidos
+
+Enviar primero mensajes cortos antes de multimedia
+
+Esperar 1–3 segundos entre mensajes (randomizado)
+
+No modificar parámetros internos del protocolo MD
+
+7. LOGS NECESARIOS PARA DETECTAR FALLOS
+
+Debe registrar:
+
+connection.update eventos completos
+
+lastDisconnect.error
+
+reconexiones
+
+regeneración de QR
+
+resyncs ejecutados
+
+mensajes fallidos + retries
+
+Esto permite diagnosticar problemas en minutos.
+
+8. CHECKLIST FINAL PARA EL PROGRAMADOR
+Si tu Baileys NO tiene lo siguiente, está incompleto:
+
+ useMultiFileAuthState() o equivalente estable
+
+ Persistencia inmediata de creds
+
+ Handlers: connection.update, messages.upsert, messages.update
+
+ Funciones: resyncMainAppState(), resyncAppState()
+
+ Watchdog para reconexiones
+
+ Retry de envíos
+
+ Manejo de statusCode 410 (regenerar QR)
+
+ Manejo de statusCode 401 (invalidar sesión)
+
+ Instancias aisladas
+
+ Anti-ban (rate limit + delays + no duplicados)
