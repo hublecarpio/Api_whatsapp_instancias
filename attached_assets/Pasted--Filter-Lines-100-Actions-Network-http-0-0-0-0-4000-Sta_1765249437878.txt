@@ -1,0 +1,209 @@
+
+Filter...
+Lines
+100
+Actions
+ 
+ 
+ 
+      
+  - Network:      http://0.0.0.0:4000
+
+ ✓ Starting...
+
+ ✓ Ready in 81ms
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+Proxy error:  [TypeError: fetch failed] {
+
+  cause:  [Error: getaddrinfo ENOTFOUND api.app.eficore.es] {
+
+  errno: -3008,
+
+  code: 'ENOTFOUND',
+
+  syscall: 'getaddrinfo',
+
+  hostname: 'api.app.eficore.es'
+
+}
+
+}
+
+
+      

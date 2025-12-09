@@ -1,0 +1,97 @@
+Core API - Starting up...
+
+============================================
+
+Environment check:
+
+  CORE_API_PORT: 4001
+
+  NODE_ENV: production
+
+  DATABASE_URL: [SET]
+
+Database connection:
+
+  Host: postgres
+
+  Port: 5432
+
+Waiting for database to be ready...
+
+Database is reachable!
+
+Running database migrations...
+
+Prisma schema loaded from prisma/schema.prisma
+
+Datasource "db": PostgreSQL database "whatsapp_saas", schema "public" at "postgres:5432"
+
+The database is already in sync with the Prisma schema.
+
+npm notice
+
+npm notice New major version of npm available! 10.8.2 -> 11.6.4
+
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.4
+
+npm notice To update run: npm install -g npm@11.6.4
+
+npm notice
+
+Migrations completed successfully!
+
+Starting Core API on port 4001...
+
+🚀 Core API running at http://0.0.0.0:4001
+
+Super Admin sessions: Redis connected
+
+Redis connected successfully
+
+Super Admin sessions: Redis ready
+
+Redis is available
+
+Redis available - initializing BullMQ workers...
+
+BullMQ queues initialized
+
+Reminder worker started with BullMQ
+
+Inactivity check worker started with BullMQ
+
+Message buffer worker started with BullMQ
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+Scheduled global inactivity check every 60 seconds
+
+Scheduled 0 pending reminders to queue
+
+All BullMQ workers initialized successfully
+
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+
+
+      
+      
