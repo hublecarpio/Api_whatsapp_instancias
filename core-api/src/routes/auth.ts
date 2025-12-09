@@ -28,9 +28,6 @@ router.post('/register', async (req: Request, res: Response) => {
     const hashedToken = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
     
-    const trialEndDate = new Date();
-    trialEndDate.setDate(trialEndDate.getDate() + 7);
-    
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: { 
@@ -40,9 +37,7 @@ router.post('/register', async (req: Request, res: Response) => {
           emailVerified: false,
           verificationToken: hashedToken,
           verificationTokenExpiresAt: expiresAt,
-          lastVerificationSentAt: new Date(),
-          subscriptionStatus: 'TRIAL',
-          trialEndAt: trialEndDate
+          lastVerificationSentAt: new Date()
         }
       });
       
