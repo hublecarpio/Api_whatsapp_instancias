@@ -41,8 +41,15 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
       pressureLevel,
       allowedStartHour,
       allowedEndHour,
-      weekendsEnabled
+      weekendsEnabled,
+      triggerMode,
+      stopOnReply,
+      followUpSteps
     } = req.body;
+    
+    if (triggerMode && !['user', 'agent', 'any'].includes(triggerMode)) {
+      return res.status(400).json({ error: 'triggerMode must be one of: user, agent, any' });
+    }
     
     const config = await prisma.followUpConfig.upsert({
       where: { businessId },
@@ -55,7 +62,10 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
         pressureLevel: pressureLevel ?? undefined,
         allowedStartHour: allowedStartHour ?? undefined,
         allowedEndHour: allowedEndHour ?? undefined,
-        weekendsEnabled: weekendsEnabled ?? undefined
+        weekendsEnabled: weekendsEnabled ?? undefined,
+        triggerMode: triggerMode ?? undefined,
+        stopOnReply: stopOnReply ?? undefined,
+        followUpSteps: followUpSteps !== undefined ? followUpSteps : undefined
       },
       create: {
         businessId,
@@ -67,7 +77,10 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
         pressureLevel: pressureLevel ?? 1,
         allowedStartHour: allowedStartHour ?? 9,
         allowedEndHour: allowedEndHour ?? 21,
-        weekendsEnabled: weekendsEnabled ?? false
+        weekendsEnabled: weekendsEnabled ?? false,
+        triggerMode: triggerMode ?? 'user',
+        stopOnReply: stopOnReply ?? true,
+        followUpSteps: followUpSteps ?? null
       }
     });
     

@@ -1140,11 +1140,11 @@ video {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
-.cursor-pointer {
-  cursor: pointer;
-}
 .cursor-not-allowed {
   cursor: not-allowed;
+}
+.cursor-pointer {
+  cursor: pointer;
 }
 .resize-none {
   resize: none;
@@ -1336,6 +1336,10 @@ video {
   --tw-border-opacity: 1;
   border-color: rgb(75 85 99 / var(--tw-border-opacity, 1));
 }
+.border-gray-700 {
+  --tw-border-opacity: 1;
+  border-color: rgb(55 65 81 / var(--tw-border-opacity, 1));
+}
 .border-green-600 {
   --tw-border-opacity: 1;
   border-color: rgb(22 163 74 / var(--tw-border-opacity, 1));
@@ -1357,9 +1361,9 @@ video {
   --tw-border-opacity: 1;
   border-color: rgb(255 255 255 / var(--tw-border-opacity, 1));
 }
-.border-gray-700 {
+.border-accent-success {
   --tw-border-opacity: 1;
-  border-color: rgb(55 65 81 / var(--tw-border-opacity, 1));
+  border-color: rgb(16 185 129 / var(--tw-border-opacity, 1));
 }
 .border-t-transparent {
   border-top-color: transparent;
@@ -1415,6 +1419,9 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(45 55 72 / var(--tw-bg-opacity, 1));
 }
+.bg-dark-hover\/50 {
+  background-color: rgb(45 55 72 / 0.5);
+}
 .bg-dark-surface {
   --tw-bg-opacity: 1;
   background-color: rgb(17 24 39 / var(--tw-bg-opacity, 1));
@@ -1433,6 +1440,9 @@ video {
 }
 .bg-gray-700\/50 {
   background-color: rgb(55 65 81 / 0.5);
+}
+.bg-gray-800\/50 {
+  background-color: rgb(31 41 55 / 0.5);
 }
 .bg-neon-blue {
   --tw-bg-opacity: 1;
@@ -1453,12 +1463,6 @@ video {
 }
 .bg-white\/80 {
   background-color: rgb(255 255 255 / 0.8);
-}
-.bg-dark-hover\/50 {
-  background-color: rgb(45 55 72 / 0.5);
-}
-.bg-gray-800\/50 {
-  background-color: rgb(31 41 55 / 0.5);
 }
 .object-cover {
   -o-object-fit: cover;
@@ -1967,6 +1971,11 @@ input, textarea, select {
   border-color: rgb(0 212 255 / var(--tw-border-opacity, 1));
 }
 
+.hover\:border-gray-600:hover {
+  --tw-border-opacity: 1;
+  border-color: rgb(75 85 99 / var(--tw-border-opacity, 1));
+}
+
 .hover\:bg-accent-error\/10:hover {
   background-color: rgb(239 68 68 / 0.1);
 }
@@ -2175,6 +2184,10 @@ input, textarea, select {
 
   .sm\:grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sm\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .sm\:flex-row {

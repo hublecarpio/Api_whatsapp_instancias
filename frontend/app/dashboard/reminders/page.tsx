@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { remindersApi } from '@/lib/api';
 
+interface FollowUpStep {
+  delayMinutes: number;
+  pressureLevel?: number;
+}
+
 interface FollowUpConfig {
   id: string;
   enabled: boolean;
@@ -15,6 +20,9 @@ interface FollowUpConfig {
   allowedStartHour: number;
   allowedEndHour: number;
   weekendsEnabled: boolean;
+  triggerMode: 'user' | 'agent' | 'any';
+  stopOnReply: boolean;
+  followUpSteps: FollowUpStep[] | null;
 }
 
 interface Reminder {
@@ -52,7 +60,12 @@ export default function RemindersPage() {
         remindersApi.getConfig(currentBusiness.id),
         remindersApi.list(currentBusiness.id)
       ]);
-      setConfig(configRes.data);
+      setConfig({
+        ...configRes.data,
+        triggerMode: configRes.data.triggerMode || 'user',
+        stopOnReply: configRes.data.stopOnReply !== false,
+        followUpSteps: configRes.data.followUpSteps || null
+      });
       setReminders(remindersRes.data);
     } catch (err) {
       console.error('Error loading data:', err);
@@ -172,6 +185,60 @@ export default function RemindersPage() {
               />
               <div className="w-11 h-6 bg-dark-hover rounded-full peer peer-checked:bg-neon-blue peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
             </label>
+          </div>
+
+          <div className="mb-6 p-4 bg-dark-bg rounded-lg border border-dark-border">
+            <h4 className="text-sm font-medium text-white mb-3">Modo de activacion</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, triggerMode: 'user' })}
+                className={`p-3 rounded-lg border text-sm text-left transition-all ${
+                  config.triggerMode === 'user' 
+                    ? 'border-neon-blue bg-neon-blue/10 text-white' 
+                    : 'border-dark-border bg-dark-card text-gray-400 hover:border-gray-600'
+                }`}
+              >
+                <div className="font-medium mb-1">Despues del cliente</div>
+                <div className="text-xs text-gray-500">Seguimiento cuando el cliente no responde despues de que le escribimos</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, triggerMode: 'agent' })}
+                className={`p-3 rounded-lg border text-sm text-left transition-all ${
+                  config.triggerMode === 'agent' 
+                    ? 'border-neon-purple bg-neon-purple/10 text-white' 
+                    : 'border-dark-border bg-dark-card text-gray-400 hover:border-gray-600'
+                }`}
+              >
+                <div className="font-medium mb-1">Despues del agente</div>
+                <div className="text-xs text-gray-500">Seguimiento cuando enviamos mensaje y no hay respuesta (ideal para pauta)</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, triggerMode: 'any' })}
+                className={`p-3 rounded-lg border text-sm text-left transition-all ${
+                  config.triggerMode === 'any' 
+                    ? 'border-accent-success bg-accent-success/10 text-white' 
+                    : 'border-dark-border bg-dark-card text-gray-400 hover:border-gray-600'
+                }`}
+              >
+                <div className="font-medium mb-1">Cualquier mensaje</div>
+                <div className="text-xs text-gray-500">Seguimiento despues de cualquier mensaje sin respuesta</div>
+              </button>
+            </div>
+            
+            <div className="mt-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.stopOnReply}
+                  onChange={(e) => setConfig({ ...config, stopOnReply: e.target.checked })}
+                  className="w-4 h-4 text-neon-blue bg-dark-card border-dark-border rounded focus:ring-neon-blue"
+                />
+                <span className="text-sm text-gray-300">Cancelar seguimiento si el cliente responde</span>
+              </label>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">

@@ -286,6 +286,9 @@ model FollowUpConfig {
   allowedStartHour    Int      @default(9)
   allowedEndHour      Int      @default(21)
   weekendsEnabled     Boolean  @default(false)
+  triggerMode         String   @default("user")
+  stopOnReply         Boolean  @default(true)
+  followUpSteps       Json?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
