@@ -73,7 +73,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, industry, logoUrl } = req.body;
+    const { name, description, industry, logoUrl, agentVersion, timezone } = req.body;
     
     const existing = await prisma.business.findFirst({
       where: { id: req.params.id, userId: req.userId }
@@ -83,9 +83,19 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (industry !== undefined) updateData.industry = industry;
+    if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
+    if (timezone !== undefined) updateData.timezone = timezone;
+    if (agentVersion !== undefined && ['v1', 'v2'].includes(agentVersion)) {
+      updateData.agentVersion = agentVersion;
+    }
+    
     const business = await prisma.business.update({
       where: { id: req.params.id },
-      data: { name, description, industry, logoUrl }
+      data: updateData
     });
     
     res.json(business);

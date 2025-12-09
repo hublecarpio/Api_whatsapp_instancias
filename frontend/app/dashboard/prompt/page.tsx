@@ -62,6 +62,7 @@ export default function PromptPage() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [botEnabled, setBotEnabled] = useState(true);
+  const [agentVersion, setAgentVersion] = useState<'v1' | 'v2'>('v1');
   const [showToolForm, setShowToolForm] = useState(false);
   const [editingTool, setEditingTool] = useState<Tool | null>(null);
   const [newTool, setNewTool] = useState({
@@ -84,6 +85,7 @@ export default function PromptPage() {
   useEffect(() => {
     if (currentBusiness) {
       setBotEnabled(currentBusiness.botEnabled);
+      setAgentVersion((currentBusiness as any).agentVersion || 'v1');
       loadData();
     }
   }, [currentBusiness]);
@@ -145,6 +147,24 @@ export default function PromptPage() {
       setSuccess(`Bot ${response.data.botEnabled ? 'activado' : 'desactivado'}`);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al cambiar estado del bot');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangeAgentVersion = async (version: 'v1' | 'v2') => {
+    if (!currentBusiness || version === agentVersion) return;
+    
+    setLoading(true);
+    setError('');
+
+    try {
+      await businessApi.update(currentBusiness.id, { agentVersion: version });
+      setAgentVersion(version);
+      updateBusiness(currentBusiness.id, { agentVersion: version } as any);
+      setSuccess(`Cambiado a Agente ${version.toUpperCase()}`);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al cambiar version del agente');
     } finally {
       setLoading(false);
     }
@@ -380,6 +400,50 @@ export default function PromptPage() {
             {botEnabled ? 'Activo' : 'Inactivo'}
           </button>
         </div>
+      </div>
+
+      <div className="card mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Version del Agente</h2>
+            <p className="text-sm text-gray-400">
+              {agentVersion === 'v1' 
+                ? 'Agente Clasico - Respuestas directas con OpenAI'
+                : 'Agente Avanzado - Procesamiento con LangGraph y memoria mejorada'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleChangeAgentVersion('v1')}
+              disabled={loading}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                agentVersion === 'v1'
+                  ? 'bg-neon-blue text-dark-bg'
+                  : 'bg-dark-hover text-gray-400 hover:text-white'
+              }`}
+            >
+              V1 Clasico
+            </button>
+            <button
+              onClick={() => handleChangeAgentVersion('v2')}
+              disabled={loading}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                agentVersion === 'v2'
+                  ? 'bg-neon-purple text-white'
+                  : 'bg-dark-hover text-gray-400 hover:text-white'
+              }`}
+            >
+              V2 Avanzado
+            </button>
+          </div>
+        </div>
+        {agentVersion === 'v2' && (
+          <div className="mt-4 p-3 bg-neon-purple/10 border border-neon-purple/20 rounded-lg">
+            <p className="text-sm text-neon-purple">
+              El Agente V2 usa procesamiento avanzado con LangGraph para respuestas mas contextuales y memoria mejorada.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6">

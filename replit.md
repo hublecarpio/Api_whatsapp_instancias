@@ -102,6 +102,24 @@ The platform follows a microservices-like architecture comprising three main com
     - Weekend detection uses business timezone instead of server time
     - Runs every 60 seconds via setInterval (fallback mode when Redis unavailable)
     - Detects client inactivity and schedules follow-up reminders automatically
+*   **Agent V2 - Advanced AI Processing (Python/LangGraph)**:
+    - Separate Python microservice (`agent-v2/`) with FastAPI and LangGraph
+    - Toggle between V1 (direct OpenAI) and V2 (LangGraph) per business
+    - Database field: `Business.agentVersion` (default: 'v1')
+    - Core API proxy: routes to `AGENT_V2_URL` when `agentVersion='v2'`
+    - Pydantic schemas for structured input/output validation
+    - Environment: `AGENT_V2_URL=http://localhost:5001` (dev) or `http://agent-v2:5001` (Swarm)
+    - Docker: Separate image `agent-v2:latest` on port 5001
+    - UI: Toggle in AI Agent dashboard (`/dashboard/prompt`) to switch versions
+*   **Production-Grade Baileys Stability**:
+    - Redis session state with automatic file-based fallback
+    - Watchdog heartbeat (90s intervals) detects zombie connections
+    - Rate limiting: 25 messages/minute per instance
+    - Anti-burst protection: 30s cooldown after connection before sending
+    - Exponential backoff: 1-30s delays for reconnection attempts
+    - StatusCode handling: 410 triggers QR regeneration, 401 invalidates session
+    - Post-connect resync and message update handler
+    - Read receipts with sendReceipt()
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM for type-safe database access and schema management.
