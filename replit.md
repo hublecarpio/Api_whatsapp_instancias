@@ -76,6 +76,13 @@ The platform follows a microservices-like architecture comprising three main com
     - Token usage automatically logged to `TokenUsage` table for each API call
     - Cost tracking based on prompt/completion tokens
     - Usage breakdown by business and by feature
+*   **Per-Contact Bot Control**:
+    - Two-level bot control: global toggle (AI Agent dashboard) and per-contact toggle (chat panel)
+    - `ContactSettings` model stores `botDisabled` flag per businessId + contactPhone combination
+    - Endpoints: `GET /tags/contact/:phone/bot-status` and `PATCH /tags/contact/:phone/bot-toggle`
+    - Per-contact disabled takes precedence over global enabled
+    - Chat panel displays contact-level bot status with toggle button
+    - Visual indicators: green when active, red when contact-disabled, gray when global-disabled
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM for type-safe database access and schema management.
