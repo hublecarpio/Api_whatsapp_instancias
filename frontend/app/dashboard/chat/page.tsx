@@ -73,6 +73,8 @@ export default function ChatPage() {
   const [assigningTag, setAssigningTag] = useState(false);
   const [windowStatus, setWindowStatus] = useState<WindowStatus | null>(null);
   const [dailyContacts, setDailyContacts] = useState<DailyContactStats | null>(null);
+  const [contactBotDisabled, setContactBotDisabled] = useState<boolean>(false);
+  const [contactBotToggling, setContactBotToggling] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -163,6 +165,7 @@ export default function ChatPage() {
     if (selectedPhone && currentBusiness) {
       fetchMessages(selectedPhone);
       fetchWindowStatus(selectedPhone);
+      fetchContactBotStatus(selectedPhone);
       const interval = setInterval(() => {
         fetchMessages(selectedPhone);
         fetchWindowStatus(selectedPhone);
@@ -170,6 +173,31 @@ export default function ChatPage() {
       return () => clearInterval(interval);
     }
   }, [selectedPhone, currentBusiness]);
+
+  const fetchContactBotStatus = async (phone: string) => {
+    if (!currentBusiness) return;
+    try {
+      const response = await tagsApi.getContactBotStatus(currentBusiness.id, phone);
+      setContactBotDisabled(response.data.botDisabled || false);
+    } catch (err) {
+      console.error('Failed to fetch contact bot status:', err);
+      setContactBotDisabled(false);
+    }
+  };
+
+  const handleToggleContactBot = async () => {
+    if (!currentBusiness || !selectedPhone) return;
+    setContactBotToggling(true);
+    try {
+      const newStatus = !contactBotDisabled;
+      await tagsApi.toggleContactBot(currentBusiness.id, selectedPhone, newStatus);
+      setContactBotDisabled(newStatus);
+    } catch (err) {
+      console.error('Failed to toggle contact bot:', err);
+    } finally {
+      setContactBotToggling(false);
+    }
+  };
 
   const fetchWindowStatus = async (phone: string) => {
     if (!currentBusiness) return;
@@ -471,8 +499,19 @@ export default function ChatPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-white truncate">{selectedContactName || `+${selectedPhone}`}</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <button onClick={handleToggleBot} disabled={botToggling} className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${currentBusiness.botEnabled ? 'bg-accent-success/20 text-accent-success' : 'bg-dark-hover text-gray-400'}`}>
-                      {currentBusiness.botEnabled ? '🤖 Bot' : '😴 Bot off'}
+                    <button 
+                      onClick={handleToggleContactBot} 
+                      disabled={contactBotToggling} 
+                      title={contactBotDisabled ? 'Bot desactivado para este contacto' : 'Bot activo para este contacto'}
+                      className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                        contactBotDisabled 
+                          ? 'bg-accent-error/20 text-accent-error' 
+                          : currentBusiness.botEnabled 
+                            ? 'bg-accent-success/20 text-accent-success' 
+                            : 'bg-dark-hover text-gray-400'
+                      }`}
+                    >
+                      {contactBotDisabled ? '🚫 Bot off' : currentBusiness.botEnabled ? '🤖 Bot' : '😴 Global off'}
                     </button>
                     {windowStatus?.provider === 'META_CLOUD' && (
                       <span className={`text-xs px-1.5 py-0.5 rounded ${windowStatus.windowOpen ? 'bg-neon-blue/20 text-neon-blue' : 'bg-accent-warning/20 text-accent-warning'}`}>

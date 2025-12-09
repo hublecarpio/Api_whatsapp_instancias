@@ -219,5 +219,9 @@ export const tagsApi = {
   getHistory: (businessId: string, contactPhone: string) =>
     api.get(`/tags/history/${contactPhone}?business_id=${businessId}`),
   suggestStage: (businessId: string, contactPhone: string) =>
-    api.post('/tags/suggest-stage', { business_id: businessId, contact_phone: contactPhone })
+    api.post('/tags/suggest-stage', { business_id: businessId, contact_phone: contactPhone }),
+  getContactBotStatus: (businessId: string, contactPhone: string) =>
+    api.get(`/tags/contact/${contactPhone}/bot-status?business_id=${businessId}`),
+  toggleContactBot: (businessId: string, contactPhone: string, botDisabled: boolean) =>
+    api.patch(`/tags/contact/${contactPhone}/bot-toggle`, { business_id: businessId, botDisabled })
 };
