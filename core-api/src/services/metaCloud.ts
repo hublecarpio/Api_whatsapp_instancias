@@ -1,4 +1,5 @@
 import axios from 'axios';
+import FormData from 'form-data';
 
 const META_API_URL = 'https://graph.facebook.com/v21.0';
 
@@ -95,83 +96,205 @@ export class MetaCloudService {
   async sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
 
-    const response = await axios.post(
-      `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
-      {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanPhone,
-        type: 'image',
-        image: {
-          link: imageUrl,
-          caption: caption || ''
-        }
-      },
-      { headers: this.headers }
-    );
+    try {
+      const { buffer, mimeType } = await this.downloadFromUrl(imageUrl);
+      const mediaId = await this.uploadMedia(buffer, mimeType, 'image.jpg');
+      
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'image',
+          image: {
+            id: mediaId,
+            caption: caption || ''
+          }
+        },
+        { headers: this.headers }
+      );
 
-    return response.data;
+      return response.data;
+    } catch (uploadError: any) {
+      console.error('Image upload failed, trying direct URL:', uploadError.message);
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'image',
+          image: {
+            link: imageUrl,
+            caption: caption || ''
+          }
+        },
+        { headers: this.headers }
+      );
+
+      return response.data;
+    }
   }
 
   async sendVideoMessage(to: string, videoUrl: string, caption?: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
 
+    try {
+      const { buffer, mimeType } = await this.downloadFromUrl(videoUrl);
+      const mediaId = await this.uploadMedia(buffer, mimeType, 'video.mp4');
+      
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'video',
+          video: {
+            id: mediaId,
+            caption: caption || ''
+          }
+        },
+        { headers: this.headers }
+      );
+
+      return response.data;
+    } catch (uploadError: any) {
+      console.error('Video upload failed, trying direct URL:', uploadError.message);
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'video',
+          video: {
+            link: videoUrl,
+            caption: caption || ''
+          }
+        },
+        { headers: this.headers }
+      );
+
+      return response.data;
+    }
+  }
+
+  async uploadMedia(buffer: Buffer, mimeType: string, filename: string): Promise<string> {
+    const formData = new FormData();
+    formData.append('messaging_product', 'whatsapp');
+    formData.append('file', buffer, {
+      filename,
+      contentType: mimeType
+    });
+    formData.append('type', mimeType);
+
     const response = await axios.post(
-      `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+      `${META_API_URL}/${this.credentials.phoneNumberId}/media`,
+      formData,
       {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanPhone,
-        type: 'video',
-        video: {
-          link: videoUrl,
-          caption: caption || ''
+        headers: {
+          'Authorization': `Bearer ${this.credentials.accessToken}`,
+          ...formData.getHeaders()
         }
-      },
-      { headers: this.headers }
+      }
     );
 
-    return response.data;
+    return response.data.id;
+  }
+
+  private async downloadFromUrl(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 30000
+    });
+    const mimeType = response.headers['content-type'] || 'application/octet-stream';
+    return { buffer: Buffer.from(response.data), mimeType };
   }
 
   async sendAudioMessage(to: string, audioUrl: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
 
-    const response = await axios.post(
-      `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
-      {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanPhone,
-        type: 'audio',
-        audio: { link: audioUrl }
-      },
-      { headers: this.headers }
-    );
+    try {
+      const { buffer, mimeType } = await this.downloadFromUrl(audioUrl);
+      const mediaId = await this.uploadMedia(buffer, mimeType, 'audio.ogg');
+      
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'audio',
+          audio: { id: mediaId }
+        },
+        { headers: this.headers }
+      );
 
-    return response.data;
+      return response.data;
+    } catch (uploadError: any) {
+      console.error('Media upload failed, trying direct URL:', uploadError.message);
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'audio',
+          audio: { link: audioUrl }
+        },
+        { headers: this.headers }
+      );
+
+      return response.data;
+    }
   }
 
   async sendDocumentMessage(to: string, documentUrl: string, filename?: string, caption?: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
 
-    const response = await axios.post(
-      `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
-      {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanPhone,
-        type: 'document',
-        document: {
-          link: documentUrl,
-          filename: filename || 'document',
-          caption: caption || ''
-        }
-      },
-      { headers: this.headers }
-    );
+    try {
+      const { buffer, mimeType } = await this.downloadFromUrl(documentUrl);
+      const mediaId = await this.uploadMedia(buffer, mimeType, filename || 'document');
+      
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'document',
+          document: {
+            id: mediaId,
+            filename: filename || 'document',
+            caption: caption || ''
+          }
+        },
+        { headers: this.headers }
+      );
 
-    return response.data;
+      return response.data;
+    } catch (uploadError: any) {
+      console.error('Document upload failed, trying direct URL:', uploadError.message);
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'document',
+          document: {
+            link: documentUrl,
+            filename: filename || 'document',
+            caption: caption || ''
+          }
+        },
+        { headers: this.headers }
+      );
+
+      return response.data;
+    }
   }
 
   async sendMessage(payload: MetaMessagePayload): Promise<any> {
