@@ -66,9 +66,11 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           });
           
           const contactPhone = data.phoneNumber || data.sender?.replace('@s.whatsapp.net', '') || data.from;
-          const contactName = data.pushName || '';
           const contactJid = data.from;
           const isFromMe = data.isFromMe || false;
+          // Only use pushName for incoming messages (when isFromMe is false)
+          // For outgoing messages (isFromMe: true), pushName is the business name, not the contact
+          const contactName = isFromMe ? '' : (data.pushName || '');
           
           await prisma.messageLog.create({
             data: {
