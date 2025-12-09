@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
@@ -45,6 +45,15 @@ interface WindowStatus {
   message: string;
 }
 
+interface Template {
+  id: string;
+  name: string;
+  status: string;
+  category: string;
+  language: string;
+  components: any[];
+}
+
 interface DailyContactStats {
   count: number;
   limit: number;
@@ -75,6 +84,9 @@ export default function ChatPage() {
   const [dailyContacts, setDailyContacts] = useState<DailyContactStats | null>(null);
   const [contactBotDisabled, setContactBotDisabled] = useState<boolean>(false);
   const [contactBotToggling, setContactBotToggling] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [sendingTemplate, setSendingTemplate] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -244,6 +256,42 @@ export default function ChatPage() {
       console.error('Failed to fetch window status:', err);
     }
   };
+
+  const fetchTemplates = async () => {
+    if (!currentBusiness) return;
+    try {
+      const response = await templatesApi.list(currentBusiness.id);
+      const approvedTemplates = (response.data || []).filter((t: Template) => t.status === 'APPROVED');
+      setTemplates(approvedTemplates);
+    } catch (err) {
+      console.error('Failed to fetch templates:', err);
+    }
+  };
+
+  const handleSendTemplate = async (template: Template) => {
+    if (!currentBusiness || !selectedPhone) return;
+    setSendingTemplate(true);
+    try {
+      await templatesApi.send(currentBusiness.id, {
+        templateName: template.name,
+        to: selectedPhone
+      });
+      setShowTemplateModal(false);
+      fetchMessages(selectedPhone);
+    } catch (err: any) {
+      console.error('Failed to send template:', err);
+      setError(err.response?.data?.error || 'Error al enviar plantilla');
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setSendingTemplate(false);
+    }
+  };
+
+  useEffect(() => {
+    if (windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen) {
+      fetchTemplates();
+    }
+  }, [windowStatus, currentBusiness]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -620,10 +668,10 @@ export default function ChatPage() {
               <form onSubmit={handleSend} className="p-3 border-t border-dark-border bg-dark-card safe-area-pb">
                 <div className="flex items-center gap-2">
                   <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx" />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-full transition-colors" disabled={sending}>
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-shrink-0 p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-full transition-colors" disabled={sending || (windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen)}>
                     <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
-                  <button type="button" onClick={isRecording ? handleStopRecording : handleStartRecording} className={`p-2.5 rounded-full transition-colors ${isRecording ? 'bg-accent-error text-white animate-pulse' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`} disabled={sending && !isRecording}>
+                  <button type="button" onClick={isRecording ? handleStopRecording : handleStartRecording} className={`flex-shrink-0 p-2.5 rounded-full transition-colors ${isRecording ? 'bg-accent-error text-white animate-pulse' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`} disabled={(sending && !isRecording) || (windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen)}>
                     <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
                   </button>
                   <input 
@@ -633,16 +681,27 @@ export default function ChatPage() {
                     onChange={(e) => setNewMessage(e.target.value)} 
                     onFocus={handleInputFocus}
                     onBlur={handleInputBlur}
-                    placeholder="Escribe un mensaje..." 
-                    className="flex-1 px-4 py-2.5 bg-dark-surface border border-dark-border rounded-full text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue/50 text-sm sm:text-base" 
-                    disabled={sending}
+                    placeholder={windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen ? "Ventana cerrada - usa plantilla" : "Escribe un mensaje..."} 
+                    className="flex-1 min-w-0 px-4 py-2.5 bg-dark-surface border border-dark-border rounded-full text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue/50 text-sm sm:text-base" 
+                    disabled={sending || (windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen)}
                     enterKeyHint="send"
                     autoComplete="off"
                     autoCorrect="on"
                   />
-                  <button type="submit" disabled={sending || (!newMessage.trim() && !previewFile)} className="p-2.5 bg-neon-blue text-dark-bg rounded-full hover:bg-neon-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-neon-sm">
-                    {sending ? <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-dark-bg border-t-transparent rounded-full animate-spin" /> : <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>}
-                  </button>
+                  {windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen ? (
+                    <button 
+                      type="button" 
+                      onClick={() => setShowTemplateModal(true)}
+                      className="flex-shrink-0 p-2.5 bg-accent-warning text-dark-bg rounded-full hover:bg-accent-warning/80 transition-colors"
+                      title="Enviar plantilla"
+                    >
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    </button>
+                  ) : (
+                    <button type="submit" disabled={sending || (!newMessage.trim() && !previewFile)} className="flex-shrink-0 p-2.5 bg-neon-blue text-dark-bg rounded-full hover:bg-neon-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-neon-sm">
+                      {sending ? <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-dark-bg border-t-transparent rounded-full animate-spin" /> : <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>}
+                    </button>
+                  )}
                 </div>
               </form>
             </>
@@ -657,6 +716,48 @@ export default function ChatPage() {
           )}
         </div>
       </div>
+
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card border border-dark-border rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b border-dark-border flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Seleccionar Plantilla</h3>
+              <button onClick={() => setShowTemplateModal(false)} className="p-1 text-gray-400 hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {templates.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-400">No hay plantillas aprobadas</p>
+                  <p className="text-gray-500 text-sm mt-2">Ve a Plantillas para sincronizar desde Meta</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {templates.map((template) => (
+                    <button
+                      key={template.id}
+                      onClick={() => handleSendTemplate(template)}
+                      disabled={sendingTemplate}
+                      className="w-full p-3 bg-dark-surface border border-dark-border rounded-lg text-left hover:border-neon-blue transition-colors disabled:opacity-50"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-white">{template.name}</span>
+                        <span className="text-xs px-2 py-0.5 bg-accent-success/20 text-accent-success rounded">{template.category}</span>
+                      </div>
+                      <p className="text-sm text-gray-400">
+                        {template.components?.find((c: any) => c.type === 'BODY')?.text?.substring(0, 100) || 'Sin contenido de cuerpo'}
+                        {(template.components?.find((c: any) => c.type === 'BODY')?.text?.length || 0) > 100 && '...'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Idioma: {template.language}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

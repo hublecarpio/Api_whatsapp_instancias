@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../services/prisma.js';
 import { MetaCloudService, MetaWebhookPayload } from '../services/metaCloud.js';
 import { processIncomingMessage } from '../services/messageIngest.js';
+import { uploadBuffer, isS3Configured } from '../services/storage.js';
 
 const router = Router();
 
@@ -104,9 +105,29 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
       if (msg.mediaId) {
         try {
           const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
-          mediaUrl = metaMediaUrl;
+          
+          if (isS3Configured()) {
+            console.log('[META WEBHOOK] Downloading media from Meta to upload to S3...');
+            const mediaBuffer = await metaService.downloadMedia(metaMediaUrl);
+            const uploadResult = await uploadBuffer(
+              mediaBuffer, 
+              msg.mimetype || 'application/octet-stream', 
+              instance.businessId
+            );
+            
+            if (uploadResult) {
+              mediaUrl = uploadResult.url;
+              console.log('[META WEBHOOK] Media uploaded to S3:', mediaUrl);
+            } else {
+              console.error('[META WEBHOOK] Failed to upload to S3, using Meta URL');
+              mediaUrl = metaMediaUrl;
+            }
+          } else {
+            console.log('[META WEBHOOK] S3 not configured, using Meta URL directly');
+            mediaUrl = metaMediaUrl;
+          }
         } catch (error) {
-          console.error('Failed to get media URL:', error);
+          console.error('Failed to get/upload media:', error);
         }
       }
 
