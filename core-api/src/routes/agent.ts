@@ -6,6 +6,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/billing.js';
 import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from '../services/openaiService.js';
 import { replacePromptVariables } from '../services/promptVariables.js';
+import { generateWithAgentV2, buildBusinessContext, buildConversationHistory } from '../services/agentV2Service.js';
 
 const router = Router();
 
@@ -326,6 +327,65 @@ async function sendMessageInParts(
   return { sentMedia };
 }
 
+async function processWithAgentV2(
+  business: any,
+  messages: string[],
+  contactPhone: string,
+  contactName: string
+): Promise<{ response: string; tokensUsed?: number }> {
+  const historyLimit = business.promptMaster?.historyLimit || 10;
+  
+  const recentMessages = await prisma.messageLog.findMany({
+    where: { 
+      businessId: business.id,
+      OR: [
+        { sender: contactPhone },
+        { recipient: contactPhone }
+      ]
+    },
+    orderBy: { createdAt: 'desc' },
+    take: historyLimit
+  });
+  
+  const conversationHistory = buildConversationHistory(recentMessages.reverse());
+  const businessContext = buildBusinessContext(
+    business, 
+    business.promptMaster?.prompt
+  );
+  
+  const combinedMessage = messages.join('\n');
+  
+  const result = await generateWithAgentV2({
+    business_context: businessContext,
+    conversation_history: conversationHistory,
+    current_message: combinedMessage,
+    sender_phone: contactPhone,
+    sender_name: contactName || undefined
+  });
+  
+  if (!result.success) {
+    console.error('Agent V2 failed:', result.error);
+    throw new Error(result.error || 'Agent V2 failed to generate response');
+  }
+  
+  if (result.tokens_used) {
+    await logTokenUsage({
+      businessId: business.id,
+      userId: business.userId,
+      feature: 'agent_v2',
+      model: result.model || 'gpt-4o-mini',
+      promptTokens: Math.floor(result.tokens_used * 0.7),
+      completionTokens: Math.floor(result.tokens_used * 0.3),
+      totalTokens: result.tokens_used
+    });
+  }
+  
+  return { 
+    response: result.response || '', 
+    tokensUsed: result.tokens_used 
+  };
+}
+
 async function processWithAgent(
   businessId: string,
   messages: string[],
@@ -350,6 +410,10 @@ async function processWithAgent(
   
   if (!business.botEnabled) {
     return { response: '' };
+  }
+  
+  if (business.agentVersion === 'v2') {
+    return await processWithAgentV2(business, messages, contactPhone, contactName);
   }
   
   if (!isOpenAIConfigured()) {
