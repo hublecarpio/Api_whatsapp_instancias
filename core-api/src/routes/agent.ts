@@ -331,9 +331,12 @@ async function processWithAgentV2(
   business: any,
   messages: string[],
   contactPhone: string,
-  contactName: string
+  contactName: string,
+  phone: string,
+  instanceBackendId?: string
 ): Promise<{ response: string; tokensUsed?: number }> {
   const historyLimit = business.promptMaster?.historyLimit || 10;
+  const splitMessages = business.promptMaster?.splitMessages ?? true;
   
   const recentMessages = await prisma.messageLog.findMany({
     where: { 
@@ -380,8 +383,53 @@ async function processWithAgentV2(
     });
   }
   
+  const aiResponse = result.response || '';
+  
+  // Send response to WhatsApp
+  const instance = business.instances?.[0];
+  const backendId = instanceBackendId || instance?.instanceBackendId;
+  
+  if (backendId && aiResponse) {
+    try {
+      // Mark messages as read before responding
+      try {
+        await axios.post(`${WA_API_URL}/instances/${backendId}/markAsRead`, {
+          from: phone
+        });
+      } catch (readError: any) {
+        console.log('Could not mark messages as read:', readError.message);
+      }
+      
+      // Send the message
+      const { sentMedia } = await sendMessageInParts(backendId, phone, aiResponse, splitMessages);
+      
+      // Log the outbound message
+      await prisma.messageLog.create({
+        data: {
+          businessId: business.id,
+          instanceId: instance?.id,
+          direction: 'outbound',
+          recipient: contactPhone,
+          message: aiResponse,
+          metadata: {
+            contactJid: phone,
+            contactPhone,
+            contactName: contactName || '',
+            agentVersion: 'v2',
+            splitMessages,
+            sentMedia: sentMedia.length > 0 ? sentMedia.map((m: any) => ({ type: m.type, url: m.url })) : undefined
+          }
+        }
+      });
+      
+      console.log(`[Agent V2] Response sent to ${contactPhone}:`, aiResponse.substring(0, 100));
+    } catch (sendError: any) {
+      console.error('Failed to send WhatsApp message (V2):', sendError.response?.data || sendError.message);
+    }
+  }
+  
   return { 
-    response: result.response || '', 
+    response: aiResponse, 
     tokensUsed: result.tokens_used 
   };
 }
@@ -413,7 +461,9 @@ async function processWithAgent(
   }
   
   if (business.agentVersion === 'v2') {
-    return await processWithAgentV2(business, messages, contactPhone, contactName);
+    const instance = business.instances?.[0];
+    const backendId = instanceId || instance?.instanceBackendId || undefined;
+    return await processWithAgentV2(business, messages, contactPhone, contactName, phone, backendId);
   }
   
   if (!isOpenAIConfigured()) {
