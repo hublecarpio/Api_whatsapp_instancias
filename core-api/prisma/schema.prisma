@@ -42,6 +42,7 @@ model Business {
   openaiApiKey String?
   openaiModel  String?            @default("gpt-4.1-mini")
   botEnabled   Boolean            @default(true)
+  timezone     String             @default("America/Lima")
   createdAt    DateTime           @default(now())
 
   user           User               @relation(fields: [userId], references: [id])

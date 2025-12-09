@@ -5,6 +5,7 @@ import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/billing.js';
 import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from '../services/openaiService.js';
+import { replacePromptVariables } from '../services/promptVariables.js';
 
 const router = Router();
 
@@ -419,6 +420,8 @@ async function processWithAgent(
       }
     }
   }
+  
+  systemPrompt = replacePromptVariables(systemPrompt, business.timezone || 'America/Lima');
   
   const recentMessages = await prisma.messageLog.findMany({
     where: { 
