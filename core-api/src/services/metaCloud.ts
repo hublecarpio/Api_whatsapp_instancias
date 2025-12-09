@@ -236,7 +236,7 @@ export class MetaCloudService {
         { headers: this.headers }
       );
 
-      console.log('[META] Audio message sent successfully');
+      console.log('[META] Audio message sent successfully as voice note');
       return response.data;
     } catch (uploadError: any) {
       console.error('[META] Audio upload/send failed:', uploadError.response?.data || uploadError.message);
