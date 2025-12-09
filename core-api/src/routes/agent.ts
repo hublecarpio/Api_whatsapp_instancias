@@ -602,6 +602,15 @@ async function processWithAgent(
   const instance = business.instances[0];
   if (instance && instance.instanceBackendId) {
     try {
+      // Mark messages as read (blue checkmarks) before responding
+      try {
+        await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/markAsRead`, {
+          from: phone
+        });
+      } catch (readError: any) {
+        console.log('Could not mark messages as read:', readError.message);
+      }
+      
       const { sentMedia } = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
       
       await prisma.messageLog.create({

@@ -632,6 +632,53 @@ router.delete('/instances/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Mark messages as read (blue checkmarks)
+router.post('/instances/:id/markAsRead', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { from } = req.body;
+
+    if (!from) {
+      return res.status(400).json({
+        success: false,
+        error: '"from" (phone number or JID) is required'
+      } as ApiResponse);
+    }
+
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.markAsRead(from);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        from,
+        status: 'read'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to mark messages as read');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 // Send message to LID directly
 router.post('/instances/:id/sendToLid', async (req: Request, res: Response) => {
   try {

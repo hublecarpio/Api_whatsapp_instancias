@@ -668,6 +668,34 @@ export class WhatsAppInstance {
     }
   }
 
+  // Mark messages as read (blue checkmarks) for a specific contact
+  async markAsRead(from: string): Promise<{ success: boolean; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Instance not connected' };
+    }
+
+    try {
+      const jid = this.formatJid(from);
+      
+      // Send read receipt - this marks all messages from this contact as read
+      await this.socket.readMessages([{
+        remoteJid: jid,
+        id: '', // Empty ID marks all unread messages as read
+        participant: undefined
+      }]);
+      
+      // Also send "available" presence to show we're online
+      await this.socket.sendPresenceUpdate('available', jid);
+      
+      this.logger.info({ from: jid }, 'Messages marked as read');
+      
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, from }, 'Failed to mark messages as read');
+      return { success: false, error: error.message };
+    }
+  }
+
   async sendText(to: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     if (!this.socket || this.status !== 'connected') {
       return { success: false, error: 'Instance not connected' };
