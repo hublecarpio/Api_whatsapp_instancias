@@ -132,7 +132,7 @@ export function buildConversationHistory(
   messages: any[]
 ): Message[] {
   return messages.map(m => ({
-    role: m.direction === 'outgoing' ? 'assistant' : 'user',
-    content: m.content || ''
+    role: m.direction === 'outbound' ? 'assistant' : 'user',
+    content: m.message || ''
   }));
 }

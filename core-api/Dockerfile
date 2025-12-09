@@ -35,6 +35,7 @@ RUN chmod +x ./entrypoint.sh && chown -R node:node /app
 
 ENV NODE_ENV=production
 ENV CORE_API_PORT=4001
+ENV AGENT_V2_URL=http://agent-v2:5001
 
 USER node
 
