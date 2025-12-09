@@ -48,7 +48,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
+args = "WA_PORT=8080 npm run dev"
 waitForPort = 8080
 
 [[workflows.workflow]]
@@ -88,5 +88,5 @@ localPort = 8080
 externalPort = 8080
 
 [[ports]]
-localPort = 38979
+localPort = 36571
 externalPort = 3000

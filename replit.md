@@ -102,6 +102,34 @@ The platform follows a microservices-like architecture comprising three main com
 *   **Security**: JWT-based authentication for securing API endpoints.
 *   **Observability**: Message logging and tool execution history for monitoring AI agent performance.
 
+## Environment Configuration (Replit vs Docker Swarm)
+
+The application uses environment variables to handle different deployment environments:
+
+### Replit (Development)
+```
+PORT=5000
+CORE_API_PORT=3001
+CORE_API_URL=http://localhost:3001
+WA_PORT=8080
+WA_API_URL=http://localhost:8080
+```
+
+### Docker Swarm (Production)
+```yaml
+# Frontend service
+NEXT_PUBLIC_API_URL: http://core-api:4001
+
+# Core API service
+WA_API_URL: http://whatsapp-api:4080
+
+# WhatsApp API service
+WA_PORT: 4080
+CORE_API_URL: http://core-api:4001
+```
+
+**Important**: Never connect the same WhatsApp number in both Replit and production simultaneously - this causes connection conflicts (error 440: Stream Errored).
+
 ## External Dependencies
 
 *   **PostgreSQL**: Primary database for all application data, managed via Prisma ORM.
