@@ -27,6 +27,7 @@ ENV PORT=4000
 
 ARG NEXT_PUBLIC_API_URL=http://core-api:4001
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV CORE_API_URL=http://core-api:4001
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
