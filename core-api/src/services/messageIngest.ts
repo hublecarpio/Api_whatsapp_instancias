@@ -67,6 +67,20 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     return;
   }
 
+  const contactSettings = await prisma.contactSettings.findUnique({
+    where: {
+      businessId_contactPhone: {
+        businessId,
+        contactPhone: cleanPhone
+      }
+    }
+  });
+
+  if (contactSettings?.botDisabled) {
+    console.log('Bot disabled for contact:', cleanPhone, 'in business:', businessId);
+    return;
+  }
+
   const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
   try {
     await axios.post(`${CORE_API_URL}/agent/think`, {
