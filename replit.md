@@ -83,6 +83,18 @@ The platform follows a microservices-like architecture comprising three main com
     - Per-contact disabled takes precedence over global enabled
     - Chat panel displays contact-level bot status with toggle button
     - Visual indicators: green when active, red when contact-disabled, gray when global-disabled
+*   **Dynamic Prompt Variables**:
+    - Variables: `{{now}}`, `{{date}}`, `{{time}}`, `{{day_of_week}}`, `{{day}}`, `{{month}}`, `{{year}}`, `{{hour}}`, `{{minute}}`
+    - Spanish locale formatting (e.g., "Lunes 9 de Diciembre 2024, 20:30")
+    - Configurable timezone per business (stored in Business model, default: America/Lima)
+    - Timezone selector in Business settings page with common Latin American/US/European options
+    - Variables replaced before sending prompt to OpenAI
+    - Service: `core-api/src/services/promptVariables.ts` using Intl.DateTimeFormat
+*   **Timezone-Aware Reminder System**:
+    - Reminder worker respects business timezone for allowed hours (allowedStartHour, allowedEndHour)
+    - Weekend detection uses business timezone instead of server time
+    - Runs every 60 seconds via setInterval (fallback mode when Redis unavailable)
+    - Detects client inactivity and schedules follow-up reminders automatically
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM for type-safe database access and schema management.
