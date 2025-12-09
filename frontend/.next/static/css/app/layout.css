@@ -828,11 +828,20 @@ video {
 .-right-1 {
   right: -0.25rem;
 }
+.left-2\.5 {
+  left: 0.625rem;
+}
 .right-0 {
   right: 0px;
 }
+.right-2 {
+  right: 0.5rem;
+}
 .top-0 {
   top: 0px;
+}
+.top-1\/2 {
+  top: 50%;
 }
 .top-3 {
   top: 0.75rem;
@@ -944,6 +953,9 @@ video {
 .h-24 {
   height: 6rem;
 }
+.h-3 {
+  height: 0.75rem;
+}
 .h-3\.5 {
   height: 0.875rem;
 }
@@ -980,17 +992,20 @@ video {
 .h-screen {
   height: 100vh;
 }
+.max-h-40 {
+  max-height: 10rem;
+}
 .max-h-64 {
   max-height: 16rem;
+}
+.max-h-\[60vh\] {
+  max-height: 60vh;
 }
 .max-h-\[80vh\] {
   max-height: 80vh;
 }
 .max-h-\[90vh\] {
   max-height: 90vh;
-}
-.max-h-\[60vh\] {
-  max-height: 60vh;
 }
 .min-h-0 {
   min-height: 0px;
@@ -1027,6 +1042,9 @@ video {
 }
 .w-24 {
   width: 6rem;
+}
+.w-3 {
+  width: 0.75rem;
 }
 .w-3\.5 {
   width: 0.875rem;
@@ -1093,6 +1111,10 @@ video {
 }
 .flex-shrink-0 {
   flex-shrink: 0;
+}
+.-translate-y-1\/2 {
+  --tw-translate-y: -50%;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 .scale-110 {
   --tw-scale-x: 1.1;
@@ -1404,6 +1426,9 @@ video {
 .bg-black\/60 {
   background-color: rgb(0 0 0 / 0.6);
 }
+.bg-blue-500\/20 {
+  background-color: rgb(59 130 246 / 0.2);
+}
 .bg-current {
   background-color: currentColor;
 }
@@ -1447,6 +1472,9 @@ video {
 .bg-gray-800\/50 {
   background-color: rgb(31 41 55 / 0.5);
 }
+.bg-green-500\/20 {
+  background-color: rgb(34 197 94 / 0.2);
+}
 .bg-neon-blue {
   --tw-bg-opacity: 1;
   background-color: rgb(0 212 255 / var(--tw-bg-opacity, 1));
@@ -1466,12 +1494,6 @@ video {
 }
 .bg-white\/80 {
   background-color: rgb(255 255 255 / 0.8);
-}
-.bg-blue-500\/20 {
-  background-color: rgb(59 130 246 / 0.2);
-}
-.bg-green-500\/20 {
-  background-color: rgb(34 197 94 / 0.2);
 }
 .object-cover {
   -o-object-fit: cover;
@@ -1575,6 +1597,12 @@ video {
 .pb-1 {
   padding-bottom: 0.25rem;
 }
+.pl-8 {
+  padding-left: 2rem;
+}
+.pr-3 {
+  padding-right: 0.75rem;
+}
 .pt-6 {
   padding-top: 1.5rem;
 }
@@ -1670,6 +1698,10 @@ video {
 .text-accent-warning\/70 {
   color: rgb(245 158 11 / 0.7);
 }
+.text-blue-400 {
+  --tw-text-opacity: 1;
+  color: rgb(96 165 250 / var(--tw-text-opacity, 1));
+}
 .text-dark-bg {
   --tw-text-opacity: 1;
   color: rgb(10 15 28 / var(--tw-text-opacity, 1));
@@ -1690,6 +1722,10 @@ video {
   --tw-text-opacity: 1;
   color: rgb(75 85 99 / var(--tw-text-opacity, 1));
 }
+.text-green-400 {
+  --tw-text-opacity: 1;
+  color: rgb(74 222 128 / var(--tw-text-opacity, 1));
+}
 .text-neon-blue {
   --tw-text-opacity: 1;
   color: rgb(0 212 255 / var(--tw-text-opacity, 1));
@@ -1708,14 +1744,6 @@ video {
 .text-white {
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity, 1));
-}
-.text-blue-400 {
-  --tw-text-opacity: 1;
-  color: rgb(96 165 250 / var(--tw-text-opacity, 1));
-}
-.text-green-400 {
-  --tw-text-opacity: 1;
-  color: rgb(74 222 128 / var(--tw-text-opacity, 1));
 }
 .underline {
   text-decoration-line: underline;
@@ -2009,6 +2037,10 @@ input, textarea, select {
   background-color: rgb(245 158 11 / 0.3);
 }
 
+.hover\:bg-accent-warning\/80:hover {
+  background-color: rgb(245 158 11 / 0.8);
+}
+
 .hover\:bg-dark-border:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(55 65 81 / var(--tw-bg-opacity, 1));
@@ -2042,6 +2074,10 @@ input, textarea, select {
   background-color: rgb(0 212 255 / 0.1);
 }
 
+.hover\:bg-neon-blue\/20:hover {
+  background-color: rgb(0 212 255 / 0.2);
+}
+
 .hover\:bg-neon-blue\/30:hover {
   background-color: rgb(0 212 255 / 0.3);
 }
@@ -2049,10 +2085,6 @@ input, textarea, select {
 .hover\:bg-yellow-600:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(202 138 4 / var(--tw-bg-opacity, 1));
-}
-
-.hover\:bg-accent-warning\/80:hover {
-  background-color: rgb(245 158 11 / 0.8);
 }
 
 .hover\:text-accent-error:hover {

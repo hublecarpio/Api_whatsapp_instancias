@@ -1,8 +1,4 @@
 {
-  "/super-admin/page": "app/super-admin/page.js",
-  "/dashboard/chat/page": "app/dashboard/chat/page.js",
-  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
-  "/dashboard/templates/page": "app/dashboard/templates/page.js",
-  "/dashboard/reminders/page": "app/dashboard/reminders/page.js",
-  "/dashboard/tags/page": "app/dashboard/tags/page.js"
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js"
 }

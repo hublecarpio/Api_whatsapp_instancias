@@ -87,6 +87,15 @@ export default function ChatPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [sendingTemplate, setSendingTemplate] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [newChatPhone, setNewChatPhone] = useState('');
+  const [newChatMessage, setNewChatMessage] = useState('');
+  const [newChatSending, setNewChatSending] = useState(false);
+  const [instanceProvider, setInstanceProvider] = useState<string | null>(null);
+  const [newChatTemplates, setNewChatTemplates] = useState<Template[]>([]);
+  const [newChatUseTemplate, setNewChatUseTemplate] = useState(false);
+  const [selectedNewChatTemplate, setSelectedNewChatTemplate] = useState<Template | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -292,6 +301,100 @@ export default function ChatPage() {
       fetchTemplates();
     }
   }, [windowStatus, currentBusiness]);
+
+  const fetchInstanceProvider = async () => {
+    if (!currentBusiness) return;
+    try {
+      const response = await waApi.status(currentBusiness.id);
+      if (response.data?.provider) {
+        setInstanceProvider(response.data.provider);
+      }
+    } catch (err) {
+      console.error('Failed to fetch instance provider:', err);
+    }
+  };
+
+  const fetchNewChatTemplates = async () => {
+    if (!currentBusiness) return;
+    try {
+      const response = await templatesApi.list(currentBusiness.id);
+      const approvedTemplates = (response.data || []).filter((t: Template) => t.status === 'APPROVED');
+      setNewChatTemplates(approvedTemplates);
+    } catch (err) {
+      console.error('Failed to fetch templates for new chat:', err);
+    }
+  };
+
+  const openNewChatModal = () => {
+    setNewChatPhone('');
+    setNewChatMessage('');
+    setNewChatUseTemplate(false);
+    setSelectedNewChatTemplate(null);
+    fetchInstanceProvider();
+    if (instanceProvider === 'META_CLOUD') {
+      fetchNewChatTemplates();
+    }
+    setShowNewChatModal(true);
+  };
+
+  useEffect(() => {
+    if (showNewChatModal && instanceProvider === 'META_CLOUD') {
+      fetchNewChatTemplates();
+    }
+  }, [showNewChatModal, instanceProvider]);
+
+  const handleSendNewChat = async () => {
+    if (!currentBusiness || !newChatPhone.trim()) return;
+    
+    const cleanPhone = newChatPhone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      setError('Numero invalido');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    setNewChatSending(true);
+    setError(null);
+
+    try {
+      if (newChatUseTemplate && selectedNewChatTemplate) {
+        await templatesApi.send(currentBusiness.id, {
+          templateName: selectedNewChatTemplate.name,
+          to: cleanPhone
+        });
+      } else if (newChatMessage.trim()) {
+        await waApi.send(currentBusiness.id, { 
+          to: cleanPhone, 
+          message: newChatMessage 
+        });
+      } else {
+        setError('Escribe un mensaje o selecciona una plantilla');
+        setNewChatSending(false);
+        return;
+      }
+
+      setShowNewChatModal(false);
+      fetchConversations();
+      setSelectedPhone(cleanPhone);
+      setSelectedContactName('');
+      fetchMessages(cleanPhone);
+      fetchWindowStatus(cleanPhone);
+    } catch (err: any) {
+      console.error('Failed to send new chat:', err);
+      setError(err.response?.data?.error || 'Error al enviar mensaje');
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setNewChatSending(false);
+    }
+  };
+
+  const filteredConversations = conversations.filter(conv => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const phoneMatch = conv.phone.toLowerCase().includes(query);
+    const nameMatch = conv.contactName?.toLowerCase().includes(query);
+    return phoneMatch || nameMatch;
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -519,7 +622,10 @@ export default function ChatPage() {
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-white">Chats</h2>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400 bg-dark-hover px-2 py-0.5 rounded-full">{conversations.length}</span>
+                <span className="text-xs text-gray-400 bg-dark-hover px-2 py-0.5 rounded-full">{filteredConversations.length}</span>
+                <button onClick={openNewChatModal} className="p-1.5 rounded-lg text-neon-blue hover:bg-neon-blue/20 transition-colors" title="Nuevo chat">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                </button>
                 <button onClick={() => setViewMode(viewMode === 'list' ? 'kanban' : 'list')} className={`p-1.5 rounded-lg transition-colors ${viewMode === 'kanban' ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:bg-dark-hover'}`}>
                   {viewMode === 'list' ? (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
@@ -528,6 +634,21 @@ export default function ChatPage() {
                   )}
                 </button>
               </div>
+            </div>
+            <div className="relative mb-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por numero o nombre..."
+                className="w-full pl-8 pr-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-blue"
+              />
+              <svg className="w-4 h-4 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              )}
             </div>
             {dailyContacts && (
               <div className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg mb-2 ${dailyContacts.remaining <= 10 ? 'bg-accent-error/20 text-accent-error' : dailyContacts.remaining <= 25 ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
@@ -551,15 +672,15 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto scrollbar-thin scroll-smooth-ios">
             {loading ? (
               <div className="p-4 text-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-neon-blue mx-auto" /></div>
-            ) : conversations.length === 0 ? (
+            ) : filteredConversations.length === 0 ? (
               <div className="p-6 text-center text-gray-500 text-sm">
                 <div className="w-16 h-16 mx-auto mb-3 bg-dark-card rounded-full flex items-center justify-center">
                   <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
                 </div>
-                No hay conversaciones
+                {searchQuery ? 'No se encontraron resultados' : 'No hay conversaciones'}
               </div>
             ) : (
-              (viewMode === 'kanban' ? getConversationsByTag(selectedTag) : conversations).map((conv) => {
+              (viewMode === 'kanban' ? getConversationsByTag(selectedTag) : filteredConversations).map((conv) => {
                 const contactTag = getContactTag(conv.phone);
                 return (
                   <button key={conv.phone} onClick={() => { setSelectedPhone(conv.phone); setSelectedContactName(conv.contactName || ''); setChatListOpen(false); }} className={`w-full p-3 text-left hover:bg-dark-hover transition-colors flex items-center gap-3 ${selectedPhone === conv.phone ? 'bg-neon-blue/10 border-l-2 border-neon-blue' : ''}`}>
@@ -753,6 +874,107 @@ export default function ChatPage() {
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNewChatModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card border border-dark-border rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b border-dark-border flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Nuevo Chat</h3>
+              <button onClick={() => setShowNewChatModal(false)} className="p-1 text-gray-400 hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Numero de telefono</label>
+                <input
+                  type="tel"
+                  value={newChatPhone}
+                  onChange={(e) => setNewChatPhone(e.target.value)}
+                  placeholder="51999999999"
+                  className="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue"
+                />
+                <p className="text-xs text-gray-500 mt-1">Incluye el codigo de pais sin + ni espacios</p>
+              </div>
+
+              {instanceProvider === 'META_CLOUD' && newChatTemplates.length > 0 && (
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-gray-400 mb-2">
+                    <input
+                      type="checkbox"
+                      checked={newChatUseTemplate}
+                      onChange={(e) => setNewChatUseTemplate(e.target.checked)}
+                      className="w-4 h-4 rounded bg-dark-surface border-dark-border text-neon-blue focus:ring-neon-blue"
+                    />
+                    Usar plantilla (Meta Cloud)
+                  </label>
+                  {newChatUseTemplate && (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {newChatTemplates.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => setSelectedNewChatTemplate(template)}
+                          className={`w-full p-2 text-left rounded-lg border transition-colors ${
+                            selectedNewChatTemplate?.id === template.id 
+                              ? 'border-neon-blue bg-neon-blue/10' 
+                              : 'border-dark-border bg-dark-surface hover:border-gray-600'
+                          }`}
+                        >
+                          <span className="text-sm text-white">{template.name}</span>
+                          <p className="text-xs text-gray-500 truncate">
+                            {template.components?.find((c: any) => c.type === 'BODY')?.text?.substring(0, 50) || ''}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!newChatUseTemplate && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Mensaje</label>
+                  <textarea
+                    value={newChatMessage}
+                    onChange={(e) => setNewChatMessage(e.target.value)}
+                    placeholder="Escribe tu mensaje..."
+                    rows={3}
+                    className="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue resize-none"
+                  />
+                </div>
+              )}
+
+              {error && (
+                <div className="px-3 py-2 bg-accent-error/10 border border-accent-error/20 rounded-lg text-accent-error text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                onClick={handleSendNewChat}
+                disabled={newChatSending || !newChatPhone.trim() || (!newChatMessage.trim() && !selectedNewChatTemplate)}
+                className="w-full py-2.5 bg-neon-blue text-dark-bg rounded-lg font-medium hover:bg-neon-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {newChatSending ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-dark-bg border-t-transparent rounded-full animate-spin" />
+                    Enviando...
+                  </div>
+                ) : (
+                  'Enviar mensaje'
+                )}
+              </button>
+
+              {instanceProvider === 'META_CLOUD' && (
+                <p className="text-xs text-gray-500 text-center">
+                  Para numeros nuevos en Meta Cloud, usa una plantilla aprobada
+                </p>
               )}
             </div>
           </div>
