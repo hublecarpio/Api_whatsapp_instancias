@@ -548,13 +548,7 @@ const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
 router.get('/wa-instances', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
   try {
-    const waResponse = await fetch(`${WA_API_URL}/instances`);
-    const waData = await waResponse.json();
-    
-    if (!waData.success) {
-      return res.status(500).json({ error: 'Failed to get WhatsApp API instances' });
-    }
-    
+    // Get all instances from database (both Baileys and Meta Cloud)
     const dbInstances = await prisma.whatsAppInstance.findMany({
       include: {
         business: {
@@ -563,29 +557,63 @@ router.get('/wa-instances', superAdminMiddleware, async (req: SuperAdminRequest,
       }
     });
     
-    const dbInstanceMap = new Map(dbInstances.map(i => [i.instanceBackendId, i]));
+    // Try to get Baileys instances from WA API
+    let baileysInstances: any[] = [];
+    try {
+      const waResponse = await fetch(`${WA_API_URL}/instances`);
+      const waData = await waResponse.json();
+      if (waData.success) {
+        baileysInstances = waData.data.instances || [];
+      }
+    } catch (err) {
+      console.log('Could not connect to WhatsApp API, showing only database instances');
+    }
     
-    const enrichedInstances = waData.data.instances.map((inst: any) => {
-      const dbRecord = dbInstanceMap.get(inst.id);
+    const baileysInstanceMap = new Map(baileysInstances.map((i: any) => [i.id, i]));
+    const processedBackendIds = new Set<string>();
+    
+    // First, process Baileys instances from WA API
+    const enrichedBaileysInstances = baileysInstances.map((inst: any) => {
+      const dbRecord = dbInstances.find(d => d.instanceBackendId === inst.id);
+      processedBackendIds.add(inst.id);
       return {
         ...inst,
         businessId: dbRecord?.businessId || null,
         businessName: dbRecord?.business?.name || null,
         userEmail: dbRecord?.business?.user?.email || null,
-        provider: dbRecord?.provider || 'baileys',
+        phoneNumber: dbRecord?.phoneNumber || inst.phoneNumber,
+        provider: 'BAILEYS',
         inDatabase: !!dbRecord
       };
     });
     
-    const orphanedInstances = enrichedInstances.filter((i: any) => !i.inDatabase);
+    // Then, add Meta Cloud instances from database (they don't exist in WA API)
+    const metaCloudInstances = dbInstances
+      .filter(inst => inst.provider === 'META_CLOUD')
+      .map(inst => ({
+        id: inst.id,
+        status: inst.status === 'connected' ? 'connected' : inst.status,
+        businessId: inst.businessId,
+        businessName: inst.business?.name || null,
+        userEmail: inst.business?.user?.email || null,
+        phoneNumber: inst.phoneNumber,
+        provider: 'META_CLOUD',
+        inDatabase: true,
+        lastConnection: inst.lastConnection
+      }));
+    
+    const allInstances = [...enrichedBaileysInstances, ...metaCloudInstances];
+    const orphanedInstances = allInstances.filter((i: any) => !i.inDatabase);
     
     res.json({
-      instances: enrichedInstances,
+      instances: allInstances,
       summary: {
-        total: enrichedInstances.length,
-        connected: enrichedInstances.filter((i: any) => i.status === 'connected').length,
-        requiresQr: enrichedInstances.filter((i: any) => i.status === 'requires_qr').length,
-        orphaned: orphanedInstances.length
+        total: allInstances.length,
+        connected: allInstances.filter((i: any) => i.status === 'connected').length,
+        requiresQr: allInstances.filter((i: any) => i.status === 'requires_qr').length,
+        orphaned: orphanedInstances.length,
+        baileys: enrichedBaileysInstances.length,
+        metaCloud: metaCloudInstances.length
       }
     });
   } catch (error: any) {

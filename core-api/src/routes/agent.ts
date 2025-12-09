@@ -7,6 +7,7 @@ import { requireActiveSubscription } from '../middleware/billing.js';
 import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from '../services/openaiService.js';
 import { replacePromptVariables } from '../services/promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory } from '../services/agentV2Service.js';
+import { MetaCloudService } from '../services/metaCloud.js';
 
 const router = Router();
 
@@ -448,7 +449,7 @@ async function processWithAgent(
       policy: true,
       promptMaster: { include: { tools: { where: { enabled: true } } } },
       products: true,
-      instances: true
+      instances: { include: { metaCredential: true } }
     }
   });
   
@@ -717,18 +718,54 @@ async function processWithAgent(
   }
   
   const instance = business.instances[0];
-  if (instance && instance.instanceBackendId) {
+  if (instance) {
     try {
-      // Mark messages as read (blue checkmarks) before responding
-      try {
-        await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/markAsRead`, {
-          from: phone
-        });
-      } catch (readError: any) {
-        console.log('Could not mark messages as read:', readError.message);
-      }
+      let sentMedia: MediaItem[] = [];
       
-      const { sentMedia } = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
+      if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
+        // Send via Meta Cloud API
+        console.log('[META CLOUD] Sending response via Meta Cloud API');
+        const metaService = new MetaCloudService({
+          accessToken: instance.metaCredential.accessToken,
+          phoneNumberId: instance.metaCredential.phoneNumberId,
+          businessId: instance.metaCredential.businessId
+        });
+        
+        const { cleanedText } = extractMediaFromText(aiResponse);
+        
+        if (cleanedText) {
+          await metaService.sendMessage({ to: contactPhone, text: cleanedText });
+        }
+        
+        // Handle media items for Meta Cloud
+        const { mediaItems } = extractMediaFromText(aiResponse);
+        for (const media of mediaItems) {
+          try {
+            if (media.type === 'image') {
+              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'image' });
+            } else if (media.type === 'video') {
+              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'video' });
+            } else if (media.type === 'file') {
+              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'document', filename: media.fileName });
+            }
+            sentMedia.push(media);
+          } catch (mediaError: any) {
+            console.error(`Failed to send media via Meta Cloud: ${media.url}`, mediaError.message);
+          }
+        }
+      } else if (instance.instanceBackendId) {
+        // Send via Baileys API
+        try {
+          await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/markAsRead`, {
+            from: phone
+          });
+        } catch (readError: any) {
+          console.log('Could not mark messages as read:', readError.message);
+        }
+        
+        const result = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
+        sentMedia = result.sentMedia;
+      }
       
       await prisma.messageLog.create({
         data: {
@@ -741,6 +778,7 @@ async function processWithAgent(
             contactJid: phone,
             contactPhone,
             contactName: contactName || '',
+            provider: instance.provider,
             splitMessages,
             sentMedia: sentMedia.length > 0 ? sentMedia.map(m => ({ type: m.type, url: m.url })) : undefined
           }

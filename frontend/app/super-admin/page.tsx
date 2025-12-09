@@ -721,11 +721,13 @@ function WhatsAppTab({ token }: { token: string }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <StatCard title="Total" value={data.summary?.total || 0} />
         <StatCard title="Conectadas" value={data.summary?.connected || 0} color="green" />
         <StatCard title="Esperando QR" value={data.summary?.requiresQr || 0} color="yellow" />
         <StatCard title="Huerfanas" value={data.summary?.orphaned || 0} color="red" />
+        <StatCard title="Baileys" value={data.summary?.baileys || 0} color="neon" />
+        <StatCard title="Meta Cloud" value={data.summary?.metaCloud || 0} color="green" />
       </div>
 
       <div className="card overflow-x-auto">
@@ -733,18 +735,28 @@ function WhatsAppTab({ token }: { token: string }) {
           <thead>
             <tr className="border-b border-dark-border">
               <th className="text-left py-3 px-4 text-gray-400 font-medium">ID Instancia</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Tipo</th>
               <th className="text-left py-3 px-4 text-gray-400 font-medium">Estado</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Telefono</th>
               <th className="text-left py-3 px-4 text-gray-400 font-medium">Negocio</th>
               <th className="text-left py-3 px-4 text-gray-400 font-medium">Usuario</th>
               <th className="text-left py-3 px-4 text-gray-400 font-medium">En BD</th>
-              <th className="text-left py-3 px-4 text-gray-400 font-medium">Ultima Conexion</th>
               <th className="text-left py-3 px-4 text-gray-400 font-medium">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {data.instances?.map((inst: any) => (
               <tr key={inst.id} className="border-b border-dark-border hover:bg-dark-hover">
-                <td className="py-3 px-4 text-white font-mono text-sm">{inst.id}</td>
+                <td className="py-3 px-4 text-white font-mono text-sm">{inst.id?.substring(0, 12)}...</td>
+                <td className="py-3 px-4">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    inst.provider === 'META_CLOUD' 
+                      ? 'bg-green-500/20 text-green-400' 
+                      : 'bg-blue-500/20 text-blue-400'
+                  }`}>
+                    {inst.provider === 'META_CLOUD' ? 'Meta Cloud' : 'Baileys'}
+                  </span>
+                </td>
                 <td className="py-3 px-4">
                   <span className={`status-badge ${
                     inst.status === 'connected' ? 'status-active' :
@@ -754,6 +766,7 @@ function WhatsAppTab({ token }: { token: string }) {
                     {inst.status}
                   </span>
                 </td>
+                <td className="py-3 px-4 text-gray-300 text-sm">{inst.phoneNumber || '-'}</td>
                 <td className="py-3 px-4 text-gray-300">{inst.businessName || '-'}</td>
                 <td className="py-3 px-4 text-gray-300 text-sm">{inst.userEmail || '-'}</td>
                 <td className="py-3 px-4">
@@ -762,9 +775,6 @@ function WhatsAppTab({ token }: { token: string }) {
                   ) : (
                     <span className="text-accent-error">No (huerfana)</span>
                   )}
-                </td>
-                <td className="py-3 px-4 text-gray-400 text-sm">
-                  {inst.lastConnection ? new Date(inst.lastConnection).toLocaleString() : '-'}
                 </td>
                 <td className="py-3 px-4">
                   <div className="flex gap-2">
