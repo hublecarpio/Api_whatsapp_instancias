@@ -13,6 +13,7 @@ export default function BusinessPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [industry, setIndustry] = useState('');
+  const [timezone, setTimezone] = useState('America/Lima');
   
   const [shippingPolicy, setShippingPolicy] = useState('');
   const [refundPolicy, setRefundPolicy] = useState('');
@@ -24,6 +25,7 @@ export default function BusinessPage() {
       setName(currentBusiness.name);
       setDescription(currentBusiness.description || '');
       setIndustry(currentBusiness.industry || '');
+      setTimezone(currentBusiness.timezone || 'America/Lima');
       
       policyApi.get(currentBusiness.id).then((res) => {
         if (res.data) {
@@ -43,13 +45,13 @@ export default function BusinessPage() {
 
     try {
       if (currentBusiness) {
-        await businessApi.update(currentBusiness.id, { name, description, industry });
+        await businessApi.update(currentBusiness.id, { name, description, industry, timezone });
         
         const refreshed = await businessApi.get(currentBusiness.id);
         setCurrentBusiness(refreshed.data);
         setSuccess('Empresa actualizada correctamente');
       } else {
-        const response = await businessApi.create({ name, description, industry });
+        const response = await businessApi.create({ name, description, industry, timezone });
         setBusinesses([...businesses, response.data]);
         setCurrentBusiness(response.data);
         setSuccess('Empresa creada correctamente');
@@ -141,6 +143,30 @@ export default function BusinessPage() {
               className="input"
               placeholder="Ej: Tecnologia, Retail, Servicios..."
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Zona horaria
+            </label>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="input"
+            >
+              <option value="America/Lima">America/Lima (Peru)</option>
+              <option value="America/Bogota">America/Bogota (Colombia)</option>
+              <option value="America/Mexico_City">America/Mexico_City (Mexico)</option>
+              <option value="America/Argentina/Buenos_Aires">America/Buenos_Aires (Argentina)</option>
+              <option value="America/Santiago">America/Santiago (Chile)</option>
+              <option value="America/Sao_Paulo">America/Sao_Paulo (Brasil)</option>
+              <option value="America/New_York">America/New_York (USA Este)</option>
+              <option value="America/Los_Angeles">America/Los_Angeles (USA Oeste)</option>
+              <option value="Europe/Madrid">Europe/Madrid (Espana)</option>
+              <option value="UTC">UTC</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Usado para variables dinamicas como {"{{now}}"}, {"{{date}}"}, {"{{time}}"}
+            </p>
           </div>
         </div>
       </div>
