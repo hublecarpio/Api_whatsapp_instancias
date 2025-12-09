@@ -204,12 +204,22 @@ NO uses saludos largos. NO uses emojis. Maximo 50 palabras.`
   return response.choices[0]?.message?.content || 'Hola! Tienes alguna pregunta?';
 }
 
-async function isWithinAllowedHours(config: any): Promise<boolean> {
+async function isWithinAllowedHours(config: any, timezone: string = 'America/Lima'): Promise<boolean> {
   const now = new Date();
-  const hour = now.getHours();
-  const day = now.getDay();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    hour12: false,
+    weekday: 'short'
+  });
   
-  if (!config.weekendsEnabled && (day === 0 || day === 6)) {
+  const parts = formatter.formatToParts(now);
+  const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+  const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+  
+  const isWeekend = weekday === 'Sat' || weekday === 'Sun';
+  
+  if (!config.weekendsEnabled && isWeekend) {
     return false;
   }
   
@@ -261,7 +271,9 @@ export async function processReminders(): Promise<void> {
         continue;
       }
       
-      if (config && !(await isWithinAllowedHours(config))) {
+      const businessTimezone = reminder.business.timezone || 'America/Lima';
+      
+      if (config && !(await isWithinAllowedHours(config, businessTimezone))) {
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(config.allowedStartHour, 0, 0, 0);

@@ -9,6 +9,7 @@ interface Business {
   openaiModel?: string;
   openaiApiKey?: string;
   botEnabled: boolean;
+  timezone?: string;
   instances?: any[];
   policy?: any;
   promptMaster?: any;
