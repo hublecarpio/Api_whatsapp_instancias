@@ -120,6 +120,18 @@ The platform follows a microservices-like architecture comprising three main com
     - StatusCode handling: 410 triggers QR regeneration, 401 invalidates session
     - Post-connect resync and message update handler
     - Read receipts with sendReceipt()
+*   **Gemini Multimedia Processing**:
+    - Google Gemini API integration for processing incoming media
+    - Audio transcription: converts voice messages to text before sending to AI orchestrator
+    - Image analysis: describes images and stickers to provide context
+    - Video analysis: describes video content for AI understanding
+    - Service: `core-api/src/services/gemini.ts`
+    - Environment: `GEMINI_API_KEY` and optionally `GEMINI_MODEL` (defaults to gemini-2.0-flash)
+    - Integrated with messageIngest to enrich messages before AI processing
+*   **Meta Cloud Media Upload Flow**:
+    - Downloads media from MinIO/S3, uploads to Meta's media API, uses media_id for sending
+    - Resolves issue with Meta Cloud not accessing private storage URLs
+    - Audio converted to OGG Opus format (48kHz, mono, voip application) for WhatsApp compatibility
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM for type-safe database access and schema management.

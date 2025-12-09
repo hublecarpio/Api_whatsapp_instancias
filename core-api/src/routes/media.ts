@@ -81,16 +81,24 @@ function getMediaType(mimetype: string): 'image' | 'video' | 'audio' | 'file' {
   return 'file';
 }
 
-async function convertAudioToOgg(inputBuffer: Buffer): Promise<Buffer> {
-  const inputPath = join(tmpdir(), `audio_input_${randomUUID()}.webm`);
+async function convertAudioToOgg(inputBuffer: Buffer, inputMimetype: string): Promise<Buffer> {
+  const inputExt = inputMimetype.includes('webm') ? 'webm' : 
+                   inputMimetype.includes('mp3') ? 'mp3' :
+                   inputMimetype.includes('m4a') ? 'm4a' :
+                   inputMimetype.includes('wav') ? 'wav' : 'webm';
+  
+  const inputPath = join(tmpdir(), `audio_input_${randomUUID()}.${inputExt}`);
   const outputPath = join(tmpdir(), `audio_output_${randomUUID()}.ogg`);
   
   try {
     await writeFile(inputPath, inputBuffer);
     
-    await execAsync(`ffmpeg -y -i "${inputPath}" -c:a libopus -b:a 64k -vbr on -compression_level 10 "${outputPath}"`);
+    await execAsync(
+      `ffmpeg -y -i "${inputPath}" -c:a libopus -b:a 128k -ar 48000 -ac 1 -application voip "${outputPath}"`
+    );
     
     const outputBuffer = await readFile(outputPath);
+    console.log(`Audio converted: ${inputBuffer.length} bytes -> ${outputBuffer.length} bytes (OGG Opus)`);
     
     return outputBuffer;
   } finally {
@@ -132,8 +140,8 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
     if (req.file.mimetype === 'audio/webm' || req.file.mimetype.startsWith('audio/')) {
       try {
         console.log('Converting audio to OGG format...');
-        fileBuffer = await convertAudioToOgg(req.file.buffer);
-        fileMimetype = 'audio/ogg';
+        fileBuffer = await convertAudioToOgg(req.file.buffer, req.file.mimetype);
+        fileMimetype = 'audio/ogg; codecs=opus';
         extension = '.ogg';
         console.log('Audio converted successfully');
       } catch (convErr: any) {

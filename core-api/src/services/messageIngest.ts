@@ -1,5 +1,6 @@
 import prisma from './prisma.js';
 import axios from 'axios';
+import { geminiService } from './gemini.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
@@ -42,7 +43,33 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     return;
   }
 
-  const messageText = text || caption || (type === 'location' ? `Location: ${message.location?.latitude}, ${message.location?.longitude}` : '');
+  let messageText = text || caption || (type === 'location' ? `Location: ${message.location?.latitude}, ${message.location?.longitude}` : '');
+
+  let mediaAnalysis = '';
+  if (mediaUrl && geminiService.isConfigured()) {
+    const mediaTypes = ['audio', 'ptt', 'image', 'sticker', 'video'];
+    if (mediaTypes.includes(type)) {
+      console.log(`[GEMINI] Processing ${type} for AI context...`);
+      const result = await geminiService.processMedia(mediaUrl, type, messageText);
+      if (result.success && result.text) {
+        if (type === 'audio' || type === 'ptt') {
+          mediaAnalysis = `[Audio transcription: ${result.text}]`;
+          if (!messageText) {
+            messageText = result.text;
+          }
+        } else if (type === 'image' || type === 'sticker') {
+          mediaAnalysis = `[Image description: ${result.text}]`;
+        } else if (type === 'video') {
+          mediaAnalysis = `[Video description: ${result.text}]`;
+        }
+        console.log(`[GEMINI] Media analysis complete for ${type}`);
+      }
+    }
+  }
+
+  const fullMessageForAgent = mediaAnalysis 
+    ? `${messageText}\n\n${mediaAnalysis}`.trim() 
+    : messageText;
 
   await prisma.messageLog.create({
     data: {
@@ -91,8 +118,9 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
       phone: `${cleanPhone}@s.whatsapp.net`,
       phoneNumber: cleanPhone,
       contactName: pushName,
-      user_message: messageText,
-      mediaUrl
+      user_message: fullMessageForAgent,
+      mediaUrl,
+      mediaAnalysis: mediaAnalysis || undefined
     }, {
       headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
     });

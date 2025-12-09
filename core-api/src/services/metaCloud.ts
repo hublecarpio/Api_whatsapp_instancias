@@ -217,8 +217,12 @@ export class MetaCloudService {
     const cleanPhone = to.replace(/\D/g, '');
 
     try {
-      const { buffer, mimeType } = await this.downloadFromUrl(audioUrl);
-      const mediaId = await this.uploadMedia(buffer, mimeType, 'audio.ogg');
+      console.log('[META] Downloading audio from:', audioUrl);
+      const { buffer } = await this.downloadFromUrl(audioUrl);
+      console.log(`[META] Audio downloaded: ${buffer.length} bytes`);
+      
+      const mediaId = await this.uploadMedia(buffer, 'audio/ogg', 'voice.ogg');
+      console.log('[META] Audio uploaded to Meta, media_id:', mediaId);
       
       const response = await axios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
@@ -232,22 +236,11 @@ export class MetaCloudService {
         { headers: this.headers }
       );
 
+      console.log('[META] Audio message sent successfully');
       return response.data;
     } catch (uploadError: any) {
-      console.error('Media upload failed, trying direct URL:', uploadError.message);
-      const response = await axios.post(
-        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'audio',
-          audio: { link: audioUrl }
-        },
-        { headers: this.headers }
-      );
-
-      return response.data;
+      console.error('[META] Audio upload/send failed:', uploadError.response?.data || uploadError.message);
+      throw uploadError;
     }
   }
 
