@@ -65,11 +65,18 @@ The platform follows a microservices-like architecture comprising three main com
     - Centralized administration panel at `/super-admin` for platform monitoring
     - Environment-based authentication using `SUPER_ADMIN_USER` and `SUPER_ADMIN_PASS`
     - Separate session management with Redis-backed tokens
-    - Dashboard tabs: Overview, Users, Businesses, Token Usage, Messages, Billing, System
+    - Dashboard tabs: Overview, Users, Businesses, WhatsApp, Token Usage, Messages, Billing, System
     - Real-time platform metrics: total users, active instances, message counts
     - Token usage tracking per business and per feature (AI agent, reminders, etc.)
     - Billing overview with subscription status and trial expiration warnings
     - System health monitoring: database, OpenAI, Stripe, Redis connectivity
+    - **WhatsApp Instance Management**:
+        - Lists all active instances from WhatsApp API (not just database)
+        - Enriches instances with business/user info from database
+        - Identifies orphaned instances (active in API but not in DB)
+        - Actions: Restart connection, Disconnect (API only), Delete (API + DB)
+        - Helps resolve connection conflicts (error 440) by allowing cleanup
+        - Proxy endpoints: `/api/super-admin/wa-instances`, DELETE/POST for management
 *   **Centralized OpenAI API Management**:
     - Single platform-wide OpenAI API key configured via `OPENAI_API_KEY` environment variable
     - Model selection via `OPENAI_MODEL` (defaults to gpt-4o-mini)

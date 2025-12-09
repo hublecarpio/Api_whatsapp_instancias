@@ -1401,6 +1401,9 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(31 41 55 / var(--tw-bg-opacity, 1));
 }
+.bg-dark-card\/50 {
+  background-color: rgb(31 41 55 / 0.5);
+}
 .bg-dark-hover {
   --tw-bg-opacity: 1;
   background-color: rgb(45 55 72 / var(--tw-bg-opacity, 1));
@@ -1948,6 +1951,10 @@ input, textarea, select {
   background-color: rgb(239 68 68 / 0.1);
 }
 
+.hover\:bg-accent-error\/30:hover {
+  background-color: rgb(239 68 68 / 0.3);
+}
+
 .hover\:bg-accent-success\/10:hover {
   background-color: rgb(16 185 129 / 0.1);
 }
@@ -1983,6 +1990,10 @@ input, textarea, select {
 
 .hover\:bg-neon-blue\/10:hover {
   background-color: rgb(0 212 255 / 0.1);
+}
+
+.hover\:bg-neon-blue\/30:hover {
+  background-color: rgb(0 212 255 / 0.3);
 }
 
 .hover\:bg-yellow-600:hover {

@@ -481,4 +481,100 @@ router.get('/system-health', superAdminMiddleware, async (req: SuperAdminRequest
   }
 });
 
+const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+
+router.get('/wa-instances', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const waResponse = await fetch(`${WA_API_URL}/instances`);
+    const waData = await waResponse.json();
+    
+    if (!waData.success) {
+      return res.status(500).json({ error: 'Failed to get WhatsApp API instances' });
+    }
+    
+    const dbInstances = await prisma.whatsAppInstance.findMany({
+      include: {
+        business: {
+          select: { id: true, name: true, user: { select: { email: true } } }
+        }
+      }
+    });
+    
+    const dbInstanceMap = new Map(dbInstances.map(i => [i.instanceBackendId, i]));
+    
+    const enrichedInstances = waData.data.instances.map((inst: any) => {
+      const dbRecord = dbInstanceMap.get(inst.id);
+      return {
+        ...inst,
+        businessId: dbRecord?.businessId || null,
+        businessName: dbRecord?.business?.name || null,
+        userEmail: dbRecord?.business?.user?.email || null,
+        provider: dbRecord?.provider || 'baileys',
+        inDatabase: !!dbRecord
+      };
+    });
+    
+    const orphanedInstances = enrichedInstances.filter((i: any) => !i.inDatabase);
+    
+    res.json({
+      instances: enrichedInstances,
+      summary: {
+        total: enrichedInstances.length,
+        connected: enrichedInstances.filter((i: any) => i.status === 'connected').length,
+        requiresQr: enrichedInstances.filter((i: any) => i.status === 'requires_qr').length,
+        orphaned: orphanedInstances.length
+      }
+    });
+  } catch (error: any) {
+    console.error('WA Instances error:', error);
+    res.status(500).json({ error: 'Failed to get WhatsApp instances', details: error.message });
+  }
+});
+
+router.delete('/wa-instances/:instanceId', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { deleteFromDb } = req.query;
+    
+    const waResponse = await fetch(`${WA_API_URL}/instances/${instanceId}`, {
+      method: 'DELETE'
+    });
+    const waData = await waResponse.json();
+    
+    if (deleteFromDb === 'true') {
+      await prisma.whatsAppInstance.deleteMany({
+        where: { instanceBackendId: instanceId }
+      });
+    }
+    
+    res.json({
+      success: true,
+      waApiResult: waData,
+      deletedFromDb: deleteFromDb === 'true'
+    });
+  } catch (error: any) {
+    console.error('Delete WA instance error:', error);
+    res.status(500).json({ error: 'Failed to delete instance', details: error.message });
+  }
+});
+
+router.post('/wa-instances/:instanceId/restart', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    
+    const waResponse = await fetch(`${WA_API_URL}/instances/${instanceId}/restart`, {
+      method: 'POST'
+    });
+    const waData = await waResponse.json();
+    
+    res.json({
+      success: true,
+      result: waData
+    });
+  } catch (error: any) {
+    console.error('Restart WA instance error:', error);
+    res.status(500).json({ error: 'Failed to restart instance', details: error.message });
+  }
+});
+
 export default router;

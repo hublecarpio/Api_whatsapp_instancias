@@ -1,4 +1,3 @@
 {
-  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
-  "/dashboard/chat/page": "app/dashboard/chat/page.js"
+  "/super-admin/page": "app/super-admin/page.js"
 }

@@ -170,6 +170,7 @@ export default function SuperAdminPage() {
             { id: 'overview', label: 'Resumen' },
             { id: 'users', label: 'Usuarios' },
             { id: 'businesses', label: 'Negocios' },
+            { id: 'whatsapp', label: 'WhatsApp' },
             { id: 'tokens', label: 'Uso de Tokens' },
             { id: 'messages', label: 'Mensajes' },
             { id: 'billing', label: 'Facturacion' },
@@ -194,6 +195,7 @@ export default function SuperAdminPage() {
         {activeTab === 'overview' && overview && <OverviewTab data={overview} />}
         {activeTab === 'users' && <UsersTab token={token} />}
         {activeTab === 'businesses' && <BusinessesTab token={token} />}
+        {activeTab === 'whatsapp' && <WhatsAppTab token={token} />}
         {activeTab === 'tokens' && <TokenUsageTab token={token} />}
         {activeTab === 'messages' && <MessagesTab token={token} />}
         {activeTab === 'billing' && <BillingTab token={token} />}
@@ -381,15 +383,15 @@ function TokenUsageTab({ token }: { token: string }) {
   }, [token]);
 
   if (loading) return <div className="text-gray-400">Cargando uso de tokens...</div>;
-  if (!data) return <div className="text-gray-400">No hay datos disponibles</div>;
+  if (!data || !data.totals) return <div className="text-gray-400">No hay datos disponibles</div>;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Tokens Totales" value={data.totals.totalTokens.toLocaleString()} />
-        <StatCard title="Tokens Prompt" value={data.totals.promptTokens.toLocaleString()} />
-        <StatCard title="Tokens Completion" value={data.totals.completionTokens.toLocaleString()} />
-        <StatCard title="Costo Total" value={`$${data.totals.totalCost.toFixed(4)}`} color="yellow" />
+        <StatCard title="Tokens Totales" value={(data.totals.totalTokens || 0).toLocaleString()} />
+        <StatCard title="Tokens Prompt" value={(data.totals.promptTokens || 0).toLocaleString()} />
+        <StatCard title="Tokens Completion" value={(data.totals.completionTokens || 0).toLocaleString()} />
+        <StatCard title="Costo Total" value={`$${(data.totals.totalCost || 0).toFixed(4)}`} color="yellow" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -562,6 +564,168 @@ function SystemTab({ token }: { token: string }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WhatsAppTab({ token }: { token: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const fetchInstances = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/super-admin/wa-instances', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await response.json();
+      setData(result);
+    } catch (err) {
+      console.error('Failed to fetch WA instances:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInstances();
+  }, [token]);
+
+  const handleDelete = async (instanceId: string, deleteFromDb: boolean) => {
+    const confirmMsg = deleteFromDb 
+      ? 'Esto eliminara la instancia del WhatsApp API Y de la base de datos. Continuar?'
+      : 'Esto desconectara la instancia del WhatsApp API (se mantendra en la BD). Continuar?';
+    
+    if (!confirm(confirmMsg)) return;
+    
+    setActionLoading(instanceId);
+    try {
+      await fetch(`/api/super-admin/wa-instances/${instanceId}?deleteFromDb=${deleteFromDb}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      await fetchInstances();
+    } catch (err) {
+      console.error('Failed to delete instance:', err);
+      alert('Error al eliminar instancia');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRestart = async (instanceId: string) => {
+    setActionLoading(instanceId);
+    try {
+      await fetch(`/api/super-admin/wa-instances/${instanceId}/restart`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      await fetchInstances();
+    } catch (err) {
+      console.error('Failed to restart instance:', err);
+      alert('Error al reiniciar instancia');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  if (loading) return <div className="text-gray-400">Cargando instancias de WhatsApp...</div>;
+  if (!data) return <div className="text-gray-400">No se pudo conectar al WhatsApp API</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-white">Instancias WhatsApp API</h2>
+        <button onClick={fetchInstances} className="btn btn-ghost text-sm">
+          Actualizar
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard title="Total" value={data.summary?.total || 0} />
+        <StatCard title="Conectadas" value={data.summary?.connected || 0} color="green" />
+        <StatCard title="Esperando QR" value={data.summary?.requiresQr || 0} color="yellow" />
+        <StatCard title="Huerfanas" value={data.summary?.orphaned || 0} color="red" />
+      </div>
+
+      <div className="card overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-dark-border">
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">ID Instancia</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Estado</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Negocio</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Usuario</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">En BD</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Ultima Conexion</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.instances?.map((inst: any) => (
+              <tr key={inst.id} className="border-b border-dark-border hover:bg-dark-hover">
+                <td className="py-3 px-4 text-white font-mono text-sm">{inst.id}</td>
+                <td className="py-3 px-4">
+                  <span className={`status-badge ${
+                    inst.status === 'connected' ? 'status-active' :
+                    inst.status === 'requires_qr' ? 'status-trial' :
+                    'status-warning'
+                  }`}>
+                    {inst.status}
+                  </span>
+                </td>
+                <td className="py-3 px-4 text-gray-300">{inst.businessName || '-'}</td>
+                <td className="py-3 px-4 text-gray-300 text-sm">{inst.userEmail || '-'}</td>
+                <td className="py-3 px-4">
+                  {inst.inDatabase ? (
+                    <span className="text-accent-success">Si</span>
+                  ) : (
+                    <span className="text-accent-error">No (huerfana)</span>
+                  )}
+                </td>
+                <td className="py-3 px-4 text-gray-400 text-sm">
+                  {inst.lastConnection ? new Date(inst.lastConnection).toLocaleString() : '-'}
+                </td>
+                <td className="py-3 px-4">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleRestart(inst.id)}
+                      disabled={actionLoading === inst.id}
+                      className="text-xs px-2 py-1 bg-neon-blue/20 text-neon-blue rounded hover:bg-neon-blue/30 disabled:opacity-50"
+                    >
+                      {actionLoading === inst.id ? '...' : 'Reiniciar'}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(inst.id, false)}
+                      disabled={actionLoading === inst.id}
+                      className="text-xs px-2 py-1 bg-accent-warning/20 text-accent-warning rounded hover:bg-accent-warning/30 disabled:opacity-50"
+                    >
+                      Desconectar
+                    </button>
+                    <button
+                      onClick={() => handleDelete(inst.id, true)}
+                      disabled={actionLoading === inst.id}
+                      className="text-xs px-2 py-1 bg-accent-error/20 text-accent-error rounded hover:bg-accent-error/30 disabled:opacity-50"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card bg-dark-card/50 border-accent-warning/20">
+        <h4 className="text-accent-warning font-medium mb-2">Informacion</h4>
+        <ul className="text-sm text-gray-400 space-y-1">
+          <li><strong>Desconectar:</strong> Elimina la instancia del WhatsApp API pero mantiene el registro en la base de datos</li>
+          <li><strong>Eliminar:</strong> Elimina completamente la instancia del API y de la base de datos</li>
+          <li><strong>Huerfana:</strong> Instancia activa en el API pero sin registro en la base de datos (limpiar manualmente)</li>
+        </ul>
       </div>
     </div>
   );
