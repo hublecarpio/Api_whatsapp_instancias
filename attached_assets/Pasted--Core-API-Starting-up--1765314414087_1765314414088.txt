@@ -1,0 +1,52 @@
+============================================
+Core API - Starting up...
+============================================
+Environment check:
+  CORE_API_PORT: 4001
+  NODE_ENV: production
+  DATABASE_URL: [SET]
+Database connection:
+  Host: postgres
+
+  Port: 5432
+Waiting for database to be ready...
+Database is reachable!
+Running database migrations...
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "whatsapp_saas", schema "public" at "postgres:5432"
+The database is already in sync with the Prisma schema.
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.7.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+npm notice To update run: npm install -g npm@11.7.0
+npm notice
+Migrations completed successfully!
+Starting Core API on port 4001...
+🚀 Core API running at http://0.0.0.0:4001
+Redis is not available, using fallback mode
+Redis not available - using legacy setInterval worker
+Starting reminder worker...
+Super Admin sessions: Redis error getaddrinfo ENOTFOUND efficore_redis
+Super Admin sessions: Redis closed
+Super Admin sessions: Redis reconnecting...
+Super Admin sessions: Redis error getaddrinfo ENOTFOUND efficore_redis
+Super Admin sessions: Redis closed
+Super Admin sessions: Redis reconnecting...
+Super Admin sessions: Redis error getaddrinfo ENOTFOUND efficore_redis
+Super Admin sessions: Redis closed
+Super Admin sessions: Redis reconnecting...
+Super Admin sessions: Redis error getaddrinfo ENOTFOUND efficore_redis
+Super Admin sessions: Redis closed
+Super Admin sessions: Redis reconnecting...
+Super Admin sessions: Redis error getaddrinfo ENOTFOUND efficore_redis
+Super Admin sessions: Redis closed
+Super Admin sessions: Redis reconnecting...
+Super Admin sessions: Redis error getaddrinfo ENOTFOUND efficore_redis
+Super Admin sessions: Redis closed
+Super Admin sessions: Redis reconnecting...
+Super Admin sessions: Redis error getaddrinfo ENOTFOUND efficore_redis
+Super Admin sessions: Redis closed
+Super Admin sessions: Redis reconnecting...
+Super Admin sessions: Redis connected
+Super Admin sessions: Redis ready
+Send message error: { success: false, error: "Instance 'biz_d96c0b3d' not found" }
