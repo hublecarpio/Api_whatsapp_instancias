@@ -479,3 +479,44 @@ model PaymentLinkRequest {
   @@index([businessId, createdAt])
   @@index([isSuccess])
 }
+
+model AgentV2Config {
+  id         String   @id @default(uuid())
+  businessId String   @unique
+  skills     Json     @default("{\"search_product\":true,\"payment\":true,\"followup\":true,\"media\":true,\"crm\":true}")
+  prompts    Json     @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model LeadMemory {
+  id            String   @id @default(uuid())
+  businessId    String
+  leadPhone     String
+  leadName      String?
+  stage         String?
+  preferences   Json     @default("[]")
+  collectedData Json     @default("{}")
+  notes         Json     @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessId, leadPhone])
+  @@index([businessId])
+  @@index([businessId, leadPhone])
+}
+
+model LearnedRule {
+  id           String   @id @default(uuid())
+  businessId   String
+  rule         String
+  source       String   @default("refiner")
+  enabled      Boolean  @default(true)
+  appliedCount Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([businessId])
+  @@index([businessId, enabled])
+}
