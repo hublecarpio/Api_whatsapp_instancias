@@ -458,3 +458,24 @@ model ContactExtractedData {
   @@unique([businessId, contactPhone, fieldKey])
   @@index([businessId, contactPhone])
 }
+
+model PaymentLinkRequest {
+  id               String   @id @default(uuid())
+  businessId       String
+  contactPhone     String?
+  triggerSource    String   @default("agent")
+  productId        String?
+  productName      String?
+  amount           Float?
+  quantity         Int      @default(1)
+  isSuccess        Boolean  @default(false)
+  failureReason    String?
+  orderId          String?
+  paymentSessionId String?
+  isPro            Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  @@index([businessId])
+  @@index([businessId, createdAt])
+  @@index([isSuccess])
+}
