@@ -7,12 +7,18 @@ function getPublicFrontendUrl(): string {
   if (process.env.PUBLIC_FRONTEND_URL) {
     return process.env.PUBLIC_FRONTEND_URL;
   }
+  if (process.env.FRONTEND_URL) {
+    return process.env.FRONTEND_URL;
+  }
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL;
   }
   if (process.env.REPLIT_DOMAINS) {
     const domain = process.env.REPLIT_DOMAINS.split(',')[0];
     return `https://${domain}`;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
   }
   return 'http://localhost:5000';
 }

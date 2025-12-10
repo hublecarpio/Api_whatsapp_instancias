@@ -19,6 +19,9 @@ WA_PORT = "8080"
 [userenv.development]
 FRONTEND_URL = "https://978db092-02f4-4062-bb4b-215586819a4b-00-if4lj5jm7ce2.picard.replit.dev"
 
+[userenv.production]
+FRONTEND_URL = "https://978db092-02f4-4062-bb4b-215586819a4b-00-if4lj5jm7ce2.picard.replit.dev"
+
 [workflows]
 runButton = "Project"
 
@@ -90,3 +93,7 @@ externalPort = 8080
 [[ports]]
 localPort = 39159
 externalPort = 3000
+
+[[ports]]
+localPort = 43353
+externalPort = 3002
