@@ -236,8 +236,16 @@ router.patch('/rules/:businessId/:ruleId', authMiddleware, requireActiveSubscrip
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    const existingRule = await prisma.learnedRule.findFirst({
+      where: { id: ruleId, businessId }
+    });
+    
+    if (!existingRule) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+    
     const rule = await prisma.learnedRule.update({
-      where: { id: ruleId, businessId },
+      where: { id: ruleId },
       data: { enabled }
     });
     
@@ -264,8 +272,16 @@ router.delete('/rules/:businessId/:ruleId', authMiddleware, requireActiveSubscri
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    await prisma.learnedRule.delete({
+    const existingRule = await prisma.learnedRule.findFirst({
       where: { id: ruleId, businessId }
+    });
+    
+    if (!existingRule) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+    
+    await prisma.learnedRule.delete({
+      where: { id: ruleId }
     });
     
     return res.json({ success: true });
