@@ -1,0 +1,73 @@
+[+] Building 47.6s (14/18)                                                                                                                                   docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s
+ => => transferring dockerfile: 1.29kB                                                                                                                                 0.0s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                                                                                      0.8s
+ => [auth] library/node:pull token for registry-1.docker.io                                                                                                            0.0s
+ => [internal] load .dockerignore                                                                                                                                      0.0s
+ => => transferring context: 2B                                                                                                                                        0.0s
+ => [deps 1/4] FROM docker.io/library/node:20-alpine@sha256:643e7036aa985317ebfee460005e322aa550c6b6883000d01daefb58689a58e2                                           0.0s
+ => [internal] load build context                                                                                                                                      0.0s
+ => => transferring context: 20.98kB                                                                                                                                   0.0s
+ => CACHED [deps 2/4] WORKDIR /app                                                                                                                                     0.0s
+ => [production 3/8] RUN addgroup --system --gid 1001 nodejs                                                                                                           0.2s
+ => [deps 3/4] COPY package*.json ./                                                                                                                                   0.0s
+ => [deps 4/4] RUN npm ci                                                                                                                                             12.0s
+ => [production 4/8] RUN adduser --system --uid 1001 nextjs                                                                                                            0.5s
+ => [builder 3/5] COPY --from=deps /app/node_modules ./node_modules                                                                                                    4.1s 
+ => [builder 4/5] COPY . .                                                                                                                                             1.0s 
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             27.7s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+1.024                                                                                                                                                                       
+1.024 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+1.024 > next build                                                                                                                                                          
+1.024                                                                                                                                                                       
+2.169 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2.169 This information is used to shape Next.js' roadmap and prioritize features.
+2.169 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2.169 https://nextjs.org/telemetry
+2.169 
+2.314   ▲ Next.js 14.2.16
+2.315 
+2.440    Creating an optimized production build ...
+19.53  ✓ Compiled successfully
+19.53    Linting and checking validity of types ...
+25.65    Collecting page data ...
+26.92    Generating static pages (0/21) ...
+27.34    Generating static pages (5/21) 
+27.40  ⨯ useSearchParams() should be wrapped in a suspense boundary at page "/order/success". Read more: https://nextjs.org/docs/messages/missing-suspense-with-csr-bailout
+27.40     at a (/app/.next/server/chunks/138.js:1:10537)
+27.40     at s (/app/.next/server/chunks/138.js:1:21477)
+27.40     at i (/app/.next/server/app/order/success/page.js:1:1959)
+27.40     at nj (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46251)
+27.40     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47571)
+27.40     at nN (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+27.40     at nI (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47010)
+27.40     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47717)
+27.40     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:61546)
+27.40     at nN (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+27.40 
+27.40 Error occurred prerendering page "/order/success". Read more: https://nextjs.org/docs/messages/prerender-error
+27.40 
+27.40    Generating static pages (10/21) 
+27.46    Generating static pages (15/21) 
+27.48  ✓ Generating static pages (21/21)
+27.49 
+27.49 > Export encountered errors on following paths:
+27.49   /order/success/page: /order/success
+27.54 npm notice
+27.54 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+27.54 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+27.54 npm notice To update run: npm install -g npm@11.7.0
+27.54 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# 
