@@ -1,0 +1,91 @@
+docker build --no-cache -t iamhuble/whatsapp-saas-frontend:latest ./frontend
+docker build --no-cache -t iamhuble/whatsapp-saas-core:latest ./core-api
+docker build --no-cache -t iamhuble/whatsapp-saas-wa:latest ./src
+docker build --no-cache -t iamhuble/whatsapp-saas-agent-v2:latest ./agent-v2
+
+# Push todas
+docker push iamhuble/whatsapp-saas-frontend:latest
+docker push iamhuble/whatsapp-saas-core:latest
+docker push iamhuble/whatsapp-saas-wa:latest
+docker push iamhuble/whatsapp-saas-agent-v2:latest
+[+] Building 73.2s (19/19) FINISHED                                                                                                                          docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s
+ => => transferring dockerfile: 1.29kB                                                                                                                                 0.0s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                                                                                      0.8s
+ => [auth] library/node:pull token for registry-1.docker.io                                                                                                            0.0s
+ => [internal] load .dockerignore                                                                                                                                      0.0s
+ => => transferring context: 2B                                                                                                                                        0.0s
+ => [internal] load build context                                                                                                                                      0.0s
+ => => transferring context: 23.68kB                                                                                                                                   0.0s
+ => [deps 1/4] FROM docker.io/library/node:20-alpine@sha256:643e7036aa985317ebfee460005e322aa550c6b6883000d01daefb58689a58e2                                           0.0s
+ => CACHED [deps 2/4] WORKDIR /app                                                                                                                                     0.0s
+ => [production 3/8] RUN addgroup --system --gid 1001 nodejs                                                                                                           0.2s
+ => [deps 3/4] COPY package*.json ./                                                                                                                                   0.0s
+ => [deps 4/4] RUN npm ci                                                                                                                                             15.3s
+ => [production 4/8] RUN adduser --system --uid 1001 nextjs                                                                                                            0.3s
+ => [builder 3/5] COPY --from=deps /app/node_modules ./node_modules                                                                                                    5.1s 
+ => [builder 4/5] COPY . .                                                                                                                                             0.7s 
+ => [builder 5/5] RUN npm run build                                                                                                                                   43.9s 
+ => [production 5/8] COPY --from=builder /app/public ./public                                                                                                          0.1s 
+ => [production 6/8] COPY --from=builder /app/.next/standalone ./                                                                                                      0.5s 
+ => [production 7/8] COPY --from=builder /app/.next/static ./.next/static                                                                                              0.1s 
+ => [production 8/8] RUN chown -R nextjs:nodejs /app                                                                                                                   3.9s 
+ => exporting to image                                                                                                                                                 0.4s 
+ => => exporting layers                                                                                                                                                0.3s 
+ => => writing image sha256:ee0327331da3e975e30914a04ba6de798273464c82befcc2541a493a869d20e9                                                                           0.0s
+ => => naming to docker.io/iamhuble/whatsapp-saas-frontend:latest                                                                                                      0.0s
+[+] Building 37.3s (25/25) FINISHED                                                                                                                          docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s
+ => => transferring dockerfile: 1.30kB                                                                                                                                 0.0s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                                                                                      0.4s
+ => [internal] load .dockerignore                                                                                                                                      0.0s
+ => => transferring context: 2B                                                                                                                                        0.0s
+ => CACHED [builder 1/9] FROM docker.io/library/node:20-alpine@sha256:643e7036aa985317ebfee460005e322aa550c6b6883000d01daefb58689a58e2                                 0.0s
+ => [internal] load build context                                                                                                                                      0.0s
+ => => transferring context: 5.80kB                                                                                                                                    0.0s
+ => [builder 2/9] RUN apk add --no-cache openssl openssl-dev                                                                                                           0.9s
+ => [production  2/12] RUN apk add --no-cache openssl netcat-openbsd                                                                                                   0.9s
+ => [builder 3/9] WORKDIR /app                                                                                                                                         0.0s
+ => [production  3/12] WORKDIR /app                                                                                                                                    0.0s
+ => [production  4/12] COPY package*.json ./                                                                                                                           0.0s
+ => [builder 4/9] COPY package*.json ./                                                                                                                                0.0s
+ => [production  5/12] COPY prisma ./prisma/                                                                                                                           0.0s
+ => [builder 5/9] COPY prisma ./prisma/                                                                                                                                0.0s
+ => [production  6/12] RUN npm ci --only=production && npm cache clean --force                                                                                         9.6s
+ => [builder 6/9] RUN npm ci                                                                                                                                           9.2s
+ => [builder 7/9] COPY . .                                                                                                                                             0.0s
+ => [builder 8/9] RUN npx prisma generate                                                                                                                              2.3s
+ => [builder 9/9] RUN npm run build                                                                                                                                    8.0s 
+ => [production  7/12] COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma                                                                            0.1s 
+ => [production  8/12] COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma                                                                            0.2s 
+ => [production  9/12] COPY --from=builder /app/node_modules/prisma ./node_modules/prisma                                                                              0.1s 
+ => [production 10/12] COPY --from=builder /app/dist ./dist                                                                                                            0.0s 
+ => [production 11/12] COPY entrypoint.sh ./entrypoint.sh                                                                                                              0.0s 
+ => [production 12/12] RUN chmod +x ./entrypoint.sh && chown -R node:node /app                                                                                        13.9s 
+ => exporting to image                                                                                                                                                 1.5s 
+ => => exporting layers                                                                                                                                                1.5s 
+ => => writing image sha256:822504d6e60148f9f0c5be81ce91b420f185383774b2656086a9894928a6495b                                                                           0.0s 
+ => => naming to docker.io/iamhuble/whatsapp-saas-core:latest                                                                                                          0.0s
+[+] Building 0.1s (1/1) FINISHED                                                                                                                             docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s
+ => => transferring dockerfile: 2B                                                                                                                                     0.0s
+ERROR: failed to build: failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory
+[+] Building 43.2s (12/12) FINISHED                                                                                                                          docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s
+ => => transferring dockerfile: 684B                                                                                                                                   0.0s
+ => [internal] load metadata for docker.io/library/python:3.11-slim                                                                                                    0.8s
+ => [auth] library/python:pull token for registry-1.docker.io                                                                                                          0.0s
+ => [internal] load .dockerignore                                                                                                                                      0.0s
+ => => transferring context: 2B                                                                                                                                        0.0s
+ => [1/6] FROM docker.io/library/python:3.11-slim@sha256:7cd0079a9bd8800c81632d65251048fc2848bf9afda542224b1b10e0cae45575                                              0.0s
+ => [internal] load build context                                                                                                                                      0.0s
+ => => transferring context: 1.45kB                                                                                                                                    0.0s
+ => CACHED [2/6] WORKDIR /app                                                                                                                                          0.0s
+ => [3/6] RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     curl     && rm -rf /var/lib/apt/lists/*                            17.1s
+ => [4/6] COPY requirements.txt .                                                                                                                                      0.0s 
+ => [5/6] RUN pip install --no-cache-dir -r requirements.txt                                                                                                          23.5s 
+ => [6/6] COPY src/ ./src/                                                                                                                                             0.0s 
+ => exporting to image                                                                                                                                                 1.6s 
+ => => exporting layers                                                                                                                                                1.6s 
+ => => writing image sha256:deb0bbcc29049f1583d2e14ed9fadf25261f11059a8005617c2f67b2e91aaf53                                                                           0.0s 
+ => => naming to docker.io/iamhuble/whatsapp-saas-agent-v2:latest                  
