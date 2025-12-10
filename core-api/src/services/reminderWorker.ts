@@ -5,18 +5,43 @@ import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } f
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
+async function getActiveInstance(businessId: string) {
+  const instance = await prisma.whatsAppInstance.findFirst({
+    where: { 
+      businessId,
+      isActive: true,
+      status: 'connected'
+    },
+    include: { metaCredential: true },
+    orderBy: { lastConnection: 'desc' }
+  });
+  
+  if (instance) return instance;
+  
+  return prisma.whatsAppInstance.findFirst({
+    where: { 
+      businessId,
+      isActive: true
+    },
+    include: { metaCredential: true },
+    orderBy: { lastConnection: 'desc' }
+  });
+}
+
 async function checkWindowStatus(businessId: string, contactPhone: string): Promise<{
   requiresTemplate: boolean;
   provider: string | null;
   hoursSinceLastMessage: number | null;
 }> {
-  const instance = await prisma.whatsAppInstance.findFirst({
-    where: { businessId },
-    include: { metaCredential: true }
-  });
+  const instance = await getActiveInstance(businessId);
   
-  if (!instance || instance.provider !== 'META_CLOUD') {
-    return { requiresTemplate: false, provider: instance?.provider || null, hoursSinceLastMessage: null };
+  if (!instance) {
+    console.log(`[REMINDER] No active instance found for business ${businessId}`);
+    return { requiresTemplate: false, provider: null, hoursSinceLastMessage: null };
+  }
+  
+  if (instance.provider !== 'META_CLOUD') {
+    return { requiresTemplate: false, provider: instance.provider, hoursSinceLastMessage: null };
   }
   
   const lastInboundMessage = await prisma.messageLog.findFirst({
@@ -49,12 +74,12 @@ interface TemplateData {
 }
 
 async function getDefaultTemplate(businessId: string): Promise<TemplateData | null> {
-  const instance = await prisma.whatsAppInstance.findFirst({
-    where: { businessId, provider: 'META_CLOUD' },
-    include: { metaCredential: true }
-  });
+  const instance = await getActiveInstance(businessId);
   
-  if (!instance?.metaCredential) return null;
+  if (!instance || instance.provider !== 'META_CLOUD' || !instance.metaCredential) {
+    console.log(`[REMINDER] No Meta Cloud instance with credentials for business ${businessId}`);
+    return null;
+  }
   
   const template = await prisma.metaTemplate.findFirst({
     where: { 
@@ -296,21 +321,25 @@ export async function processReminders(): Promise<void> {
         }
       }
       
-      const instance = reminder.business.instances[0];
+      const instance = await getActiveInstance(reminder.businessId);
       if (!instance) {
-        console.log(`No WhatsApp instance for business ${reminder.businessId}`);
+        console.log(`[REMINDER] No active WhatsApp instance for business ${reminder.businessId} - skipping reminder ${reminder.id}`);
         continue;
       }
+      
+      console.log(`[REMINDER] Processing reminder ${reminder.id} for ${reminder.contactPhone} via ${instance.provider} (instance: ${instance.id})`);
       
       const windowStatus = await checkWindowStatus(reminder.businessId, reminder.contactPhone);
       
       let message = reminder.messageTemplate || reminder.generatedMessage;
       let usedTemplate: TemplateData | null = null;
       
+      console.log(`[REMINDER] Window status for ${reminder.contactPhone}: requiresTemplate=${windowStatus.requiresTemplate}, provider=${windowStatus.provider}, hours=${windowStatus.hoursSinceLastMessage}`);
+      
       if (windowStatus.requiresTemplate && windowStatus.provider === 'META_CLOUD') {
         const templateData = await getDefaultTemplate(reminder.businessId);
         if (!templateData) {
-          console.log(`No approved template for Meta Cloud business ${reminder.businessId} - cannot send reminder outside 24h window`);
+          console.log(`[REMINDER] No approved template for Meta Cloud business ${reminder.businessId} - cannot send reminder outside 24h window`);
           await prisma.reminder.update({
             where: { id: reminder.id },
             data: { status: 'no_template' }
@@ -319,6 +348,7 @@ export async function processReminders(): Promise<void> {
         }
         usedTemplate = templateData;
         message = templateData.bodyText || `[Template: ${templateData.name}]`;
+        console.log(`[REMINDER] Using template: ${templateData.name}`);
       } else if (!message) {
         message = await generateFollowUpMessage(
           reminder.businessId,
@@ -326,19 +356,22 @@ export async function processReminders(): Promise<void> {
           reminder.attemptNumber,
           config?.pressureLevel || 1
         );
+        console.log(`[REMINDER] Generated follow-up message for attempt #${reminder.attemptNumber}`);
       }
       
       const cleanPhone = reminder.contactPhone.replace(/\D/g, '');
       
       if (instance.provider === 'META_CLOUD') {
-        const metaCred = await prisma.metaCredential.findFirst({
+        const metaCred = instance.metaCredential || await prisma.metaCredential.findFirst({
           where: { instanceId: instance.id }
         });
         
         if (!metaCred) {
-          console.log(`No Meta credentials for instance ${instance.id}`);
+          console.log(`[REMINDER] No Meta credentials for instance ${instance.id} - skipping`);
           continue;
         }
+        
+        console.log(`[REMINDER] Sending via Meta Cloud to ${cleanPhone}`);
         
         const metaService = new MetaCloudService({
           accessToken: metaCred.accessToken,
@@ -353,8 +386,10 @@ export async function processReminders(): Promise<void> {
             language: usedTemplate.language,
             components: usedTemplate.components
           });
+          console.log(`[REMINDER] Template sent successfully to ${cleanPhone}`);
         } else {
           await metaService.sendMessage({ to: cleanPhone, text: message });
+          console.log(`[REMINDER] Message sent successfully to ${cleanPhone}`);
         }
       } else {
         if (!instance.instanceBackendId) {
