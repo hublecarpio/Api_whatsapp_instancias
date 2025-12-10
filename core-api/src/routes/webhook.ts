@@ -159,6 +159,19 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           });
           
           if (!isFromMe && business.botEnabled) {
+            const cleanPhoneForSettings = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+            const contactSettings = await prisma.contactSettings.findUnique({
+              where: {
+                businessId_contactPhone: {
+                  businessId,
+                  contactPhone: cleanPhoneForSettings
+                }
+              }
+            });
+            
+            if (contactSettings?.botDisabled) {
+              console.log(`Bot disabled for contact ${cleanPhoneForSettings}, skipping agent`);
+            } else {
             let messageForAgent = data.text || '';
             
             if (mediaAnalysis) {
@@ -193,6 +206,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               } catch (err: any) {
                 console.error('Agent think failed:', err.response?.data || err.message);
               }
+            }
             }
           }
 

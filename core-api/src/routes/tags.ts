@@ -633,11 +633,13 @@ router.get('/contact/:contact_phone/bot-status', authMiddleware, async (req: Aut
       return;
     }
     
+    const cleanPhone = contact_phone.replace(/\D/g, '').replace(/:.*$/, '');
+    
     const settings = await prisma.contactSettings.findUnique({
       where: {
         businessId_contactPhone: {
           businessId: business_id as string,
-          contactPhone: contact_phone
+          contactPhone: cleanPhone
         }
       }
     });
@@ -667,16 +669,18 @@ router.patch('/contact/:contact_phone/bot-toggle', authMiddleware, async (req: A
       return;
     }
     
+    const cleanPhone = contact_phone.replace(/\D/g, '').replace(/:.*$/, '');
+    
     const settings = await prisma.contactSettings.upsert({
       where: {
         businessId_contactPhone: {
           businessId: business_id,
-          contactPhone: contact_phone
+          contactPhone: cleanPhone
         }
       },
       create: {
         businessId: business_id,
-        contactPhone: contact_phone,
+        contactPhone: cleanPhone,
         botDisabled
       },
       update: {
