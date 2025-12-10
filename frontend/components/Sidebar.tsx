@@ -23,6 +23,7 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: '💬' },
     { href: '/dashboard/templates', label: 'Templates', icon: '📄' },
     { href: '/dashboard/products', label: 'Productos', icon: '📦' },
+    { href: '/dashboard/orders', label: 'Pedidos', icon: '🛒' },
     { href: '/dashboard/prompt', label: 'Agente IA', icon: '🤖' },
     { href: '/dashboard/chat', label: 'Chat', icon: '💭' },
     { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' },

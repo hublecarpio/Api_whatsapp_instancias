@@ -33,12 +33,18 @@ export default function ProductsPage() {
   const [copied, setCopied] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (currentBusiness) {
       fetchProducts();
     }
   }, [currentBusiness]);
+
+  const filteredProducts = products.filter(product => 
+    product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const fetchProducts = async () => {
     if (!currentBusiness) return;
@@ -279,6 +285,18 @@ export default function ProductsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-white">Productos</h1>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar productos..."
+              className="w-48 sm:w-64 px-3 py-2 pl-9 bg-[#1e1e1e] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-green-500 placeholder-gray-500"
+            />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
           <div className="flex bg-[#1e1e1e] rounded-lg p-1 border border-gray-700">
             <button
               onClick={() => setViewMode('grid')}
@@ -478,14 +496,14 @@ export default function ProductsPage() {
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue mx-auto"></div>
         </div>
-      ) : products.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <div className="card text-center py-12">
           <div className="text-6xl mb-4">📦</div>
           <p className="text-gray-400">No tienes productos todavia.</p>
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {products.map((product) => (
+          {filteredProducts.map((product) => (
             <div key={product.id} className="card card-hover">
               {product.imageUrl && (
                 <img
@@ -536,7 +554,7 @@ export default function ProductsPage() {
             <div className="col-span-2">Stock</div>
             <div className="col-span-3">Acciones</div>
           </div>
-          {products.map((product) => (
+          {filteredProducts.map((product) => (
             <div key={product.id} className="card card-hover">
               <div className="flex flex-col sm:grid sm:grid-cols-12 gap-4 items-center">
                 <div className="col-span-1 w-full sm:w-auto">
