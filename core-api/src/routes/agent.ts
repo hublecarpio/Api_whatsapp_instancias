@@ -59,7 +59,7 @@ async function internalOrAuthMiddleware(req: InternalRequest, res: Response, nex
 
 const activeBuffers = new Map<string, NodeJS.Timeout>();
 
-const S3_BASE_URL = 'https://memoriaback.iamhuble.space/n8nback';
+const S3_BASE_URL = process.env.MINIO_PUBLIC_URL || 'https://memoriaback.iamhuble.space/n8nback';
 
 interface MediaItem {
   type: 'image' | 'file' | 'video';
@@ -292,6 +292,100 @@ async function executeExternalTool(tool: any, args: any): Promise<string> {
   }
 }
 
+function chunkByMaxChars(text: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  let remaining = text;
+  
+  while (remaining.length > maxChars) {
+    let cutPoint = remaining.lastIndexOf(' ', maxChars);
+    if (cutPoint <= 0) cutPoint = maxChars;
+    chunks.push(remaining.substring(0, cutPoint).trim());
+    remaining = remaining.substring(cutPoint).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
+function smartSplitMessage(text: string, maxChars: number = 350): string[] {
+  if (text.length <= maxChars) return [text];
+  
+  const byParagraphs = text.split(/\n{2,}/).filter(p => p.trim());
+  if (byParagraphs.length > 1) {
+    const result: string[] = [];
+    for (const para of byParagraphs) {
+      if (para.length > maxChars) {
+        result.push(...chunkByMaxChars(para, maxChars));
+      } else {
+        result.push(para.trim());
+      }
+    }
+    return result;
+  }
+  
+  const bySingleNewline = text.split(/\n/).filter(p => p.trim());
+  if (bySingleNewline.length > 1) {
+    const merged: string[] = [];
+    let current = '';
+    for (const line of bySingleNewline) {
+      if ((current + '\n' + line).length > maxChars && current) {
+        if (current.length > maxChars) {
+          merged.push(...chunkByMaxChars(current, maxChars));
+        } else {
+          merged.push(current.trim());
+        }
+        current = line;
+      } else {
+        current = current ? current + '\n' + line : line;
+      }
+    }
+    if (current) {
+      if (current.length > maxChars) {
+        merged.push(...chunkByMaxChars(current, maxChars));
+      } else {
+        merged.push(current.trim());
+      }
+    }
+    return merged;
+  }
+  
+  const sentences = text.match(/[^.!?]+[.!?]+/g);
+  if (sentences && sentences.length > 1) {
+    const parts: string[] = [];
+    let current = '';
+    
+    for (const sentence of sentences) {
+      if ((current + sentence).length > maxChars && current) {
+        if (current.length > maxChars) {
+          parts.push(...chunkByMaxChars(current, maxChars));
+        } else {
+          parts.push(current.trim());
+        }
+        current = sentence;
+      } else {
+        current += sentence;
+      }
+    }
+    if (current) {
+      if (current.length > maxChars) {
+        parts.push(...chunkByMaxChars(current, maxChars));
+      } else {
+        parts.push(current.trim());
+      }
+    }
+    return parts;
+  }
+  
+  return chunkByMaxChars(text, maxChars);
+}
+
+function calculateTypingDelay(text: string): number {
+  const baseDelay = 300;
+  const charsPerSecond = 25;
+  const calculated = baseDelay + (text.length / charsPerSecond) * 1000;
+  const randomFactor = 0.8 + Math.random() * 0.4;
+  return Math.min(Math.max(calculated * randomFactor, 500), 3000);
+}
+
 async function sendMessageInParts(
   instanceBackendId: string,
   to: string,
@@ -309,24 +403,19 @@ async function sendMessageInParts(
         message: finalText
       });
     } else {
-      const parts = finalText.split(/\n{2,}/).filter(p => p.trim());
+      const parts = smartSplitMessage(finalText);
       
-      if (parts.length <= 1) {
+      for (let i = 0; i < parts.length; i++) {
+        const delay = calculateTypingDelay(parts[i]);
+        
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
         await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
           to,
-          message: finalText
+          message: parts[i]
         });
-      } else {
-        for (let i = 0; i < parts.length; i++) {
-          await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
-            to,
-            message: parts[i].trim()
-          });
-          
-          if (i < parts.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
-          }
-        }
       }
     }
   }
@@ -744,17 +833,27 @@ async function processWithAgent(
           businessId: instance.metaCredential.businessId
         });
         
-        const { cleanedText } = extractMediaFromText(aiResponse);
+        const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
         const finalText = cleanMarkdownForWhatsApp(cleanedText);
         
         if (finalText) {
-          await metaService.sendMessage({ to: contactPhone, text: finalText });
+          if (splitMessages) {
+            const parts = smartSplitMessage(finalText);
+            for (let i = 0; i < parts.length; i++) {
+              if (i > 0) {
+                const delay = calculateTypingDelay(parts[i]);
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
+              await metaService.sendMessage({ to: contactPhone, text: parts[i] });
+            }
+          } else {
+            await metaService.sendMessage({ to: contactPhone, text: finalText });
+          }
         }
         
-        // Handle media items for Meta Cloud
-        const { mediaItems } = extractMediaFromText(aiResponse);
         for (const media of mediaItems) {
           try {
+            await new Promise(resolve => setTimeout(resolve, 500));
             if (media.type === 'image') {
               await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'image' });
             } else if (media.type === 'video') {
