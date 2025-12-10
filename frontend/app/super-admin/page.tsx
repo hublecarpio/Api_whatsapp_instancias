@@ -474,6 +474,35 @@ function TokenUsageTab({ token }: { token: string }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card">
+          <h3 className="text-lg font-semibold text-white mb-4">Por Proveedor</h3>
+          <div className="space-y-2">
+            {data.byProvider?.map((p: any) => (
+              <div key={p.provider} className="flex justify-between items-center">
+                <span className="text-gray-400 flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${p.provider === 'openai' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
+                  {p.provider.toUpperCase()}
+                </span>
+                <span className="text-white">{p.tokens.toLocaleString()} (${p.cost.toFixed(4)})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 className="text-lg font-semibold text-white mb-4">Por Modelo</h3>
+          <div className="space-y-2">
+            {data.byModel?.map((m: any) => (
+              <div key={m.model} className="flex justify-between">
+                <span className="text-gray-400 text-sm">{m.model}</span>
+                <span className="text-white">{m.tokens.toLocaleString()} (${m.cost.toFixed(4)})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="card">
           <h3 className="text-lg font-semibold text-white mb-4">Por Funcionalidad</h3>
           <div className="space-y-2">
             {data.byFeature?.map((f: any) => (

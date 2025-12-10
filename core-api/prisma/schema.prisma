@@ -328,6 +328,7 @@ model TokenUsage {
   businessId       String
   userId           String?
   feature          String
+  provider         String   @default("openai")
   model            String
   promptTokens     Int
   completionTokens Int
@@ -338,6 +339,7 @@ model TokenUsage {
   @@index([businessId, createdAt])
   @@index([userId, createdAt])
   @@index([createdAt])
+  @@index([provider, createdAt])
 }
 
 model ContactSettings {

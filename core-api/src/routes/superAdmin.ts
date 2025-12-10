@@ -373,6 +373,26 @@ router.get('/token-usage', superAdminMiddleware, async (req: SuperAdminRequest, 
       acc[u.feature].cost += u.costUsd;
       return acc;
     }, {});
+
+    const byProvider = usage.reduce<Record<string, UsageData>>((acc, u) => {
+      const provider = u.provider || 'openai';
+      if (!acc[provider]) {
+        acc[provider] = { tokens: 0, cost: 0 };
+      }
+      acc[provider].tokens += u.totalTokens;
+      acc[provider].cost += u.costUsd;
+      return acc;
+    }, {});
+
+    const byModel = usage.reduce<Record<string, UsageData>>((acc, u) => {
+      const key = `${u.provider || 'openai'}/${u.model}`;
+      if (!acc[key]) {
+        acc[key] = { tokens: 0, cost: 0 };
+      }
+      acc[key].tokens += u.totalTokens;
+      acc[key].cost += u.costUsd;
+      return acc;
+    }, {});
     
     res.json({
       totals: {
@@ -382,6 +402,16 @@ router.get('/token-usage', superAdminMiddleware, async (req: SuperAdminRequest, 
       topBusinesses,
       byFeature: Object.entries(byFeature).map(([feature, data]) => ({
         feature,
+        tokens: data.tokens,
+        cost: parseFloat(data.cost.toFixed(4))
+      })),
+      byProvider: Object.entries(byProvider).map(([provider, data]) => ({
+        provider,
+        tokens: data.tokens,
+        cost: parseFloat(data.cost.toFixed(4))
+      })),
+      byModel: Object.entries(byModel).map(([model, data]) => ({
+        model,
         tokens: data.tokens,
         cost: parseFloat(data.cost.toFixed(4))
       }))
