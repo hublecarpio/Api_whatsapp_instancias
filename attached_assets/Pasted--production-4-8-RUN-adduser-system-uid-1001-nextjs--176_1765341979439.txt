@@ -1,0 +1,59 @@
+ => [production 4/8] RUN adduser --system --uid 1001 nextjs                                                                                                            0.4s
+ => [builder 3/5] COPY --from=deps /app/node_modules ./node_modules                                                                                                    3.3s 
+ => [builder 4/5] COPY . .                                                                                                                                             0.5s 
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             29.7s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+0.945                                                                                                                                                                       
+0.945 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+0.945 > next build                                                                                                                                                          
+0.945                                                                                                                                                                       
+1.940 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+1.940 This information is used to shape Next.js' roadmap and prioritize features.
+1.940 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+1.940 https://nextjs.org/telemetry
+1.940 
+2.029   ▲ Next.js 14.2.16
+2.029 
+2.153    Creating an optimized production build ...
+19.40  ✓ Compiled successfully
+19.40    Linting and checking validity of types ...
+27.70    Collecting page data ...
+29.00    Generating static pages (0/21) ...
+29.37    Generating static pages (5/21) 
+29.41  ⨯ useSearchParams() should be wrapped in a suspense boundary at page "/order/success". Read more: https://nextjs.org/docs/messages/missing-suspense-with-csr-bailout
+29.41     at a (/app/.next/server/chunks/138.js:1:10537)
+29.41     at s (/app/.next/server/chunks/138.js:1:21477)
+29.41     at i (/app/.next/server/app/order/success/page.js:1:1959)
+29.41     at nj (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46251)
+29.41     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47571)
+29.41     at nN (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+29.41     at nI (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47010)
+29.41     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47717)
+29.41     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:61546)
+29.41     at nN (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+29.41 
+29.41 Error occurred prerendering page "/order/success". Read more: https://nextjs.org/docs/messages/prerender-error
+29.41 
+29.41    Generating static pages (10/21) 
+29.43    Generating static pages (15/21) 
+29.51  ✓ Generating static pages (21/21)
+29.52 
+29.52 > Export encountered errors on following paths:
+29.52   /order/success/page: /order/success
+29.55 npm notice
+29.55 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+29.55 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+29.55 npm notice To update run: npm install -g npm@11.7.0
+29.55 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# 
