@@ -5,6 +5,19 @@ import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } f
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
+function cleanMarkdownForWhatsApp(text: string): string {
+  let cleaned = text;
+  cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$2');
+  cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
+  cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
+  cleaned = cleaned.replace(/\*+/g, '');
+  cleaned = cleaned.replace(/^#+\s*/gm, '');
+  cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  return cleaned.trim();
+}
+
 async function getActiveInstance(businessId: string) {
   const instance = await prisma.whatsAppInstance.findFirst({
     where: { 
@@ -388,7 +401,8 @@ export async function processReminders(): Promise<void> {
           });
           console.log(`[REMINDER] Template sent successfully to ${cleanPhone}`);
         } else {
-          await metaService.sendMessage({ to: cleanPhone, text: message });
+          const cleanedMessage = cleanMarkdownForWhatsApp(message);
+          await metaService.sendMessage({ to: cleanPhone, text: cleanedMessage });
           console.log(`[REMINDER] Message sent successfully to ${cleanPhone}`);
         }
       } else {
@@ -397,9 +411,10 @@ export async function processReminders(): Promise<void> {
           continue;
         }
         
+        const cleanedMessage = cleanMarkdownForWhatsApp(message);
         await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendMessage`, {
           to: cleanPhone.includes('@') ? cleanPhone : `${cleanPhone}@s.whatsapp.net`,
-          message
+          message: cleanedMessage
         });
       }
       

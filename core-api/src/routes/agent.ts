@@ -94,6 +94,19 @@ const MIME_TYPES: Record<string, string> = {
   'rar': 'application/vnd.rar'
 };
 
+function cleanMarkdownForWhatsApp(text: string): string {
+  let cleaned = text;
+  cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$2');
+  cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
+  cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
+  cleaned = cleaned.replace(/\*+/g, '');
+  cleaned = cleaned.replace(/^#+\s*/gm, '');
+  cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  return cleaned.trim();
+}
+
 function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedText: string } {
   const mediaItems: MediaItem[] = [];
   let cleanedText = text;
@@ -286,21 +299,22 @@ async function sendMessageInParts(
   splitMessages: boolean
 ): Promise<{ sentMedia: MediaItem[] }> {
   const { mediaItems, cleanedText } = extractMediaFromText(message);
+  const finalText = cleanMarkdownForWhatsApp(cleanedText);
   const sentMedia: MediaItem[] = [];
   
-  if (cleanedText) {
+  if (finalText) {
     if (!splitMessages) {
       await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
         to,
-        message: cleanedText
+        message: finalText
       });
     } else {
-      const parts = cleanedText.split(/\n{2,}/).filter(p => p.trim());
+      const parts = finalText.split(/\n{2,}/).filter(p => p.trim());
       
       if (parts.length <= 1) {
         await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
           to,
-          message: cleanedText
+          message: finalText
         });
       } else {
         for (let i = 0; i < parts.length; i++) {
@@ -723,7 +737,6 @@ async function processWithAgent(
       let sentMedia: MediaItem[] = [];
       
       if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
-        // Send via Meta Cloud API
         console.log('[META CLOUD] Sending response via Meta Cloud API');
         const metaService = new MetaCloudService({
           accessToken: instance.metaCredential.accessToken,
@@ -732,9 +745,10 @@ async function processWithAgent(
         });
         
         const { cleanedText } = extractMediaFromText(aiResponse);
+        const finalText = cleanMarkdownForWhatsApp(cleanedText);
         
-        if (cleanedText) {
-          await metaService.sendMessage({ to: contactPhone, text: cleanedText });
+        if (finalText) {
+          await metaService.sendMessage({ to: contactPhone, text: finalText });
         }
         
         // Handle media items for Meta Cloud
