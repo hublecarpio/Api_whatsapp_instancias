@@ -44,6 +44,62 @@ router.get('/pay/:code', async (req, res) => {
   }
 });
 
+router.get('/details/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const result = await handlePaymentSuccess(sessionId);
+
+    if (!result.success) {
+      const order = await prisma.order.findUnique({
+        where: { stripeSessionId: sessionId },
+        include: { items: true }
+      });
+
+      if (!order) {
+        return res.status(404).json({ success: false, error: result.error || 'Pedido no encontrado' });
+      }
+
+      return res.json({
+        success: true,
+        order: {
+          orderId: order.id,
+          totalAmount: order.totalAmount,
+          currencySymbol: order.currencySymbol,
+          contactName: order.contactName,
+          status: order.status,
+          items: order.items.map(item => ({
+            productTitle: item.productTitle,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice
+          }))
+        }
+      });
+    }
+
+    const updatedOrder = result.order;
+
+    res.json({
+      success: true,
+      order: {
+        orderId: updatedOrder.id,
+        totalAmount: updatedOrder.totalAmount,
+        currencySymbol: updatedOrder.currencySymbol,
+        contactName: updatedOrder.contactName,
+        status: updatedOrder.status,
+        items: updatedOrder.items.map((item: any) => ({
+          productTitle: item.productTitle,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice
+        }))
+      }
+    });
+  } catch (error: any) {
+    console.error('[ORDERS] Error fetching order details:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+});
+
 router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
   try {
     const { businessId, contactPhone, contactName, items, shippingAddress, shippingCity, shippingCountry } = req.body;

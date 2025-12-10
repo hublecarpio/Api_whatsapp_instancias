@@ -4,7 +4,7 @@ import prisma from './prisma.js';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 const PUBLIC_API_URL = process.env.PUBLIC_API_URL || process.env.CORE_API_URL || 'http://localhost:3001';
-const PUBLIC_FRONTEND_URL = process.env.PUBLIC_FRONTEND_URL || 'https://app.efficore.es';
+const PUBLIC_FRONTEND_URL = process.env.PUBLIC_FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5000';
 
 function generateShortCode(length: number = 7): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -144,8 +144,8 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
       payment_method_types: ['card'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: `${PUBLIC_API_URL}/orders/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${PUBLIC_API_URL}/orders/cancel?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${PUBLIC_FRONTEND_URL}/order/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${PUBLIC_FRONTEND_URL}/order/cancel?session_id={CHECKOUT_SESSION_ID}`,
       metadata: {
         orderId: order.id,
         businessId,
