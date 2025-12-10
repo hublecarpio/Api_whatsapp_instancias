@@ -1,3 +1,4 @@
 {
+  "/pay/[code]/page": "app/pay/[code]/page.js",
   "/dashboard/orders/page": "app/dashboard/orders/page.js"
 }
