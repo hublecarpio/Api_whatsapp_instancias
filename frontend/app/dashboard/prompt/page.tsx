@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
-import { promptApi, toolsApi, businessApi } from '@/lib/api';
+import { promptApi, toolsApi, businessApi, agentV2Api } from '@/lib/api';
+import { SkillsV2Panel, PromptsV2Panel, LeadMemoryPanel, RulesLearnedPanel } from '@/components/AgentV2';
 
 interface ToolParameter {
   name: string;
@@ -38,6 +39,40 @@ interface ToolStats {
   totalCalls: number;
   avgDuration: number;
   lastCall: string | null;
+}
+
+interface V2Skills {
+  search_product: boolean;
+  payment: boolean;
+  followup: boolean;
+  media: boolean;
+  crm: boolean;
+}
+
+interface V2Prompts {
+  vendor: string;
+  observer: string;
+  refiner: string;
+}
+
+interface LeadMemory {
+  leadId: string;
+  phone: string;
+  name?: string;
+  stage?: string;
+  preferences: string[];
+  collectedData: Record<string, string>;
+  notes: string[];
+  lastInteraction?: string;
+}
+
+interface LearnedRule {
+  id: string;
+  rule: string;
+  source: string;
+  enabled: boolean;
+  createdAt: string;
+  appliedCount?: number;
 }
 
 const DEFAULT_PROMPT = `Eres un asistente de atencion al cliente amable y profesional.
@@ -85,13 +120,40 @@ export default function PromptPage() {
   const [toolStats, setToolStats] = useState<ToolStats | null>(null);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
+  const [v2Skills, setV2Skills] = useState<V2Skills>({
+    search_product: true,
+    payment: true,
+    followup: true,
+    media: true,
+    crm: true
+  });
+  const [v2Prompts, setV2Prompts] = useState<V2Prompts>({
+    vendor: '',
+    observer: '',
+    refiner: ''
+  });
+  const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
+  const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
+  const [loadingV2, setLoadingV2] = useState(false);
+  const [activeV2Tab, setActiveV2Tab] = useState<'skills' | 'prompts' | 'memory' | 'rules'>('skills');
+
   useEffect(() => {
     if (currentBusiness) {
       setBotEnabled(currentBusiness.botEnabled);
-      setAgentVersion((currentBusiness as any).agentVersion || 'v1');
+      const version = (currentBusiness as any).agentVersion || 'v1';
+      setAgentVersion(version);
       loadData();
+      if (version === 'v2') {
+        loadV2Data();
+      }
     }
   }, [currentBusiness]);
+
+  useEffect(() => {
+    if (currentBusiness && agentVersion === 'v2') {
+      loadV2Data();
+    }
+  }, [agentVersion]);
 
   const loadData = async () => {
     if (!currentBusiness) return;
@@ -110,6 +172,122 @@ export default function PromptPage() {
       }
     } catch {
       setPrompt(DEFAULT_PROMPT);
+    }
+  };
+
+  const loadV2Data = async () => {
+    if (!currentBusiness) return;
+    
+    setLoadingV2(true);
+    try {
+      const [configRes, memoriesRes, rulesRes] = await Promise.allSettled([
+        agentV2Api.getConfig(currentBusiness.id),
+        agentV2Api.listLeadMemories(currentBusiness.id),
+        agentV2Api.getRules(currentBusiness.id)
+      ]);
+
+      if (configRes.status === 'fulfilled' && configRes.value.data) {
+        const config = configRes.value.data;
+        if (config.skills) setV2Skills(config.skills);
+        if (config.prompts) setV2Prompts(config.prompts);
+      }
+
+      if (memoriesRes.status === 'fulfilled' && memoriesRes.value.data) {
+        setLeadMemories(memoriesRes.value.data.memories || []);
+      }
+
+      if (rulesRes.status === 'fulfilled' && rulesRes.value.data) {
+        setLearnedRules(rulesRes.value.data.rules || []);
+      }
+    } catch (err) {
+      console.error('Error loading V2 data:', err);
+    } finally {
+      setLoadingV2(false);
+    }
+  };
+
+  const handleToggleV2Skill = async (skill: keyof V2Skills) => {
+    if (!currentBusiness) return;
+    
+    const newSkills = { ...v2Skills, [skill]: !v2Skills[skill] };
+    setV2Skills(newSkills);
+    
+    try {
+      await agentV2Api.saveConfig(currentBusiness.id, { skills: newSkills });
+      setSuccess(`Skill ${skill} ${newSkills[skill] ? 'activado' : 'desactivado'}`);
+    } catch (err: any) {
+      setV2Skills(v2Skills);
+      setError(err.response?.data?.error || 'Error al actualizar skill');
+    }
+  };
+
+  const handleSaveV2Prompts = async (prompts: V2Prompts) => {
+    if (!currentBusiness) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      await agentV2Api.saveConfig(currentBusiness.id, { prompts });
+      setV2Prompts(prompts);
+      setSuccess('Prompts de V2 guardados correctamente');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al guardar prompts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleRule = async (ruleId: string, enabled: boolean) => {
+    if (!currentBusiness) return;
+    
+    try {
+      await agentV2Api.toggleRule(currentBusiness.id, ruleId, enabled);
+      setLearnedRules(rules => 
+        rules.map(r => r.id === ruleId ? { ...r, enabled } : r)
+      );
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al actualizar regla');
+    }
+  };
+
+  const handleDeleteRule = async (ruleId: string) => {
+    if (!currentBusiness) return;
+    
+    try {
+      await agentV2Api.deleteRule(currentBusiness.id, ruleId);
+      setLearnedRules(rules => rules.filter(r => r.id !== ruleId));
+      setSuccess('Regla eliminada');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al eliminar regla');
+    }
+  };
+
+  const handleRefreshMemories = async () => {
+    if (!currentBusiness) return;
+    
+    setLoadingV2(true);
+    try {
+      const res = await agentV2Api.listLeadMemories(currentBusiness.id);
+      setLeadMemories(res.data.memories || []);
+    } catch (err) {
+      console.error('Error refreshing memories:', err);
+    } finally {
+      setLoadingV2(false);
+    }
+  };
+
+  const handleRefreshRules = async () => {
+    if (!currentBusiness) return;
+    
+    setLoadingV2(true);
+    try {
+      const res = await agentV2Api.getRules(currentBusiness.id);
+      setLearnedRules(res.data.rules || []);
+    } catch (err) {
+      console.error('Error refreshing rules:', err);
+    } finally {
+      setLoadingV2(false);
     }
   };
 
@@ -466,34 +644,114 @@ export default function PromptPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-6">
-        <button
-          onClick={() => setActiveTab('prompt')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'prompt' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-          }`}
-        >
-          Prompt Maestro
-        </button>
-        <button
-          onClick={() => setActiveTab('config')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'config' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-          }`}
-        >
-          Configuracion
-        </button>
-        <button
-          onClick={() => setActiveTab('tools')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'tools' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-          }`}
-        >
-          Tools ({tools.length})
-        </button>
-      </div>
+      {agentVersion === 'v1' ? (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('prompt')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'prompt' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Prompt Maestro
+          </button>
+          <button
+            onClick={() => setActiveTab('config')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'config' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Configuracion
+          </button>
+          <button
+            onClick={() => setActiveTab('tools')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'tools' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Tools ({tools.length})
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => setActiveV2Tab('skills')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'skills' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Skills V2
+          </button>
+          <button
+            onClick={() => setActiveV2Tab('prompts')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'prompts' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            3 Cerebros
+          </button>
+          <button
+            onClick={() => setActiveV2Tab('memory')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'memory' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Memoria
+          </button>
+          <button
+            onClick={() => setActiveV2Tab('rules')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'rules' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Reglas ({learnedRules.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('config')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'config' && activeV2Tab !== 'skills' && activeV2Tab !== 'prompts' && activeV2Tab !== 'memory' && activeV2Tab !== 'rules'
+                ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Configuracion
+          </button>
+        </div>
+      )}
 
-      {activeTab === 'prompt' && (
+      {agentVersion === 'v2' && activeV2Tab === 'skills' && (
+        <SkillsV2Panel
+          skills={v2Skills}
+          onToggleSkill={handleToggleV2Skill}
+          loading={loadingV2}
+        />
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'prompts' && (
+        <PromptsV2Panel
+          prompts={v2Prompts}
+          onUpdatePrompts={handleSaveV2Prompts}
+          loading={loading}
+        />
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'memory' && (
+        <LeadMemoryPanel
+          memories={leadMemories}
+          loading={loadingV2}
+          onRefresh={handleRefreshMemories}
+        />
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'rules' && (
+        <RulesLearnedPanel
+          rules={learnedRules}
+          loading={loadingV2}
+          onToggleRule={handleToggleRule}
+          onDeleteRule={handleDeleteRule}
+          onRefresh={handleRefreshRules}
+        />
+      )}
+
+      {agentVersion === 'v1' && activeTab === 'prompt' && (
         <div className="card">
           <h2 className="text-lg font-semibold text-white mb-4">Prompt maestro</h2>
           <p className="text-sm text-gray-400 mb-4">
@@ -527,7 +785,7 @@ export default function PromptPage() {
         </div>
       )}
 
-      {activeTab === 'config' && (
+      {((agentVersion === 'v1' && activeTab === 'config') || (agentVersion === 'v2' && activeTab === 'config')) && (
         <div className="space-y-6">
           <div className="card">
             <h2 className="text-lg font-semibold text-white mb-4">Buffer de Mensajes</h2>
@@ -611,7 +869,7 @@ export default function PromptPage() {
         </div>
       )}
 
-      {activeTab === 'tools' && (
+      {agentVersion === 'v1' && activeTab === 'tools' && (
         <div className="space-y-4">
           <div className="card">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">

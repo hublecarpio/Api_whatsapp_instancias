@@ -267,3 +267,34 @@ export const extractionApi = {
   updateContactData: (businessId: string, contactPhone: string, data: Record<string, string>) =>
     api.patch(`/extraction/contact/${businessId}/${contactPhone}`, { data })
 };
+
+export const agentV2Api = {
+  getConfig: (businessId: string) =>
+    api.get(`/agent-v2/config/${businessId}`),
+  saveConfig: (businessId: string, data: {
+    skills?: {
+      search_product?: boolean;
+      payment?: boolean;
+      followup?: boolean;
+      media?: boolean;
+      crm?: boolean;
+    };
+    prompts?: {
+      vendor?: string;
+      observer?: string;
+      refiner?: string;
+    };
+  }) => api.put(`/agent-v2/config/${businessId}`, data),
+  getLeadMemory: (businessId: string, leadId: string) =>
+    api.get(`/agent-v2/memory/${businessId}/${leadId}`),
+  listLeadMemories: (businessId: string) =>
+    api.get(`/agent-v2/memories/${businessId}`),
+  getRules: (businessId: string) =>
+    api.get(`/agent-v2/rules/${businessId}`),
+  toggleRule: (businessId: string, ruleId: string, enabled: boolean) =>
+    api.patch(`/agent-v2/rules/${businessId}/${ruleId}`, { enabled }),
+  deleteRule: (businessId: string, ruleId: string) =>
+    api.delete(`/agent-v2/rules/${businessId}/${ruleId}`),
+  generateEmbeddings: (businessId: string) =>
+    api.post(`/agent-v2/embeddings/${businessId}`)
+};

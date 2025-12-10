@@ -1,4 +1,6 @@
 {
-  "/page": "app/page.js",
-  "/login/page": "app/login/page.js"
+  "/login/page": "app/login/page.js",
+  "/super-admin/page": "app/super-admin/page.js",
+  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js"
 }
