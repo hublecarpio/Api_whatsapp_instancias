@@ -606,30 +606,45 @@ export default function ChatPage() {
   const renderMedia = (mediaUrl: string, isOutbound: boolean) => {
     if (isImageUrl(mediaUrl)) {
       return (
-        <div className="mb-2">
-          <img src={mediaUrl} alt="Media" className="max-w-full rounded-lg cursor-pointer hover:opacity-90" style={{ maxHeight: '200px' }} onClick={() => window.open(mediaUrl, '_blank')} />
+        <div className="mb-1">
+          <img 
+            src={mediaUrl} 
+            alt="Media" 
+            className="max-w-full rounded-md cursor-pointer hover:opacity-90 transition-opacity" 
+            style={{ maxHeight: '180px', maxWidth: '200px' }} 
+            onClick={() => window.open(mediaUrl, '_blank')} 
+          />
         </div>
       );
     }
     if (isVideoUrl(mediaUrl)) {
-      return <div className="mb-2"><video src={mediaUrl} controls className="max-w-full rounded-lg" style={{ maxHeight: '200px' }} /></div>;
+      return (
+        <div className="mb-1">
+          <video 
+            src={mediaUrl} 
+            controls 
+            className="max-w-full rounded-md" 
+            style={{ maxHeight: '180px', maxWidth: '220px' }} 
+          />
+        </div>
+      );
     }
     if (isAudioUrl(mediaUrl)) {
       return (
-        <div className={`mb-2 p-2 rounded-lg ${isOutbound ? 'bg-neon-blue-dark/30' : 'bg-dark-hover'}`}>
-          <audio controls preload="metadata" className="h-10 w-full max-w-[180px]">
-            <source src={mediaUrl} type="audio/ogg" />
+        <div className="mb-1">
+          <audio controls preload="metadata" className="h-8 w-full" style={{ maxWidth: '200px' }}>
             <source src={mediaUrl} type="audio/mpeg" />
+            <source src={mediaUrl} type="audio/ogg" />
           </audio>
         </div>
       );
     }
     return (
-      <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-2 p-2 rounded-lg mb-2 ${isOutbound ? 'bg-neon-blue-dark/30' : 'bg-dark-hover'}`}>
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-2 px-3 py-2 rounded-md mb-1 ${isOutbound ? 'bg-neon-blue-dark/20' : 'bg-dark-hover/50'}`}>
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
         </svg>
-        <span className="text-sm underline">Ver archivo</span>
+        <span className="text-sm">Ver archivo</span>
       </a>
     );
   };
@@ -797,21 +812,18 @@ export default function ChatPage() {
                       {msg.mediaUrl && renderMedia(msg.mediaUrl, msg.direction === 'outbound')}
                       {msg.message && <p className="break-words whitespace-pre-wrap text-sm sm:text-base">{msg.message}</p>}
                       {msg.direction === 'inbound' && msg.metadata?.mediaAnalysis && (
-                        <div className="mt-2 group relative">
-                          <button 
-                            className="flex items-center gap-1 text-xs px-2 py-1 bg-purple-500/20 text-purple-300 rounded-full hover:bg-purple-500/30 transition-colors"
-                            title="Ver análisis de IA"
-                          >
+                        <div className="mt-1 group relative inline-block">
+                          <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded cursor-help">
                             <span>✨</span>
                             <span>Analizado</span>
-                          </button>
-                          <div className="absolute bottom-full left-0 mb-2 w-64 sm:w-80 p-3 bg-dark-card border border-purple-500/30 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                            <p className="text-xs text-purple-300 font-medium mb-1">
+                          </span>
+                          <div className="absolute bottom-full left-0 mb-1 w-56 sm:w-64 p-2 bg-dark-card border border-purple-500/20 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                            <p className="text-[10px] text-purple-400 font-medium mb-0.5">
                               {msg.metadata?.mediaType === 'audio' || msg.metadata?.type === 'audio' || msg.metadata?.type === 'ptt' ? '🎤 Transcripción:' : 
                                msg.metadata?.mediaType === 'image' || msg.metadata?.type === 'image' || msg.metadata?.type === 'sticker' ? '🖼️ Descripción:' : 
                                msg.metadata?.mediaType === 'video' || msg.metadata?.type === 'video' ? '🎬 Descripción:' : '📎 Análisis:'}
                             </p>
-                            <p className="text-xs text-gray-300 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                            <p className="text-[10px] text-gray-400 whitespace-pre-wrap max-h-32 overflow-y-auto leading-relaxed">
                               {msg.metadata.mediaAnalysis}
                             </p>
                           </div>
