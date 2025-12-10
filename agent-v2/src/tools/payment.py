@@ -28,7 +28,7 @@ class PaymentTool:
                     },
                     headers={
                         "Content-Type": "application/json",
-                        "X-Internal-Secret": "internal-agent-secret-change-me"
+                        "X-Internal-Secret": settings.internal_agent_secret
                     }
                 )
                 

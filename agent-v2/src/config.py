@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     redis_url: str = ""
     core_api_url: str = "http://localhost:3001"
+    internal_agent_secret: str = "internal-agent-secret-change-me"
     
     port: int = 5001
     debug: bool = False
