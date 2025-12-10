@@ -62,6 +62,8 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
   paymentUrl?: string;
   sessionId?: string;
   orderId?: string;
+  paymentSessionId?: string;
+  totalAmount?: number;
   error?: string;
 }> {
   try {
@@ -177,7 +179,7 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
     const shortCode = generateShortCode(7);
     const shortPaymentUrl = `${PUBLIC_FRONTEND_URL}/pay/${shortCode}`;
 
-    await prisma.paymentSession.create({
+    const paymentSession = await prisma.paymentSession.create({
       data: {
         businessId,
         contactPhone,
@@ -200,7 +202,9 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
       success: true,
       paymentUrl: shortPaymentUrl,
       sessionId: session.id,
-      orderId: order.id
+      orderId: order.id,
+      paymentSessionId: paymentSession.id,
+      totalAmount
     };
   } catch (error: any) {
     console.error('[STRIPE PAYMENT] Error creating payment link:', error);

@@ -923,6 +923,17 @@ async function processWithAgent(
               exito: false,
               error: 'Producto no encontrado'
             });
+            await prisma.paymentLinkRequest.create({
+              data: {
+                businessId,
+                contactPhone,
+                triggerSource: 'agent',
+                productId,
+                isSuccess: false,
+                failureReason: 'Producto no encontrado',
+                isPro: false
+              }
+            });
           } else {
             const totalAmount = product.price * quantity;
             const order = await prisma.order.create({
@@ -949,6 +960,21 @@ async function processWithAgent(
               }
             });
             
+            await prisma.paymentLinkRequest.create({
+              data: {
+                businessId,
+                contactPhone,
+                triggerSource: 'agent',
+                productId: product.id,
+                productName: product.title,
+                amount: totalAmount,
+                quantity,
+                isSuccess: true,
+                orderId: order.id,
+                isPro: false
+              }
+            });
+            
             paymentResult = JSON.stringify({
               exito: true,
               mensaje: 'Pedido creado exitosamente',
@@ -959,6 +985,10 @@ async function processWithAgent(
             console.log(`[PAYMENT LINK] Order created with AWAITING_VOUCHER status: ${order.id}`);
           }
         } else {
+          const product = await prisma.product.findUnique({
+            where: { id: productId }
+          });
+          
           const result = await createProductPaymentLink({
             businessId,
             contactPhone,
@@ -970,6 +1000,22 @@ async function processWithAgent(
           });
           
           if (result.success && result.paymentUrl) {
+            await prisma.paymentLinkRequest.create({
+              data: {
+                businessId,
+                contactPhone,
+                triggerSource: 'agent',
+                productId,
+                productName: product?.title,
+                amount: result.totalAmount,
+                quantity,
+                isSuccess: true,
+                orderId: result.orderId,
+                paymentSessionId: result.paymentSessionId,
+                isPro: true
+              }
+            });
+            
             paymentResult = JSON.stringify({
               exito: true,
               mensaje: 'Enlace de pago generado exitosamente',
@@ -979,6 +1025,20 @@ async function processWithAgent(
             });
             console.log(`[PAYMENT LINK] Created successfully: ${result.paymentUrl}`);
           } else {
+            await prisma.paymentLinkRequest.create({
+              data: {
+                businessId,
+                contactPhone,
+                triggerSource: 'agent',
+                productId,
+                productName: product?.title,
+                quantity,
+                isSuccess: false,
+                failureReason: result.error || 'No se pudo generar el enlace de pago',
+                isPro: true
+              }
+            });
+            
             paymentResult = JSON.stringify({
               exito: false,
               error: result.error || 'No se pudo generar el enlace de pago'
