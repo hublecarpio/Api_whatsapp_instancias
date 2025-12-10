@@ -13,6 +13,59 @@ async function checkBusinessAccess(userId: string, businessId: string) {
   return business;
 }
 
+router.post('/search', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, query, limit = 10 } = req.body;
+    
+    if (!businessId || !query) {
+      return res.status(400).json({ error: 'businessId and query are required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const searchTerms = query.toLowerCase().split(/\s+/).filter((t: string) => t.length > 2);
+    
+    const products = await prisma.product.findMany({
+      where: {
+        businessId,
+        OR: searchTerms.length > 0 ? [
+          { title: { contains: query, mode: 'insensitive' } },
+          { description: { contains: query, mode: 'insensitive' } },
+          ...searchTerms.map((term: string) => ({ title: { contains: term, mode: 'insensitive' as const } })),
+          ...searchTerms.map((term: string) => ({ description: { contains: term, mode: 'insensitive' as const } }))
+        ] : [
+          { title: { contains: query, mode: 'insensitive' } },
+          { description: { contains: query, mode: 'insensitive' } }
+        ]
+      },
+      take: Math.min(limit, 20),
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json({
+      products: products.map(p => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        price: p.price,
+        stock: p.stock,
+        imageUrl: p.imageUrl,
+        available: p.stock > 0
+      })),
+      currency: {
+        code: business.currencyCode,
+        symbol: business.currencySymbol
+      }
+    });
+  } catch (error) {
+    console.error('Search products error:', error);
+    res.status(500).json({ error: 'Failed to search products' });
+  }
+});
+
 router.post('/bulk', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, products } = req.body;
@@ -38,6 +91,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
         title: String(p.title).trim(),
         description: p.description ? String(p.description).trim() : null,
         price: parseFloat(p.price),
+        stock: p.stock !== undefined ? parseInt(p.stock) : 0,
         imageUrl: p.imageUrl ? String(p.imageUrl).trim() : null
       }))
     });
@@ -55,7 +109,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, title, description, price, imageUrl } = req.body;
+    const { businessId, title, description, price, stock, imageUrl } = req.body;
     
     if (!businessId || !title || price === undefined) {
       return res.status(400).json({ error: 'businessId, title and price are required' });
@@ -67,7 +121,14 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
     
     const product = await prisma.product.create({
-      data: { businessId, title, description, price, imageUrl }
+      data: { 
+        businessId, 
+        title, 
+        description, 
+        price, 
+        stock: stock !== undefined ? parseInt(stock) : 0,
+        imageUrl 
+      }
     });
     
     res.status(201).json(product);
@@ -122,7 +183,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, price, imageUrl } = req.body;
+    const { title, description, price, stock, imageUrl } = req.body;
     
     const existing = await prisma.product.findUnique({
       where: { id: req.params.id },
@@ -139,6 +200,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         title: title ?? existing.title,
         description: description ?? existing.description,
         price: price ?? existing.price,
+        stock: stock !== undefined ? parseInt(stock) : existing.stock,
         imageUrl: imageUrl ?? existing.imageUrl
       }
     });

@@ -9,6 +9,7 @@ interface Product {
   title: string;
   description?: string;
   price: number;
+  stock: number;
   imageUrl?: string;
 }
 
@@ -23,6 +24,7 @@ export default function ProductsPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
+  const [stock, setStock] = useState('0');
   const [imageUrl, setImageUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -54,6 +56,7 @@ export default function ProductsPage() {
     setTitle('');
     setDescription('');
     setPrice('');
+    setStock('0');
     setImageUrl('');
     setEditingProduct(null);
     setShowForm(false);
@@ -111,10 +114,10 @@ export default function ProductsPage() {
   };
 
   const downloadCsvExample = () => {
-    const csvContent = `title,description,price,imageUrl
-"Producto ejemplo 1","Descripcion del producto 1",29.99,https://ejemplo.com/imagen1.jpg
-"Producto ejemplo 2","Descripcion del producto 2",49.99,
-"Producto sin descripcion",,19.99,https://ejemplo.com/imagen3.jpg`;
+    const csvContent = `title,description,price,stock,imageUrl
+"Producto ejemplo 1","Descripcion del producto 1",29.99,100,https://ejemplo.com/imagen1.jpg
+"Producto ejemplo 2","Descripcion del producto 2",49.99,50,
+"Producto sin descripcion",,19.99,25,https://ejemplo.com/imagen3.jpg`;
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -143,6 +146,7 @@ export default function ProductsPage() {
       const titleIdx = headers.indexOf('title');
       const descIdx = headers.indexOf('description');
       const priceIdx = headers.indexOf('price');
+      const stockIdx = headers.indexOf('stock');
       const imageIdx = headers.indexOf('imageurl');
       
       if (titleIdx === -1 || priceIdx === -1) {
@@ -162,6 +166,7 @@ export default function ProductsPage() {
               title,
               description: descIdx >= 0 ? values[descIdx]?.trim() || null : null,
               price,
+              stock: stockIdx >= 0 ? parseInt(values[stockIdx]?.trim() || '0') || 0 : 0,
               imageUrl: imageIdx >= 0 ? values[imageIdx]?.trim() || null : null
             });
           }
@@ -208,6 +213,7 @@ export default function ProductsPage() {
     setTitle(product.title);
     setDescription(product.description || '');
     setPrice(product.price.toString());
+    setStock(product.stock?.toString() || '0');
     setImageUrl(product.imageUrl || '');
     setEditingProduct(product);
     setShowForm(true);
@@ -225,6 +231,7 @@ export default function ProductsPage() {
           title,
           description,
           price: parseFloat(price),
+          stock: parseInt(stock),
           imageUrl
         });
       } else {
@@ -233,6 +240,7 @@ export default function ProductsPage() {
           title,
           description,
           price: parseFloat(price),
+          stock: parseInt(stock),
           imageUrl
         });
       }
@@ -308,7 +316,7 @@ export default function ProductsPage() {
             {editingProduct ? 'Editar producto' : 'Nuevo producto'}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
                   Titulo *
@@ -333,6 +341,18 @@ export default function ProductsPage() {
                   step="0.01"
                   min="0"
                   required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Stock
+                </label>
+                <input
+                  type="number"
+                  value={stock}
+                  onChange={(e) => setStock(e.target.value)}
+                  className="input"
+                  min="0"
                 />
               </div>
             </div>
@@ -449,9 +469,18 @@ export default function ProductsPage() {
               {product.description && (
                 <p className="text-sm text-gray-400 mt-1">{product.description}</p>
               )}
-              <p className="text-lg font-bold text-neon-blue mt-2">
-                ${product.price.toFixed(2)}
-              </p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-lg font-bold text-neon-blue">
+                  {currentBusiness?.currencySymbol || 'S/.'}{product.price.toFixed(2)}
+                </p>
+                <span className={`text-sm px-2 py-0.5 rounded ${
+                  product.stock > 0 
+                    ? 'bg-accent-success/20 text-accent-success' 
+                    : 'bg-accent-error/20 text-accent-error'
+                }`}>
+                  Stock: {product.stock ?? 0}
+                </span>
+              </div>
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={() => handleEdit(product)}

@@ -595,10 +595,16 @@ async function processWithAgent(
     }
   }
   
-  if (business.products && business.products.length > 0) {
+  const currencySymbol = business.currencySymbol || 'S/.';
+  const productCount = business.products?.length || 0;
+  
+  if (productCount > 0 && productCount <= 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
     business.products.forEach((product: any) => {
-      systemPrompt += `\n- ${product.title}: $${product.price}`;
+      systemPrompt += `\n- ${product.title}: ${currencySymbol}${product.price}`;
+      if (product.stock !== undefined) {
+        systemPrompt += ` (Stock: ${product.stock})`;
+      }
       if (product.description) {
         systemPrompt += ` - ${product.description}`;
       }
@@ -607,6 +613,14 @@ async function processWithAgent(
       }
     });
     systemPrompt += `\n\nCuando el cliente pregunte por un producto con imagen, incluye la URL de la imagen en tu respuesta para que se envíe automáticamente.`;
+    systemPrompt += `\nSi un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
+  } else if (productCount > 20) {
+    systemPrompt += `\n\n## Catálogo de productos:`;
+    systemPrompt += `\nTienes acceso a un catálogo extenso de ${productCount} productos. Usa la función buscar_producto para encontrar productos por nombre o descripción cuando el cliente pregunte.`;
+    systemPrompt += `\nLos precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).`;
+    systemPrompt += `\nCuando el cliente pregunte por un producto, SIEMPRE usa la función buscar_producto para buscar en el catálogo.`;
+    systemPrompt += `\nIncluye la URL de la imagen en tu respuesta si el producto tiene imagen.`;
+    systemPrompt += `\nSi un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
   }
   
   const contactAssignment = await prisma.tagAssignment.findUnique({
@@ -702,6 +716,26 @@ async function processWithAgent(
     };
   });
   
+  if (productCount > 20) {
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'buscar_producto',
+        description: 'Busca productos en el catálogo por nombre o descripción. Usa esta función cuando el cliente pregunte por un producto específico.',
+        parameters: {
+          type: 'object',
+          properties: {
+            consulta: {
+              type: 'string',
+              description: 'Término de búsqueda: nombre del producto o palabras clave de la descripción'
+            }
+          },
+          required: ['consulta']
+        }
+      }
+    });
+  }
+  
   const modelToUse = getDefaultModel();
   
   const chatParams: any = {
@@ -733,6 +767,55 @@ async function processWithAgent(
     for (const toolCall of toolCalls) {
       const fn = (toolCall as any).function;
       const toolName = fn.name;
+      
+      if (toolName === 'buscar_producto') {
+        const args = JSON.parse(fn.arguments);
+        const searchQuery = args.consulta || args.query || '';
+        
+        console.log(`[PRODUCT SEARCH] Query: ${searchQuery}`);
+        
+        const searchTerms = searchQuery.toLowerCase().split(/\s+/).filter((t: string) => t.length > 2);
+        
+        const foundProducts = await prisma.product.findMany({
+          where: {
+            businessId,
+            OR: searchTerms.length > 0 ? [
+              { title: { contains: searchQuery, mode: 'insensitive' } },
+              { description: { contains: searchQuery, mode: 'insensitive' } },
+              ...searchTerms.map((term: string) => ({ title: { contains: term, mode: 'insensitive' as const } })),
+              ...searchTerms.map((term: string) => ({ description: { contains: term, mode: 'insensitive' as const } }))
+            ] : [
+              { title: { contains: searchQuery, mode: 'insensitive' } },
+              { description: { contains: searchQuery, mode: 'insensitive' } }
+            ]
+          },
+          take: 10,
+          orderBy: { createdAt: 'desc' }
+        });
+        
+        const productResults = foundProducts.map(p => ({
+          nombre: p.title,
+          precio: `${currencySymbol}${p.price}`,
+          stock: p.stock,
+          disponible: p.stock > 0,
+          descripcion: p.description || 'Sin descripción',
+          imagen: p.imageUrl || null
+        }));
+        
+        const resultContent = productResults.length > 0 
+          ? JSON.stringify({ productos_encontrados: productResults })
+          : JSON.stringify({ mensaje: 'No se encontraron productos con ese término de búsqueda' });
+        
+        console.log(`[PRODUCT SEARCH] Found ${productResults.length} products`);
+        
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: resultContent
+        });
+        continue;
+      }
+      
       const tool = tools.find(t => t.name.replace(/[^a-zA-Z0-9_-]/g, '_') === toolName);
       
       if (tool) {

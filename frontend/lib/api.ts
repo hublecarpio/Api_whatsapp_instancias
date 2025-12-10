@@ -59,7 +59,8 @@ export const productApi = {
   create: (data: any) => api.post('/products', data),
   update: (id: string, data: any) => api.put(`/products/${id}`, data),
   delete: (id: string) => api.delete(`/products/${id}`),
-  bulkCreate: (businessId: string, products: any[]) => api.post('/products/bulk', { businessId, products })
+  bulkCreate: (businessId: string, products: any[]) => api.post('/products/bulk', { businessId, products }),
+  search: (businessId: string, query: string, limit?: number) => api.post('/products/search', { businessId, query, limit })
 };
 
 export const policyApi = {

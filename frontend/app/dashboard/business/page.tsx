@@ -14,6 +14,8 @@ export default function BusinessPage() {
   const [description, setDescription] = useState('');
   const [industry, setIndustry] = useState('');
   const [timezone, setTimezone] = useState('America/Lima');
+  const [currencyCode, setCurrencyCode] = useState('PEN');
+  const [currencySymbol, setCurrencySymbol] = useState('S/.');
   
   const [shippingPolicy, setShippingPolicy] = useState('');
   const [refundPolicy, setRefundPolicy] = useState('');
@@ -26,6 +28,8 @@ export default function BusinessPage() {
       setDescription(currentBusiness.description || '');
       setIndustry(currentBusiness.industry || '');
       setTimezone(currentBusiness.timezone || 'America/Lima');
+      setCurrencyCode(currentBusiness.currencyCode || 'PEN');
+      setCurrencySymbol(currentBusiness.currencySymbol || 'S/.');
       
       policyApi.get(currentBusiness.id).then((res) => {
         if (res.data) {
@@ -45,13 +49,13 @@ export default function BusinessPage() {
 
     try {
       if (currentBusiness) {
-        await businessApi.update(currentBusiness.id, { name, description, industry, timezone });
+        await businessApi.update(currentBusiness.id, { name, description, industry, timezone, currencyCode, currencySymbol });
         
         const refreshed = await businessApi.get(currentBusiness.id);
         setCurrentBusiness(refreshed.data);
         setSuccess('Empresa actualizada correctamente');
       } else {
-        const response = await businessApi.create({ name, description, industry, timezone });
+        const response = await businessApi.create({ name, description, industry, timezone, currencyCode, currencySymbol });
         setBusinesses([...businesses, response.data]);
         setCurrentBusiness(response.data);
         setSuccess('Empresa creada correctamente');
@@ -167,6 +171,53 @@ export default function BusinessPage() {
             <p className="text-xs text-gray-400 mt-1">
               Usado para variables dinamicas como {"{{now}}"}, {"{{date}}"}, {"{{time}}"}
             </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Moneda
+              </label>
+              <select
+                value={currencyCode}
+                onChange={(e) => {
+                  const code = e.target.value;
+                  setCurrencyCode(code);
+                  const symbols: Record<string, string> = {
+                    'PEN': 'S/.',
+                    'USD': '$',
+                    'EUR': '€',
+                    'MXN': '$',
+                    'COP': '$',
+                    'ARS': '$',
+                    'CLP': '$',
+                    'BRL': 'R$'
+                  };
+                  setCurrencySymbol(symbols[code] || '$');
+                }}
+                className="input"
+              >
+                <option value="PEN">PEN - Sol Peruano</option>
+                <option value="USD">USD - Dolar Americano</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="MXN">MXN - Peso Mexicano</option>
+                <option value="COP">COP - Peso Colombiano</option>
+                <option value="ARS">ARS - Peso Argentino</option>
+                <option value="CLP">CLP - Peso Chileno</option>
+                <option value="BRL">BRL - Real Brasileno</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Simbolo
+              </label>
+              <input
+                type="text"
+                value={currencySymbol}
+                onChange={(e) => setCurrencySymbol(e.target.value)}
+                className="input"
+                placeholder="S/."
+              />
+            </div>
           </div>
         </div>
       </div>
