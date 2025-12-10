@@ -3,8 +3,22 @@ import prisma from './prisma.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
+function getPublicFrontendUrl(): string {
+  if (process.env.PUBLIC_FRONTEND_URL) {
+    return process.env.PUBLIC_FRONTEND_URL;
+  }
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+  if (process.env.REPLIT_DOMAINS) {
+    const domain = process.env.REPLIT_DOMAINS.split(',')[0];
+    return `https://${domain}`;
+  }
+  return 'http://localhost:5000';
+}
+
 const PUBLIC_API_URL = process.env.PUBLIC_API_URL || process.env.CORE_API_URL || 'http://localhost:3001';
-const PUBLIC_FRONTEND_URL = process.env.PUBLIC_FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5000';
+const PUBLIC_FRONTEND_URL = getPublicFrontendUrl();
 
 function generateShortCode(length: number = 7): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

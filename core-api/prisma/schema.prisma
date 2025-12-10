@@ -427,3 +427,31 @@ model PaymentSession {
   @@index([shortCode])
   @@index([status, expiresAt])
 }
+
+model ExtractionField {
+  id           String   @id @default(uuid())
+  businessId   String
+  fieldKey     String
+  fieldLabel   String
+  fieldType    String   @default("text")
+  required     Boolean  @default(false)
+  order        Int      @default(0)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@unique([businessId, fieldKey])
+  @@index([businessId])
+}
+
+model ContactExtractedData {
+  id           String   @id @default(uuid())
+  businessId   String
+  contactPhone String
+  fieldKey     String
+  fieldValue   String?
+  extractedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([businessId, contactPhone, fieldKey])
+  @@index([businessId, contactPhone])
+}
