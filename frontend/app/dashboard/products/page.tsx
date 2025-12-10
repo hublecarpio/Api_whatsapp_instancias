@@ -20,6 +20,7 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [error, setError] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -277,7 +278,35 @@ export default function ProductsPage() {
     <div className="p-4 sm:p-0">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-white">Productos</h1>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex bg-[#1e1e1e] rounded-lg p-1 border border-gray-700">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                viewMode === 'grid'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Vista mosaico"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Vista listado"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
           <button
             onClick={downloadCsvExample}
             className="btn btn-secondary text-sm"
@@ -454,7 +483,7 @@ export default function ProductsPage() {
           <div className="text-6xl mb-4">📦</div>
           <p className="text-gray-400">No tienes productos todavia.</p>
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {products.map((product) => (
             <div key={product.id} className="card card-hover">
@@ -467,7 +496,7 @@ export default function ProductsPage() {
               )}
               <h3 className="font-semibold text-white">{product.title}</h3>
               {product.description && (
-                <p className="text-sm text-gray-400 mt-1">{product.description}</p>
+                <p className="text-sm text-gray-400 mt-1 line-clamp-2">{product.description}</p>
               )}
               <div className="flex items-center justify-between mt-2">
                 <p className="text-lg font-bold text-neon-blue">
@@ -494,6 +523,69 @@ export default function ProductsPage() {
                 >
                   Eliminar
                 </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="hidden sm:grid sm:grid-cols-12 gap-4 px-4 py-2 text-xs text-gray-500 uppercase font-medium">
+            <div className="col-span-1">Imagen</div>
+            <div className="col-span-4">Producto</div>
+            <div className="col-span-2">Precio</div>
+            <div className="col-span-2">Stock</div>
+            <div className="col-span-3">Acciones</div>
+          </div>
+          {products.map((product) => (
+            <div key={product.id} className="card card-hover">
+              <div className="flex flex-col sm:grid sm:grid-cols-12 gap-4 items-center">
+                <div className="col-span-1 w-full sm:w-auto">
+                  {product.imageUrl ? (
+                    <img
+                      src={product.imageUrl}
+                      alt={product.title}
+                      className="w-full sm:w-12 sm:h-12 h-32 object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-full sm:w-12 sm:h-12 h-32 bg-gray-700 rounded-lg flex items-center justify-center">
+                      <span className="text-gray-500 text-2xl">📷</span>
+                    </div>
+                  )}
+                </div>
+                <div className="col-span-4 w-full sm:w-auto">
+                  <h3 className="font-semibold text-white">{product.title}</h3>
+                  {product.description && (
+                    <p className="text-sm text-gray-400 truncate max-w-xs">{product.description}</p>
+                  )}
+                </div>
+                <div className="col-span-2 w-full sm:w-auto">
+                  <p className="text-lg font-bold text-neon-blue">
+                    {currentBusiness?.currencySymbol || 'S/.'}{product.price.toFixed(2)}
+                  </p>
+                </div>
+                <div className="col-span-2 w-full sm:w-auto">
+                  <span className={`text-sm px-2 py-0.5 rounded ${
+                    product.stock > 0 
+                      ? 'bg-accent-success/20 text-accent-success' 
+                      : 'bg-accent-error/20 text-accent-error'
+                  }`}>
+                    {product.stock ?? 0} unidades
+                  </span>
+                </div>
+                <div className="col-span-3 flex gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => handleEdit(product)}
+                    className="btn btn-secondary btn-sm flex-1 sm:flex-none"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => handleDelete(product.id)}
+                    className="btn btn-danger btn-sm"
+                  >
+                    Eliminar
+                  </button>
+                </div>
               </div>
             </div>
           ))}

@@ -103,6 +103,9 @@ export default function ChatPage() {
   const [selectedNewChatTemplate, setSelectedNewChatTemplate] = useState<Template | null>(null);
   const [templateVariables, setTemplateVariables] = useState<string[]>([]);
   const [newChatTemplateVariables, setNewChatTemplateVariables] = useState<string[]>([]);
+  const [contactData, setContactData] = useState<Record<string, any>>({});
+  const [currentStage, setCurrentStage] = useState<{id: string; name: string; color: string} | null>(null);
+  const [showContactPanel, setShowContactPanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -230,9 +233,11 @@ export default function ChatPage() {
       fetchMessages(selectedPhone);
       fetchWindowStatus(selectedPhone);
       fetchContactBotStatus(selectedPhone);
+      fetchContactExtractedData(selectedPhone);
       const interval = setInterval(() => {
         fetchMessages(selectedPhone);
         fetchWindowStatus(selectedPhone);
+        fetchContactExtractedData(selectedPhone);
       }, 5000);
       return () => clearInterval(interval);
     }
@@ -246,6 +251,18 @@ export default function ChatPage() {
     } catch (err) {
       console.error('Failed to fetch contact bot status:', err);
       setContactBotDisabled(false);
+    }
+  };
+
+  const fetchContactExtractedData = async (phone: string) => {
+    if (!currentBusiness) return;
+    try {
+      const response = await tagsApi.getContactExtractedData(currentBusiness.id, phone);
+      setContactData(response.data.extractedData || {});
+      setCurrentStage(response.data.currentStage || null);
+    } catch (err) {
+      console.error('Failed to fetch contact extracted data:', err);
+      setContactData({});
     }
   };
 
@@ -803,7 +820,56 @@ export default function ChatPage() {
                   <option value="">Sin etapa</option>
                   {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
                 </select>
+                <button 
+                  onClick={() => setShowContactPanel(!showContactPanel)}
+                  className={`p-2 rounded-full transition-colors ${showContactPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`}
+                  title="Datos del contacto"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
               </div>
+
+              {showContactPanel && (
+                <div className="px-4 py-3 border-b border-dark-border bg-dark-surface">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-white">Datos del Contacto</h4>
+                    {currentStage && (
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${currentStage.color}20`, color: currentStage.color }}>
+                        {currentStage.name}
+                      </span>
+                    )}
+                  </div>
+                  {Object.keys(contactData).length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {contactData.nombre && (
+                        <div><span className="text-gray-500">Nombre:</span> <span className="text-white">{contactData.nombre}</span></div>
+                      )}
+                      {contactData.email && (
+                        <div><span className="text-gray-500">Email:</span> <span className="text-white">{contactData.email}</span></div>
+                      )}
+                      {contactData.direccion && (
+                        <div className="col-span-2"><span className="text-gray-500">Dirección:</span> <span className="text-white">{contactData.direccion}</span></div>
+                      )}
+                      {contactData.ciudad && (
+                        <div><span className="text-gray-500">Ciudad:</span> <span className="text-white">{contactData.ciudad}</span></div>
+                      )}
+                      {contactData.codigo_postal && (
+                        <div><span className="text-gray-500">C.P.:</span> <span className="text-white">{contactData.codigo_postal}</span></div>
+                      )}
+                      {contactData.documento && (
+                        <div><span className="text-gray-500">Documento:</span> <span className="text-white">{contactData.documento}</span></div>
+                      )}
+                      {contactData.notas && (
+                        <div className="col-span-2"><span className="text-gray-500">Notas:</span> <span className="text-gray-400">{contactData.notas}</span></div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500">Sin datos extraídos aún. Los datos se extraen automáticamente de las conversaciones.</p>
+                  )}
+                </div>
+              )}
 
               <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 scroll-smooth-ios scrollbar-thin bg-dark-bg">
                 {messages.map((msg) => (

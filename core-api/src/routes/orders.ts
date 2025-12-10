@@ -318,6 +318,70 @@ router.get('/', authMiddleware, async (req: any, res) => {
   }
 });
 
+router.get('/payment-links', authMiddleware, async (req: any, res) => {
+  try {
+    const { businessId, status } = req.query;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: businessId,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este negocio' });
+    }
+
+    const whereClause: any = { businessId };
+    if (status) {
+      whereClause.status = status;
+    }
+
+    const paymentLinks = await prisma.paymentSession.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    });
+
+    const linksWithProducts = await Promise.all(
+      paymentLinks.map(async (link) => {
+        const productIds = link.productIds as string[];
+        const quantities = link.quantities as number[];
+        
+        const products = await prisma.product.findMany({
+          where: { id: { in: productIds } }
+        });
+
+        const items = productIds.map((productId, index) => {
+          const product = products.find(p => p.id === productId);
+          return {
+            productId,
+            productTitle: product?.title || 'Producto eliminado',
+            quantity: quantities[index] || 1,
+            unitPrice: product?.price || 0,
+            imageUrl: product?.imageUrl
+          };
+        });
+
+        return {
+          ...link,
+          items
+        };
+      })
+    );
+
+    res.json(linksWithProducts);
+  } catch (error: any) {
+    console.error('[ORDERS] Error listing payment links:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/:orderId', authMiddleware, async (req: any, res) => {
   try {
     const { orderId } = req.params;

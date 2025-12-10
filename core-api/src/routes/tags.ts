@@ -694,4 +694,66 @@ router.patch('/contact/:contact_phone/bot-toggle', authMiddleware, async (req: A
   }
 });
 
+router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { contact_phone } = req.params;
+    const { business_id } = req.query;
+    
+    if (!business_id) {
+      res.status(400).json({ error: 'business_id is required' });
+      return;
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id as string, userId: req.userId }
+    });
+
+    if (!business) {
+      res.status(404).json({ error: 'Business not found' });
+      return;
+    }
+    
+    const settings = await prisma.contactSettings.findUnique({
+      where: {
+        businessId_contactPhone: {
+          businessId: business_id as string,
+          contactPhone: contact_phone
+        }
+      }
+    });
+    
+    let extractedData: Record<string, any> = {};
+    if (settings?.notes) {
+      try {
+        const parsed = JSON.parse(settings.notes);
+        extractedData = parsed.extractedData || {};
+      } catch {}
+    }
+
+    const currentTag = await prisma.tagAssignment.findUnique({
+      where: {
+        businessId_contactPhone: {
+          businessId: business_id as string,
+          contactPhone: contact_phone
+        }
+      },
+      include: { tag: true }
+    });
+    
+    res.json({
+      extractedData,
+      currentStage: currentTag?.tag ? {
+        id: currentTag.tag.id,
+        name: currentTag.tag.name,
+        color: currentTag.tag.color
+      } : null,
+      assignedAt: currentTag?.assignedAt,
+      source: currentTag?.source
+    });
+  } catch (error: any) {
+    console.error('Get contact extracted data error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

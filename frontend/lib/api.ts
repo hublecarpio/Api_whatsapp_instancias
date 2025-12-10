@@ -225,7 +225,9 @@ export const tagsApi = {
   getContactBotStatus: (businessId: string, contactPhone: string) =>
     api.get(`/tags/contact/${contactPhone}/bot-status?business_id=${businessId}`),
   toggleContactBot: (businessId: string, contactPhone: string, botDisabled: boolean) =>
-    api.patch(`/tags/contact/${contactPhone}/bot-toggle`, { business_id: businessId, botDisabled })
+    api.patch(`/tags/contact/${contactPhone}/bot-toggle`, { business_id: businessId, botDisabled }),
+  getContactExtractedData: (businessId: string, contactPhone: string) =>
+    api.get(`/tags/contact/${contactPhone}/extracted-data?business_id=${businessId}`)
 };
 
 export const ordersApi = {
@@ -242,5 +244,7 @@ export const ordersApi = {
     shippingAddress?: string;
     shippingCity?: string;
     shippingCountry?: string;
-  }) => api.post('/orders/create-payment-link', data)
+  }) => api.post('/orders/create-payment-link', data),
+  listPaymentLinks: (businessId: string, status?: string) =>
+    api.get(`/orders/payment-links?businessId=${businessId}${status ? `&status=${status}` : ''}`)
 };

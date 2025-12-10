@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
+import { analyzeAndUpdateLeadStage, extractAndSaveContactData } from '../services/leadStageService.js';
 
 const router = Router();
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
@@ -106,6 +107,17 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             } catch (err: any) {
               console.error('Agent think failed:', err.response?.data || err.message);
             }
+          }
+
+          if (!isFromMe) {
+            setImmediate(async () => {
+              try {
+                await analyzeAndUpdateLeadStage(businessId, contactPhone);
+                await extractAndSaveContactData(businessId, contactPhone);
+              } catch (err: any) {
+                console.error('Lead stage analysis failed:', err.message);
+              }
+            });
           }
         }
         break;
