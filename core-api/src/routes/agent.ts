@@ -97,6 +97,9 @@ const MIME_TYPES: Record<string, string> = {
 
 function cleanMarkdownForWhatsApp(text: string): string {
   let cleaned = text;
+  // Remove image markdown syntax ![text](url) - extract just the URL
+  cleaned = cleaned.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '$2');
+  // Remove link markdown syntax [text](url) - extract just the URL
   cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$2');
   cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
   cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
@@ -111,6 +114,7 @@ function cleanMarkdownForWhatsApp(text: string): string {
 function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedText: string } {
   const mediaItems: MediaItem[] = [];
   let cleanedText = text;
+  const seenUrls = new Set<string>();
   
   const allExtensions = [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS, ...FILE_EXTENSIONS].join('|');
   const urlPattern = new RegExp(`(https?:\\/\\/[^\\s]+\\.(${allExtensions}))(?:\\s|$|[)\\]"'])`, 'gi');
@@ -119,6 +123,13 @@ function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedT
   while ((match = urlPattern.exec(text)) !== null) {
     const url = match[1];
     const ext = url.split('.').pop()?.toLowerCase() || '';
+    
+    // Skip duplicates
+    if (seenUrls.has(url)) {
+      cleanedText = cleanedText.replace(match[1], '').trim();
+      continue;
+    }
+    seenUrls.add(url);
     
     let type: 'image' | 'file' | 'video' = 'file';
     if (IMAGE_EXTENSIONS.includes(ext)) type = 'image';
@@ -610,18 +621,25 @@ async function processWithAgent(
         systemPrompt += ` - ${product.description}`;
       }
       if (product.imageUrl) {
-        systemPrompt += ` [Imagen: ${product.imageUrl}]`;
+        systemPrompt += ` [IMG:${product.imageUrl}]`;
       }
     });
-    systemPrompt += `\n\nCuando el cliente pregunte por un producto con imagen, incluye la URL de la imagen en tu respuesta para que se envíe automáticamente.`;
-    systemPrompt += `\nSi un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
+    systemPrompt += `\n\n## Reglas para responder sobre productos:`;
+    systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué KTM tienen"), PRIMERO pregunta qué modelo específico le interesa antes de mostrar todo el catálogo.`;
+    systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto, muestra los detalles de ese producto.`;
+    systemPrompt += `\n- Para enviar imagen de UN producto específico, incluye SOLO la URL completa (https://...) al final de tu mensaje. NO uses sintaxis Markdown como ![texto](url).`;
+    systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje. Si hay varios productos, no incluyas ninguna imagen.`;
+    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
   } else if (productCount > 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
-    systemPrompt += `\nTienes acceso a un catálogo extenso de ${productCount} productos. Usa la función buscar_producto para encontrar productos por nombre o descripción cuando el cliente pregunte.`;
+    systemPrompt += `\nTienes acceso a un catálogo extenso de ${productCount} productos.`;
     systemPrompt += `\nLos precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).`;
-    systemPrompt += `\nCuando el cliente pregunte por un producto, SIEMPRE usa la función buscar_producto para buscar en el catálogo.`;
-    systemPrompt += `\nIncluye la URL de la imagen en tu respuesta si el producto tiene imagen.`;
-    systemPrompt += `\nSi un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
+    systemPrompt += `\n\n## Reglas para responder sobre productos:`;
+    systemPrompt += `\n- PRIMERO pregunta al cliente qué modelo o producto específico busca. NO listes múltiples productos de una vez.`;
+    systemPrompt += `\n- Usa la función buscar_producto SOLO cuando el cliente especifique qué busca (marca, modelo, categoría específica).`;
+    systemPrompt += `\n- Para enviar imagen de UN producto específico, incluye SOLO la URL completa (https://...) al final. NO uses sintaxis Markdown como ![texto](url).`;
+    systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje.`;
+    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
   }
   
   const contactAssignment = await prisma.tagAssignment.findUnique({
