@@ -18,6 +18,7 @@ import metaWebhookRoutes from './routes/metaWebhook.js';
 import templatesRoutes from './routes/templates.js';
 import billingRoutes from './routes/billing.js';
 import superAdminRoutes from './routes/superAdmin.js';
+import ordersRoutes from './routes/orders.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
 
@@ -41,6 +42,7 @@ const PORT = process.env.CORE_API_PORT || 3001;
 app.use(cors());
 
 app.use('/billing/webhook', express.raw({ type: 'application/json' }));
+app.use('/orders/webhook', express.raw({ type: 'application/json' }));
 
 app.use(express.json());
 
@@ -82,6 +84,7 @@ app.use('/webhook/meta', metaWebhookRoutes);
 app.use('/templates', templatesRoutes);
 app.use('/billing', billingRoutes);
 app.use('/super-admin', superAdminRoutes);
+app.use('/orders', ordersRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

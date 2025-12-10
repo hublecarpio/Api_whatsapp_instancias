@@ -8,6 +8,7 @@ import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } f
 import { replacePromptVariables } from '../services/promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory } from '../services/agentV2Service.js';
 import { MetaCloudService } from '../services/metaCloud.js';
+import { createProductPaymentLink } from '../services/stripePayments.js';
 
 const router = Router();
 
@@ -736,6 +737,46 @@ async function processWithAgent(
     });
   }
   
+  if (productCount > 0) {
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'crear_enlace_pago',
+        description: 'Genera un enlace de pago para que el cliente complete su compra. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío.',
+        parameters: {
+          type: 'object',
+          properties: {
+            producto_id: {
+              type: 'string',
+              description: 'ID del producto que el cliente quiere comprar'
+            },
+            cantidad: {
+              type: 'integer',
+              description: 'Cantidad de unidades a comprar (por defecto 1)'
+            },
+            nombre_cliente: {
+              type: 'string',
+              description: 'Nombre completo del cliente'
+            },
+            direccion_envio: {
+              type: 'string',
+              description: 'Dirección completa de envío'
+            },
+            ciudad: {
+              type: 'string',
+              description: 'Ciudad de envío'
+            },
+            pais: {
+              type: 'string',
+              description: 'País de envío'
+            }
+          },
+          required: ['producto_id', 'nombre_cliente', 'direccion_envio']
+        }
+      }
+    });
+  }
+  
   const modelToUse = getDefaultModel();
   
   const chatParams: any = {
@@ -794,6 +835,7 @@ async function processWithAgent(
         });
         
         const productResults = foundProducts.map(p => ({
+          id: p.id,
           nombre: p.title,
           precio: `${currencySymbol}${p.price}`,
           stock: p.stock,
@@ -812,6 +854,53 @@ async function processWithAgent(
           role: 'tool',
           tool_call_id: toolCall.id,
           content: resultContent
+        });
+        continue;
+      }
+      
+      if (toolName === 'crear_enlace_pago') {
+        const args = JSON.parse(fn.arguments);
+        const productId = args.producto_id;
+        const quantity = args.cantidad || 1;
+        const customerName = args.nombre_cliente;
+        const shippingAddress = args.direccion_envio;
+        const city = args.ciudad || '';
+        const country = args.pais || '';
+        
+        console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}`);
+        
+        const result = await createProductPaymentLink({
+          businessId,
+          contactPhone,
+          contactName: customerName,
+          items: [{ productId, quantity }],
+          shippingAddress,
+          shippingCity: city,
+          shippingCountry: country
+        });
+        
+        let paymentResult: string;
+        if (result.success && result.paymentUrl) {
+          paymentResult = JSON.stringify({
+            exito: true,
+            mensaje: 'Enlace de pago generado exitosamente',
+            enlace_pago: result.paymentUrl,
+            pedido_id: result.orderId,
+            instrucciones: 'Comparte este enlace con el cliente para que complete su pago de forma segura.'
+          });
+          console.log(`[PAYMENT LINK] Created successfully: ${result.paymentUrl}`);
+        } else {
+          paymentResult = JSON.stringify({
+            exito: false,
+            error: result.error || 'No se pudo generar el enlace de pago'
+          });
+          console.log(`[PAYMENT LINK] Failed: ${result.error}`);
+        }
+        
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: paymentResult
         });
         continue;
       }

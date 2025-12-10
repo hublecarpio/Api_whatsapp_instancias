@@ -352,3 +352,76 @@ model ContactSettings {
   @@unique([businessId, contactPhone])
   @@index([businessId, botDisabled])
 }
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id                   String      @id @default(uuid())
+  businessId           String
+  contactPhone         String
+  contactName          String?
+  email                String?
+  shippingAddress      String?
+  shippingCity         String?
+  shippingState        String?
+  shippingZip          String?
+  shippingCountry      String?
+  notes                String?
+  totalAmount          Float
+  currencyCode         String      @default("PEN")
+  currencySymbol       String      @default("S/.")
+  status               OrderStatus @default(PENDING_PAYMENT)
+  stripeSessionId      String?     @unique
+  stripePaymentIntentId String?
+  paidAt               DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  items OrderItem[]
+
+  @@index([businessId, status])
+  @@index([businessId, contactPhone])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id           String  @id @default(uuid())
+  orderId      String
+  productId    String?
+  productTitle String
+  quantity     Int     @default(1)
+  unitPrice    Float
+  imageUrl     String?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model PaymentSession {
+  id            String   @id @default(uuid())
+  businessId    String
+  contactPhone  String
+  productIds    Json
+  quantities    Json
+  totalAmount   Float
+  currencyCode  String
+  stripeSessionId String @unique
+  paymentUrl    String
+  status        String   @default("pending")
+  metadata      Json?
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([businessId, contactPhone])
+  @@index([stripeSessionId])
+  @@index([status, expiresAt])
+}
