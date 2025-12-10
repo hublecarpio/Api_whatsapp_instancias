@@ -219,23 +219,46 @@ router.delete('/users/:id', superAdminMiddleware, async (req: SuperAdminRequest,
     
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { businesses: { include: { instances: true } } }
+      include: { businesses: true }
     });
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    await prisma.user.delete({
-      where: { id: userId }
+    const businessIds = user.businesses.map(b => b.id);
+    
+    await prisma.$transaction(async (tx) => {
+      await tx.tokenUsage.deleteMany({ where: { userId } });
+      await tx.tokenUsage.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      await tx.contactExtractedData.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.extractionField.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.paymentLinkRequest.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.contactSettings.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.messageBuffer.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.tagHistory.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.tagAssignment.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      await tx.learnedRule.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.leadMemory.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.agentV2Config.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      await tx.orderItem.deleteMany({ 
+        where: { order: { businessId: { in: businessIds } } } 
+      });
+      await tx.order.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.paymentSession.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      await tx.user.delete({ where: { id: userId } });
     });
     
-    console.log(`[Super Admin] User deleted: ${user.email}`);
+    console.log(`[Super Admin] User deleted: ${user.email} (${user.businesses.length} businesses removed)`);
     
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (error: any) {
     console.error('Delete user error:', error);
-    res.status(500).json({ error: 'Failed to delete user' });
+    res.status(500).json({ error: 'Failed to delete user', details: error.message });
   }
 });
 
@@ -904,6 +927,98 @@ router.get('/analytics/payment-links', superAdminMiddleware, async (req: SuperAd
   } catch (error: any) {
     console.error('Analytics payment links error:', error);
     res.status(500).json({ error: 'Failed to fetch payment link analytics', details: error.message });
+  }
+});
+
+router.get('/agent-v2-stats', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const v2Businesses = await prisma.business.findMany({
+      where: { agentVersion: 'v2' },
+      select: {
+        id: true,
+        name: true,
+        userId: true,
+        createdAt: true,
+        user: { select: { name: true, email: true } }
+      }
+    });
+    
+    const businessIds = v2Businesses.map(b => b.id);
+    
+    const v2Configs = await prisma.agentV2Config.findMany({
+      where: { businessId: { in: businessIds } }
+    });
+    
+    const leadMemories = await prisma.leadMemory.findMany({
+      where: { businessId: { in: businessIds } }
+    });
+    
+    const learnedRules = await prisma.learnedRule.findMany({
+      where: { businessId: { in: businessIds } }
+    });
+    
+    const memoriesByBusiness = leadMemories.reduce((acc, m) => {
+      acc[m.businessId] = (acc[m.businessId] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const rulesByBusiness = learnedRules.reduce((acc, r) => {
+      acc[r.businessId] = (acc[r.businessId] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const configMap = new Map(v2Configs.map(c => [c.businessId, c]));
+    
+    const businesses = v2Businesses.map(b => ({
+      id: b.id,
+      name: b.name,
+      userName: b.user?.name || 'Unknown',
+      userEmail: b.user?.email || 'Unknown',
+      createdAt: b.createdAt,
+      memoryCount: memoriesByBusiness[b.id] || 0,
+      ruleCount: rulesByBusiness[b.id] || 0,
+      skills: configMap.get(b.id)?.skills || null
+    }));
+    
+    const activeRulesCount = learnedRules.filter(r => r.enabled).length;
+    const totalAppliedCount = learnedRules.reduce((sum, r) => sum + r.appliedCount, 0);
+    
+    res.json({
+      summary: {
+        totalV2Businesses: v2Businesses.length,
+        totalLeadMemories: leadMemories.length,
+        totalLearnedRules: learnedRules.length,
+        activeRulesCount,
+        totalRuleApplications: totalAppliedCount
+      },
+      businesses,
+      recentRules: learnedRules
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, 20)
+        .map(r => ({
+          id: r.id,
+          businessId: r.businessId,
+          rule: r.rule,
+          source: r.source,
+          enabled: r.enabled,
+          appliedCount: r.appliedCount,
+          createdAt: r.createdAt
+        })),
+      recentMemories: leadMemories
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+        .slice(0, 20)
+        .map(m => ({
+          id: m.id,
+          businessId: m.businessId,
+          leadPhone: m.leadPhone,
+          leadName: m.leadName,
+          stage: m.stage,
+          updatedAt: m.updatedAt
+        }))
+    });
+  } catch (error: any) {
+    console.error('Agent V2 stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch Agent V2 stats', details: error.message });
   }
 });
 

@@ -175,6 +175,7 @@ export default function SuperAdminPage() {
             { id: 'tokens', label: 'Uso de Tokens' },
             { id: 'messages', label: 'Mensajes' },
             { id: 'billing', label: 'Facturacion' },
+            { id: 'agentv2', label: 'Agent V2' },
             { id: 'system', label: 'Sistema' }
           ].map((tab) => (
             <button
@@ -201,6 +202,7 @@ export default function SuperAdminPage() {
         {activeTab === 'tokens' && <TokenUsageTab token={token} />}
         {activeTab === 'messages' && <MessagesTab token={token} />}
         {activeTab === 'billing' && <BillingTab token={token} />}
+        {activeTab === 'agentv2' && <AgentV2Tab token={token} />}
         {activeTab === 'system' && <SystemTab token={token} />}
       </main>
     </div>
@@ -318,7 +320,7 @@ function UsersTab({ token }: { token: string }) {
   const handleDeleteUser = async (userId: string, email: string) => {
     if (actionLoading) return;
     
-    if (!confirm(`¿Estas seguro de eliminar al usuario ${email}? Esta accion no se puede deshacer.`)) {
+    if (!confirm(`¿Estas seguro de eliminar al usuario ${email}? Esta accion no se puede deshacer y eliminara todos sus negocios, instancias y datos asociados.`)) {
       return;
     }
     
@@ -332,9 +334,14 @@ function UsersTab({ token }: { token: string }) {
       
       if (response.ok) {
         setUsers(users.filter(u => u.id !== userId));
+        alert(`Usuario ${email} eliminado correctamente`);
+      } else {
+        const data = await response.json();
+        alert(`Error al eliminar usuario: ${data.error || data.details || 'Error desconocido'}`);
       }
     } catch (err) {
       console.error('Failed to delete user:', err);
+      alert('Error de conexion al intentar eliminar el usuario');
     } finally {
       setActionLoading(null);
     }
@@ -1258,6 +1265,143 @@ function AnalyticsTab({ token }: { token: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AgentV2Tab({ token }: { token: string }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchStats();
+  }, [token]);
+
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/super-admin/agent-v2-stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch stats');
+      
+      const result = await response.json();
+      setData(result);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="text-gray-400">Cargando estadisticas de Agent V2...</div>;
+  if (error) return <div className="text-red-400">Error: {error}</div>;
+  if (!data) return null;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <StatCard title="Negocios V2" value={data.summary.totalV2Businesses} color="neon" />
+        <StatCard title="Memorias de Leads" value={data.summary.totalLeadMemories} color="green" />
+        <StatCard title="Reglas Aprendidas" value={data.summary.totalLearnedRules} color="yellow" />
+        <StatCard title="Reglas Activas" value={data.summary.activeRulesCount} color="green" />
+        <StatCard title="Aplicaciones de Reglas" value={data.summary.totalRuleApplications} color="neon" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card">
+          <h3 className="text-lg font-semibold text-white mb-4">Negocios usando Agent V2</h3>
+          {data.businesses.length === 0 ? (
+            <p className="text-gray-500">Ningun negocio esta usando Agent V2 aun</p>
+          ) : (
+            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-dark-surface">
+                  <tr className="border-b border-dark-border">
+                    <th className="text-left py-2 text-gray-400 font-medium text-sm">Negocio</th>
+                    <th className="text-left py-2 text-gray-400 font-medium text-sm">Usuario</th>
+                    <th className="text-center py-2 text-gray-400 font-medium text-sm">Memorias</th>
+                    <th className="text-center py-2 text-gray-400 font-medium text-sm">Reglas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.businesses.map((b: any) => (
+                    <tr key={b.id} className="border-b border-dark-border hover:bg-dark-hover">
+                      <td className="py-2 text-white">{b.name}</td>
+                      <td className="py-2 text-gray-300 text-sm">{b.userEmail}</td>
+                      <td className="py-2 text-center text-neon-blue">{b.memoryCount}</td>
+                      <td className="py-2 text-center text-accent-warning">{b.ruleCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <h3 className="text-lg font-semibold text-white mb-4">Reglas Aprendidas Recientes</h3>
+          {data.recentRules.length === 0 ? (
+            <p className="text-gray-500">No hay reglas aprendidas aun</p>
+          ) : (
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              {data.recentRules.map((rule: any) => (
+                <div key={rule.id} className="bg-dark-bg p-3 rounded-lg border border-dark-border">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-white text-sm flex-1">{rule.rule}</p>
+                    <span className={`text-xs px-2 py-0.5 rounded ${rule.enabled ? 'bg-accent-success/20 text-accent-success' : 'bg-gray-700 text-gray-400'}`}>
+                      {rule.enabled ? 'Activa' : 'Inactiva'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                    <span>Fuente: {rule.source}</span>
+                    <span>Aplicada: {rule.appliedCount}x</span>
+                    <span>{new Date(rule.createdAt).toLocaleDateString('es-PE')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="text-lg font-semibold text-white mb-4">Memorias de Leads Recientes</h3>
+        {data.recentMemories.length === 0 ? (
+          <p className="text-gray-500">No hay memorias de leads aun</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-dark-border">
+                  <th className="text-left py-2 text-gray-400 font-medium text-sm">Telefono</th>
+                  <th className="text-left py-2 text-gray-400 font-medium text-sm">Nombre</th>
+                  <th className="text-left py-2 text-gray-400 font-medium text-sm">Etapa</th>
+                  <th className="text-left py-2 text-gray-400 font-medium text-sm">Ultima actualizacion</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recentMemories.map((m: any) => (
+                  <tr key={m.id} className="border-b border-dark-border hover:bg-dark-hover">
+                    <td className="py-2 text-white font-mono text-sm">{m.leadPhone}</td>
+                    <td className="py-2 text-gray-300">{m.leadName || '-'}</td>
+                    <td className="py-2">
+                      <span className="text-xs px-2 py-0.5 rounded bg-neon-blue/20 text-neon-blue">
+                        {m.stage || 'Sin etapa'}
+                      </span>
+                    </td>
+                    <td className="py-2 text-gray-400 text-sm">
+                      {new Date(m.updatedAt).toLocaleString('es-PE')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
