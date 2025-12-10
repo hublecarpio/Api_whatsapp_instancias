@@ -1,0 +1,61 @@
+ => [deps 4/4] RUN npm ci                                                                                                                                             11.8s
+ => [production 4/8] RUN adduser --system --uid 1001 nextjs                                                                                                            0.4s
+ => [builder 3/5] COPY --from=deps /app/node_modules ./node_modules                                                                                                    3.6s 
+ => [builder 4/5] COPY . .                                                                                                                                             0.3s 
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             24.5s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+0.596                                                                                                                                                                       
+0.596 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+0.596 > next build                                                                                                                                                          
+0.596                                                                                                                                                                       
+1.332 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+1.332 This information is used to shape Next.js' roadmap and prioritize features.
+1.332 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+1.332 https://nextjs.org/telemetry
+1.332 
+1.420   ▲ Next.js 14.2.16
+1.421 
+1.538    Creating an optimized production build ...
+16.76  ✓ Compiled successfully
+16.76    Linting and checking validity of types ...
+22.60    Collecting page data ...
+23.77    Generating static pages (0/21) ...
+24.19    Generating static pages (5/21) 
+24.24  ⨯ useSearchParams() should be wrapped in a suspense boundary at page "/order/success". Read more: https://nextjs.org/docs/messages/missing-suspense-with-csr-bailout
+24.24     at a (/app/.next/server/chunks/138.js:1:10537)
+24.24     at s (/app/.next/server/chunks/138.js:1:21477)
+24.24     at i (/app/.next/server/app/order/success/page.js:1:1959)
+24.24     at nj (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46251)
+24.24     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47571)
+24.24     at nN (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+24.24     at nI (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47010)
+24.24     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47717)
+24.24     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:61546)
+24.24     at nN (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+24.24 
+24.24 Error occurred prerendering page "/order/success". Read more: https://nextjs.org/docs/messages/prerender-error
+24.24 
+24.24    Generating static pages (10/21) 
+24.28    Generating static pages (15/21) 
+24.33  ✓ Generating static pages (21/21)
+24.34 
+24.34 > Export encountered errors on following paths:
+24.34   /order/success/page: /order/success
+24.40 npm notice
+24.40 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+24.40 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+24.40 npm notice To update run: npm install -g npm@11.7.0
+24.40 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+[+] Building 43.4s (25/25) FINISHED                                                                                                                          docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s
