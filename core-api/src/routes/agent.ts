@@ -565,7 +565,8 @@ async function processWithAgent(
       policy: true,
       promptMaster: { include: { tools: { where: { enabled: true } } } },
       products: true,
-      instances: { include: { metaCredential: true } }
+      instances: { include: { metaCredential: true } },
+      user: { select: { isPro: true } }
     }
   });
   
@@ -889,34 +890,83 @@ async function processWithAgent(
         const city = args.ciudad || '';
         const country = args.pais || '';
         
-        console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}`);
-        
-        const result = await createProductPaymentLink({
-          businessId,
-          contactPhone,
-          contactName: customerName,
-          items: [{ productId, quantity }],
-          shippingAddress,
-          shippingCity: city,
-          shippingCountry: country
-        });
+        const isPro = business.user?.isPro || false;
+        console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}, isPro: ${isPro}`);
         
         let paymentResult: string;
-        if (result.success && result.paymentUrl) {
-          paymentResult = JSON.stringify({
-            exito: true,
-            mensaje: 'Enlace de pago generado exitosamente',
-            enlace_pago: result.paymentUrl,
-            pedido_id: result.orderId,
-            instrucciones: 'Comparte este enlace con el cliente para que complete su pago de forma segura.'
+        
+        if (!isPro) {
+          const product = await prisma.product.findUnique({
+            where: { id: productId }
           });
-          console.log(`[PAYMENT LINK] Created successfully: ${result.paymentUrl}`);
+          
+          if (!product) {
+            paymentResult = JSON.stringify({
+              exito: false,
+              error: 'Producto no encontrado'
+            });
+          } else {
+            const totalAmount = product.price * quantity;
+            const order = await prisma.order.create({
+              data: {
+                businessId,
+                contactPhone,
+                contactName: customerName,
+                shippingAddress,
+                shippingCity: city,
+                shippingCountry: country,
+                totalAmount,
+                currencyCode: business.currencyCode || 'PEN',
+                currencySymbol: business.currencySymbol || 'S/.',
+                status: 'AWAITING_VOUCHER',
+                items: {
+                  create: [{
+                    productId: product.id,
+                    productTitle: product.title,
+                    quantity,
+                    unitPrice: product.price,
+                    imageUrl: product.imageUrl
+                  }]
+                }
+              }
+            });
+            
+            paymentResult = JSON.stringify({
+              exito: true,
+              mensaje: 'Pedido creado exitosamente',
+              pedido_id: order.id,
+              esperando_voucher: true,
+              instrucciones: 'Pide al cliente que envíe el comprobante de pago (voucher/transferencia) para confirmar su pedido.'
+            });
+            console.log(`[PAYMENT LINK] Order created with AWAITING_VOUCHER status: ${order.id}`);
+          }
         } else {
-          paymentResult = JSON.stringify({
-            exito: false,
-            error: result.error || 'No se pudo generar el enlace de pago'
+          const result = await createProductPaymentLink({
+            businessId,
+            contactPhone,
+            contactName: customerName,
+            items: [{ productId, quantity }],
+            shippingAddress,
+            shippingCity: city,
+            shippingCountry: country
           });
-          console.log(`[PAYMENT LINK] Failed: ${result.error}`);
+          
+          if (result.success && result.paymentUrl) {
+            paymentResult = JSON.stringify({
+              exito: true,
+              mensaje: 'Enlace de pago generado exitosamente',
+              enlace_pago: result.paymentUrl,
+              pedido_id: result.orderId,
+              instrucciones: 'Comparte este enlace con el cliente para que complete su pago de forma segura.'
+            });
+            console.log(`[PAYMENT LINK] Created successfully: ${result.paymentUrl}`);
+          } else {
+            paymentResult = JSON.stringify({
+              exito: false,
+              error: result.error || 'No se pudo generar el enlace de pago'
+            });
+            console.log(`[PAYMENT LINK] Failed: ${result.error}`);
+          }
         }
         
         toolMessages.push({
