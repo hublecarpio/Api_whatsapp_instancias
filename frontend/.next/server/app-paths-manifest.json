@@ -1,1 +1,11 @@
-{}
+{
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
+  "/dashboard/orders/page": "app/dashboard/orders/page.js",
+  "/dashboard/products/page": "app/dashboard/products/page.js",
+  "/dashboard/chat/page": "app/dashboard/chat/page.js",
+  "/dashboard/tags/page": "app/dashboard/tags/page.js",
+  "/dashboard/reminders/page": "app/dashboard/reminders/page.js"
+}
