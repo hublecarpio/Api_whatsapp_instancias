@@ -689,8 +689,13 @@ export default function ChatPage() {
     );
   };
 
-  const renderMedia = (mediaUrl: string, isOutbound: boolean) => {
-    if (isImageUrl(mediaUrl)) {
+  const renderMedia = (mediaUrl: string, isOutbound: boolean, mediaType?: string) => {
+    const type = mediaType?.toLowerCase() || '';
+    const isAudio = type === 'audio' || type === 'ptt' || isAudioUrl(mediaUrl);
+    const isImage = type === 'image' || type === 'sticker' || isImageUrl(mediaUrl);
+    const isVideo = type === 'video' || isVideoUrl(mediaUrl);
+    
+    if (isImage) {
       return (
         <img 
           src={mediaUrl} 
@@ -701,7 +706,7 @@ export default function ChatPage() {
         />
       );
     }
-    if (isVideoUrl(mediaUrl)) {
+    if (isVideo) {
       return (
         <div className="relative rounded-lg overflow-hidden" style={{ maxWidth: '220px' }}>
           <video 
@@ -713,7 +718,7 @@ export default function ChatPage() {
         </div>
       );
     }
-    if (isAudioUrl(mediaUrl)) {
+    if (isAudio) {
       return <AudioPlayer src={mediaUrl} isOutbound={isOutbound} />;
     }
     const fileName = mediaUrl.split('/').pop()?.split('?')[0] || 'archivo';
@@ -939,7 +944,7 @@ export default function ChatPage() {
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`chat-bubble ${msg.direction === 'outbound' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'}`}>
-                      {msg.mediaUrl && renderMedia(msg.mediaUrl, msg.direction === 'outbound')}
+                      {msg.mediaUrl && renderMedia(msg.mediaUrl, msg.direction === 'outbound', msg.metadata?.mediaType || msg.metadata?.type)}
                       {msg.message && <p className="break-words whitespace-pre-wrap text-sm sm:text-base">{msg.message}</p>}
                       {msg.direction === 'inbound' && msg.metadata?.mediaAnalysis && (
                         <div className="mt-1 group relative inline-block">
