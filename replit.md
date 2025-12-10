@@ -32,7 +32,7 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Centralized OpenAI API Management**: Uses a single platform-wide OpenAI API key, allows model selection, and logs token usage for cost tracking.
 *   **Per-Contact Bot Control**: Provides two-level bot control (global and per-contact) with a `botDisabled` flag, UI toggles, and visual indicators.
 *   **Dynamic Prompt Variables**: Supports dynamic variables like `{{now}}` with configurable timezones for businesses, replaced before sending prompts to OpenAI.
-*   **Agent V2 - Advanced AI Processing (Python/LangGraph)**: An optional Python microservice (FastAPI/LangGraph) for advanced AI processing, toggleable per business.
+*   **Agent V2 - Multi-Agent AI System (Python/LangGraph)**: An advanced Python microservice with 3-brain architecture (Vendor → Observer → Refiner). Features 5 executable tools (search_product, payment, followup, media, crm), Redis-backed memory persistence, OpenAI embeddings for semantic product search, and dynamic learning system that saves rules per business. Restricted to Pro tier users.
 *   **Production-Grade Baileys Stability**: Features Redis session state, watchdog heartbeat, rate limiting, anti-burst protection, exponential backoff, and robust error handling.
 *   **Gemini Multimedia Processing**: Integrates Google Gemini API for audio transcription, image analysis, and video analysis to enrich message context for AI.
 *   **Meta Cloud Media Upload Flow**: Handles downloading media from storage, uploading to Meta's API, and converting audio to compatible formats.
