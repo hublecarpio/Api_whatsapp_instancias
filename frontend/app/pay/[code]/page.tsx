@@ -19,7 +19,7 @@ export default function PaymentRedirectPage() {
 
     const fetchPaymentUrl = async () => {
       try {
-        const response = await fetch(`/api/pay/${code}`);
+        const response = await fetch(`/api/orders/pay/${code}`);
         const data = await response.json();
 
         if (data.success && data.paymentUrl) {
