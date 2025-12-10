@@ -19,6 +19,7 @@ import templatesRoutes from './routes/templates.js';
 import billingRoutes from './routes/billing.js';
 import superAdminRoutes from './routes/superAdmin.js';
 import ordersRoutes from './routes/orders.js';
+import extractionRoutes from './routes/extraction.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
 
@@ -85,6 +86,7 @@ app.use('/templates', templatesRoutes);
 app.use('/billing', billingRoutes);
 app.use('/super-admin', superAdminRoutes);
 app.use('/orders', ordersRoutes);
+app.use('/extraction', extractionRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
