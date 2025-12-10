@@ -9,6 +9,7 @@ import { replacePromptVariables } from '../services/promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory } from '../services/agentV2Service.js';
 import { MetaCloudService } from '../services/metaCloud.js';
 import { createProductPaymentLink } from '../services/stripePayments.js';
+import { searchProductsIntelligent } from '../services/productSearch.js';
 
 const router = Router();
 
@@ -632,14 +633,16 @@ async function processWithAgent(
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
   } else if (productCount > 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
-    systemPrompt += `\nTienes acceso a un catálogo extenso de ${productCount} productos.`;
+    systemPrompt += `\nTienes acceso a un catálogo extenso de ${productCount} productos con BÚSQUEDA INTELIGENTE.`;
     systemPrompt += `\nLos precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).`;
     systemPrompt += `\n\n## Reglas para responder sobre productos:`;
-    systemPrompt += `\n- PRIMERO pregunta al cliente qué modelo o producto específico busca. NO listes múltiples productos de una vez.`;
-    systemPrompt += `\n- Usa la función buscar_producto SOLO cuando el cliente especifique qué busca (marca, modelo, categoría específica).`;
-    systemPrompt += `\n- Para enviar imagen de UN producto específico, incluye SOLO la URL completa (https://...) al final. NO uses sintaxis Markdown como ![texto](url).`;
+    systemPrompt += `\n- Cuando el cliente mencione un producto (aunque no sea exactamente igual), usa buscar_producto inmediatamente.`;
+    systemPrompt += `\n- La búsqueda es inteligente: encontrará productos similares aunque el cliente escriba con errores o use términos parciales.`;
+    systemPrompt += `\n- CONFÍA en el resultado "mejor_coincidencia" - es el producto más parecido a lo que busca el cliente.`;
+    systemPrompt += `\n- Si la similitud es alta (>70%), puedes asumir que es el producto correcto.`;
+    systemPrompt += `\n- Para enviar imagen de UN producto específico, incluye SOLO la URL completa (https://...) al final. NO uses sintaxis Markdown.`;
     systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje.`;
-    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
+    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere productos similares del resultado.`;
   }
   
   const contactAssignment = await prisma.tagAssignment.findUnique({
@@ -831,42 +834,43 @@ async function processWithAgent(
         const args = JSON.parse(fn.arguments);
         const searchQuery = args.consulta || args.query || '';
         
-        console.log(`[PRODUCT SEARCH] Query: ${searchQuery}`);
+        console.log(`[PRODUCT SEARCH] Query: "${searchQuery}" (intelligent matching)`);
         
-        const searchTerms = searchQuery.toLowerCase().split(/\s+/).filter((t: string) => t.length > 2);
+        const searchResult = await searchProductsIntelligent(businessId, searchQuery, 10);
         
-        const foundProducts = await prisma.product.findMany({
-          where: {
-            businessId,
-            OR: searchTerms.length > 0 ? [
-              { title: { contains: searchQuery, mode: 'insensitive' } },
-              { description: { contains: searchQuery, mode: 'insensitive' } },
-              ...searchTerms.map((term: string) => ({ title: { contains: term, mode: 'insensitive' as const } })),
-              ...searchTerms.map((term: string) => ({ description: { contains: term, mode: 'insensitive' as const } }))
-            ] : [
-              { title: { contains: searchQuery, mode: 'insensitive' } },
-              { description: { contains: searchQuery, mode: 'insensitive' } }
-            ]
-          },
-          take: 10,
-          orderBy: { createdAt: 'desc' }
-        });
-        
-        const productResults = foundProducts.map(p => ({
+        const productResults = searchResult.products.map(p => ({
           id: p.id,
           nombre: p.title,
           precio: `${currencySymbol}${p.price}`,
           stock: p.stock,
-          disponible: p.stock > 0,
+          disponible: p.available,
           descripcion: p.description || 'Sin descripción',
-          imagen: p.imageUrl || null
+          imagen: p.imageUrl || null,
+          similitud: Math.round(p.similarity * 100)
         }));
         
-        const resultContent = productResults.length > 0 
-          ? JSON.stringify({ productos_encontrados: productResults })
-          : JSON.stringify({ mensaje: 'No se encontraron productos con ese término de búsqueda' });
+        let resultContent: string;
+        if (productResults.length > 0) {
+          const bestMatch = searchResult.bestMatch;
+          resultContent = JSON.stringify({
+            productos_encontrados: productResults,
+            coincidencia_exacta: searchResult.exactMatch,
+            mejor_coincidencia: bestMatch ? {
+              nombre: bestMatch.title,
+              similitud: Math.round(bestMatch.similarity * 100) + '%'
+            } : null,
+            nota: searchResult.exactMatch 
+              ? 'Se encontró una coincidencia exacta' 
+              : 'Se muestran los productos más similares a la búsqueda'
+          });
+        } else {
+          resultContent = JSON.stringify({ 
+            mensaje: `No se encontraron productos similares a "${searchQuery}"`,
+            sugerencia: 'Intenta con otro término o pregunta al cliente por más detalles'
+          });
+        }
         
-        console.log(`[PRODUCT SEARCH] Found ${productResults.length} products`);
+        console.log(`[PRODUCT SEARCH] Found ${productResults.length} products (exact: ${searchResult.exactMatch})`);
         
         toolMessages.push({
           role: 'tool',

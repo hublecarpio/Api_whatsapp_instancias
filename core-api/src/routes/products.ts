@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { searchProductsIntelligent, findBestProductMatch } from '../services/productSearch.js';
 
 const router = Router();
 
@@ -15,7 +16,7 @@ async function checkBusinessAccess(userId: string, businessId: string) {
 
 router.post('/search', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, query, limit = 10 } = req.body;
+    const { businessId, query, limit = 10, intelligent = true } = req.body;
     
     if (!businessId || !query) {
       return res.status(400).json({ error: 'businessId and query are required' });
@@ -24,6 +25,21 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
     const business = await checkBusinessAccess(req.userId!, businessId);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
+    }
+
+    if (intelligent) {
+      const result = await searchProductsIntelligent(businessId, query, Math.min(limit, 20));
+      
+      res.json({
+        products: result.products,
+        exactMatch: result.exactMatch,
+        bestMatch: result.bestMatch,
+        currency: {
+          code: business.currencyCode,
+          symbol: business.currencySymbol
+        }
+      });
+      return;
     }
     
     const searchTerms = query.toLowerCase().split(/\s+/).filter((t: string) => t.length > 2);
@@ -63,6 +79,43 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Search products error:', error);
     res.status(500).json({ error: 'Failed to search products' });
+  }
+});
+
+router.post('/find-best-match', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, query } = req.body;
+    
+    if (!businessId || !query) {
+      return res.status(400).json({ error: 'businessId and query are required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const bestMatch = await findBestProductMatch(businessId, query);
+    
+    if (bestMatch) {
+      res.json({
+        found: true,
+        product: bestMatch,
+        currency: {
+          code: business.currencyCode,
+          symbol: business.currencySymbol
+        }
+      });
+    } else {
+      res.json({
+        found: false,
+        message: `No se encontró un producto que coincida con "${query}"`,
+        suggestion: 'Intenta con otro nombre o verifica el catálogo'
+      });
+    }
+  } catch (error) {
+    console.error('Find best match error:', error);
+    res.status(500).json({ error: 'Failed to find product' });
   }
 });
 
