@@ -52,13 +52,13 @@ export class GeminiService {
                 }
               },
               {
-                text: 'Transcribe this audio message exactly as spoken. Only return the transcription, nothing else. If you cannot transcribe it, return "[Audio no disponible]".'
+                text: 'Transcribe este audio exactamente como se habla. Solo devuelve la transcripción, nada más. Si no puedes transcribirlo, devuelve "[Audio no disponible]".'
               }
             ]
           }],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 2048
+            maxOutputTokens: 1536
           }
         },
         {
@@ -92,8 +92,8 @@ export class GeminiService {
       const base64Data = buffer.toString('base64');
 
       const prompt = context 
-        ? `Analyze this image in the context of this conversation: "${context}". Describe what you see in detail and how it relates to the conversation.`
-        : 'Describe this image in detail. What objects, people, text, or scenes do you see? Be specific and comprehensive.';
+        ? `Describe brevemente esta imagen en español (máximo 2 oraciones). Contexto: "${context}".`
+        : 'Describe brevemente esta imagen en español, máximo 2 oraciones. Sé conciso.';
 
       const response = await axios.post(
         `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
@@ -111,7 +111,7 @@ export class GeminiService {
           }],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 2048
+            maxOutputTokens: 128
           }
         },
         {
@@ -154,8 +154,8 @@ export class GeminiService {
       const base64Data = buffer.toString('base64');
 
       const prompt = context
-        ? `Analyze this video in the context of this conversation: "${context}". Describe what happens and how it relates to the conversation.`
-        : 'Describe this video in detail. What happens? What objects, people, actions, or scenes do you see? Include any spoken words if audible.';
+        ? `Describe brevemente este video en español (máximo 2 oraciones). Contexto: "${context}".`
+        : 'Describe brevemente este video en español, máximo 2 oraciones. Sé conciso.';
 
       const response = await axios.post(
         `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
@@ -173,7 +173,7 @@ export class GeminiService {
           }],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 4096
+            maxOutputTokens: 128
           }
         },
         {
