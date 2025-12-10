@@ -1,4 +1,9 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/pay/[code]/page": "app/pay/[code]/page.js"
+  "/pay/[code]/page": "app/pay/[code]/page.js",
+  "/dashboard/orders/page": "app/dashboard/orders/page.js",
+  "/dashboard/products/page": "app/dashboard/products/page.js",
+  "/dashboard/tags/page": "app/dashboard/tags/page.js",
+  "/dashboard/reminders/page": "app/dashboard/reminders/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
+  "/dashboard/chat/page": "app/dashboard/chat/page.js"
 }

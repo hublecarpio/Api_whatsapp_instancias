@@ -121,6 +121,14 @@ router.patch('/fields/:businessId/:fieldId', async (req: AuthRequest, res: Respo
       return res.status(404).json({ error: 'Business not found' });
     }
 
+    const existingField = await prisma.extractionField.findFirst({
+      where: { id: fieldId, businessId }
+    });
+
+    if (!existingField) {
+      return res.status(404).json({ error: 'Field not found' });
+    }
+
     const field = await prisma.extractionField.update({
       where: { id: fieldId },
       data: {
@@ -145,6 +153,14 @@ router.delete('/fields/:businessId/:fieldId', async (req: AuthRequest, res: Resp
     const business = await checkBusinessAccess(req.userId!, businessId);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const existingField = await prisma.extractionField.findFirst({
+      where: { id: fieldId, businessId }
+    });
+
+    if (!existingField) {
+      return res.status(404).json({ error: 'Field not found' });
     }
 
     await prisma.extractionField.delete({
@@ -172,10 +188,18 @@ router.put('/fields/:businessId/reorder', async (req: AuthRequest, res: Response
       return res.status(400).json({ error: 'fieldIds array is required' });
     }
 
+    const existingFields = await prisma.extractionField.findMany({
+      where: { businessId, id: { in: fieldIds } }
+    });
+
+    if (existingFields.length !== fieldIds.length) {
+      return res.status(400).json({ error: 'Invalid field IDs' });
+    }
+
     await Promise.all(
       fieldIds.map((id: string, index: number) =>
-        prisma.extractionField.update({
-          where: { id },
+        prisma.extractionField.updateMany({
+          where: { id, businessId },
           data: { order: index }
         })
       )

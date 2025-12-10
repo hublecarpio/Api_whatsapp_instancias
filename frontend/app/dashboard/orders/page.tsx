@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { ordersApi } from '@/lib/api';
+import ExtractionFieldsManager from '@/components/ExtractionFieldsManager';
 
 interface OrderItem {
   id: string;
@@ -94,7 +95,7 @@ const LINK_STATUS_COLORS: Record<string, string> = {
 
 export default function OrdersPage() {
   const { currentBusiness } = useBusinessStore();
-  const [activeTab, setActiveTab] = useState<'orders' | 'links'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'links' | 'extraction'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([]);
   const [loading, setLoading] = useState(true);
@@ -242,9 +243,19 @@ export default function OrdersPage() {
           >
             Enlaces de Pago ({paymentLinks.length})
           </button>
+          <button
+            onClick={() => { setActiveTab('extraction'); setSelectedOrder(null); setSelectedLink(null); }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'extraction'
+                ? 'bg-green-600 text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Extraccion
+          </button>
         </div>
 
-        {activeTab === 'orders' ? (
+        {activeTab === 'orders' && (
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -255,7 +266,8 @@ export default function OrdersPage() {
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-        ) : (
+        )}
+        {activeTab === 'links' && (
           <select
             value={linkStatusFilter}
             onChange={(e) => setLinkStatusFilter(e.target.value)}
@@ -268,15 +280,19 @@ export default function OrdersPage() {
           </select>
         )}
 
-        <button
-          onClick={activeTab === 'orders' ? loadOrders : loadPaymentLinks}
-          className="px-4 py-2 bg-[#2a2a2a] hover:bg-[#333] text-white rounded-lg transition-colors"
-        >
-          Actualizar
-        </button>
+        {activeTab !== 'extraction' && (
+          <button
+            onClick={activeTab === 'orders' ? loadOrders : loadPaymentLinks}
+            className="px-4 py-2 bg-[#2a2a2a] hover:bg-[#333] text-white rounded-lg transition-colors"
+          >
+            Actualizar
+          </button>
+        )}
       </div>
 
-      {loading ? (
+      {activeTab === 'extraction' ? (
+        <ExtractionFieldsManager businessId={currentBusiness.id} />
+      ) : loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
         </div>

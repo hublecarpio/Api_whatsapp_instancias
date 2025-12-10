@@ -132,6 +132,19 @@ The platform follows a microservices-like architecture comprising three main com
     - Downloads media from MinIO/S3, uploads to Meta's media API, uses media_id for sending
     - Resolves issue with Meta Cloud not accessing private storage URLs
     - Audio converted to OGG Opus format (48kHz, mono, voip application) for WhatsApp compatibility
+*   **Customizable Contact Data Extraction**:
+    - Businesses can define custom fields to extract from conversations (name, address, email, etc.)
+    - Prisma models: `ExtractionField` (field definitions) and `ContactExtractedData` (extracted values)
+    - Default fields: nombre, email, direccion, ciudad, telefono_alternativo
+    - UI: "Extraccion" tab in Orders page (`/dashboard/orders`)
+    - Endpoints: `/extraction/fields/:businessId` for CRUD, `/extraction/contact/:businessId/:phone` for data
+    - Service: `core-api/src/services/contactExtraction.ts` integrates with Gemini AI
+    - Multi-tenant security: All operations verify field ownership by businessId
+*   **Intelligent Product Search**:
+    - Fuzzy matching using Levenshtein distance algorithm
+    - Finds products even with typos or name variations (>70% similarity threshold)
+    - Service: `core-api/src/services/productSearch.ts`
+    - AI agent prompt updated to trust fuzzy search results
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM for type-safe database access and schema management.

@@ -250,3 +250,20 @@ export const ordersApi = {
   listPaymentLinks: (businessId: string, status?: string) =>
     api.get(`/orders/payment-links?businessId=${businessId}${status ? `&status=${status}` : ''}`)
 };
+
+export const extractionApi = {
+  getFields: (businessId: string) =>
+    api.get(`/extraction/fields/${businessId}`),
+  createField: (businessId: string, data: { fieldKey: string; fieldLabel: string; fieldType?: string; required?: boolean }) =>
+    api.post(`/extraction/fields/${businessId}`, data),
+  updateField: (businessId: string, fieldId: string, data: { fieldLabel?: string; required?: boolean; enabled?: boolean; order?: number }) =>
+    api.patch(`/extraction/fields/${businessId}/${fieldId}`, data),
+  deleteField: (businessId: string, fieldId: string) =>
+    api.delete(`/extraction/fields/${businessId}/${fieldId}`),
+  reorderFields: (businessId: string, fieldIds: string[]) =>
+    api.put(`/extraction/fields/${businessId}/reorder`, { fieldIds }),
+  getContactData: (businessId: string, contactPhone: string) =>
+    api.get(`/extraction/contact/${businessId}/${contactPhone}`),
+  updateContactData: (businessId: string, contactPhone: string, data: Record<string, string>) =>
+    api.patch(`/extraction/contact/${businessId}/${contactPhone}`, { data })
+};
