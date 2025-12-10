@@ -620,48 +620,112 @@ export default function ChatPage() {
   const isVideoUrl = (url: string) => /\.(mp4|mov|webm|avi)(\?.*)?$/i.test(url);
   const isAudioUrl = (url: string) => /\.(ogg|mp3|wav|m4a|aac|opus|webm)(\?.*)?$/i.test(url);
 
+  const AudioPlayer = ({ src, isOutbound }: { src: string; isOutbound: boolean }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [duration, setDuration] = useState(0);
+    const [currentTime, setCurrentTime] = useState(0);
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const waveHeights = useRef([10, 14, 8, 16, 12, 10, 14, 8, 12, 16, 10, 14]);
+
+    const togglePlay = () => {
+      if (audioRef.current) {
+        if (isPlaying) {
+          audioRef.current.pause();
+        } else {
+          audioRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+      }
+    };
+
+    const formatDuration = (sec: number) => {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const progress = duration > 0 ? Math.floor((currentTime / duration) * 12) : 0;
+
+    return (
+      <div className="flex items-center gap-2 min-w-[160px]">
+        <audio 
+          ref={audioRef} 
+          src={src} 
+          preload="metadata"
+          onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration)}
+          onTimeUpdate={(e) => setCurrentTime((e.target as HTMLAudioElement).currentTime)}
+          onEnded={() => { setIsPlaying(false); setCurrentTime(0); }}
+          className="hidden"
+        />
+        <button 
+          onClick={togglePlay} 
+          className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${isOutbound ? 'bg-white/20 hover:bg-white/30' : 'bg-neon-blue/20 hover:bg-neon-blue/30'}`}
+        >
+          {isPlaying ? (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+          ) : (
+            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+          )}
+        </button>
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-end gap-[3px] h-4">
+            {waveHeights.current.map((h, i) => (
+              <div 
+                key={i} 
+                className={`w-[3px] rounded-sm transition-colors duration-150 ${
+                  i < progress 
+                    ? (isOutbound ? 'bg-white' : 'bg-neon-blue') 
+                    : (isOutbound ? 'bg-white/30' : 'bg-gray-600')
+                }`}
+                style={{ height: `${h}px` }}
+              />
+            ))}
+          </div>
+          <span className={`text-[10px] ${isOutbound ? 'text-white/60' : 'text-gray-400'}`}>
+            {formatDuration(currentTime > 0 ? currentTime : duration || 0)}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   const renderMedia = (mediaUrl: string, isOutbound: boolean) => {
     if (isImageUrl(mediaUrl)) {
       return (
-        <div className="mb-1">
-          <img 
-            src={mediaUrl} 
-            alt="Media" 
-            className="max-w-full rounded-md cursor-pointer hover:opacity-90 transition-opacity" 
-            style={{ maxHeight: '180px', maxWidth: '200px' }} 
-            onClick={() => window.open(mediaUrl, '_blank')} 
-          />
-        </div>
+        <img 
+          src={mediaUrl} 
+          alt="" 
+          className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity" 
+          style={{ maxHeight: '200px', maxWidth: '220px' }} 
+          onClick={() => window.open(mediaUrl, '_blank')} 
+        />
       );
     }
     if (isVideoUrl(mediaUrl)) {
       return (
-        <div className="mb-1">
+        <div className="relative rounded-lg overflow-hidden" style={{ maxWidth: '220px' }}>
           <video 
             src={mediaUrl} 
             controls 
-            className="max-w-full rounded-md" 
-            style={{ maxHeight: '180px', maxWidth: '220px' }} 
+            className="max-w-full" 
+            style={{ maxHeight: '180px' }} 
           />
         </div>
       );
     }
     if (isAudioUrl(mediaUrl)) {
-      return (
-        <div className="mb-1">
-          <audio controls preload="metadata" className="h-8 w-full" style={{ maxWidth: '200px' }}>
-            <source src={mediaUrl} type="audio/mpeg" />
-            <source src={mediaUrl} type="audio/ogg" />
-          </audio>
-        </div>
-      );
+      return <AudioPlayer src={mediaUrl} isOutbound={isOutbound} />;
     }
+    const fileName = mediaUrl.split('/').pop()?.split('?')[0] || 'archivo';
     return (
-      <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-2 px-3 py-2 rounded-md mb-1 ${isOutbound ? 'bg-neon-blue-dark/20' : 'bg-dark-hover/50'}`}>
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-        </svg>
-        <span className="text-sm">Ver archivo</span>
+      <a 
+        href={mediaUrl} 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className={`inline-flex items-center gap-1.5 text-sm ${isOutbound ? 'text-white/90 hover:text-white' : 'text-neon-blue hover:text-neon-blue-light'}`}
+      >
+        <span>📄</span>
+        <span className="underline underline-offset-2">{fileName.length > 20 ? fileName.slice(0, 17) + '...' : fileName}</span>
       </a>
     );
   };
