@@ -14,6 +14,36 @@ import {
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
+router.get('/pay/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+
+    const paymentSession = await prisma.paymentSession.findUnique({
+      where: { shortCode: code }
+    });
+
+    if (!paymentSession) {
+      return res.status(404).json({ success: false, error: 'Enlace de pago no encontrado' });
+    }
+
+    if (paymentSession.status !== 'pending') {
+      return res.status(400).json({ success: false, error: 'Este enlace de pago ya fue utilizado' });
+    }
+
+    if (new Date() > paymentSession.expiresAt) {
+      return res.status(400).json({ success: false, error: 'Este enlace de pago ha expirado' });
+    }
+
+    res.json({
+      success: true,
+      paymentUrl: paymentSession.paymentUrl
+    });
+  } catch (error: any) {
+    console.error('[ORDERS] Error resolving payment code:', error);
+    res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+});
+
 router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
   try {
     const { businessId, contactPhone, contactName, items, shippingAddress, shippingCity, shippingCountry } = req.body;

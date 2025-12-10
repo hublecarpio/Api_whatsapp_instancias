@@ -4,6 +4,16 @@ import prisma from './prisma.js';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 const PUBLIC_API_URL = process.env.PUBLIC_API_URL || process.env.CORE_API_URL || 'http://localhost:3001';
+const PUBLIC_FRONTEND_URL = process.env.PUBLIC_FRONTEND_URL || 'https://app.efficore.es';
+
+function generateShortCode(length: number = 7): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
 
 interface ProductItem {
   productId: string;
@@ -150,6 +160,9 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
       data: { stripeSessionId: session.id }
     });
 
+    const shortCode = generateShortCode(7);
+    const shortPaymentUrl = `${PUBLIC_FRONTEND_URL}/pay/${shortCode}`;
+
     await prisma.paymentSession.create({
       data: {
         businessId,
@@ -158,6 +171,7 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
         quantities: items.map(i => i.quantity),
         totalAmount,
         currencyCode: business.currencyCode,
+        shortCode,
         stripeSessionId: session.id,
         paymentUrl: session.url || '',
         status: 'pending',
@@ -166,9 +180,11 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
       }
     });
 
+    console.log(`[STRIPE PAYMENT] Created short payment link: ${shortPaymentUrl}`);
+
     return {
       success: true,
-      paymentUrl: session.url || undefined,
+      paymentUrl: shortPaymentUrl,
       sessionId: session.id,
       orderId: order.id
     };

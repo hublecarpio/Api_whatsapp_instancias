@@ -407,21 +407,23 @@ model OrderItem {
 }
 
 model PaymentSession {
-  id            String   @id @default(uuid())
-  businessId    String
-  contactPhone  String
-  productIds    Json
-  quantities    Json
-  totalAmount   Float
-  currencyCode  String
-  stripeSessionId String @unique
-  paymentUrl    String
-  status        String   @default("pending")
-  metadata      Json?
-  expiresAt     DateTime
-  createdAt     DateTime @default(now())
+  id              String   @id @default(uuid())
+  businessId      String
+  contactPhone    String
+  productIds      Json
+  quantities      Json
+  totalAmount     Float
+  currencyCode    String
+  shortCode       String   @unique
+  stripeSessionId String   @unique
+  paymentUrl      String
+  status          String   @default("pending")
+  metadata        Json?
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
 
   @@index([businessId, contactPhone])
   @@index([stripeSessionId])
+  @@index([shortCode])
   @@index([status, expiresAt])
 }
