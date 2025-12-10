@@ -34,6 +34,7 @@ export default function ProductsPage() {
   const [bulkUploading, setBulkUploading] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'az' | 'za' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc'>('az');
 
   useEffect(() => {
     if (currentBusiness) {
@@ -41,10 +42,22 @@ export default function ProductsPage() {
     }
   }, [currentBusiness]);
 
-  const filteredProducts = products.filter(product => 
-    product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = products
+    .filter(product => 
+      product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'az': return a.title.localeCompare(b.title);
+        case 'za': return b.title.localeCompare(a.title);
+        case 'price_asc': return a.price - b.price;
+        case 'price_desc': return b.price - a.price;
+        case 'stock_asc': return a.stock - b.stock;
+        case 'stock_desc': return b.stock - a.stock;
+        default: return 0;
+      }
+    });
 
   const fetchProducts = async () => {
     if (!currentBusiness) return;
@@ -297,6 +310,18 @@ export default function ProductsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="px-3 py-2 bg-[#1e1e1e] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-green-500"
+          >
+            <option value="az">A - Z</option>
+            <option value="za">Z - A</option>
+            <option value="price_asc">Precio: Menor a Mayor</option>
+            <option value="price_desc">Precio: Mayor a Menor</option>
+            <option value="stock_asc">Stock: Menor a Mayor</option>
+            <option value="stock_desc">Stock: Mayor a Menor</option>
+          </select>
           <div className="flex bg-[#1e1e1e] rounded-lg p-1 border border-gray-700">
             <button
               onClick={() => setViewMode('grid')}
