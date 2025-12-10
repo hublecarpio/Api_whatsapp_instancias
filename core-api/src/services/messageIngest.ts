@@ -46,30 +46,30 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
   let messageText = text || caption || (type === 'location' ? `Location: ${message.location?.latitude}, ${message.location?.longitude}` : '');
 
   let mediaAnalysis = '';
+  let mediaAnalysisRaw = '';
   if (mediaUrl && geminiService.isConfigured()) {
     const mediaTypes = ['audio', 'ptt', 'image', 'sticker', 'video'];
     if (mediaTypes.includes(type)) {
       console.log(`[GEMINI] Processing ${type} for AI context...`);
       const result = await geminiService.processMedia(mediaUrl, type, messageText);
       if (result.success && result.text) {
+        mediaAnalysisRaw = result.text;
         if (type === 'audio' || type === 'ptt') {
-          mediaAnalysis = `[Audio transcription: ${result.text}]`;
           if (!messageText) {
             messageText = result.text;
           }
+          mediaAnalysis = `\n\n[SISTEMA - Transcripción automática del audio enviado por el cliente: "${result.text}"]`;
         } else if (type === 'image' || type === 'sticker') {
-          mediaAnalysis = `[Image description: ${result.text}]`;
+          mediaAnalysis = `\n\n[SISTEMA - El cliente envió una imagen. Descripción automática: ${result.text}]`;
         } else if (type === 'video') {
-          mediaAnalysis = `[Video description: ${result.text}]`;
+          mediaAnalysis = `\n\n[SISTEMA - El cliente envió un video. Descripción automática: ${result.text}]`;
         }
         console.log(`[GEMINI] Media analysis complete for ${type}`);
       }
     }
   }
 
-  const fullMessageForAgent = mediaAnalysis 
-    ? `${messageText}\n\n${mediaAnalysis}`.trim() 
-    : messageText;
+  const fullMessageForAgent = messageText + mediaAnalysis;
 
   await prisma.messageLog.create({
     data: {
@@ -85,7 +85,9 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
         type,
         provider,
         messageId: message.messageId,
-        timestamp: message.timestamp
+        timestamp: message.timestamp,
+        mediaAnalysis: mediaAnalysisRaw || undefined,
+        mediaType: mediaUrl ? type : undefined
       }
     }
   });

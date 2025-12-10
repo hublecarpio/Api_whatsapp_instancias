@@ -218,10 +218,17 @@ export class MetaCloudService {
 
     try {
       console.log('[META] Downloading audio from:', audioUrl);
-      const { buffer } = await this.downloadFromUrl(audioUrl);
-      console.log(`[META] Audio downloaded: ${buffer.length} bytes`);
+      const { buffer, mimeType } = await this.downloadFromUrl(audioUrl);
+      console.log(`[META] Audio downloaded: ${buffer.length} bytes, type: ${mimeType}`);
       
-      const mediaId = await this.uploadMedia(buffer, 'audio/ogg', 'voice.ogg');
+      const actualMimeType = mimeType.includes('mpeg') || mimeType.includes('mp3') 
+        ? 'audio/mpeg' 
+        : mimeType.includes('ogg') 
+          ? 'audio/ogg' 
+          : 'audio/mpeg';
+      
+      const extension = actualMimeType === 'audio/mpeg' ? 'mp3' : 'ogg';
+      const mediaId = await this.uploadMedia(buffer, actualMimeType, `voice.${extension}`);
       console.log('[META] Audio uploaded to Meta, media_id:', mediaId);
       
       const response = await axios.post(
@@ -236,7 +243,7 @@ export class MetaCloudService {
         { headers: this.headers }
       );
 
-      console.log('[META] Audio message sent successfully as voice note');
+      console.log('[META] Audio message sent successfully');
       return response.data;
     } catch (uploadError: any) {
       console.error('[META] Audio upload/send failed:', uploadError.response?.data || uploadError.message);

@@ -81,26 +81,27 @@ function getMediaType(mimetype: string): 'image' | 'video' | 'audio' | 'file' {
   return 'file';
 }
 
-async function convertAudioToOgg(inputBuffer: Buffer, inputMimetype: string): Promise<Buffer> {
+async function convertAudioForWhatsApp(inputBuffer: Buffer, inputMimetype: string): Promise<{ buffer: Buffer; extension: string; mimetype: string }> {
   const inputExt = inputMimetype.includes('webm') ? 'webm' : 
                    inputMimetype.includes('mp3') ? 'mp3' :
                    inputMimetype.includes('m4a') ? 'm4a' :
+                   inputMimetype.includes('ogg') ? 'ogg' :
                    inputMimetype.includes('wav') ? 'wav' : 'webm';
   
   const inputPath = join(tmpdir(), `audio_input_${randomUUID()}.${inputExt}`);
-  const outputPath = join(tmpdir(), `audio_output_${randomUUID()}.ogg`);
+  const outputPath = join(tmpdir(), `audio_output_${randomUUID()}.mp3`);
   
   try {
     await writeFile(inputPath, inputBuffer);
     
     await execAsync(
-      `ffmpeg -y -i "${inputPath}" -c:a libopus -b:a 128k -ar 48000 -ac 1 -application voip "${outputPath}"`
+      `ffmpeg -y -i "${inputPath}" -c:a libmp3lame -b:a 128k -ar 44100 -ac 1 "${outputPath}"`
     );
     
     const outputBuffer = await readFile(outputPath);
-    console.log(`Audio converted: ${inputBuffer.length} bytes -> ${outputBuffer.length} bytes (OGG Opus)`);
+    console.log(`Audio converted: ${inputBuffer.length} bytes -> ${outputBuffer.length} bytes (MP3)`);
     
-    return outputBuffer;
+    return { buffer: outputBuffer, extension: '.mp3', mimetype: 'audio/mpeg' };
   } finally {
     try { await unlink(inputPath); } catch {}
     try { await unlink(outputPath); } catch {}
@@ -139,11 +140,12 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
     
     if (req.file.mimetype === 'audio/webm' || req.file.mimetype.startsWith('audio/')) {
       try {
-        console.log('Converting audio to OGG format...');
-        fileBuffer = await convertAudioToOgg(req.file.buffer, req.file.mimetype);
-        fileMimetype = 'audio/ogg; codecs=opus';
-        extension = '.ogg';
-        console.log('Audio converted successfully');
+        console.log('Converting audio for WhatsApp...');
+        const converted = await convertAudioForWhatsApp(req.file.buffer, req.file.mimetype);
+        fileBuffer = converted.buffer;
+        fileMimetype = converted.mimetype;
+        extension = converted.extension;
+        console.log('Audio converted successfully to', converted.mimetype);
       } catch (convErr: any) {
         console.error('Audio conversion failed, using original:', convErr.message);
       }

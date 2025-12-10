@@ -20,6 +20,11 @@ interface Message {
   message?: string;
   mediaUrl?: string;
   createdAt: string;
+  metadata?: {
+    mediaAnalysis?: string;
+    mediaType?: string;
+    type?: string;
+  };
 }
 
 interface Tag {
@@ -791,6 +796,27 @@ export default function ChatPage() {
                     <div className={`chat-bubble ${msg.direction === 'outbound' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'}`}>
                       {msg.mediaUrl && renderMedia(msg.mediaUrl, msg.direction === 'outbound')}
                       {msg.message && <p className="break-words whitespace-pre-wrap text-sm sm:text-base">{msg.message}</p>}
+                      {msg.direction === 'inbound' && msg.metadata?.mediaAnalysis && (
+                        <div className="mt-2 group relative">
+                          <button 
+                            className="flex items-center gap-1 text-xs px-2 py-1 bg-purple-500/20 text-purple-300 rounded-full hover:bg-purple-500/30 transition-colors"
+                            title="Ver análisis de IA"
+                          >
+                            <span>✨</span>
+                            <span>Analizado</span>
+                          </button>
+                          <div className="absolute bottom-full left-0 mb-2 w-64 sm:w-80 p-3 bg-dark-card border border-purple-500/30 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                            <p className="text-xs text-purple-300 font-medium mb-1">
+                              {msg.metadata?.mediaType === 'audio' || msg.metadata?.type === 'audio' || msg.metadata?.type === 'ptt' ? '🎤 Transcripción:' : 
+                               msg.metadata?.mediaType === 'image' || msg.metadata?.type === 'image' || msg.metadata?.type === 'sticker' ? '🖼️ Descripción:' : 
+                               msg.metadata?.mediaType === 'video' || msg.metadata?.type === 'video' ? '🎬 Descripción:' : '📎 Análisis:'}
+                            </p>
+                            <p className="text-xs text-gray-300 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                              {msg.metadata.mediaAnalysis}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                       <p className={`text-xs mt-1 text-right ${msg.direction === 'outbound' ? 'text-neon-blue-dark' : 'text-gray-500'}`}>
                         {formatTime(msg.createdAt)}
                         {msg.direction === 'outbound' && <span className="ml-1">✓✓</span>}
