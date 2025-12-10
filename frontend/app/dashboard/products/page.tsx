@@ -28,6 +28,8 @@ export default function ProductsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -108,6 +110,100 @@ export default function ProductsPage() {
     }
   };
 
+  const downloadCsvExample = () => {
+    const csvContent = `title,description,price,imageUrl
+"Producto ejemplo 1","Descripcion del producto 1",29.99,https://ejemplo.com/imagen1.jpg
+"Producto ejemplo 2","Descripcion del producto 2",49.99,
+"Producto sin descripcion",,19.99,https://ejemplo.com/imagen3.jpg`;
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'productos_ejemplo.csv';
+    link.click();
+  };
+
+  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentBusiness) return;
+    
+    setBulkUploading(true);
+    setError('');
+    
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        setError('El CSV debe tener al menos una fila de datos ademas del encabezado');
+        return;
+      }
+      
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+      const titleIdx = headers.indexOf('title');
+      const descIdx = headers.indexOf('description');
+      const priceIdx = headers.indexOf('price');
+      const imageIdx = headers.indexOf('imageurl');
+      
+      if (titleIdx === -1 || priceIdx === -1) {
+        setError('El CSV debe tener columnas "title" y "price"');
+        return;
+      }
+      
+      const products = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        if (values.length > Math.max(titleIdx, priceIdx)) {
+          const title = values[titleIdx]?.trim();
+          const price = parseFloat(values[priceIdx]?.trim() || '0');
+          
+          if (title && !isNaN(price)) {
+            products.push({
+              title,
+              description: descIdx >= 0 ? values[descIdx]?.trim() || null : null,
+              price,
+              imageUrl: imageIdx >= 0 ? values[imageIdx]?.trim() || null : null
+            });
+          }
+        }
+      }
+      
+      if (products.length === 0) {
+        setError('No se encontraron productos validos en el CSV');
+        return;
+      }
+      
+      const response = await productApi.bulkCreate(currentBusiness.id, products);
+      fetchProducts();
+      alert(`Se crearon ${response.data.created} productos exitosamente${response.data.skipped > 0 ? `. ${response.data.skipped} filas fueron omitidas por datos invalidos.` : ''}`);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al procesar CSV');
+    } finally {
+      setBulkUploading(false);
+      if (csvInputRef.current) csvInputRef.current.value = '';
+    }
+  };
+
+  const parseCSVLine = (line: string): string[] => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.replace(/^"|"$/g, ''));
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.replace(/^"|"$/g, ''));
+    return result;
+  };
+
   const handleEdit = (product: Product) => {
     setTitle(product.title);
     setDescription(product.description || '');
@@ -173,12 +269,31 @@ export default function ProductsPage() {
     <div className="p-4 sm:p-0">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-white">Productos</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="btn btn-primary w-full sm:w-auto"
-        >
-          {showForm ? 'Cancelar' : '+ Agregar producto'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={downloadCsvExample}
+            className="btn btn-secondary text-sm"
+          >
+            Descargar CSV ejemplo
+          </button>
+          <label className={`btn btn-secondary text-sm cursor-pointer ${bulkUploading ? 'opacity-50' : ''}`}>
+            {bulkUploading ? 'Subiendo...' : 'Importar CSV'}
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleCsvUpload}
+              disabled={bulkUploading}
+              className="hidden"
+            />
+          </label>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="btn btn-primary"
+          >
+            {showForm ? 'Cancelar' : '+ Agregar'}
+          </button>
+        </div>
       </div>
 
       {error && (

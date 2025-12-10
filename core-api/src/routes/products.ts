@@ -13,6 +13,46 @@ async function checkBusinessAccess(userId: string, businessId: string) {
   return business;
 }
 
+router.post('/bulk', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, products } = req.body;
+    
+    if (!businessId || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: 'businessId and products array are required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const validProducts = products.filter((p: any) => p.title && p.price !== undefined);
+    
+    if (validProducts.length === 0) {
+      return res.status(400).json({ error: 'No valid products found. Each product needs at least title and price.' });
+    }
+    
+    const created = await prisma.product.createMany({
+      data: validProducts.map((p: any) => ({
+        businessId,
+        title: String(p.title).trim(),
+        description: p.description ? String(p.description).trim() : null,
+        price: parseFloat(p.price),
+        imageUrl: p.imageUrl ? String(p.imageUrl).trim() : null
+      }))
+    });
+    
+    res.status(201).json({ 
+      success: true, 
+      created: created.count,
+      skipped: products.length - validProducts.length
+    });
+  } catch (error) {
+    console.error('Bulk create products error:', error);
+    res.status(500).json({ error: 'Failed to create products' });
+  }
+});
+
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, title, description, price, imageUrl } = req.body;
