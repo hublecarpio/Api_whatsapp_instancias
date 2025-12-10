@@ -34,19 +34,21 @@ enum SubscriptionStatus {
 }
 
 model Business {
-  id            String             @id @default(uuid())
-  userId        String
-  name          String
-  description   String?
-  industry      String?
-  logoUrl       String?
-  openaiApiKey  String?
-  openaiModel   String?            @default("gpt-4.1-mini")
-  botEnabled    Boolean            @default(true)
-  timezone      String             @default("America/Lima")
-  agentVersion  String             @default("v1")
-  agentV2Config Json?
-  createdAt     DateTime           @default(now())
+  id             String             @id @default(uuid())
+  userId         String
+  name           String
+  description    String?
+  industry       String?
+  logoUrl        String?
+  openaiApiKey   String?
+  openaiModel    String?            @default("gpt-4.1-mini")
+  botEnabled     Boolean            @default(true)
+  timezone       String             @default("America/Lima")
+  agentVersion   String             @default("v1")
+  agentV2Config  Json?
+  currencyCode   String             @default("PEN")
+  currencySymbol String             @default("S/.")
+  createdAt      DateTime           @default(now())
 
   user           User               @relation(fields: [userId], references: [id])
   instances      WhatsAppInstance[]
@@ -126,10 +128,13 @@ model Product {
   title       String
   description String?
   price       Float
+  stock       Int      @default(0)
   imageUrl    String?
   createdAt   DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, title])
 }
 
 model Policy {
