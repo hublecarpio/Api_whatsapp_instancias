@@ -698,4 +698,216 @@ router.post('/wa-instances/:instanceId/restart', superAdminMiddleware, async (re
   }
 });
 
+router.get('/analytics/orders', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { businessId, startDate, endDate, status } = req.query;
+    
+    const dateFilter: any = {};
+    if (startDate) {
+      dateFilter.gte = new Date(startDate as string);
+    }
+    if (endDate) {
+      const end = new Date(endDate as string);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+    
+    const where: any = {};
+    if (businessId) where.businessId = businessId as string;
+    if (Object.keys(dateFilter).length > 0) where.createdAt = dateFilter;
+    if (status) where.status = status as string;
+    
+    const [
+      ordersByStatus,
+      totalOrders,
+      totalRevenue,
+      recentOrders,
+      ordersByBusiness
+    ] = await Promise.all([
+      prisma.order.groupBy({
+        by: ['status'],
+        where,
+        _count: true,
+        _sum: { totalAmount: true }
+      }),
+      prisma.order.count({ where }),
+      prisma.order.aggregate({
+        where: { ...where, status: 'PAID' },
+        _sum: { totalAmount: true }
+      }),
+      prisma.order.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: {
+          items: true,
+          business: { select: { name: true, currencySymbol: true } }
+        }
+      }),
+      prisma.order.groupBy({
+        by: ['businessId'],
+        where,
+        _count: true,
+        _sum: { totalAmount: true }
+      })
+    ]);
+    
+    const businessIds = ordersByBusiness.map(b => b.businessId);
+    const businesses = await prisma.business.findMany({
+      where: { id: { in: businessIds } },
+      select: { id: true, name: true }
+    });
+    const businessMap = new Map(businesses.map(b => [b.id, b.name]));
+    
+    const statusBreakdown = ordersByStatus.reduce<Record<string, { count: number; amount: number }>>((acc, s) => {
+      acc[s.status] = {
+        count: s._count,
+        amount: s._sum.totalAmount || 0
+      };
+      return acc;
+    }, {});
+    
+    const byBusiness = ordersByBusiness.map(b => ({
+      businessId: b.businessId,
+      businessName: businessMap.get(b.businessId) || 'Unknown',
+      count: b._count,
+      totalAmount: b._sum.totalAmount || 0
+    })).sort((a, b) => b.count - a.count);
+    
+    res.json({
+      summary: {
+        totalOrders,
+        totalRevenue: totalRevenue._sum.totalAmount || 0,
+        byStatus: statusBreakdown
+      },
+      byBusiness,
+      recentOrders: recentOrders.map(o => ({
+        id: o.id,
+        status: o.status,
+        totalAmount: o.totalAmount,
+        currencySymbol: o.currencySymbol,
+        contactPhone: o.contactPhone,
+        contactName: o.contactName,
+        businessName: o.business.name,
+        itemCount: o.items.length,
+        createdAt: o.createdAt
+      }))
+    });
+  } catch (error: any) {
+    console.error('Analytics orders error:', error);
+    res.status(500).json({ error: 'Failed to fetch order analytics', details: error.message });
+  }
+});
+
+router.get('/analytics/payment-links', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { businessId, startDate, endDate, isSuccess } = req.query;
+    
+    const dateFilter: any = {};
+    if (startDate) {
+      dateFilter.gte = new Date(startDate as string);
+    }
+    if (endDate) {
+      const end = new Date(endDate as string);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.lte = end;
+    }
+    
+    const where: any = {};
+    if (businessId) where.businessId = businessId as string;
+    if (Object.keys(dateFilter).length > 0) where.createdAt = dateFilter;
+    if (isSuccess !== undefined) where.isSuccess = isSuccess === 'true';
+    
+    const [
+      totalRequests,
+      successCount,
+      failureCount,
+      requestsByBusiness,
+      requestsBySource,
+      recentRequests,
+      failureReasons
+    ] = await Promise.all([
+      prisma.paymentLinkRequest.count({ where }),
+      prisma.paymentLinkRequest.count({ where: { ...where, isSuccess: true } }),
+      prisma.paymentLinkRequest.count({ where: { ...where, isSuccess: false } }),
+      prisma.paymentLinkRequest.groupBy({
+        by: ['businessId'],
+        where,
+        _count: true
+      }),
+      prisma.paymentLinkRequest.groupBy({
+        by: ['triggerSource'],
+        where,
+        _count: true
+      }),
+      prisma.paymentLinkRequest.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: 30
+      }),
+      prisma.paymentLinkRequest.groupBy({
+        by: ['failureReason'],
+        where: { ...where, isSuccess: false, failureReason: { not: null } },
+        _count: true
+      })
+    ]);
+    
+    const businessIds = requestsByBusiness.map(b => b.businessId);
+    const businesses = await prisma.business.findMany({
+      where: { id: { in: businessIds } },
+      select: { id: true, name: true }
+    });
+    const businessMap = new Map(businesses.map(b => [b.id, b.name]));
+    
+    const byBusiness = requestsByBusiness.map(b => ({
+      businessId: b.businessId,
+      businessName: businessMap.get(b.businessId) || 'Unknown',
+      count: b._count
+    })).sort((a, b) => b.count - a.count);
+    
+    const bySource = requestsBySource.reduce<Record<string, number>>((acc, s) => {
+      acc[s.triggerSource] = s._count;
+      return acc;
+    }, {});
+    
+    const topFailureReasons = failureReasons
+      .filter(f => f.failureReason)
+      .map(f => ({
+        reason: f.failureReason,
+        count: f._count
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+    
+    res.json({
+      summary: {
+        totalRequests,
+        successCount,
+        failureCount,
+        successRate: totalRequests > 0 ? Math.round((successCount / totalRequests) * 100) : 0
+      },
+      byBusiness,
+      bySource,
+      topFailureReasons,
+      recentRequests: recentRequests.map(r => ({
+        id: r.id,
+        businessId: r.businessId,
+        businessName: businessMap.get(r.businessId) || 'Unknown',
+        contactPhone: r.contactPhone,
+        productName: r.productName,
+        amount: r.amount,
+        quantity: r.quantity,
+        isSuccess: r.isSuccess,
+        failureReason: r.failureReason,
+        isPro: r.isPro,
+        triggerSource: r.triggerSource,
+        createdAt: r.createdAt
+      }))
+    });
+  } catch (error: any) {
+    console.error('Analytics payment links error:', error);
+    res.status(500).json({ error: 'Failed to fetch payment link analytics', details: error.message });
+  }
+});
+
 export default router;
