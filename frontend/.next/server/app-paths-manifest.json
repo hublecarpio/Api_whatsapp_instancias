@@ -1,8 +1,7 @@
 {
   "/dashboard/templates/page": "app/dashboard/templates/page.js",
-  "/dashboard/business/page": "app/dashboard/business/page.js",
-  "/dashboard/orders/page": "app/dashboard/orders/page.js",
   "/dashboard/tags/page": "app/dashboard/tags/page.js",
+  "/dashboard/orders/page": "app/dashboard/orders/page.js",
   "/dashboard/chat/page": "app/dashboard/chat/page.js",
   "/dashboard/prompt/page": "app/dashboard/prompt/page.js"
 }

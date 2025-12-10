@@ -114,6 +114,8 @@ export default function ChatPage() {
   const audioStreamRef = useRef<MediaStream | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const isNearBottomRef = useRef(true);
+  const prevMessagesLengthRef = useRef(0);
 
   useEffect(() => {
     const handleViewportResize = () => {
@@ -230,6 +232,8 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (selectedPhone && currentBusiness) {
+      prevMessagesLengthRef.current = 0;
+      isNearBottomRef.current = true;
       fetchMessages(selectedPhone);
       fetchWindowStatus(selectedPhone);
       fetchContactBotStatus(selectedPhone);
@@ -454,7 +458,14 @@ export default function ChatPage() {
   });
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const isNewConversation = prevMessagesLengthRef.current === 0 && messages.length > 0;
+    const hasNewMessages = messages.length > prevMessagesLengthRef.current;
+    
+    if (isNewConversation || (hasNewMessages && isNearBottomRef.current)) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    prevMessagesLengthRef.current = messages.length;
   }, [messages]);
 
   const fetchConversations = async () => {
@@ -940,7 +951,14 @@ export default function ChatPage() {
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 scroll-smooth-ios scrollbar-thin bg-dark-bg">
+              <div 
+                className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 scroll-smooth-ios scrollbar-thin bg-dark-bg"
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  const threshold = 150;
+                  isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+                }}
+              >
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`chat-bubble ${msg.direction === 'outbound' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'}`}>
