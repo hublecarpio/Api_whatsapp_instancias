@@ -233,6 +233,8 @@ export const tagsApi = {
 export const ordersApi = {
   list: (businessId: string, status?: string) =>
     api.get(`/orders?businessId=${businessId}${status ? `&status=${status}` : ''}`),
+  syncPayment: (sessionId: string) =>
+    api.post(`/orders/sync-payment/${sessionId}`),
   get: (orderId: string) => api.get(`/orders/${orderId}`),
   updateStatus: (orderId: string, status: string) =>
     api.patch(`/orders/${orderId}/status`, { status }),

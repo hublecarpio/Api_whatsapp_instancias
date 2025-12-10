@@ -318,6 +318,49 @@ router.get('/', authMiddleware, async (req: any, res) => {
   }
 });
 
+router.post('/sync-payment/:sessionId', authMiddleware, async (req: any, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    const paymentSession = await prisma.paymentSession.findUnique({
+      where: { stripeSessionId: sessionId }
+    });
+
+    if (!paymentSession) {
+      return res.status(404).json({ error: 'Sesión de pago no encontrada' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: paymentSession.businessId,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este negocio' });
+    }
+
+    const result = await handlePaymentSuccess(sessionId);
+
+    if (result.success) {
+      res.json({ 
+        success: true, 
+        message: 'Estado del pago sincronizado correctamente',
+        order: result.order
+      });
+    } else {
+      res.json({ 
+        success: false, 
+        message: result.error || 'No se pudo sincronizar el pago'
+      });
+    }
+  } catch (error: any) {
+    console.error('[ORDERS] Error syncing payment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/payment-links', authMiddleware, async (req: any, res) => {
   try {
     const { businessId, status } = req.query;

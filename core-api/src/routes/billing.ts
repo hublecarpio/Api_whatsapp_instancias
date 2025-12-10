@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getDailyContactStats } from '../middleware/billing.js';
+import { handlePaymentSuccess, handlePaymentCanceled } from '../services/stripePayments.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -88,24 +89,43 @@ router.post('/webhook', async (req, res) => {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.userId;
-        const subscriptionId = session.subscription as string;
+        
+        if (session.mode === 'payment' && session.metadata?.orderId) {
+          const result = await handlePaymentSuccess(session.id);
+          if (result.success && result.order) {
+            console.log(`[BILLING WEBHOOK] Order ${result.order.id} payment completed`);
+          } else {
+            console.log(`[BILLING WEBHOOK] Payment session processed: ${session.id}`);
+          }
+        } else if (session.mode === 'subscription') {
+          const userId = session.metadata?.userId;
+          const subscriptionId = session.subscription as string;
 
-        if (userId && subscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const trialEnd = subscription.trial_end 
-            ? new Date(subscription.trial_end * 1000) 
-            : null;
+          if (userId && subscriptionId) {
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            const trialEnd = subscription.trial_end 
+              ? new Date(subscription.trial_end * 1000) 
+              : null;
 
-          await prisma.user.update({
-            where: { id: userId },
-            data: {
-              stripeSubscriptionId: subscriptionId,
-              subscriptionStatus: trialEnd ? 'TRIAL' : 'ACTIVE',
-              trialEndAt: trialEnd
-            }
-          });
-          console.log(`User ${userId} subscription activated: ${subscriptionId}`);
+            await prisma.user.update({
+              where: { id: userId },
+              data: {
+                stripeSubscriptionId: subscriptionId,
+                subscriptionStatus: trialEnd ? 'TRIAL' : 'ACTIVE',
+                trialEndAt: trialEnd
+              }
+            });
+            console.log(`User ${userId} subscription activated: ${subscriptionId}`);
+          }
+        }
+        break;
+      }
+      
+      case 'checkout.session.expired': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.orderId) {
+          await handlePaymentCanceled(session.id);
+          console.log(`[BILLING WEBHOOK] Session expired, order canceled`);
         }
         break;
       }

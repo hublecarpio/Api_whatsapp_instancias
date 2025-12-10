@@ -48,6 +48,7 @@ interface PaymentLink {
   status: string;
   expiresAt: string;
   createdAt: string;
+  stripeSessionId?: string;
   items: {
     productId: string;
     productTitle: string;
@@ -102,6 +103,8 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [linkStatusFilter, setLinkStatusFilter] = useState<string>('');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentBusiness?.id) {
@@ -177,6 +180,27 @@ export default function OrdersPage() {
   const copyShortUrl = (shortCode: string) => {
     const url = `${window.location.origin}/pay/${shortCode}`;
     navigator.clipboard.writeText(url);
+  };
+
+  const syncPayment = async (sessionId: string) => {
+    try {
+      setSyncing(true);
+      setSyncMessage(null);
+      const response = await ordersApi.syncPayment(sessionId);
+      if (response.data.success) {
+        setSyncMessage('Pago sincronizado correctamente');
+        await loadPaymentLinks();
+        await loadOrders();
+        setSelectedLink(null);
+      } else {
+        setSyncMessage(response.data.message || 'No se pudo sincronizar');
+      }
+    } catch (error: any) {
+      setSyncMessage(error.response?.data?.error || 'Error al sincronizar');
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMessage(null), 3000);
+    }
   };
 
   if (!currentBusiness) {
@@ -507,11 +531,27 @@ export default function OrdersPage() {
                     
                     <div>
                       <p className="text-gray-500 text-xs uppercase mb-1">Estado</p>
-                      <span className={`px-3 py-1 text-sm rounded-full border ${
-                        LINK_STATUS_COLORS[isExpired(selectedLink.expiresAt) && selectedLink.status === 'pending' ? 'expired' : selectedLink.status]
-                      }`}>
-                        {LINK_STATUS_LABELS[isExpired(selectedLink.expiresAt) && selectedLink.status === 'pending' ? 'expired' : selectedLink.status]}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 text-sm rounded-full border ${
+                          LINK_STATUS_COLORS[isExpired(selectedLink.expiresAt) && selectedLink.status === 'pending' ? 'expired' : selectedLink.status]
+                        }`}>
+                          {LINK_STATUS_LABELS[isExpired(selectedLink.expiresAt) && selectedLink.status === 'pending' ? 'expired' : selectedLink.status]}
+                        </span>
+                        {selectedLink.status === 'pending' && selectedLink.stripeSessionId && (
+                          <button
+                            onClick={() => syncPayment(selectedLink.stripeSessionId!)}
+                            disabled={syncing}
+                            className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                          >
+                            {syncing ? 'Sincronizando...' : 'Sincronizar'}
+                          </button>
+                        )}
+                      </div>
+                      {syncMessage && (
+                        <p className={`text-xs mt-1 ${syncMessage.includes('correctamente') ? 'text-green-400' : 'text-yellow-400'}`}>
+                          {syncMessage}
+                        </p>
+                      )}
                     </div>
                     
                     <div>
