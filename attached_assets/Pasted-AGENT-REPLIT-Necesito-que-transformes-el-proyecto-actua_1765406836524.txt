@@ -1,0 +1,368 @@
+AGENT REPLIT: Necesito que transformes el proyecto actual “Agent V2” en una arquitectura agéntica completa basada en LangGraph + Tools + Memoria Persistente + Aprendizaje Dinámico.
+
+A continuación te detallo exactamente lo que debes hacer.
+Sigue los pasos en orden. No avances al paso siguiente si no completaste el anterior.
+Asegúrate de ser consistente con el código existente.
+
+1. ORGANIZACIÓN DEL PROYECTO
+
+Crea o reorganiza las siguientes carpetas dentro del proyecto Python/FastAPI:
+
+/agents
+    vendor.py
+    observer.py
+    refiner.py
+
+/tools
+    search_product.py
+    payment.py
+    followup.py
+    media.py
+    crm.py
+
+/core
+    graph.py
+    memory.py
+    tool_router.py
+    embeddings.py
+
+/schemas
+    business_profile.py
+    tool_schemas.py
+    vendor_state.py
+
+/learning
+    ajustes_{business_id}.json
+
+
+No borres nada existente, solo organiza y prepara los nuevos módulos para ser llenados.
+
+2. CARGA DEL BUSINESS CONTEXT (lo que viene desde el Core API)
+
+Agent V2 ya recibe:
+
+business_context
+
+products[]
+
+policies[]
+
+custom_prompt
+
+history
+
+contacto (teléfono y nombre)
+
+Debes:
+
+Crear una clase Pydantic BusinessProfile en /schemas/business_profile.py que valide ese contexto.
+
+Implementar un loader en el endpoint /generate para convertir ese contexto en un objeto de negocio usable.
+
+Asegurar que este BusinessProfile se pase al grafo LangGraph como parte del estado inicial.
+
+Este profile será la base para todas las decisiones del agente.
+
+3. CREAR MEMORIA PERSISTENTE POR LEAD
+
+Actualmente Redis está disponible pero no se usa.
+
+Debes:
+
+Crear /core/memory.py con funciones:
+
+get_memory(lead_id)
+
+save_memory(lead_id, data)
+
+Guardar en memoria:
+
+etapa actual
+
+datos recopilados (talla, color, email, etc.)
+
+productos vistos
+
+follow-ups enviados
+
+preferencias detectadas
+
+Integrar esta memoria en el estado inicial de cada ejecución del grafo.
+
+Advertencia:
+No sobrescribas memoria completa; siempre actualiza incrementalmente.
+
+4. IMPLEMENTAR EMBEDDINGS DEL CATÁLOGO
+
+El catálogo llega desde el Core API, pero ahora debe soportar búsqueda semántica.
+
+Crea /core/embeddings.py con:
+
+Función embed_products(products: list)
+
+Genera embeddings para cada producto usando OpenAI embeddings.
+
+Almacena en memoria temporal por request (no en BD aún).
+
+Función search_similarity(query, embedded_products)
+
+Embeddear el query del usuario
+
+Calcular similitud coseno
+
+Retornar top-N productos
+
+Esto reemplaza la lógica manual actual del Agente V1.
+
+Advertencia:
+No realices llamadas de embeddings innecesarias. Cachea productos dentro de la ejecución.
+
+5. CREAR EL SISTEMA DE TOOLS
+
+Agent V2 debe ser capaz de ejecutar acciones reales.
+
+Crea las siguientes herramientas:
+
+Tool 1: search_product
+
+Archivo: /tools/search_product.py
+
+Input: query de usuario
+
+Output: lista de productos relevantes
+
+Internamente usa /core/embeddings.py
+
+Tool 2: payment
+
+Archivo: /tools/payment.py
+
+Input: producto + cantidad + lead_id
+
+Output: link de pago generado por Stripe o lo que ya use tu Core API
+
+Este tool no debe procesar el pago, solo generar el link.
+
+Tool 3: followup
+
+Archivo: /tools/followup.py
+
+Programar un mensaje de seguimiento (debe retornar un JSON indicando que quedó programado)
+
+Tool 4: media
+
+Archivo: /tools/media.py
+
+Enviar o retornar URLs de imágenes, PDFs u otros recursos del negocio
+
+Tool 5: crm
+
+Archivo: /tools/crm.py
+
+Set tags
+
+Actualizar etapas
+
+Registrar intención
+
+Advertencia:
+No llames herramientas directamente desde el endpoint.
+Todas deben ser invocadas desde el grafo LangGraph para mantener coherencia agéntica.
+
+6. CREAR ROUTER DE TOOLS PARA LANGGRAPH
+
+Archivo: /core/tool_router.py
+
+Debes implementar:
+
+Mapeo de tool_name → función Python real
+
+Ejecutar tool y retornar output al grafo
+
+Validación Pydantic de inputs y outputs
+
+Ejemplo:
+
+TOOLS = {
+    "search_product": search_product.run,
+    "payment": payment.run,
+    "followup": followup.run,
+    "media": media.run,
+    "crm": crm.run
+}
+
+
+Este router permitirá que el vendor agent pueda llamar tools con:
+
+{
+ "accion": "tool",
+ "nombre_tool": "...",
+ "input_tool": {...}
+}
+
+7. CREAR LOS TRES CEREBROS
+7.1 Vendor Agent (Cerebro 1)
+
+Archivo: /agents/vendor.py
+
+Función:
+
+Interpretar mensaje
+
+Decidir si responder o usar tool
+
+Consultar memoria
+
+Consultar catálogo
+
+Aplicar políticas del negocio
+
+Regresar JSON estructurado
+
+Formato que debe devolver SIEMPRE:
+
+{
+ "accion": "respuesta" | "tool",
+ "mensaje": "...",
+ "nombre_tool": "search_product" | "payment" | null,
+ "input_tool": {...}
+}
+
+
+Advertencia:
+El vendor nunca ejecuta tool directamente. Solo ordena la acción.
+
+7.2 Observer Agent (Cerebro 2)
+
+Archivo: /agents/observer.py
+
+Función:
+
+Analizar mensaje del usuario
+
+Analizar mensaje del agente
+
+Detectar fallos o mejoras
+
+Extraer objeciones
+
+Debe retornar un JSON del tipo:
+
+{
+ "fallas": [...],
+ "objeciones": [...],
+ "recomendaciones": [...]
+}
+
+7.3 Refiner Agent (Cerebro 3)
+
+Archivo: /agents/refiner.py
+
+Función:
+
+Tomar insights del observer
+
+Generar reglas nuevas
+
+Guardarlas en /learning/ajustes_{business_id}.json
+
+Formato:
+
+{
+ "nuevas_reglas": [...],
+ "nuevas_respuestas": [...]
+}
+
+
+Advertencia:
+Nunca borres reglas previas; siempre agrega.
+
+8. CREAR LA MÁQUINA LANGGRAPH AVANZADA
+
+Archivo: /core/graph.py
+
+La máquina debe tener:
+
+vendor → tool_router → vendor → observer → refiner → END
+
+
+Detalles:
+
+El vendor decide si se debe usar un tool.
+
+Si hay tool → tool_router lo ejecuta → resultado vuelve al vendor.
+
+Cuando el vendor termina → pasa a observer.
+
+Luego → refiner.
+
+Respuesta final se envía al Core API.
+
+Advertencia:
+Mantén el state machine puro. No mezcles lógica externa.
+
+9. MODIFICAR EL ENDPOINT /generate PARA SOPORTAR TODO
+
+En main.py o server.py:
+
+Recibir:
+
+business_context
+
+conversation_history
+
+message
+
+lead_id
+
+phone
+
+profile
+
+Cargar memoria
+
+Cargar ajustes dinámicos
+
+Cargar embeddings de productos
+
+Montar estado inicial para el grafo LangGraph
+
+Ejecutar graph.invoke()
+
+Guardar nueva memoria
+
+Retornar respuesta o la intención de tool-call al Core API
+
+Advertencia:
+Nunca hagas lógica fuera del grafo.
+Toda decisión debe hacerse adentro del sistema agéntico.
+
+10. ASEGURAR QUE LA RESPUESTA FINAL SEA DETERMINÍSTICA Y JSON
+
+El output del sistema SIEMPRE debe tener:
+
+{
+ "type": "message" | "tool_call",
+ "tool": null | "search_product" | "payment" | "followup" | ...,
+ "tool_input": {...},
+ "message": "..."
+}
+
+
+Core API se encargará de usar ese output para WhatsApp.
+
+11. MANTENER COMPATIBILIDAD CON Agent V1 Y LA CORE API
+
+Asegúrate:
+
+Nunca cambies el shape del JSON final.
+
+Nunca rompas /generate.
+
+Mantén backwards compatibility.
+
+Todo lo nuevo debe ser opcional.
+
+FIN DEL PROMPT PARA AGENT REPLIT
+
+Cuando termines estos pasos, Agente V2 será un sistema de agentes completo, escalable, con memoria persistente, tools, embeddings, tres cerebros, machine learning dinámico y una arquitectura profesional.
