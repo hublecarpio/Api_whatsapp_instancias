@@ -615,7 +615,7 @@ async function processWithAgent(
   if (productCount > 0 && productCount <= 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
     business.products.forEach((product: any) => {
-      systemPrompt += `\n- ${product.title}: ${currencySymbol}${product.price}`;
+      systemPrompt += `\n- [ID:${product.id}] ${product.title}: ${currencySymbol}${product.price}`;
       if (product.stock !== undefined) {
         systemPrompt += ` (Stock: ${product.stock})`;
       }
@@ -630,8 +630,9 @@ async function processWithAgent(
     systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué KTM tienen"), PRIMERO pregunta qué modelo específico le interesa antes de mostrar todo el catálogo.`;
     systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto, muestra los detalles de ese producto.`;
     systemPrompt += `\n- Para enviar imagen de UN producto específico, incluye SOLO la URL completa (https://...) al final de tu mensaje. NO uses sintaxis Markdown como ![texto](url).`;
-    systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje. Si hay varios productos, no incluyas ninguna imagen.`;
+    systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje.`;
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
+    systemPrompt += `\n- IMPORTANTE: Para generar enlaces de pago, SIEMPRE usa el ID del producto (el valor después de "ID:"), NO el nombre.`;
   } else if (productCount > 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
     systemPrompt += `\nTienes acceso a un catálogo extenso de ${productCount} productos con BÚSQUEDA INTELIGENTE.`;
@@ -883,12 +884,29 @@ async function processWithAgent(
       
       if (toolName === 'crear_enlace_pago') {
         const args = JSON.parse(fn.arguments);
-        const productId = args.producto_id;
+        let productId = args.producto_id;
         const quantity = args.cantidad || 1;
         const customerName = args.nombre_cliente;
         const shippingAddress = args.direccion_envio;
         const city = args.ciudad || '';
         const country = args.pais || '';
+        
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
+        if (!isUUID) {
+          console.log(`[PAYMENT LINK] productId "${productId}" is not a UUID, searching by name...`);
+          const productByName = await prisma.product.findFirst({
+            where: {
+              businessId,
+              title: { contains: productId, mode: 'insensitive' }
+            }
+          });
+          if (productByName) {
+            console.log(`[PAYMENT LINK] Found product by name: ${productByName.id} (${productByName.title})`);
+            productId = productByName.id;
+          } else {
+            console.log(`[PAYMENT LINK] No product found matching name "${productId}"`);
+          }
+        }
         
         const isPro = business.user?.isPro || false;
         console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}, isPro: ${isPro}`);
