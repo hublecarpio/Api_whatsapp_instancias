@@ -807,6 +807,9 @@ video {
   white-space: nowrap;
   border-width: 0;
 }
+.pointer-events-none {
+  pointer-events: none;
+}
 .invisible {
   visibility: hidden;
 }
@@ -1350,6 +1353,9 @@ video {
 .border-t {
   border-top-width: 1px;
 }
+.border-dashed {
+  border-style: dashed;
+}
 .border-accent-error\/20 {
   border-color: rgb(239 68 68 / 0.2);
 }
@@ -1524,6 +1530,10 @@ video {
 }
 .bg-white\/80 {
   background-color: rgb(255 255 255 / 0.8);
+}
+.object-contain {
+  -o-object-fit: contain;
+     object-fit: contain;
 }
 .object-cover {
   -o-object-fit: cover;
@@ -1809,6 +1819,9 @@ video {
 .opacity-75 {
   opacity: 0.75;
 }
+.opacity-50 {
+  opacity: 0.5;
+}
 .shadow-dark-lg {
   --tw-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   --tw-shadow-colored: 0 10px 40px var(--tw-shadow-color);
@@ -2064,6 +2077,11 @@ input, textarea, select {
 .hover\:border-neon-blue:hover {
   --tw-border-opacity: 1;
   border-color: rgb(0 212 255 / var(--tw-border-opacity, 1));
+}
+
+.hover\:border-gray-500:hover {
+  --tw-border-opacity: 1;
+  border-color: rgb(107 114 128 / var(--tw-border-opacity, 1));
 }
 
 .hover\:bg-accent-error\/10:hover {

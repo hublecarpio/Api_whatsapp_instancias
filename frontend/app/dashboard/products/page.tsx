@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { productApi } from '@/lib/api';
+import { productApi, mediaApi } from '@/lib/api';
 
 interface Product {
   id: string;
@@ -24,6 +24,10 @@ export default function ProductsPage() {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -51,6 +55,57 @@ export default function ProductsPage() {
     setImageUrl('');
     setEditingProduct(null);
     setShowForm(false);
+    setCopied(false);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!currentBusiness) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Solo se permiten archivos de imagen');
+      return;
+    }
+    
+    setUploading(true);
+    setError('');
+    
+    try {
+      const response = await mediaApi.upload(currentBusiness.id, file);
+      setImageUrl(response.data.url);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al subir imagen');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileUpload(file);
+  }, [currentBusiness]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileUpload(file);
+  };
+
+  const copyToClipboard = () => {
+    if (imageUrl) {
+      navigator.clipboard.writeText(imageUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleEdit = (product: Product) => {
@@ -179,15 +234,65 @@ export default function ProductsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
-                URL de imagen
+                Imagen del producto
               </label>
-              <input
-                type="url"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                className="input"
-                placeholder="https://..."
-              />
+              <div
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all ${
+                  isDragging 
+                    ? 'border-neon-blue bg-neon-blue/10' 
+                    : 'border-gray-600 hover:border-gray-500'
+                } ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                {uploading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-neon-blue"></div>
+                    <span className="text-gray-400">Subiendo...</span>
+                  </div>
+                ) : imageUrl ? (
+                  <div className="space-y-3">
+                    <img 
+                      src={imageUrl} 
+                      alt="Preview" 
+                      className="w-full max-h-40 object-contain rounded"
+                    />
+                    <p className="text-xs text-gray-500">Arrastra otra imagen para reemplazar</p>
+                  </div>
+                ) : (
+                  <div className="text-gray-400">
+                    <div className="text-3xl mb-2">📷</div>
+                    <p className="text-sm">Arrastra una imagen aqui o haz clic para seleccionar</p>
+                  </div>
+                )}
+              </div>
+              
+              {imageUrl && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={imageUrl}
+                    readOnly
+                    className="input text-xs flex-1 bg-gray-800/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={copyToClipboard}
+                    className="btn btn-secondary btn-sm whitespace-nowrap"
+                  >
+                    {copied ? '✓ Copiado' : 'Copiar'}
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
               <button type="submit" className="btn btn-primary">

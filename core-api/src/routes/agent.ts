@@ -597,12 +597,16 @@ async function processWithAgent(
   
   if (business.products && business.products.length > 0) {
     systemPrompt += `\n\n## Catálogo de productos:`;
-    business.products.forEach(product => {
+    business.products.forEach((product: any) => {
       systemPrompt += `\n- ${product.title}: $${product.price}`;
       if (product.description) {
         systemPrompt += ` - ${product.description}`;
       }
+      if (product.imageUrl) {
+        systemPrompt += ` [Imagen: ${product.imageUrl}]`;
+      }
     });
+    systemPrompt += `\n\nCuando el cliente pregunte por un producto con imagen, incluye la URL de la imagen en tu respuesta para que se envíe automáticamente.`;
   }
   
   const contactAssignment = await prisma.tagAssignment.findUnique({
