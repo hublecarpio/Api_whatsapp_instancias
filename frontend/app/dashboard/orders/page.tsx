@@ -219,19 +219,17 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Pedidos y Enlaces</h1>
-          <p className="text-gray-400 mt-1">Gestiona pedidos y enlaces de pago</p>
-        </div>
+    <div className="p-3 sm:p-6">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Pedidos y Enlaces</h1>
+        <p className="text-gray-400 text-sm mt-1">Gestiona pedidos y enlaces de pago</p>
       </div>
 
-      <div className="flex items-center gap-4 mb-6">
-        <div className="flex bg-[#1e1e1e] rounded-lg p-1 border border-gray-700">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4 sm:mb-6">
+        <div className="flex bg-[#1e1e1e] rounded-lg p-1 border border-gray-700 overflow-x-auto">
           <button
             onClick={() => { setActiveTab('orders'); setExpandedOrderId(null); setExpandedLinkId(null); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'orders'
                 ? 'bg-green-600 text-white'
                 : 'text-gray-400 hover:text-white'
@@ -241,17 +239,17 @@ export default function OrdersPage() {
           </button>
           <button
             onClick={() => { setActiveTab('links'); setExpandedOrderId(null); setExpandedLinkId(null); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'links'
                 ? 'bg-green-600 text-white'
                 : 'text-gray-400 hover:text-white'
             }`}
           >
-            Enlaces de Pago ({paymentLinks.length})
+            Enlaces ({paymentLinks.length})
           </button>
           <button
             onClick={() => { setActiveTab('extraction'); setExpandedOrderId(null); setExpandedLinkId(null); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'extraction'
                 ? 'bg-green-600 text-white'
                 : 'text-gray-400 hover:text-white'
@@ -261,39 +259,44 @@ export default function OrdersPage() {
           </button>
         </div>
 
-        {activeTab === 'orders' && (
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-[#2a2a2a] border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500"
-          >
-            <option value="">Todos los estados</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        )}
-        {activeTab === 'links' && (
-          <select
-            value={linkStatusFilter}
-            onChange={(e) => setLinkStatusFilter(e.target.value)}
-            className="bg-[#2a2a2a] border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500"
-          >
-            <option value="">Todos los estados</option>
-            {Object.entries(LINK_STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        )}
+        <div className="flex items-center gap-2">
+          {activeTab === 'orders' && (
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="flex-1 sm:flex-none bg-[#2a2a2a] border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
+            >
+              <option value="">Todos</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          )}
+          {activeTab === 'links' && (
+            <select
+              value={linkStatusFilter}
+              onChange={(e) => setLinkStatusFilter(e.target.value)}
+              className="flex-1 sm:flex-none bg-[#2a2a2a] border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
+            >
+              <option value="">Todos</option>
+              {Object.entries(LINK_STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          )}
 
-        {activeTab !== 'extraction' && (
-          <button
-            onClick={activeTab === 'orders' ? loadOrders : loadPaymentLinks}
-            className="px-4 py-2 bg-[#2a2a2a] hover:bg-[#333] text-white rounded-lg transition-colors"
-          >
-            Actualizar
-          </button>
-        )}
+          {activeTab !== 'extraction' && (
+            <button
+              onClick={activeTab === 'orders' ? loadOrders : loadPaymentLinks}
+              className="p-2 bg-[#2a2a2a] hover:bg-[#333] text-white rounded-lg transition-colors"
+              title="Actualizar"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {activeTab === 'extraction' ? (
@@ -324,50 +327,50 @@ export default function OrdersPage() {
                 >
                   <div
                     onClick={() => toggleOrderExpand(order.id)}
-                    className="p-4 cursor-pointer hover:bg-[#252525] transition-colors rounded-t-xl"
+                    className="p-3 sm:p-4 cursor-pointer hover:bg-[#252525] transition-colors rounded-t-xl"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+                        <span className={`transform transition-transform mt-1 text-xs sm:text-sm ${isExpanded ? 'rotate-90' : ''}`}>
                           ▶
                         </span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-white font-mono text-sm">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                            <span className="text-white font-mono text-xs sm:text-sm">
                               #{order.id.slice(0, 8).toUpperCase()}
                             </span>
-                            <span className={`px-2 py-0.5 text-xs rounded-full border ${STATUS_COLORS[order.status]}`}>
+                            <span className={`px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs rounded-full border ${STATUS_COLORS[order.status]}`}>
                               {STATUS_LABELS[order.status]}
                             </span>
                           </div>
-                          <p className="text-gray-400 text-sm mt-1">
+                          <p className="text-gray-400 text-xs sm:text-sm mt-1 truncate">
                             {order.contactName || formatPhone(order.contactPhone)}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-white font-semibold">
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-white font-semibold text-sm sm:text-base">
                           {order.currencySymbol}{order.totalAmount.toFixed(2)}
                         </p>
-                        <p className="text-gray-500 text-xs">{formatDate(order.createdAt)}</p>
+                        <p className="text-gray-500 text-[10px] sm:text-xs">{formatDate(order.createdAt)}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-400 mt-2 ml-7">
-                      <span>{order.items.length} producto{order.items.length !== 1 ? 's' : ''}</span>
+                    <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-400 mt-2 ml-5 sm:ml-7">
+                      <span>{order.items.length} prod.</span>
                       {order.shippingCity && (
                         <>
                           <span>•</span>
-                          <span>{order.shippingCity}</span>
+                          <span className="truncate">{order.shippingCity}</span>
                         </>
                       )}
                     </div>
                   </div>
 
                   {isExpanded && (
-                    <div className="border-t border-gray-700 p-4 space-y-4 bg-[#1a1a1a] rounded-b-xl">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="border-t border-gray-700 p-3 sm:p-4 space-y-3 sm:space-y-4 bg-[#1a1a1a] rounded-b-xl">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <p className="text-gray-500 text-xs uppercase mb-1">Estado</p>
+                          <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-1">Estado</p>
                           <select
                             value={order.status}
                             onChange={(e) => {
@@ -375,32 +378,32 @@ export default function OrdersPage() {
                               updateStatus(order.id, e.target.value);
                             }}
                             disabled={updatingStatus === order.id || order.status === 'PENDING_PAYMENT'}
-                            className="w-full bg-[#2a2a2a] border border-gray-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 disabled:opacity-50"
+                            className="w-full bg-[#2a2a2a] border border-gray-600 rounded px-2 sm:px-3 py-1.5 sm:py-2 text-white text-xs sm:text-sm focus:outline-none focus:border-green-500 disabled:opacity-50"
                           >
                             {Object.entries(STATUS_LABELS).map(([value, label]) => (
                               <option key={value} value={value}>{label}</option>
                             ))}
                           </select>
                           {order.status === 'AWAITING_VOUCHER' && (
-                            <p className="text-orange-400 text-xs mt-1">
-                              Confirma manualmente cuando recibas el comprobante
+                            <p className="text-orange-400 text-[10px] sm:text-xs mt-1">
+                              Confirma cuando recibas el comprobante
                             </p>
                           )}
                         </div>
 
                         <div>
-                          <p className="text-gray-500 text-xs uppercase mb-1">Cliente</p>
-                          <p className="text-white">{order.contactName || 'Sin nombre'}</p>
-                          <p className="text-gray-400 text-sm">{formatPhone(order.contactPhone)}</p>
+                          <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-1">Cliente</p>
+                          <p className="text-white text-sm">{order.contactName || 'Sin nombre'}</p>
+                          <p className="text-gray-400 text-xs sm:text-sm">{formatPhone(order.contactPhone)}</p>
                         </div>
                       </div>
 
                       {order.shippingAddress && (
                         <div>
-                          <p className="text-gray-500 text-xs uppercase mb-1">Dirección de Envío</p>
-                          <p className="text-white text-sm">{order.shippingAddress}</p>
+                          <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-1">Direccion</p>
+                          <p className="text-white text-xs sm:text-sm">{order.shippingAddress}</p>
                           {order.shippingCity && (
-                            <p className="text-gray-400 text-sm">
+                            <p className="text-gray-400 text-xs sm:text-sm">
                               {order.shippingCity}
                               {order.shippingCountry && `, ${order.shippingCountry}`}
                             </p>
@@ -409,24 +412,24 @@ export default function OrdersPage() {
                       )}
 
                       <div>
-                        <p className="text-gray-500 text-xs uppercase mb-2">Productos</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-2">Productos</p>
+                        <div className="space-y-2">
                           {order.items.map(item => (
-                            <div key={item.id} className="flex items-center gap-3 bg-[#2a2a2a] rounded-lg p-2">
+                            <div key={item.id} className="flex items-center gap-2 sm:gap-3 bg-[#2a2a2a] rounded-lg p-2">
                               {item.imageUrl && (
                                 <img
                                   src={item.imageUrl}
                                   alt={item.productTitle}
-                                  className="w-10 h-10 object-cover rounded"
+                                  className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded flex-shrink-0"
                                 />
                               )}
                               <div className="flex-1 min-w-0">
-                                <p className="text-white text-sm truncate">{item.productTitle}</p>
-                                <p className="text-gray-400 text-xs">
+                                <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}</p>
+                                <p className="text-gray-400 text-[10px] sm:text-xs">
                                   {item.quantity} x {order.currencySymbol}{item.unitPrice.toFixed(2)}
                                 </p>
                               </div>
-                              <p className="text-white text-sm font-medium">
+                              <p className="text-white text-xs sm:text-sm font-medium flex-shrink-0">
                                 {order.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}
                               </p>
                             </div>
@@ -434,15 +437,15 @@ export default function OrdersPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-3 border-t border-gray-700">
-                        <div className="text-sm text-gray-400">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-gray-700">
+                        <div className="text-xs sm:text-sm text-gray-400">
                           {order.paidAt ? (
                             <span className="text-green-400">Pagado: {formatDate(order.paidAt)}</span>
                           ) : (
                             <span>Creado: {formatDate(order.createdAt)}</span>
                           )}
                         </div>
-                        <div className="text-xl font-bold text-white">
+                        <div className="text-lg sm:text-xl font-bold text-white">
                           Total: {order.currencySymbol}{order.totalAmount.toFixed(2)}
                         </div>
                       </div>
@@ -478,77 +481,77 @@ export default function OrdersPage() {
                 >
                   <div
                     onClick={() => toggleLinkExpand(link.id)}
-                    className="p-4 cursor-pointer hover:bg-[#252525] transition-colors rounded-t-xl"
+                    className="p-3 sm:p-4 cursor-pointer hover:bg-[#252525] transition-colors rounded-t-xl"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+                        <span className={`transform transition-transform mt-1 text-xs sm:text-sm ${isExpanded ? 'rotate-90' : ''}`}>
                           ▶
                         </span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-white font-mono text-sm bg-[#2a2a2a] px-2 py-1 rounded">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                            <span className="text-white font-mono text-xs sm:text-sm bg-[#2a2a2a] px-1.5 sm:px-2 py-0.5 sm:py-1 rounded">
                               {link.shortCode}
                             </span>
-                            <span className={`px-2 py-0.5 text-xs rounded-full border ${LINK_STATUS_COLORS[effectiveStatus]}`}>
+                            <span className={`px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs rounded-full border ${LINK_STATUS_COLORS[effectiveStatus]}`}>
                               {LINK_STATUS_LABELS[effectiveStatus]}
                             </span>
                           </div>
-                          <p className="text-gray-400 text-sm mt-1">
+                          <p className="text-gray-400 text-xs sm:text-sm mt-1 truncate">
                             {formatPhone(link.contactPhone)}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-white font-semibold">
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-white font-semibold text-sm sm:text-base">
                           {currentBusiness.currencySymbol}{link.totalAmount.toFixed(2)}
                         </p>
-                        <p className="text-gray-500 text-xs">{formatDate(link.createdAt)}</p>
+                        <p className="text-gray-500 text-[10px] sm:text-xs">{formatDate(link.createdAt)}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-400 mt-2 ml-7">
-                      <span>{link.items.length} producto{link.items.length !== 1 ? 's' : ''}</span>
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-400 mt-2 ml-5 sm:ml-7">
+                      <span>{link.items.length} prod.</span>
                       <span>•</span>
                       <span className={expired ? 'text-red-400' : 'text-gray-400'}>
-                        {expired ? 'Expirado' : `Expira: ${formatDate(link.expiresAt)}`}
+                        {expired ? 'Expirado' : `Exp: ${formatDate(link.expiresAt)}`}
                       </span>
                     </div>
                   </div>
 
                   {isExpanded && (
-                    <div className="border-t border-gray-700 p-4 space-y-4 bg-[#1a1a1a] rounded-b-xl">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="border-t border-gray-700 p-3 sm:p-4 space-y-3 sm:space-y-4 bg-[#1a1a1a] rounded-b-xl">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <p className="text-gray-500 text-xs uppercase mb-1">Código Corto</p>
+                          <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-1">Codigo</p>
                           <div className="flex items-center gap-2">
-                            <p className="text-white font-mono text-lg">{link.shortCode}</p>
+                            <p className="text-white font-mono text-sm sm:text-lg">{link.shortCode}</p>
                             <button
                               onClick={(e) => { e.stopPropagation(); copyShortUrl(link.shortCode); }}
-                              className="text-green-400 hover:text-green-300 text-sm"
+                              className="text-green-400 hover:text-green-300 text-xs sm:text-sm"
                             >
-                              Copiar URL
+                              Copiar
                             </button>
                           </div>
                         </div>
 
                         <div>
-                          <p className="text-gray-500 text-xs uppercase mb-1">Estado</p>
-                          <div className="flex items-center gap-2">
-                            <span className={`px-3 py-1 text-sm rounded-full border ${LINK_STATUS_COLORS[effectiveStatus]}`}>
+                          <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-1">Estado</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2 sm:px-3 py-0.5 sm:py-1 text-xs sm:text-sm rounded-full border ${LINK_STATUS_COLORS[effectiveStatus]}`}>
                               {LINK_STATUS_LABELS[effectiveStatus]}
                             </span>
                             {link.status === 'pending' && link.stripeSessionId && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); syncPayment(link.stripeSessionId!); }}
                                 disabled={syncing}
-                                className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                                className="text-[10px] sm:text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
                               >
-                                {syncing ? 'Sincronizando...' : 'Sincronizar'}
+                                {syncing ? 'Sync...' : 'Sincronizar'}
                               </button>
                             )}
                           </div>
                           {syncMessage && (
-                            <p className={`text-xs mt-1 ${syncMessage.includes('correctamente') ? 'text-green-400' : 'text-yellow-400'}`}>
+                            <p className={`text-[10px] sm:text-xs mt-1 ${syncMessage.includes('correctamente') ? 'text-green-400' : 'text-yellow-400'}`}>
                               {syncMessage}
                             </p>
                           )}
@@ -556,24 +559,24 @@ export default function OrdersPage() {
                       </div>
 
                       <div>
-                        <p className="text-gray-500 text-xs uppercase mb-2">Productos</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-2">Productos</p>
+                        <div className="space-y-2">
                           {link.items.map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-3 bg-[#2a2a2a] rounded-lg p-2">
+                            <div key={idx} className="flex items-center gap-2 sm:gap-3 bg-[#2a2a2a] rounded-lg p-2">
                               {item.imageUrl && (
                                 <img
                                   src={item.imageUrl}
                                   alt={item.productTitle}
-                                  className="w-10 h-10 object-cover rounded"
+                                  className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded flex-shrink-0"
                                 />
                               )}
                               <div className="flex-1 min-w-0">
-                                <p className="text-white text-sm truncate">{item.productTitle}</p>
-                                <p className="text-gray-400 text-xs">
+                                <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}</p>
+                                <p className="text-gray-400 text-[10px] sm:text-xs">
                                   {item.quantity} x {currentBusiness.currencySymbol}{item.unitPrice.toFixed(2)}
                                 </p>
                               </div>
-                              <p className="text-white text-sm font-medium">
+                              <p className="text-white text-xs sm:text-sm font-medium flex-shrink-0">
                                 {currentBusiness.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}
                               </p>
                             </div>
@@ -581,13 +584,13 @@ export default function OrdersPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-3 border-t border-gray-700">
-                        <div className="text-sm text-gray-400">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-gray-700">
+                        <div className="text-xs sm:text-sm text-gray-400">
                           <span className={expired ? 'text-red-400' : ''}>
                             Expira: {formatDate(link.expiresAt)}
                           </span>
                         </div>
-                        <div className="text-xl font-bold text-white">
+                        <div className="text-lg sm:text-xl font-bold text-white">
                           Total: {currentBusiness.currencySymbol}{link.totalAmount.toFixed(2)}
                         </div>
                       </div>
