@@ -1,7 +1,7 @@
 import express from 'express';
 import Stripe from 'stripe';
 import { authMiddleware } from '../middleware/auth.js';
-import { prisma } from '../services/prisma.js';
+import prisma from '../services/prisma.js';
 import {
   createProductPaymentLink,
   handlePaymentSuccess,

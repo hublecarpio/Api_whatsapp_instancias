@@ -227,3 +227,20 @@ export const tagsApi = {
   toggleContactBot: (businessId: string, contactPhone: string, botDisabled: boolean) =>
     api.patch(`/tags/contact/${contactPhone}/bot-toggle`, { business_id: businessId, botDisabled })
 };
+
+export const ordersApi = {
+  list: (businessId: string, status?: string) =>
+    api.get(`/orders?businessId=${businessId}${status ? `&status=${status}` : ''}`),
+  get: (orderId: string) => api.get(`/orders/${orderId}`),
+  updateStatus: (orderId: string, status: string) =>
+    api.patch(`/orders/${orderId}/status`, { status }),
+  createPaymentLink: (data: {
+    businessId: string;
+    contactPhone: string;
+    contactName?: string;
+    items: Array<{ productId: string; quantity: number }>;
+    shippingAddress?: string;
+    shippingCity?: string;
+    shippingCountry?: string;
+  }) => api.post('/orders/create-payment-link', data)
+};

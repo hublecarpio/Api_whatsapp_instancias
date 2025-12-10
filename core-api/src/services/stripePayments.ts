@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { prisma } from './prisma.js';
+import prisma from './prisma.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
@@ -203,33 +203,37 @@ export async function handlePaymentSuccess(sessionId: string): Promise<{
       return { success: false, error: 'Pago no completado' };
     }
 
-    for (const item of order.items) {
-      if (item.productId) {
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: {
-            stock: { decrement: item.quantity }
-          }
-        });
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      for (const item of order.items) {
+        if (item.productId) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stock: { decrement: item.quantity }
+            }
+          });
+        }
       }
-    }
 
-    const updatedOrder = await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        status: 'PAID',
-        stripePaymentIntentId: session.payment_intent as string,
-        paidAt: new Date()
-      },
-      include: { items: true }
+      const updated = await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: 'PAID',
+          stripePaymentIntentId: session.payment_intent as string,
+          paidAt: new Date()
+        },
+        include: { items: true }
+      });
+
+      await tx.paymentSession.updateMany({
+        where: { stripeSessionId: sessionId },
+        data: { status: 'completed' }
+      });
+
+      return updated;
     });
 
-    await prisma.paymentSession.updateMany({
-      where: { stripeSessionId: sessionId },
-      data: { status: 'completed' }
-    });
-
-    console.log(`[STRIPE PAYMENT] Order ${order.id} paid successfully. Stock updated.`);
+    console.log(`[STRIPE PAYMENT] Order ${order.id} paid successfully. Stock updated atomically.`);
 
     return { success: true, order: updatedOrder };
   } catch (error: any) {
