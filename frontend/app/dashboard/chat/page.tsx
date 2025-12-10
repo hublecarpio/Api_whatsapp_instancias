@@ -1118,7 +1118,7 @@ export default function ChatPage() {
 
               <button
                 onClick={handleSendNewChat}
-                disabled={newChatSending || !newChatPhone.trim() || (!newChatMessage.trim() && !selectedNewChatTemplate) || (selectedNewChatTemplate && newChatTemplateVariables.length > 0 && newChatTemplateVariables.some(v => !v.trim()))}
+                disabled={newChatSending || !newChatPhone.trim() || (!newChatMessage.trim() && !selectedNewChatTemplate) || !!(selectedNewChatTemplate && newChatTemplateVariables.length > 0 && newChatTemplateVariables.some(v => !v.trim()))}
                 className="w-full py-2.5 bg-neon-blue text-dark-bg rounded-lg font-medium hover:bg-neon-blue-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {newChatSending ? (
