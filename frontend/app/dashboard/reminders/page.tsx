@@ -199,8 +199,8 @@ export default function RemindersPage() {
                     : 'border-dark-border bg-dark-card text-gray-400 hover:border-gray-600'
                 }`}
               >
-                <div className="font-medium mb-1">Despues del cliente</div>
-                <div className="text-xs text-gray-500">Seguimiento cuando el cliente no responde despues de que le escribimos</div>
+                <div className="font-medium mb-1">Tu le escribes</div>
+                <div className="text-xs text-gray-500">Seguimiento cuando TU (usuario) le escribes al cliente y el no responde</div>
               </button>
               <button
                 type="button"
@@ -211,8 +211,8 @@ export default function RemindersPage() {
                     : 'border-dark-border bg-dark-card text-gray-400 hover:border-gray-600'
                 }`}
               >
-                <div className="font-medium mb-1">Despues del agente</div>
-                <div className="text-xs text-gray-500">Seguimiento cuando enviamos mensaje y no hay respuesta (ideal para pauta)</div>
+                <div className="font-medium mb-1">El agente IA escribe</div>
+                <div className="text-xs text-gray-500">Seguimiento cuando el AGENTE IA le escribe al cliente y no hay respuesta</div>
               </button>
               <button
                 type="button"
@@ -223,8 +223,8 @@ export default function RemindersPage() {
                     : 'border-dark-border bg-dark-card text-gray-400 hover:border-gray-600'
                 }`}
               >
-                <div className="font-medium mb-1">Cualquier mensaje</div>
-                <div className="text-xs text-gray-500">Seguimiento despues de cualquier mensaje sin respuesta</div>
+                <div className="font-medium mb-1">Ambos casos</div>
+                <div className="text-xs text-gray-500">Seguimiento cuando TU o el AGENTE escriben y el cliente no responde</div>
               </button>
             </div>
             
@@ -454,13 +454,14 @@ export default function RemindersPage() {
 
       <div className="mt-8 p-4 bg-neon-blue/10 rounded-xl border border-neon-blue/20">
         <h4 className="font-medium text-neon-blue mb-2">Como funciona</h4>
-        <ul className="text-sm text-gray-300 space-y-1">
-          <li>1. Cuando respondes a un cliente y el no contesta, el sistema espera el tiempo configurado</li>
-          <li>2. Despues del primer tiempo sin respuesta, se envia un mensaje de seguimiento automatico</li>
-          <li>3. El mensaje se genera con IA basado en la conversacion para que sea coherente</li>
-          <li>4. El nivel de presion aumenta con cada intento segun tu configuracion</li>
-          <li>5. Respetamos el horario permitido y el maximo de intentos diarios</li>
+        <ul className="text-sm text-gray-300 space-y-2">
+          <li><strong>Tu le escribes:</strong> El seguimiento se activa cuando TU (usuario humano) le envias un mensaje al cliente y el no responde.</li>
+          <li><strong>El agente IA escribe:</strong> El seguimiento se activa cuando el AGENTE IA le envia un mensaje al cliente y el no responde. Ideal para campanas de pauta.</li>
+          <li><strong>Ambos casos:</strong> Se activa el seguimiento sin importar si escribiste tu o el agente IA, siempre que el cliente no responda.</li>
         </ul>
+        <div className="mt-3 pt-3 border-t border-neon-blue/20">
+          <p className="text-xs text-gray-400">El sistema verifica que no existan seguimientos duplicados. Si el cliente responde antes del seguimiento programado, este se cancela automaticamente (si tienes esa opcion activada).</p>
+        </div>
       </div>
     </div>
   );
