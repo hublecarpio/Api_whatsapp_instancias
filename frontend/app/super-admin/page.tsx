@@ -168,6 +168,7 @@ export default function SuperAdminPage() {
         <div className="flex gap-1 -mb-px">
           {[
             { id: 'overview', label: 'Resumen' },
+            { id: 'analytics', label: 'Pedidos y Pagos' },
             { id: 'users', label: 'Usuarios' },
             { id: 'businesses', label: 'Negocios' },
             { id: 'whatsapp', label: 'WhatsApp' },
@@ -193,6 +194,7 @@ export default function SuperAdminPage() {
 
       <main className="p-6">
         {activeTab === 'overview' && overview && <OverviewTab data={overview} />}
+        {activeTab === 'analytics' && <AnalyticsTab token={token} />}
         {activeTab === 'users' && <UsersTab token={token} />}
         {activeTab === 'businesses' && <BusinessesTab token={token} />}
         {activeTab === 'whatsapp' && <WhatsAppTab token={token} />}
@@ -860,6 +862,402 @@ function WhatsAppTab({ token }: { token: string }) {
           <li><strong>Huerfana:</strong> Instancia activa en el API pero sin registro en la base de datos (limpiar manualmente)</li>
         </ul>
       </div>
+    </div>
+  );
+}
+
+interface OrdersAnalytics {
+  summary: {
+    totalOrders: number;
+    totalRevenue: number;
+    byStatus: Record<string, { count: number; amount: number }>;
+  };
+  byBusiness: Array<{
+    businessId: string;
+    businessName: string;
+    count: number;
+    totalAmount: number;
+  }>;
+  recentOrders: Array<{
+    id: string;
+    status: string;
+    totalAmount: number;
+    currencySymbol: string;
+    contactPhone: string;
+    contactName: string | null;
+    businessName: string;
+    itemCount: number;
+    createdAt: string;
+  }>;
+}
+
+interface PaymentLinksAnalytics {
+  summary: {
+    totalRequests: number;
+    successCount: number;
+    failureCount: number;
+    successRate: number;
+  };
+  byBusiness: Array<{
+    businessId: string;
+    businessName: string;
+    count: number;
+  }>;
+  bySource: Record<string, number>;
+  topFailureReasons: Array<{
+    reason: string | null;
+    count: number;
+  }>;
+  recentRequests: Array<{
+    id: string;
+    businessName: string;
+    contactPhone: string | null;
+    productName: string | null;
+    amount: number | null;
+    quantity: number;
+    isSuccess: boolean;
+    failureReason: string | null;
+    isPro: boolean;
+    triggerSource: string;
+    createdAt: string;
+  }>;
+}
+
+function AnalyticsTab({ token }: { token: string }) {
+  const [ordersData, setOrdersData] = useState<OrdersAnalytics | null>(null);
+  const [paymentLinksData, setPaymentLinksData] = useState<PaymentLinksAnalytics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState<'orders' | 'payment-links'>('orders');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      
+      const [ordersRes, paymentLinksRes] = await Promise.all([
+        fetch(`/api/super-admin/analytics/orders?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`/api/super-admin/analytics/payment-links?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+      
+      if (ordersRes.ok) {
+        setOrdersData(await ordersRes.json());
+      }
+      if (paymentLinksRes.ok) {
+        setPaymentLinksData(await paymentLinksRes.json());
+      }
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [token]);
+
+  const handleApplyFilters = () => {
+    fetchData();
+  };
+
+  const statusColors: Record<string, string> = {
+    PENDING_PAYMENT: 'text-accent-warning',
+    AWAITING_VOUCHER: 'text-neon-purple',
+    PAID: 'text-accent-success',
+    CANCELLED: 'text-accent-error',
+    REFUNDED: 'text-gray-400'
+  };
+
+  const statusLabels: Record<string, string> = {
+    PENDING_PAYMENT: 'Pendiente de Pago',
+    AWAITING_VOUCHER: 'Esperando Voucher',
+    PAID: 'Pagado',
+    CANCELLED: 'Cancelado',
+    REFUNDED: 'Reembolsado'
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-gray-400">Cargando analytics...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Fecha inicio</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="input text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Fecha fin</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="input text-sm"
+            />
+          </div>
+          <button onClick={handleApplyFilters} className="btn btn-primary">
+            Aplicar filtros
+          </button>
+        </div>
+      </div>
+
+      <div className="flex gap-2 border-b border-dark-border pb-2">
+        <button
+          onClick={() => setActiveSection('orders')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeSection === 'orders'
+              ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/30 border-b-transparent'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Pedidos
+        </button>
+        <button
+          onClick={() => setActiveSection('payment-links')}
+          className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+            activeSection === 'payment-links'
+              ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/30 border-b-transparent'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Enlaces de Pago
+        </button>
+      </div>
+
+      {activeSection === 'orders' && ordersData && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard title="Total Pedidos" value={ordersData.summary.totalOrders} />
+            <StatCard 
+              title="Ingresos Totales" 
+              value={`S/.${ordersData.summary.totalRevenue.toLocaleString()}`} 
+              subtitle="Solo pedidos pagados"
+              color="green"
+            />
+            <StatCard 
+              title="Pendientes de Pago" 
+              value={ordersData.summary.byStatus.PENDING_PAYMENT?.count || 0} 
+              color="yellow"
+            />
+            <StatCard 
+              title="Pagados" 
+              value={ordersData.summary.byStatus.PAID?.count || 0} 
+              color="green"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card">
+              <h3 className="text-lg font-semibold text-white mb-4">Pedidos por Estado</h3>
+              <div className="space-y-3">
+                {Object.entries(ordersData.summary.byStatus).map(([status, data]) => (
+                  <div key={status} className="flex justify-between items-center">
+                    <span className={statusColors[status] || 'text-gray-400'}>
+                      {statusLabels[status] || status}
+                    </span>
+                    <div className="text-right">
+                      <span className="text-white font-medium">{data.count}</span>
+                      <span className="text-gray-500 text-sm ml-2">
+                        (S/.{data.amount.toLocaleString()})
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card">
+              <h3 className="text-lg font-semibold text-white mb-4">Top Negocios por Pedidos</h3>
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {ordersData.byBusiness.slice(0, 10).map((b) => (
+                  <div key={b.businessId} className="flex justify-between items-center">
+                    <span className="text-gray-300 truncate max-w-[60%]">{b.businessName}</span>
+                    <div className="text-right">
+                      <span className="text-white font-medium">{b.count}</span>
+                      <span className="text-gray-500 text-sm ml-2">
+                        (S/.{b.totalAmount.toLocaleString()})
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="text-lg font-semibold text-white mb-4">Pedidos Recientes</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-400 border-b border-dark-border">
+                    <th className="pb-3">Negocio</th>
+                    <th className="pb-3">Cliente</th>
+                    <th className="pb-3">Monto</th>
+                    <th className="pb-3">Items</th>
+                    <th className="pb-3">Estado</th>
+                    <th className="pb-3">Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordersData.recentOrders.map((order) => (
+                    <tr key={order.id} className="border-b border-dark-border/50">
+                      <td className="py-3 text-gray-300">{order.businessName}</td>
+                      <td className="py-3">
+                        <div className="text-white">{order.contactName || '-'}</div>
+                        <div className="text-gray-500 text-xs">{order.contactPhone}</div>
+                      </td>
+                      <td className="py-3 text-white">
+                        {order.currencySymbol}{order.totalAmount.toLocaleString()}
+                      </td>
+                      <td className="py-3 text-gray-400">{order.itemCount}</td>
+                      <td className="py-3">
+                        <span className={`px-2 py-1 rounded text-xs ${statusColors[order.status] || 'text-gray-400'}`}>
+                          {statusLabels[order.status] || order.status}
+                        </span>
+                      </td>
+                      <td className="py-3 text-gray-400">
+                        {new Date(order.createdAt).toLocaleDateString('es-PE')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'payment-links' && paymentLinksData && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard title="Total Solicitudes" value={paymentLinksData.summary.totalRequests} />
+            <StatCard 
+              title="Exitosas" 
+              value={paymentLinksData.summary.successCount} 
+              color="green"
+            />
+            <StatCard 
+              title="Fallidas" 
+              value={paymentLinksData.summary.failureCount} 
+              color="red"
+            />
+            <StatCard 
+              title="Tasa de Exito" 
+              value={`${paymentLinksData.summary.successRate}%`} 
+              color={paymentLinksData.summary.successRate >= 80 ? 'green' : paymentLinksData.summary.successRate >= 50 ? 'yellow' : 'red'}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card">
+              <h3 className="text-lg font-semibold text-white mb-4">Por Origen</h3>
+              <div className="space-y-3">
+                {Object.entries(paymentLinksData.bySource).map(([source, count]) => (
+                  <div key={source} className="flex justify-between items-center">
+                    <span className="text-gray-300 capitalize">{source}</span>
+                    <span className="text-white font-medium">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card">
+              <h3 className="text-lg font-semibold text-white mb-4">Top Negocios</h3>
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {paymentLinksData.byBusiness.slice(0, 10).map((b) => (
+                  <div key={b.businessId} className="flex justify-between items-center">
+                    <span className="text-gray-300 truncate max-w-[70%]">{b.businessName}</span>
+                    <span className="text-white font-medium">{b.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {paymentLinksData.topFailureReasons.length > 0 && (
+            <div className="card">
+              <h3 className="text-lg font-semibold text-white mb-4">Razones de Fallo mas Comunes</h3>
+              <div className="space-y-2">
+                {paymentLinksData.topFailureReasons.map((f, i) => (
+                  <div key={i} className="flex justify-between items-center">
+                    <span className="text-gray-300">{f.reason || 'Sin especificar'}</span>
+                    <span className="text-accent-error font-medium">{f.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <h3 className="text-lg font-semibold text-white mb-4">Solicitudes Recientes</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-400 border-b border-dark-border">
+                    <th className="pb-3">Negocio</th>
+                    <th className="pb-3">Producto</th>
+                    <th className="pb-3">Monto</th>
+                    <th className="pb-3">Origen</th>
+                    <th className="pb-3">Pro</th>
+                    <th className="pb-3">Estado</th>
+                    <th className="pb-3">Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentLinksData.recentRequests.map((req) => (
+                    <tr key={req.id} className="border-b border-dark-border/50">
+                      <td className="py-3 text-gray-300">{req.businessName}</td>
+                      <td className="py-3 text-white">{req.productName || '-'}</td>
+                      <td className="py-3 text-white">
+                        {req.amount ? `S/.${req.amount.toLocaleString()}` : '-'}
+                      </td>
+                      <td className="py-3 text-gray-400 capitalize">{req.triggerSource}</td>
+                      <td className="py-3">
+                        {req.isPro ? (
+                          <span className="text-neon-purple">Pro</span>
+                        ) : (
+                          <span className="text-gray-500">Free</span>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        {req.isSuccess ? (
+                          <span className="text-accent-success">Exitoso</span>
+                        ) : (
+                          <span className="text-accent-error" title={req.failureReason || ''}>
+                            Fallido
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 text-gray-400">
+                        {new Date(req.createdAt).toLocaleDateString('es-PE')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

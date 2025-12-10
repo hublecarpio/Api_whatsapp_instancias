@@ -739,10 +739,7 @@ router.get('/analytics/orders', superAdminMiddleware, async (req: SuperAdminRequ
         where,
         orderBy: { createdAt: 'desc' },
         take: 20,
-        include: {
-          items: true,
-          business: { select: { name: true, currencySymbol: true } }
-        }
+        include: { items: true }
       }),
       prisma.order.groupBy({
         by: ['businessId'],
@@ -752,9 +749,9 @@ router.get('/analytics/orders', superAdminMiddleware, async (req: SuperAdminRequ
       })
     ]);
     
-    const businessIds = ordersByBusiness.map(b => b.businessId);
+    const orderBusinessIds = [...new Set([...ordersByBusiness.map(b => b.businessId), ...recentOrders.map(o => o.businessId)])];
     const businesses = await prisma.business.findMany({
-      where: { id: { in: businessIds } },
+      where: { id: { in: orderBusinessIds } },
       select: { id: true, name: true }
     });
     const businessMap = new Map(businesses.map(b => [b.id, b.name]));
@@ -788,7 +785,7 @@ router.get('/analytics/orders', superAdminMiddleware, async (req: SuperAdminRequ
         currencySymbol: o.currencySymbol,
         contactPhone: o.contactPhone,
         contactName: o.contactName,
-        businessName: o.business.name,
+        businessName: businessMap.get(o.businessId) || 'Unknown',
         itemCount: o.items.length,
         createdAt: o.createdAt
       }))
