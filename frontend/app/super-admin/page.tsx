@@ -505,12 +505,28 @@ function TokenUsageTab({ token }: { token: string }) {
         <div className="card">
           <h3 className="text-lg font-semibold text-white mb-4">Por Funcionalidad</h3>
           <div className="space-y-2">
-            {data.byFeature?.map((f: any) => (
-              <div key={f.feature} className="flex justify-between">
-                <span className="text-gray-400">{f.feature}</span>
-                <span className="text-white">{f.tokens.toLocaleString()} (${f.cost.toFixed(4)})</span>
-              </div>
-            ))}
+            {data.byFeature?.map((f: any) => {
+              const featureLabels: Record<string, { label: string; icon: string }> = {
+                'ai_agent': { label: 'Agente IA (Chat)', icon: '🤖' },
+                'reminder': { label: 'Recordatorios', icon: '⏰' },
+                'audio_transcription': { label: 'Transcripcion Audio', icon: '🎵' },
+                'image_analysis': { label: 'Analisis Imagen', icon: '🖼️' },
+                'video_analysis': { label: 'Analisis Video', icon: '🎬' },
+                'lead_stage_analysis': { label: 'Analisis de Etapa', icon: '📊' },
+                'contact_extraction': { label: 'Extraccion Datos', icon: '📋' },
+                'product_search': { label: 'Busqueda Productos', icon: '🔍' }
+              };
+              const info = featureLabels[f.feature] || { label: f.feature, icon: '📌' };
+              return (
+                <div key={f.feature} className="flex justify-between items-center">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <span>{info.icon}</span>
+                    {info.label}
+                  </span>
+                  <span className="text-white">{f.tokens.toLocaleString()} (${f.cost.toFixed(4)})</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 

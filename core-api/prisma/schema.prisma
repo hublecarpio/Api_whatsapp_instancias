@@ -357,6 +357,7 @@ model ContactSettings {
 
 enum OrderStatus {
   PENDING_PAYMENT
+  AWAITING_VOUCHER
   PAID
   PROCESSING
   SHIPPED

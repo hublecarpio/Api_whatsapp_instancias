@@ -61,6 +61,7 @@ interface PaymentLink {
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_PAYMENT: 'Pendiente de Pago',
+  AWAITING_VOUCHER: 'Esperando Voucher',
   PAID: 'Pagado',
   PROCESSING: 'Procesando',
   SHIPPED: 'Enviado',
@@ -71,6 +72,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING_PAYMENT: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  AWAITING_VOUCHER: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   PAID: 'bg-green-500/20 text-green-400 border-green-500/30',
   PROCESSING: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   SHIPPED: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
@@ -99,8 +101,8 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedLink, setSelectedLink] = useState<PaymentLink | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [linkStatusFilter, setLinkStatusFilter] = useState<string>('');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
@@ -150,14 +152,19 @@ export default function OrdersPage() {
       setUpdatingStatus(orderId);
       await ordersApi.updateStatus(orderId, newStatus);
       await loadOrders();
-      if (selectedOrder?.id === orderId) {
-        setSelectedOrder(prev => prev ? { ...prev, status: newStatus } : null);
-      }
     } catch (error) {
       console.error('Error updating order status:', error);
     } finally {
       setUpdatingStatus(null);
     }
+  };
+
+  const toggleOrderExpand = (orderId: string) => {
+    setExpandedOrderId(prev => prev === orderId ? null : orderId);
+  };
+
+  const toggleLinkExpand = (linkId: string) => {
+    setExpandedLinkId(prev => prev === linkId ? null : linkId);
   };
 
   const formatDate = (dateString: string) => {
@@ -192,7 +199,6 @@ export default function OrdersPage() {
         setSyncMessage('Pago sincronizado correctamente');
         await loadPaymentLinks();
         await loadOrders();
-        setSelectedLink(null);
       } else {
         setSyncMessage(response.data.message || 'No se pudo sincronizar');
       }
@@ -224,7 +230,7 @@ export default function OrdersPage() {
       <div className="flex items-center gap-4 mb-6">
         <div className="flex bg-[#1e1e1e] rounded-lg p-1 border border-gray-700">
           <button
-            onClick={() => { setActiveTab('orders'); setSelectedOrder(null); setSelectedLink(null); }}
+            onClick={() => { setActiveTab('orders'); setExpandedOrderId(null); setExpandedLinkId(null); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === 'orders'
                 ? 'bg-green-600 text-white'
@@ -234,7 +240,7 @@ export default function OrdersPage() {
             Pedidos ({orders.length})
           </button>
           <button
-            onClick={() => { setActiveTab('links'); setSelectedOrder(null); setSelectedLink(null); }}
+            onClick={() => { setActiveTab('links'); setExpandedOrderId(null); setExpandedLinkId(null); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === 'links'
                 ? 'bg-green-600 text-white'
@@ -244,7 +250,7 @@ export default function OrdersPage() {
             Enlaces de Pago ({paymentLinks.length})
           </button>
           <button
-            onClick={() => { setActiveTab('extraction'); setSelectedOrder(null); setSelectedLink(null); }}
+            onClick={() => { setActiveTab('extraction'); setExpandedOrderId(null); setExpandedLinkId(null); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === 'extraction'
                 ? 'bg-green-600 text-white'
@@ -306,158 +312,145 @@ export default function OrdersPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-4">
-              {orders.map(order => (
+          <div className="space-y-3">
+            {orders.map(order => {
+              const isExpanded = expandedOrderId === order.id;
+              return (
                 <div
                   key={order.id}
-                  onClick={() => setSelectedOrder(order)}
-                  className={`bg-[#1e1e1e] rounded-xl border p-4 cursor-pointer transition-all hover:border-green-500/50 ${
-                    selectedOrder?.id === order.id ? 'border-green-500' : 'border-gray-700'
+                  className={`bg-[#1e1e1e] rounded-xl border transition-all ${
+                    isExpanded ? 'border-green-500' : 'border-gray-700'
                   }`}
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-white font-mono text-sm">
-                          #{order.id.slice(0, 8).toUpperCase()}
+                  <div
+                    onClick={() => toggleOrderExpand(order.id)}
+                    className="p-4 cursor-pointer hover:bg-[#252525] transition-colors rounded-t-xl"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                          ▶
                         </span>
-                        <span className={`px-2 py-0.5 text-xs rounded-full border ${STATUS_COLORS[order.status]}`}>
-                          {STATUS_LABELS[order.status]}
-                        </span>
-                      </div>
-                      <p className="text-gray-400 text-sm mt-1">
-                        {order.contactName || formatPhone(order.contactPhone)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-white font-semibold">
-                        {order.currencySymbol}{order.totalAmount.toFixed(2)}
-                      </p>
-                      <p className="text-gray-500 text-xs">{formatDate(order.createdAt)}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <span>{order.items.length} producto{order.items.length !== 1 ? 's' : ''}</span>
-                    {order.shippingCity && (
-                      <>
-                        <span>•</span>
-                        <span>{order.shippingCity}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            <div className="lg:col-span-1">
-              {selectedOrder ? (
-                <div className="bg-[#1e1e1e] rounded-xl border border-gray-700 p-4 sticky top-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-white">Detalles del Pedido</h3>
-                    <button
-                      onClick={() => setSelectedOrder(null)}
-                      className="text-gray-400 hover:text-white"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">ID del Pedido</p>
-                      <p className="text-white font-mono">{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">Estado</p>
-                      <select
-                        value={selectedOrder.status}
-                        onChange={(e) => updateStatus(selectedOrder.id, e.target.value)}
-                        disabled={updatingStatus === selectedOrder.id || selectedOrder.status === 'PENDING_PAYMENT'}
-                        className="w-full bg-[#2a2a2a] border border-gray-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 disabled:opacity-50"
-                      >
-                        {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">Cliente</p>
-                      <p className="text-white">{selectedOrder.contactName || 'Sin nombre'}</p>
-                      <p className="text-gray-400 text-sm">{formatPhone(selectedOrder.contactPhone)}</p>
-                    </div>
-                    
-                    {selectedOrder.shippingAddress && (
-                      <div>
-                        <p className="text-gray-500 text-xs uppercase mb-1">Dirección de Envío</p>
-                        <p className="text-white text-sm">{selectedOrder.shippingAddress}</p>
-                        {selectedOrder.shippingCity && (
-                          <p className="text-gray-400 text-sm">
-                            {selectedOrder.shippingCity}
-                            {selectedOrder.shippingCountry && `, ${selectedOrder.shippingCountry}`}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-white font-mono text-sm">
+                              #{order.id.slice(0, 8).toUpperCase()}
+                            </span>
+                            <span className={`px-2 py-0.5 text-xs rounded-full border ${STATUS_COLORS[order.status]}`}>
+                              {STATUS_LABELS[order.status]}
+                            </span>
+                          </div>
+                          <p className="text-gray-400 text-sm mt-1">
+                            {order.contactName || formatPhone(order.contactPhone)}
                           </p>
-                        )}
+                        </div>
                       </div>
-                    )}
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-2">Productos</p>
-                      <div className="space-y-2">
-                        {selectedOrder.items.map(item => (
-                          <div key={item.id} className="flex items-center gap-3 bg-[#2a2a2a] rounded-lg p-2">
-                            {item.imageUrl && (
-                              <img
-                                src={item.imageUrl}
-                                alt={item.productTitle}
-                                className="w-10 h-10 object-cover rounded"
-                              />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm truncate">{item.productTitle}</p>
-                              <p className="text-gray-400 text-xs">
-                                {item.quantity} x {selectedOrder.currencySymbol}{item.unitPrice.toFixed(2)}
+                      <div className="text-right">
+                        <p className="text-white font-semibold">
+                          {order.currencySymbol}{order.totalAmount.toFixed(2)}
+                        </p>
+                        <p className="text-gray-500 text-xs">{formatDate(order.createdAt)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-400 mt-2 ml-7">
+                      <span>{order.items.length} producto{order.items.length !== 1 ? 's' : ''}</span>
+                      {order.shippingCity && (
+                        <>
+                          <span>•</span>
+                          <span>{order.shippingCity}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="border-t border-gray-700 p-4 space-y-4 bg-[#1a1a1a] rounded-b-xl">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase mb-1">Estado</p>
+                          <select
+                            value={order.status}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              updateStatus(order.id, e.target.value);
+                            }}
+                            disabled={updatingStatus === order.id || order.status === 'PENDING_PAYMENT'}
+                            className="w-full bg-[#2a2a2a] border border-gray-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 disabled:opacity-50"
+                          >
+                            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                          {order.status === 'AWAITING_VOUCHER' && (
+                            <p className="text-orange-400 text-xs mt-1">
+                              Confirma manualmente cuando recibas el comprobante
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase mb-1">Cliente</p>
+                          <p className="text-white">{order.contactName || 'Sin nombre'}</p>
+                          <p className="text-gray-400 text-sm">{formatPhone(order.contactPhone)}</p>
+                        </div>
+                      </div>
+
+                      {order.shippingAddress && (
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase mb-1">Dirección de Envío</p>
+                          <p className="text-white text-sm">{order.shippingAddress}</p>
+                          {order.shippingCity && (
+                            <p className="text-gray-400 text-sm">
+                              {order.shippingCity}
+                              {order.shippingCountry && `, ${order.shippingCountry}`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div>
+                        <p className="text-gray-500 text-xs uppercase mb-2">Productos</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {order.items.map(item => (
+                            <div key={item.id} className="flex items-center gap-3 bg-[#2a2a2a] rounded-lg p-2">
+                              {item.imageUrl && (
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.productTitle}
+                                  className="w-10 h-10 object-cover rounded"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white text-sm truncate">{item.productTitle}</p>
+                                <p className="text-gray-400 text-xs">
+                                  {item.quantity} x {order.currencySymbol}{item.unitPrice.toFixed(2)}
+                                </p>
+                              </div>
+                              <p className="text-white text-sm font-medium">
+                                {order.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}
                               </p>
                             </div>
-                            <p className="text-white text-sm font-medium">
-                              {selectedOrder.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}
-                            </p>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-700">
+                        <div className="text-sm text-gray-400">
+                          {order.paidAt ? (
+                            <span className="text-green-400">Pagado: {formatDate(order.paidAt)}</span>
+                          ) : (
+                            <span>Creado: {formatDate(order.createdAt)}</span>
+                          )}
+                        </div>
+                        <div className="text-xl font-bold text-white">
+                          Total: {order.currencySymbol}{order.totalAmount.toFixed(2)}
+                        </div>
                       </div>
                     </div>
-                    
-                    <div className="border-t border-gray-700 pt-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-400">Total</span>
-                        <span className="text-white text-xl font-bold">
-                          {selectedOrder.currencySymbol}{selectedOrder.totalAmount.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {selectedOrder.paidAt && (
-                      <div>
-                        <p className="text-gray-500 text-xs uppercase mb-1">Fecha de Pago</p>
-                        <p className="text-green-400 text-sm">{formatDate(selectedOrder.paidAt)}</p>
-                      </div>
-                    )}
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">Fecha de Creación</p>
-                      <p className="text-gray-400 text-sm">{formatDate(selectedOrder.createdAt)}</p>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              ) : (
-                <div className="bg-[#1e1e1e] rounded-xl border border-gray-700 p-8 text-center">
-                  <div className="text-4xl mb-3">👆</div>
-                  <p className="text-gray-400">Selecciona un pedido para ver sus detalles</p>
-                </div>
-              )}
-            </div>
+              );
+            })}
           </div>
         )
       ) : (
@@ -470,33 +463,41 @@ export default function OrdersPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-4">
-              {paymentLinks.map(link => {
-                const expired = isExpired(link.expiresAt);
-                const effectiveStatus = expired && link.status === 'pending' ? 'expired' : link.status;
-                
-                return (
+          <div className="space-y-3">
+            {paymentLinks.map(link => {
+              const expired = isExpired(link.expiresAt);
+              const effectiveStatus = expired && link.status === 'pending' ? 'expired' : link.status;
+              const isExpanded = expandedLinkId === link.id;
+              
+              return (
+                <div
+                  key={link.id}
+                  className={`bg-[#1e1e1e] rounded-xl border transition-all ${
+                    isExpanded ? 'border-green-500' : 'border-gray-700'
+                  }`}
+                >
                   <div
-                    key={link.id}
-                    onClick={() => setSelectedLink(link)}
-                    className={`bg-[#1e1e1e] rounded-xl border p-4 cursor-pointer transition-all hover:border-green-500/50 ${
-                      selectedLink?.id === link.id ? 'border-green-500' : 'border-gray-700'
-                    }`}
+                    onClick={() => toggleLinkExpand(link.id)}
+                    className="p-4 cursor-pointer hover:bg-[#252525] transition-colors rounded-t-xl"
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-white font-mono text-sm bg-[#2a2a2a] px-2 py-1 rounded">
-                            {link.shortCode}
-                          </span>
-                          <span className={`px-2 py-0.5 text-xs rounded-full border ${LINK_STATUS_COLORS[effectiveStatus]}`}>
-                            {LINK_STATUS_LABELS[effectiveStatus]}
-                          </span>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                          ▶
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-white font-mono text-sm bg-[#2a2a2a] px-2 py-1 rounded">
+                              {link.shortCode}
+                            </span>
+                            <span className={`px-2 py-0.5 text-xs rounded-full border ${LINK_STATUS_COLORS[effectiveStatus]}`}>
+                              {LINK_STATUS_LABELS[effectiveStatus]}
+                            </span>
+                          </div>
+                          <p className="text-gray-400 text-sm mt-1">
+                            {formatPhone(link.contactPhone)}
+                          </p>
                         </div>
-                        <p className="text-gray-400 text-sm mt-1">
-                          {formatPhone(link.contactPhone)}
-                        </p>
                       </div>
                       <div className="text-right">
                         <p className="text-white font-semibold">
@@ -505,8 +506,7 @@ export default function OrdersPage() {
                         <p className="text-gray-500 text-xs">{formatDate(link.createdAt)}</p>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-2 text-sm text-gray-400">
+                    <div className="flex items-center gap-2 text-sm text-gray-400 mt-2 ml-7">
                       <span>{link.items.length} producto{link.items.length !== 1 ? 's' : ''}</span>
                       <span>•</span>
                       <span className={expired ? 'text-red-400' : 'text-gray-400'}>
@@ -514,122 +514,88 @@ export default function OrdersPage() {
                       </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-            
-            <div className="lg:col-span-1">
-              {selectedLink ? (
-                <div className="bg-[#1e1e1e] rounded-xl border border-gray-700 p-4 sticky top-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-white">Detalles del Enlace</h3>
-                    <button
-                      onClick={() => setSelectedLink(null)}
-                      className="text-gray-400 hover:text-white"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">Código Corto</p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-white font-mono text-lg">{selectedLink.shortCode}</p>
-                        <button
-                          onClick={() => copyShortUrl(selectedLink.shortCode)}
-                          className="text-green-400 hover:text-green-300 text-sm"
-                        >
-                          Copiar URL
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">Estado</p>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-3 py-1 text-sm rounded-full border ${
-                          LINK_STATUS_COLORS[isExpired(selectedLink.expiresAt) && selectedLink.status === 'pending' ? 'expired' : selectedLink.status]
-                        }`}>
-                          {LINK_STATUS_LABELS[isExpired(selectedLink.expiresAt) && selectedLink.status === 'pending' ? 'expired' : selectedLink.status]}
-                        </span>
-                        {selectedLink.status === 'pending' && selectedLink.stripeSessionId && (
-                          <button
-                            onClick={() => syncPayment(selectedLink.stripeSessionId!)}
-                            disabled={syncing}
-                            className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
-                          >
-                            {syncing ? 'Sincronizando...' : 'Sincronizar'}
-                          </button>
-                        )}
-                      </div>
-                      {syncMessage && (
-                        <p className={`text-xs mt-1 ${syncMessage.includes('correctamente') ? 'text-green-400' : 'text-yellow-400'}`}>
-                          {syncMessage}
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">Cliente</p>
-                      <p className="text-gray-400 text-sm">{formatPhone(selectedLink.contactPhone)}</p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-2">Productos</p>
-                      <div className="space-y-2">
-                        {selectedLink.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center gap-3 bg-[#2a2a2a] rounded-lg p-2">
-                            {item.imageUrl && (
-                              <img
-                                src={item.imageUrl}
-                                alt={item.productTitle}
-                                className="w-10 h-10 object-cover rounded"
-                              />
+
+                  {isExpanded && (
+                    <div className="border-t border-gray-700 p-4 space-y-4 bg-[#1a1a1a] rounded-b-xl">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase mb-1">Código Corto</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-white font-mono text-lg">{link.shortCode}</p>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); copyShortUrl(link.shortCode); }}
+                              className="text-green-400 hover:text-green-300 text-sm"
+                            >
+                              Copiar URL
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase mb-1">Estado</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-3 py-1 text-sm rounded-full border ${LINK_STATUS_COLORS[effectiveStatus]}`}>
+                              {LINK_STATUS_LABELS[effectiveStatus]}
+                            </span>
+                            {link.status === 'pending' && link.stripeSessionId && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); syncPayment(link.stripeSessionId!); }}
+                                disabled={syncing}
+                                className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                              >
+                                {syncing ? 'Sincronizando...' : 'Sincronizar'}
+                              </button>
                             )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm truncate">{item.productTitle}</p>
-                              <p className="text-gray-400 text-xs">
-                                {item.quantity} x {currentBusiness.currencySymbol}{item.unitPrice.toFixed(2)}
+                          </div>
+                          {syncMessage && (
+                            <p className={`text-xs mt-1 ${syncMessage.includes('correctamente') ? 'text-green-400' : 'text-yellow-400'}`}>
+                              {syncMessage}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-gray-500 text-xs uppercase mb-2">Productos</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {link.items.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-3 bg-[#2a2a2a] rounded-lg p-2">
+                              {item.imageUrl && (
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.productTitle}
+                                  className="w-10 h-10 object-cover rounded"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white text-sm truncate">{item.productTitle}</p>
+                                <p className="text-gray-400 text-xs">
+                                  {item.quantity} x {currentBusiness.currencySymbol}{item.unitPrice.toFixed(2)}
+                                </p>
+                              </div>
+                              <p className="text-white text-sm font-medium">
+                                {currentBusiness.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}
                               </p>
                             </div>
-                            <p className="text-white text-sm font-medium">
-                              {currentBusiness.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}
-                            </p>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-700">
+                        <div className="text-sm text-gray-400">
+                          <span className={expired ? 'text-red-400' : ''}>
+                            Expira: {formatDate(link.expiresAt)}
+                          </span>
+                        </div>
+                        <div className="text-xl font-bold text-white">
+                          Total: {currentBusiness.currencySymbol}{link.totalAmount.toFixed(2)}
+                        </div>
                       </div>
                     </div>
-                    
-                    <div className="border-t border-gray-700 pt-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-400">Total</span>
-                        <span className="text-white text-xl font-bold">
-                          {currentBusiness.currencySymbol}{selectedLink.totalAmount.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">Expira</p>
-                      <p className={`text-sm ${isExpired(selectedLink.expiresAt) ? 'text-red-400' : 'text-gray-400'}`}>
-                        {formatDate(selectedLink.expiresAt)}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-gray-500 text-xs uppercase mb-1">Creado</p>
-                      <p className="text-gray-400 text-sm">{formatDate(selectedLink.createdAt)}</p>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              ) : (
-                <div className="bg-[#1e1e1e] rounded-xl border border-gray-700 p-8 text-center">
-                  <div className="text-4xl mb-3">👆</div>
-                  <p className="text-gray-400">Selecciona un enlace para ver sus detalles</p>
-                </div>
-              )}
-            </div>
+              );
+            })}
           </div>
         )
       )}

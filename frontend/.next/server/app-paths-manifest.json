@@ -1,1 +1,6 @@
-{}
+{
+  "/super-admin/page": "app/super-admin/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
+  "/dashboard/chat/page": "app/dashboard/chat/page.js",
+  "/dashboard/tags/page": "app/dashboard/tags/page.js"
+}

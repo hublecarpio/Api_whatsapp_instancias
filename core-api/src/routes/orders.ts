@@ -112,11 +112,68 @@ router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
       where: {
         id: businessId,
         userId: req.userId
+      },
+      include: {
+        user: {
+          select: { isPro: true }
+        }
       }
     });
 
     if (!business) {
       return res.status(403).json({ error: 'No tienes acceso a este negocio' });
+    }
+
+    const isPro = business.user?.isPro || false;
+
+    if (!isPro) {
+      const products = await prisma.product.findMany({
+        where: { id: { in: items.map((i: any) => i.productId) } }
+      });
+
+      const productMap = new Map(products.map(p => [p.id, p]));
+      let totalAmount = 0;
+
+      const orderItems = items.map((item: any) => {
+        const product = productMap.get(item.productId);
+        const unitPrice = product?.price || item.unitPrice || 0;
+        const quantity = item.quantity || 1;
+        totalAmount += unitPrice * quantity;
+
+        return {
+          productId: item.productId,
+          productTitle: product?.title || item.productTitle || 'Producto',
+          quantity,
+          unitPrice,
+          imageUrl: product?.imageUrl || item.imageUrl
+        };
+      });
+
+      const order = await prisma.order.create({
+        data: {
+          businessId,
+          contactPhone,
+          contactName,
+          shippingAddress,
+          shippingCity,
+          shippingCountry,
+          totalAmount,
+          currencyCode: business.currencyCode || 'PEN',
+          currencySymbol: business.currencySymbol || 'S/.',
+          status: 'AWAITING_VOUCHER',
+          items: {
+            create: orderItems
+          }
+        },
+        include: { items: true }
+      });
+
+      return res.json({
+        success: true,
+        orderId: order.id,
+        awaitingVoucher: true,
+        message: 'Pedido creado. Esperando comprobante de pago.'
+      });
     }
 
     const result = await createProductPaymentLink({
@@ -137,7 +194,8 @@ router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
       success: true,
       paymentUrl: result.paymentUrl,
       sessionId: result.sessionId,
-      orderId: result.orderId
+      orderId: result.orderId,
+      awaitingVoucher: false
     });
   } catch (error: any) {
     console.error('[ORDERS] Error creating payment link:', error);
