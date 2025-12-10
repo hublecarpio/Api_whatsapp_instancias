@@ -10,6 +10,8 @@ interface Business {
   openaiApiKey?: string;
   botEnabled: boolean;
   timezone?: string;
+  currencyCode?: string;
+  currencySymbol?: string;
   instances?: any[];
   policy?: any;
   promptMaster?: any;

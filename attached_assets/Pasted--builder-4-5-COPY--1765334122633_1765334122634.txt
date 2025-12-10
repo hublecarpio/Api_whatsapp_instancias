@@ -1,0 +1,49 @@
+ => [builder 4/5] COPY . .                                                                                                                                             0.5s
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             23.9s
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+0.678                                                                                                                                                                       
+0.678 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+0.678 > next build                                                                                                                                                          
+0.678                                                                                                                                                                       
+1.672 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+1.673 This information is used to shape Next.js' roadmap and prioritize features.
+1.673 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+1.673 https://nextjs.org/telemetry
+1.673 
+1.768   ▲ Next.js 14.2.16
+1.769 
+1.880    Creating an optimized production build ...
+18.13  ✓ Compiled successfully
+18.13    Linting and checking validity of types ...
+23.78 Failed to compile.
+23.78 
+23.78 ./app/dashboard/business/page.tsx:31:39
+23.78 Type error: Property 'currencyCode' does not exist on type 'Business'.
+23.78 
+23.78   29 |       setIndustry(currentBusiness.industry || '');
+23.78   30 |       setTimezone(currentBusiness.timezone || 'America/Lima');
+23.78 > 31 |       setCurrencyCode(currentBusiness.currencyCode || 'PEN');
+23.78      |                                       ^
+23.78   32 |       setCurrencySymbol(currentBusiness.currencySymbol || 'S/.');
+23.78   33 |       
+23.78   34 |       policyApi.get(currentBusiness.id).then((res) => {
+23.84 npm notice
+23.84 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+23.84 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+23.84 npm notice To update run: npm install -g npm@11.7.0
+23.84 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+[+] Building 32.3s (23/24)                                                                                                                                   docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s
+ => => transferring dockerfile: 1.30kB                                                                                                                                 0.0s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                                                                                      0.2s
