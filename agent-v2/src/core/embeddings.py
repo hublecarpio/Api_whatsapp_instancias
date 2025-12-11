@@ -2,11 +2,18 @@ import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI
 import logging
+import hashlib
+import json
+import redis
+import os
 
 from ..config import get_settings
 from ..schemas.business_profile import Product
 
 logger = logging.getLogger(__name__)
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
+EMBEDDING_CACHE_TTL = 86400 * 7
 
 
 class EmbeddingService:
@@ -14,14 +21,54 @@ class EmbeddingService:
         settings = get_settings()
         self.client = OpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
         self.model = "text-embedding-3-small"
-        self._cache: Dict[str, List[float]] = {}
+        self._local_cache: Dict[str, List[float]] = {}
+        self._redis: Optional[redis.Redis] = None
+        try:
+            self._redis = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=2)
+            self._redis.ping()
+            logger.info("Redis connected for embedding cache")
+        except Exception as e:
+            logger.warning(f"Redis not available for embedding cache: {e}")
+            self._redis = None
+    
+    def _cache_key(self, text: str) -> str:
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        return f"emb:{self.model}:{text_hash}"
+    
+    def _get_from_cache(self, text: str) -> Optional[List[float]]:
+        if text in self._local_cache:
+            return self._local_cache[text]
+        
+        if self._redis:
+            try:
+                key = self._cache_key(text)
+                cached = self._redis.get(key)
+                if cached:
+                    embedding = json.loads(cached)
+                    self._local_cache[text] = embedding
+                    return embedding
+            except Exception as e:
+                logger.debug(f"Redis cache read error: {e}")
+        
+        return None
+    
+    def _set_cache(self, text: str, embedding: List[float]):
+        self._local_cache[text] = embedding
+        
+        if self._redis:
+            try:
+                key = self._cache_key(text)
+                self._redis.setex(key, EMBEDDING_CACHE_TTL, json.dumps(embedding))
+            except Exception as e:
+                logger.debug(f"Redis cache write error: {e}")
     
     def _get_embedding(self, text: str) -> List[float]:
         if not self.client:
             raise ValueError("OpenAI client not initialized")
         
-        if text in self._cache:
-            return self._cache[text]
+        cached = self._get_from_cache(text)
+        if cached:
+            return cached
         
         try:
             response = self.client.embeddings.create(
@@ -29,7 +76,7 @@ class EmbeddingService:
                 input=text
             )
             embedding = response.data[0].embedding
-            self._cache[text] = embedding
+            self._set_cache(text, embedding)
             return embedding
         except Exception as e:
             logger.error(f"Error generating embedding: {e}")
@@ -132,7 +179,15 @@ class EmbeddingService:
         return results[:top_n]
     
     def clear_cache(self):
-        self._cache.clear()
+        self._local_cache.clear()
+        if self._redis:
+            try:
+                keys = self._redis.keys("emb:*")
+                if keys:
+                    self._redis.delete(*keys)
+                logger.info("Embedding cache cleared")
+            except Exception as e:
+                logger.warning(f"Could not clear Redis embedding cache: {e}")
 
 
 _embedding_service: Optional[EmbeddingService] = None

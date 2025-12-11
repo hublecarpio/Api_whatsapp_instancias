@@ -36,7 +36,7 @@ services:
       - SESSION_SECRET=CAMBIA_ESTO_POR_UN_SECRETO_LARGO_32_CARACTERES
       - WA_API_URL=http://whatsapp-api:4080
       - REDIS_URL=redis://efficore_redis:6389
-      - WORKER_CONCURRENCY=20
+      - WORKER_CONCURRENCY=40
       - MINIO_ENDPOINT=https://TU_MINIO_ENDPOINT
       - MINIO_ACCESS_KEY=TU_MINIO_ACCESS_KEY
       - MINIO_SECRET_KEY=TU_MINIO_SECRET_KEY
@@ -65,12 +65,12 @@ services:
     depends_on:
       - efficore_redis
     deploy:
-      replicas: 2
+      replicas: 3
       resources:
         limits:
-          memory: 1024M
+          memory: 1536M
         reservations:
-          memory: 512M
+          memory: 768M
       update_config:
         parallelism: 1
         delay: 10s
@@ -171,6 +171,7 @@ services:
       - INTERNAL_AGENT_SECRET=TU_INTERNAL_AGENT_SECRET_CAMBIA_ESTO
       - PORT=5001
       - DEBUG=false
+      - WORKERS=4
     networks:
       - whatsapp_internal
     depends_on:
