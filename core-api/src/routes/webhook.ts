@@ -139,6 +139,29 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               businessId,
               business.userId
             );
+            
+            if (mediaType === 'image') {
+              const pendingVoucherOrder = await prisma.order.findFirst({
+                where: {
+                  businessId,
+                  contactPhone: contactPhone.replace(/\D/g, ''),
+                  status: 'AWAITING_VOUCHER',
+                  voucherImageUrl: null
+                },
+                orderBy: { createdAt: 'desc' }
+              });
+              
+              if (pendingVoucherOrder) {
+                await prisma.order.update({
+                  where: { id: pendingVoucherOrder.id },
+                  data: {
+                    voucherImageUrl: data.mediaUrl,
+                    voucherReceivedAt: new Date()
+                  }
+                });
+                console.log(`[WEBHOOK] Voucher image attached to order ${pendingVoucherOrder.id} from ${contactPhone}`);
+              }
+            }
           }
           
           await prisma.messageLog.create({

@@ -730,6 +730,30 @@ async function processWithAgent(
     }
   }
   
+  const pendingVoucherOrder = await prisma.order.findFirst({
+    where: {
+      businessId,
+      contactPhone: contactPhone.replace(/\D/g, ''),
+      status: 'AWAITING_VOUCHER'
+    },
+    orderBy: { createdAt: 'desc' },
+    include: { items: true }
+  });
+  
+  if (pendingVoucherOrder) {
+    const productNames = pendingVoucherOrder.items.map(i => i.productTitle).join(', ');
+    systemPrompt += `\n\n## PEDIDO PENDIENTE DE PAGO:`;
+    systemPrompt += `\n- El cliente tiene un pedido pendiente de comprobante de pago`;
+    systemPrompt += `\n- Productos: ${productNames}`;
+    systemPrompt += `\n- Total: ${pendingVoucherOrder.currencySymbol}${pendingVoucherOrder.totalAmount.toFixed(2)}`;
+    
+    if (pendingVoucherOrder.voucherImageUrl) {
+      systemPrompt += `\n- COMPROBANTE RECIBIDO: El cliente ya envió su comprobante de pago. Agradécele y confirma que el equipo revisará el pago pronto.`;
+    } else {
+      systemPrompt += `\n- Recuerda pedirle amablemente que envíe el comprobante de pago (foto del voucher/transferencia) para confirmar su pedido.`;
+    }
+  }
+  
   systemPrompt = replacePromptVariables(systemPrompt, business.timezone || 'America/Lima');
   
   const recentMessages = await prisma.messageLog.findMany({

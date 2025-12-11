@@ -33,6 +33,8 @@ interface Order {
   stripeSessionId: string | null;
   stripePaymentIntentId: string | null;
   paidAt: string | null;
+  voucherImageUrl: string | null;
+  voucherReceivedAt: string | null;
   createdAt: string;
   updatedAt: string;
   items: OrderItem[];
@@ -108,6 +110,8 @@ export default function OrdersPage() {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [confirmingPayment, setConfirmingPayment] = useState<string | null>(null);
+  const [voucherModalUrl, setVoucherModalUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentBusiness?.id) {
@@ -156,6 +160,18 @@ export default function OrdersPage() {
       console.error('Error updating order status:', error);
     } finally {
       setUpdatingStatus(null);
+    }
+  };
+
+  const confirmPayment = async (orderId: string) => {
+    try {
+      setConfirmingPayment(orderId);
+      await ordersApi.confirmPayment(orderId);
+      await loadOrders();
+    } catch (error) {
+      console.error('Error confirming payment:', error);
+    } finally {
+      setConfirmingPayment(null);
     }
   };
 
@@ -384,9 +400,9 @@ export default function OrdersPage() {
                               <option key={value} value={value}>{label}</option>
                             ))}
                           </select>
-                          {order.status === 'AWAITING_VOUCHER' && (
+                          {order.status === 'AWAITING_VOUCHER' && !order.voucherImageUrl && (
                             <p className="text-orange-400 text-[10px] sm:text-xs mt-1">
-                              Confirma cuando recibas el comprobante
+                              Esperando comprobante del cliente
                             </p>
                           )}
                         </div>
@@ -408,6 +424,64 @@ export default function OrdersPage() {
                               {order.shippingCountry && `, ${order.shippingCountry}`}
                             </p>
                           )}
+                        </div>
+                      )}
+
+                      {order.status === 'AWAITING_VOUCHER' && (
+                        <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 sm:p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <p className="text-orange-400 font-medium text-sm mb-1">Comprobante de Pago</p>
+                              {order.voucherImageUrl ? (
+                                <div className="flex items-center gap-3">
+                                  <img
+                                    src={order.voucherImageUrl}
+                                    alt="Comprobante de pago"
+                                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setVoucherModalUrl(order.voucherImageUrl);
+                                    }}
+                                  />
+                                  <div className="flex-1">
+                                    <p className="text-green-400 text-xs sm:text-sm">Comprobante recibido</p>
+                                    {order.voucherReceivedAt && (
+                                      <p className="text-gray-500 text-[10px] sm:text-xs">
+                                        {formatDate(order.voucherReceivedAt)}
+                                      </p>
+                                    )}
+                                    <p className="text-gray-400 text-[10px] sm:text-xs mt-1">
+                                      Click en la imagen para ampliar
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-gray-400 text-xs sm:text-sm">
+                                  El cliente aun no ha enviado el comprobante de pago
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmPayment(order.id);
+                              }}
+                              disabled={confirmingPayment === order.id}
+                              className="px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:opacity-50 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors flex-shrink-0"
+                            >
+                              {confirmingPayment === order.id ? (
+                                <span className="flex items-center gap-2">
+                                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                  Confirmando...
+                                </span>
+                              ) : (
+                                'Confirmar Pago'
+                              )}
+                            </button>
+                          </div>
                         </div>
                       )}
 
@@ -601,6 +675,33 @@ export default function OrdersPage() {
             })}
           </div>
         )
+      )}
+
+      {voucherModalUrl && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setVoucherModalUrl(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] w-full">
+            <button
+              onClick={() => setVoucherModalUrl(null)}
+              className="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img
+              src={voucherModalUrl}
+              alt="Comprobante de pago"
+              className="w-full h-auto max-h-[85vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <p className="text-center text-gray-400 text-sm mt-2">
+              Click fuera de la imagen para cerrar
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

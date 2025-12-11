@@ -14,6 +14,94 @@ import {
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
+const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
+
+router.post('/internal/attach-voucher', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    
+    if (internalSecret !== INTERNAL_AGENT_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { businessId, contactPhone, voucherImageUrl } = req.body;
+
+    if (!businessId || !contactPhone || !voucherImageUrl) {
+      return res.status(400).json({ error: 'businessId, contactPhone y voucherImageUrl son requeridos' });
+    }
+
+    const pendingOrder = await prisma.order.findFirst({
+      where: {
+        businessId,
+        contactPhone,
+        status: 'AWAITING_VOUCHER'
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!pendingOrder) {
+      return res.json({ 
+        success: false, 
+        message: 'No hay pedido pendiente de voucher para este contacto' 
+      });
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: pendingOrder.id },
+      data: {
+        voucherImageUrl,
+        voucherReceivedAt: new Date()
+      },
+      include: { items: true }
+    });
+
+    console.log(`[ORDERS INTERNAL] Voucher attached to order ${updatedOrder.id} from ${contactPhone}`);
+
+    res.json({
+      success: true,
+      orderId: updatedOrder.id,
+      message: 'Voucher asociado al pedido exitosamente'
+    });
+  } catch (error: any) {
+    console.error('[ORDERS INTERNAL] Error attaching voucher:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/internal/pending-voucher', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    
+    if (internalSecret !== INTERNAL_AGENT_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { businessId, contactPhone } = req.query;
+
+    if (!businessId || !contactPhone) {
+      return res.status(400).json({ error: 'businessId y contactPhone son requeridos' });
+    }
+
+    const pendingOrder = await prisma.order.findFirst({
+      where: {
+        businessId: businessId as string,
+        contactPhone: contactPhone as string,
+        status: 'AWAITING_VOUCHER'
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true }
+    });
+
+    res.json({
+      hasPendingOrder: !!pendingOrder,
+      order: pendingOrder
+    });
+  } catch (error: any) {
+    console.error('[ORDERS INTERNAL] Error checking pending voucher:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/pay/:code', async (req, res) => {
   try {
     const { code } = req.params;
@@ -511,12 +599,97 @@ router.get('/:orderId', authMiddleware, async (req: any, res) => {
   }
 });
 
+router.post('/:orderId/voucher', authMiddleware, async (req: any, res) => {
+  try {
+    const { orderId } = req.params;
+    const { voucherImageUrl } = req.body;
+
+    if (!voucherImageUrl) {
+      return res.status(400).json({ error: 'voucherImageUrl es requerido' });
+    }
+
+    const order = await getOrderById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: order.businessId,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        voucherImageUrl,
+        voucherReceivedAt: new Date()
+      },
+      include: { items: true }
+    });
+
+    console.log(`[ORDERS] Voucher attached to order ${orderId}: ${voucherImageUrl}`);
+    res.json(updatedOrder);
+  } catch (error: any) {
+    console.error('[ORDERS] Error attaching voucher:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/:orderId/confirm-payment', authMiddleware, async (req: any, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await getOrderById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: order.businessId,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
+    if (order.status !== 'AWAITING_VOUCHER') {
+      return res.status(400).json({ error: 'Solo se pueden confirmar pedidos en estado AWAITING_VOUCHER' });
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'PAID',
+        paidAt: new Date()
+      },
+      include: { items: true }
+    });
+
+    console.log(`[ORDERS] Payment confirmed for order ${orderId}`);
+    res.json(updatedOrder);
+  } catch (error: any) {
+    console.error('[ORDERS] Error confirming payment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.patch('/:orderId/status', authMiddleware, async (req: any, res) => {
   try {
     const { orderId } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ['PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
+    const validStatuses = ['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Estado no válido' });
     }

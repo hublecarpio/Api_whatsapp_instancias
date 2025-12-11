@@ -241,6 +241,10 @@ export const ordersApi = {
   get: (orderId: string) => api.get(`/orders/${orderId}`),
   updateStatus: (orderId: string, status: string) =>
     api.patch(`/orders/${orderId}/status`, { status }),
+  confirmPayment: (orderId: string) =>
+    api.post(`/orders/${orderId}/confirm-payment`),
+  attachVoucher: (orderId: string, voucherImageUrl: string) =>
+    api.post(`/orders/${orderId}/voucher`, { voucherImageUrl }),
   createPaymentLink: (data: {
     businessId: string;
     contactPhone: string;

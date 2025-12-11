@@ -428,6 +428,8 @@ model Order {
   stripeSessionId      String?     @unique
   stripePaymentIntentId String?
   paidAt               DateTime?
+  voucherImageUrl      String?
+  voucherReceivedAt    DateTime?
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
