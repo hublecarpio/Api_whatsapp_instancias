@@ -1527,6 +1527,7 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
       stripeSubscribers,
       enterpriseSubscribers,
       tokenCostToday,
+      tokenCostTotal,
       errorCount24h,
       pendingReminders,
       recentActivity
@@ -1544,6 +1545,9 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
       }),
       prisma.tokenUsage.aggregate({
         where: { createdAt: { gte: today } },
+        _sum: { costUsd: true }
+      }),
+      prisma.tokenUsage.aggregate({
         _sum: { costUsd: true }
       }),
       prisma.systemEvent.count({
@@ -1591,7 +1595,8 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
       activity: {
         messagesToday,
         ordersToday,
-        tokenCostToday: tokenCostToday._sum.costUsd || 0
+        tokenCostToday: tokenCostToday._sum.costUsd || 0,
+        tokenCostTotal: tokenCostTotal._sum.costUsd || 0
       },
       pending: {
         reminders: pendingReminders

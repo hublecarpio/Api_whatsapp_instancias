@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
 
@@ -164,32 +164,32 @@ export default function SuperAdminPage() {
         </div>
       </header>
 
-      <nav className="bg-dark-surface border-b border-dark-border px-2 sm:px-6">
-        <div className="flex gap-0.5 sm:gap-1 -mb-px overflow-x-auto scrollbar-hide">
+      <nav className="bg-dark-surface/80 backdrop-blur-sm border-b border-dark-border/50 px-2 sm:px-6 sticky top-0 z-10">
+        <div className="flex gap-1 sm:gap-2 -mb-px overflow-x-auto scrollbar-hide py-1">
           {[
             { id: 'command', label: 'Comando', icon: '⚡' },
             { id: 'devconsole', label: 'Console', icon: '🔧' },
-            { id: 'users', label: 'Usuarios', icon: '' },
-            { id: 'businesses', label: 'Negocios', icon: '' },
-            { id: 'whatsapp', label: 'WhatsApp', icon: '' },
-            { id: 'analytics', label: 'Ventas', icon: '' },
-            { id: 'billing', label: 'Billing', icon: '' },
-            { id: 'tokens', label: 'Tokens', icon: '' },
-            { id: 'agentv2', label: 'Agent V2', icon: '' },
-            { id: 'referrals', label: 'Referidos', icon: '' },
-            { id: 'system', label: 'Sistema', icon: '' }
+            { id: 'users', label: 'Usuarios', icon: '👥' },
+            { id: 'businesses', label: 'Negocios', icon: '🏢' },
+            { id: 'whatsapp', label: 'WhatsApp', icon: '📱' },
+            { id: 'analytics', label: 'Ventas', icon: '📊' },
+            { id: 'billing', label: 'Billing', icon: '💳' },
+            { id: 'tokens', label: 'Tokens', icon: '🎯' },
+            { id: 'agentv2', label: 'Agent V2', icon: '🤖' },
+            { id: 'referrals', label: 'Referidos', icon: '🔗' },
+            { id: 'system', label: 'Sistema', icon: '⚙️' }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-medium rounded-t-lg transition-all duration-200 whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === tab.id
-                  ? 'border-neon-blue text-neon-blue'
-                  : 'border-transparent text-gray-400 hover:text-white'
+                  ? 'bg-gradient-to-b from-neon-blue/20 to-transparent border-b-2 border-neon-blue text-neon-blue shadow-lg shadow-neon-blue/10'
+                  : 'border-b-2 border-transparent text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              {tab.icon && <span className="mr-0.5 sm:mr-1">{tab.icon}</span>}
-              {tab.label}
+              <span className="text-sm sm:text-base">{tab.icon}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </div>
@@ -417,6 +417,7 @@ function UsersTab({ token }: { token: string }) {
 function BusinessesTab({ token }: { token: string }) {
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/super-admin/businesses', {
@@ -430,32 +431,182 @@ function BusinessesTab({ token }: { token: string }) {
       .catch(() => setLoading(false));
   }, [token]);
 
+  const exportToCSV = () => {
+    const headers = ['ID', 'Nombre', 'Usuario', 'Objetivo', 'Zona Horaria', 'Instancias', 'Mensajes', 'Productos', 'Bot Activo', 'Agente', 'Creado'];
+    const rows = businesses.map(biz => [
+      biz.id,
+      biz.name,
+      biz.user?.email || '',
+      biz.businessObjective || 'SALES',
+      biz.timezone || 'America/Lima',
+      biz.instances?.length || 0,
+      biz._count?.messages || 0,
+      biz._count?.products || 0,
+      biz.botEnabled ? 'Si' : 'No',
+      biz.agentVersion?.toUpperCase() || 'V1',
+      new Date(biz.createdAt).toLocaleDateString()
+    ]);
+    
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `negocios_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) return <div className="text-gray-400">Cargando negocios...</div>;
 
   return (
-    <div className="card overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-dark-border">
-            <th className="text-left py-3 px-4 text-gray-400 font-medium">Negocio</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-medium">Usuario</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-medium">Instancias</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-medium">Mensajes</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-medium">Productos</th>
-          </tr>
-        </thead>
-        <tbody>
-          {businesses.map((biz) => (
-            <tr key={biz.id} className="border-b border-dark-border hover:bg-dark-hover">
-              <td className="py-3 px-4 text-white">{biz.name}</td>
-              <td className="py-3 px-4 text-gray-300">{biz.user?.email}</td>
-              <td className="py-3 px-4 text-gray-300">{biz.instances?.length || 0}</td>
-              <td className="py-3 px-4 text-gray-300">{biz._count?.messages || 0}</td>
-              <td className="py-3 px-4 text-gray-300">{biz._count?.products || 0}</td>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+        <div className="text-center sm:text-left">
+          <h2 className="text-lg sm:text-xl font-bold text-white">Negocios ({businesses.length})</h2>
+          <p className="text-gray-400 text-xs sm:text-sm">Gestion de negocios registrados</p>
+        </div>
+        <button onClick={exportToCSV} className="btn btn-primary text-xs sm:text-sm flex items-center gap-2 justify-center">
+          <span>📥</span> Exportar CSV
+        </button>
+      </div>
+
+      <div className="hidden md:block card overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-dark-border">
+              <th className="text-left py-3 px-4 text-gray-400 font-medium"></th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Negocio</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Usuario</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Objetivo</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Instancias</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Mensajes</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium">Productos</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {businesses.map((biz) => (
+              <Fragment key={biz.id}>
+                <tr 
+                  className="border-b border-dark-border hover:bg-dark-hover cursor-pointer"
+                  onClick={() => setExpandedId(expandedId === biz.id ? null : biz.id)}
+                >
+                  <td className="py-3 px-4 text-gray-400">
+                    <span className={`transition-transform inline-block ${expandedId === biz.id ? 'rotate-90' : ''}`}>▶</span>
+                  </td>
+                  <td className="py-3 px-4 text-white font-medium">{biz.name}</td>
+                  <td className="py-3 px-4 text-gray-300">{biz.user?.email}</td>
+                  <td className="py-3 px-4">
+                    <span className={`px-2 py-0.5 rounded text-xs ${biz.businessObjective === 'APPOINTMENTS' ? 'bg-purple-500/20 text-purple-400' : 'bg-neon-blue/20 text-neon-blue'}`}>
+                      {biz.businessObjective === 'APPOINTMENTS' ? 'Citas' : 'Ventas'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-gray-300">{biz.instances?.length || 0}</td>
+                  <td className="py-3 px-4 text-gray-300">{biz._count?.messages || 0}</td>
+                  <td className="py-3 px-4 text-gray-300">{biz._count?.products || 0}</td>
+                </tr>
+                {expandedId === biz.id && (
+                  <tr className="bg-dark-hover/50">
+                    <td colSpan={7} className="px-4 py-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs">ID</p>
+                          <p className="text-gray-300 font-mono text-xs truncate">{biz.id}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Email Negocio</p>
+                          <p className="text-gray-300">{biz.email || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Telefono</p>
+                          <p className="text-gray-300">{biz.phone || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Zona Horaria</p>
+                          <p className="text-gray-300">{biz.timezone || 'America/Lima'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Bot Activo</p>
+                          <p className={biz.botEnabled ? 'text-accent-success' : 'text-gray-500'}>{biz.botEnabled ? 'Si' : 'No'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Agente</p>
+                          <p className="text-purple-400">{biz.agentVersion?.toUpperCase() || 'V1'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Creado</p>
+                          <p className="text-gray-300">{new Date(biz.createdAt).toLocaleDateString()}</p>
+                        </div>
+                        {biz.systemPrompt && (
+                          <div className="col-span-2 md:col-span-4">
+                            <p className="text-gray-500 text-xs mb-1">Prompt del Sistema</p>
+                            <p className="text-gray-400 text-xs bg-dark-bg p-2 rounded max-h-24 overflow-y-auto">{biz.systemPrompt.substring(0, 500)}{biz.systemPrompt.length > 500 ? '...' : ''}</p>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden space-y-3">
+        {businesses.map((biz) => (
+          <div key={biz.id} className="card">
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setExpandedId(expandedId === biz.id ? null : biz.id)}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-medium truncate">{biz.name}</p>
+                <p className="text-gray-400 text-xs truncate">{biz.user?.email}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`px-2 py-0.5 rounded text-xs ${biz.businessObjective === 'APPOINTMENTS' ? 'bg-purple-500/20 text-purple-400' : 'bg-neon-blue/20 text-neon-blue'}`}>
+                  {biz.businessObjective === 'APPOINTMENTS' ? 'Citas' : 'Ventas'}
+                </span>
+                <span className={`transition-transform ${expandedId === biz.id ? 'rotate-90' : ''}`}>▶</span>
+              </div>
+            </div>
+            
+            {expandedId === biz.id && (
+              <div className="mt-4 pt-4 border-t border-dark-border grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-gray-500 text-xs">Instancias</p>
+                  <p className="text-neon-blue font-bold">{biz.instances?.length || 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs">Mensajes</p>
+                  <p className="text-white font-bold">{biz._count?.messages || 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs">Productos</p>
+                  <p className="text-accent-warning font-bold">{biz._count?.products || 0}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs">Bot Activo</p>
+                  <p className={biz.botEnabled ? 'text-accent-success' : 'text-gray-500'}>{biz.botEnabled ? 'Si' : 'No'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs">Agente</p>
+                  <p className="text-purple-400">{biz.agentVersion?.toUpperCase() || 'V1'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs">Zona Horaria</p>
+                  <p className="text-gray-300">{biz.timezone || 'America/Lima'}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-gray-500 text-xs">ID</p>
+                  <p className="text-gray-400 font-mono text-xs truncate">{biz.id}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2002,8 +2153,11 @@ function CommandCenterTab({ token }: { token: string }) {
           <p className="text-lg sm:text-2xl font-bold text-neon-blue">{data.activity.ordersToday}</p>
         </div>
         <div className="card bg-gradient-to-br from-purple-500/10 to-transparent border-purple-500/30 p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-gray-400">Costo IA</p>
-          <p className="text-lg sm:text-2xl font-bold text-purple-400">${data.activity.tokenCostToday.toFixed(2)}</p>
+          <p className="text-xs sm:text-sm text-gray-400">Costo IA (Hoy)</p>
+          <p className="text-lg sm:text-2xl font-bold text-purple-400">${(data.activity.tokenCostToday || 0).toFixed(2)}</p>
+          {data.activity.tokenCostTotal > 0 && (
+            <p className="text-[10px] text-gray-500">Total: ${(data.activity.tokenCostTotal || 0).toFixed(2)}</p>
+          )}
         </div>
         <div className="card bg-gradient-to-br from-accent-warning/10 to-transparent border-accent-warning/30 p-3 sm:p-4">
           <p className="text-xs sm:text-sm text-gray-400">Reminders</p>
