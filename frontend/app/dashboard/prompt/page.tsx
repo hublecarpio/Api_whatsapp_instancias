@@ -135,7 +135,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'skills' | 'prompts' | 'memory' | 'rules'>('skills');
+  const [activeV2Tab, setActiveV2Tab] = useState<'skills' | 'prompts' | 'memory' | 'rules' | 'config'>('skills');
 
   useEffect(() => {
     if (currentBusiness) {
@@ -706,10 +706,12 @@ export default function PromptPage() {
             Reglas ({learnedRules.length})
           </button>
           <button
-            onClick={() => setActiveTab('config')}
+            onClick={() => {
+              setActiveV2Tab('config');
+              setActiveTab('config');
+            }}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'config' && activeV2Tab !== 'skills' && activeV2Tab !== 'prompts' && activeV2Tab !== 'memory' && activeV2Tab !== 'rules'
-                ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+              activeV2Tab === 'config' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
             }`}
           >
             Configuracion
@@ -785,7 +787,7 @@ export default function PromptPage() {
         </div>
       )}
 
-      {((agentVersion === 'v1' && activeTab === 'config') || (agentVersion === 'v2' && activeTab === 'config')) && (
+      {((agentVersion === 'v1' && activeTab === 'config') || (agentVersion === 'v2' && activeV2Tab === 'config')) && (
         <div className="space-y-6">
           <div className="card">
             <h2 className="text-lg font-semibold text-white mb-4">Buffer de Mensajes</h2>

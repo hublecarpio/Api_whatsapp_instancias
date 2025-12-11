@@ -6,7 +6,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/billing.js';
 import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from '../services/openaiService.js';
 import { replacePromptVariables } from '../services/promptVariables.js';
-import { generateWithAgentV2, buildBusinessContext, buildConversationHistory } from '../services/agentV2Service.js';
+import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../services/agentV2Service.js';
 import { MetaCloudService } from '../services/metaCloud.js';
 import { createProductPaymentLink } from '../services/stripePayments.js';
 import { searchProductsIntelligent } from '../services/productSearch.js';
@@ -581,7 +581,17 @@ async function processWithAgent(
   if (business.agentVersion === 'v2') {
     const instance = business.instances?.[0];
     const backendId = instanceId || instance?.instanceBackendId || undefined;
-    return await processWithAgentV2(business, messages, contactPhone, contactName, phone, backendId);
+    
+    try {
+      const v2Available = await isAgentV2Available();
+      if (!v2Available) {
+        console.log('[Agent V2] Service unavailable, falling back to V1');
+      } else {
+        return await processWithAgentV2(business, messages, contactPhone, contactName, phone, backendId);
+      }
+    } catch (v2Error: any) {
+      console.error('[Agent V2] Error, falling back to V1:', v2Error.message);
+    }
   }
   
   if (!isOpenAIConfigured()) {
