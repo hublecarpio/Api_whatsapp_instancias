@@ -1,0 +1,55 @@
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             32.3s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+0.945                                                                                                                                                                       
+0.945 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+0.945 > next build                                                                                                                                                          
+0.945                                                                                                                                                                       
+2.000 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2.001 This information is used to shape Next.js' roadmap and prioritize features.
+2.001 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2.001 https://nextjs.org/telemetry
+2.001 
+2.089   ▲ Next.js 14.2.16
+2.089 
+2.207    Creating an optimized production build ...
+21.22  ✓ Compiled successfully
+21.22    Linting and checking validity of types ...
+30.27    Collecting page data ...
+31.56    Generating static pages (0/25) ...
+32.02    Generating static pages (6/25) 
+32.08    Generating static pages (12/25) 
+32.12  ⨯ useSearchParams() should be wrapped in a suspense boundary at page "/register". Read more: https://nextjs.org/docs/messages/missing-suspense-with-csr-bailout
+32.12     at a (/app/.next/server/chunks/138.js:1:10537)
+32.12     at s (/app/.next/server/chunks/138.js:1:21477)
+32.12     at d (/app/.next/server/app/register/page.js:1:2580)
+32.12     at nj (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:46251)
+32.12     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47571)
+32.12     at nN (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+32.12     at nI (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47010)
+32.12     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:47717)
+32.12     at nM (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:61546)
+32.12     at nN (/app/node_modules/next/dist/compiled/next-server/app-page.runtime.prod.js:12:64546)
+32.12 
+32.12 Error occurred prerendering page "/register". Read more: https://nextjs.org/docs/messages/prerender-error
+32.12 
+32.12    Generating static pages (18/25) 
+32.18  ✓ Generating static pages (25/25)
+32.19 
+32.19 > Export encountered errors on following paths:
+32.19   /register/page: /register
+32.23 npm notice
+32.23 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+32.23 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+32.23 npm notice To update run: npm install -g npm@11.7.0
+32.23 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
