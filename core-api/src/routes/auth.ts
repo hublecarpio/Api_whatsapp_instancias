@@ -508,4 +508,76 @@ router.get('/verify-reset-token', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { code } = req.body;
+    
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'Referral code is required' });
+    }
+    
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (user.proBonusExpiresAt && user.proBonusExpiresAt > new Date()) {
+      return res.status(400).json({ error: 'You already have an active Pro bonus' });
+    }
+    
+    const refCode = await prisma.referralCode.findFirst({
+      where: { 
+        code: code.toUpperCase(),
+        isActive: true,
+        type: 'ENTERPRISE'
+      }
+    });
+    
+    if (!refCode) {
+      return res.status(400).json({ error: 'Invalid or inactive referral code' });
+    }
+    
+    if (refCode.expiresAt && refCode.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'This referral code has expired' });
+    }
+    
+    if (refCode.maxUses && refCode.usageCount >= refCode.maxUses) {
+      return res.status(400).json({ error: 'This referral code has reached its maximum uses' });
+    }
+    
+    const grantDays = refCode.grantDurationDays || 7;
+    const proBonusExpiresAt = new Date();
+    proBonusExpiresAt.setDate(proBonusExpiresAt.getDate() + grantDays);
+    
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: {
+          proBonusExpiresAt,
+          isPro: true,
+          paymentLinkEnabled: true
+        }
+      }),
+      prisma.referralCode.update({
+        where: { id: refCode.id },
+        data: { usageCount: { increment: 1 } }
+      })
+    ]);
+    
+    console.log(`User ${user.id} applied referral code ${refCode.code}, Pro bonus expires at ${proBonusExpiresAt}`);
+    
+    res.json({ 
+      success: true, 
+      message: `Pro bonus activated for ${grantDays} days`,
+      proBonusExpiresAt
+    });
+  } catch (error) {
+    console.error('Apply referral error:', error);
+    res.status(500).json({ error: 'Failed to apply referral code' });
+  }
+});
+
 export default router;
