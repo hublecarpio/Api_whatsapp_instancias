@@ -320,3 +320,25 @@ export const knowledgeApi = {
   search: (businessId: string, query: string, limit?: number) =>
     api.post(`/knowledge/${businessId}/search`, { query, limit })
 };
+
+export const agentFilesApi = {
+  list: (businessId: string) =>
+    api.get(`/agent/files/${businessId}`),
+  upload: (businessId: string, formData: FormData) =>
+    api.post(`/agent/files/${businessId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+  update: (businessId: string, fileId: string, data: { 
+    name?: string; 
+    description?: string; 
+    triggerKeywords?: string; 
+    triggerContext?: string; 
+    order?: number; 
+    enabled?: boolean 
+  }) =>
+    api.put(`/agent/files/${businessId}/${fileId}`, data),
+  delete: (businessId: string, fileId: string) =>
+    api.delete(`/agent/files/${businessId}/${fileId}`),
+  reorder: (businessId: string, fileOrders: { id: string; order: number }[]) =>
+    api.put(`/agent/files/${businessId}/reorder`, { fileOrders })
+};
