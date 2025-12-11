@@ -56,9 +56,11 @@ router.post('/inject-prompt', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'El usuario no tiene negocios registrados' });
     }
 
-    const business = user.businesses[0];
+    const business = user.businesses.find(
+      b => b.injectionCode && b.injectionCode === codigo_verificacion.toUpperCase()
+    );
 
-    if (!business.injectionCode || business.injectionCode !== codigo_verificacion.toUpperCase()) {
+    if (!business) {
       return res.status(401).json({ error: 'Codigo de verificacion invalido' });
     }
 

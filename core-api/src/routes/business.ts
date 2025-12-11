@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { randomBytes } from 'crypto';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 
@@ -199,8 +200,7 @@ router.post('/:id/generate-injection-code', async (req: AuthRequest, res: Respon
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase() + 
-                 Math.random().toString(36).substring(2, 6).toUpperCase();
+    const code = randomBytes(6).toString('hex').toUpperCase();
     
     const business = await prisma.business.update({
       where: { id: req.params.id },
