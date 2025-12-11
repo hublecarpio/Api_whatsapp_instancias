@@ -67,6 +67,36 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   The current buffer locking implementation uses a 2-hour TTL which should cover most production scenarios. However, in extreme cases (queue backlog > 2 hours, prolonged worker outages), there is a theoretical risk of duplicate buffer processing. For guaranteed single-claim semantics in high-load environments, consider implementing BullMQ progress hooks or a dedicated lock renewal worker.
 *   Failed buffers are quarantined with failedAt/failureReason fields but require manual intervention via SQL to reprocess. Consider adding a Super Admin UI for failed buffer management.
 
+## Scaling Guide (Docker Swarm)
+
+### Services That Can Scale:
+| Service | Scalable | Notes |
+|---------|----------|-------|
+| Core API | ✅ Yes | Requires Redis. Default 2 replicas. |
+| Agent V2 | ✅ Yes | Stateless with Redis memory. Default 2 replicas. |
+| Frontend | ✅ Yes | Stateless. Default 1 replica. |
+| WhatsApp API (Baileys) | ⚠️ Limited | One instance per WhatsApp number due to session persistence. |
+| WhatsApp API (Meta Cloud) | ✅ Yes | Fully scalable via webhooks. |
+
+### Scaling Commands:
+```bash
+docker service scale efficore_core-api=4
+docker service scale efficore_agent-v2=4
+docker service scale efficore_frontend=3
+```
+
+### Capacity Estimates:
+| Replicas (Core + V2) | Concurrent AI Requests | Businesses (40 clients each) |
+|----------------------|------------------------|------------------------------|
+| 2 + 2 (default) | ~80/min | 50-100 |
+| 4 + 4 | ~160/min | 100-200 |
+| 8 + 8 | ~320/min | 200-400 |
+
+### Prerequisites for Scaling:
+1. **Redis is REQUIRED** - Without Redis, duplicate processing will occur
+2. **Database Connection Pooling** - Consider PgBouncer for >4 replicas
+3. **WORKER_CONCURRENCY** env var controls AI parallelism per Core API replica (default: 20)
+
 ## External Dependencies
 
 *   **PostgreSQL**: Primary database.

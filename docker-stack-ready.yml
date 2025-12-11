@@ -36,6 +36,7 @@ services:
       - SESSION_SECRET=CAMBIA_ESTO_POR_UN_SECRETO_LARGO_32_CARACTERES
       - WA_API_URL=http://whatsapp-api:4080
       - REDIS_URL=redis://efficore_redis:6389
+      - WORKER_CONCURRENCY=20
       - MINIO_ENDPOINT=https://TU_MINIO_ENDPOINT
       - MINIO_ACCESS_KEY=TU_MINIO_ACCESS_KEY
       - MINIO_SECRET_KEY=TU_MINIO_SECRET_KEY
@@ -64,11 +65,20 @@ services:
     depends_on:
       - efficore_redis
     deploy:
-      replicas: 1
+      replicas: 2
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
       update_config:
         parallelism: 1
         delay: 10s
+        order: start-first
         failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 10s
       restart_policy:
         condition: on-failure
         delay: 10s
@@ -80,6 +90,14 @@ services:
         - "traefik.http.routers.whatsapp_core.tls.certresolver=le"
         - "traefik.http.routers.whatsapp_core.priority=200"
         - "traefik.http.services.whatsapp_core.loadbalancer.server.port=4001"
+        - "traefik.http.services.whatsapp_core.loadbalancer.sticky.cookie=true"
+        - "traefik.http.services.whatsapp_core.loadbalancer.sticky.cookie.name=core_sticky"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4001/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   whatsapp-api:
     image: docker.io/iamhuble/whatsapp-saas-wa:latest
@@ -159,11 +177,20 @@ services:
       - efficore_redis
       - core-api
     deploy:
-      replicas: 1
+      replicas: 2
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
       update_config:
         parallelism: 1
         delay: 10s
+        order: start-first
         failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 10s
       restart_policy:
         condition: on-failure
         delay: 10s
