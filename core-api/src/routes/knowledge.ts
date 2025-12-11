@@ -141,7 +141,7 @@ router.post('/:businessId', authMiddleware, requireActiveSubscription, async (re
         content,
         type,
         chunks: chunks,
-        embedding: embedding,
+        embedding: embedding ?? undefined,
         metadata: {
           wordCount: content.split(/\s+/).length,
           chunkCount: chunks.length,
