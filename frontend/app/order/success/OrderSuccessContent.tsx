@@ -31,8 +31,7 @@ export default function OrderSuccessContent() {
 
     const fetchOrderDetails = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const response = await fetch(`${apiUrl}/orders/details/${sessionId}`);
+        const response = await fetch(`/api/orders/details/${sessionId}`);
         const data = await response.json();
 
         if (data.success && data.order) {

@@ -18,6 +18,7 @@ WA_PORT = "8080"
 
 [userenv.development]
 FRONTEND_URL = "https://978db092-02f4-4062-bb4b-215586819a4b-00-if4lj5jm7ce2.picard.replit.dev"
+NEXT_PUBLIC_API_URL = "https://978db092-02f4-4062-bb4b-215586819a4b-00-if4lj5jm7ce2.picard.replit.dev:3001"
 
 [userenv.production]
 FRONTEND_URL = "https://978db092-02f4-4062-bb4b-215586819a4b-00-if4lj5jm7ce2.picard.replit.dev"
