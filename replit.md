@@ -50,11 +50,22 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Agent Files Library (V1)**: Businesses can upload documents and images with metadata (triggerKeywords, triggerContext, order) that the AI uses to contextually send files during conversations. Files are stored in S3 and integrated via the "enviar_archivo" AI tool.
 *   **Referral Code System**: Marketing tracking via referral codes with unique URLs (e.g., `/SIETEDIASGRATIS`). Codes can have descriptions, expiration dates, and active status. Registration flow validates codes and tracks user source. Super Admin dashboard includes full CRUD for code management with usage statistics.
 
+*   **Distributed Buffer State Management**: Buffer processing state (activeBuffers, processingBuffers) moved from in-memory Maps to Redis for horizontal scalability. The `bufferStateService.ts` provides distributed locking via Redis SET NX for safe concurrent buffer processing across multiple API replicas.
+*   **BullMQ Expired Buffer Processor**: Replaced the per-instance `setInterval(processExpiredBuffers)` with a BullMQ repeatable job that runs every 5 seconds. Only one worker processes expired buffers, preventing duplicate processing when running multiple Core API replicas. Falls back to legacy setInterval when Redis is unavailable.
+*   **Atomic Buffer Claiming with DB Locking**: MessageBuffer model includes `processingUntil` field for atomic row-level locking. Processors use `updateMany` with WHERE clause to claim buffers atomically, preventing duplicate processing across replicas. 2-hour TTL covers queue backlog + processing + retries.
+*   **Buffer-to-Worker Lifecycle Management**: AI jobs include `bufferId` for end-to-end tracking. Buffers are deleted ONLY after successful AI processing, not on enqueue. BullMQ configured with 3 attempts and exponential backoff (5s base). Lock extended during retries to prevent duplicate claims.
+*   **Terminal State Handling**: Failed buffers after exhausting retries are quarantined with `failedAt`, `failureReason`, `retryCount` fields and a 1-year lock. Query failed buffers: `WHERE failedAt IS NOT NULL`. Manual intervention can reset for reprocessing.
+*   **Synchronous Processing Fallback**: When Redis/BullMQ unavailable, system falls back to `processAIResponseDirect()` for immediate in-process AI handling, ensuring no message loss in degraded mode.
+
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
-*   **Scalability**: Multi-instance design for WhatsApp API.
+*   **Scalability**: Horizontally scalable Core API with stateless design. All interval-based jobs migrated to BullMQ repeatable jobs. State stored in Redis for multi-replica support.
 *   **Security**: JWT-based authentication.
 *   **Observability**: Message logging and tool execution history.
+
+**Horizontal Scalability Limitations**:
+*   The current buffer locking implementation uses a 2-hour TTL which should cover most production scenarios. However, in extreme cases (queue backlog > 2 hours, prolonged worker outages), there is a theoretical risk of duplicate buffer processing. For guaranteed single-claim semantics in high-load environments, consider implementing BullMQ progress hooks or a dedicated lock renewal worker.
+*   Failed buffers are quarantined with failedAt/failureReason fields but require manual intervention via SQL to reprocess. Consider adding a Super Admin UI for failed buffer management.
 
 ## External Dependencies
 

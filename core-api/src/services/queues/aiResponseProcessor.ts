@@ -41,7 +41,12 @@ export async function queueAIResponse(data: AIResponseJobData): Promise<string |
   try {
     const addPromise = queue.add('process-ai-response', data, {
       jobId,
-      priority: priorityMap[data.priority || 'normal']
+      priority: priorityMap[data.priority || 'normal'],
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000
+      }
     });
     
     let timeoutId: NodeJS.Timeout;
@@ -69,9 +74,16 @@ export async function queueAIResponse(data: AIResponseJobData): Promise<string |
 }
 
 async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ response: string; tokensUsed?: number }> {
-  const { businessId, contactPhone, contactName, messages, phone, instanceId, instanceBackendId } = job.data;
+  const { businessId, contactPhone, contactName, messages, phone, instanceId, instanceBackendId, bufferId } = job.data;
   
   console.log(`[AI Worker] Processing job ${job.id} for business ${businessId}, contact ${contactPhone}`);
+  
+  if (bufferId) {
+    await prisma.messageBuffer.update({
+      where: { id: bufferId },
+      data: { processingUntil: new Date(Date.now() + 600000) }
+    }).catch(() => {});
+  }
   
   const business = await prisma.business.findUnique({
     where: { id: businessId },
@@ -85,10 +97,16 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
   });
   
   if (!business) {
+    if (bufferId) {
+      await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
+    }
     throw new Error(`Business ${businessId} not found`);
   }
   
   if (!business.botEnabled) {
+    if (bufferId) {
+      await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
+    }
     return { response: '' };
   }
   
@@ -105,18 +123,30 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     backendId = `biz_${businessId.substring(0, 8)}`;
   }
   
+  let result: { response: string; tokensUsed?: number };
+  
   if (business.agentVersion === 'v2') {
     try {
       const v2Available = await isAgentV2Available();
       if (v2Available) {
-        return await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, backendId);
+        result = await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, backendId);
+      } else {
+        result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
       }
     } catch (v2Error: any) {
       console.error('[AI Worker] Agent V2 error, falling back to V1:', v2Error.message);
+      result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
     }
+  } else {
+    result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
   }
   
-  return await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
+  if (bufferId) {
+    await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
+    console.log(`[AI Worker] Buffer ${bufferId} deleted after successful processing`);
+  }
+  
+  return result;
 }
 
 async function processWithAgentV2Worker(
@@ -355,8 +385,44 @@ export function startAIResponseWorker(): Worker<AIResponseJobData> {
     console.log(`[AI Worker] Job ${job.id} completed, response length: ${result?.response?.length || 0}`);
   });
 
-  aiResponseWorker.on('failed', (job, error) => {
+  aiResponseWorker.on('failed', async (job, error) => {
     console.error(`[AI Worker] Job ${job?.id} failed:`, error.message);
+    if (job?.data?.bufferId) {
+      const maxAttempts = job?.opts?.attempts || 3;
+      const attemptsMade = job?.attemptsMade || 0;
+      
+      if (attemptsMade >= maxAttempts) {
+        try {
+          await prisma.messageBuffer.update({
+            where: { id: job.data.bufferId },
+            data: { 
+              failedAt: new Date(),
+              failureReason: error.message?.substring(0, 500) || 'Unknown error',
+              retryCount: attemptsMade,
+              processingUntil: new Date(Date.now() + 86400000 * 365)
+            }
+          });
+          console.error(`[AI Worker] Buffer ${job.data.bufferId} FAILED after ${attemptsMade} attempts - requires manual intervention, error: ${error.message}`);
+        } catch (e) {
+          console.error(`[AI Worker] Failed to mark buffer ${job.data.bufferId} as failed:`, e);
+        }
+      } else {
+        try {
+          const backoffDelay = Math.pow(2, attemptsMade) * 5000;
+          const extendedLock = new Date(Date.now() + backoffDelay + 600000);
+          await prisma.messageBuffer.update({
+            where: { id: job.data.bufferId },
+            data: { 
+              processingUntil: extendedLock,
+              retryCount: attemptsMade
+            }
+          });
+          console.log(`[AI Worker] Buffer ${job.data.bufferId} lock extended for retry, attempt ${attemptsMade}/${maxAttempts}`);
+        } catch (e) {
+          console.error(`[AI Worker] Failed to extend buffer lock:`, e);
+        }
+      }
+    }
   });
 
   aiResponseWorker.on('error', (error) => {
@@ -400,4 +466,55 @@ export async function getAIQueueStats(): Promise<{
   ]);
   
   return { waiting, active, completed, failed, concurrency: WORKER_CONCURRENCY, workerRunning: isAIWorkerRunning() };
+}
+
+export async function processAIResponseDirect(data: AIResponseJobData): Promise<{ response: string; tokensUsed?: number }> {
+  const { businessId, contactPhone, contactName, messages, phone, instanceId, instanceBackendId } = data;
+  
+  console.log(`[AI Direct] Processing for business ${businessId}, contact ${contactPhone}`);
+  
+  const business = await prisma.business.findUnique({
+    where: { id: businessId },
+    include: {
+      policy: true,
+      promptMaster: { include: { tools: { where: { enabled: true } } } },
+      products: true,
+      instances: { include: { metaCredential: true } },
+      user: { select: { isPro: true } }
+    }
+  });
+  
+  if (!business) {
+    throw new Error(`Business ${businessId} not found`);
+  }
+  
+  if (!business.botEnabled) {
+    return { response: '' };
+  }
+  
+  let backendId = instanceBackendId;
+  if (!backendId && instanceId) {
+    const instance = await prisma.whatsAppInstance.findUnique({
+      where: { id: instanceId }
+    });
+    if (instance?.instanceBackendId) {
+      backendId = instance.instanceBackendId;
+    }
+  }
+  if (!backendId) {
+    backendId = `biz_${businessId.substring(0, 8)}`;
+  }
+  
+  if (business.agentVersion === 'v2') {
+    try {
+      const v2Available = await isAgentV2Available();
+      if (v2Available) {
+        return await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, backendId);
+      }
+    } catch (v2Error: any) {
+      console.error('[AI Direct] Agent V2 error, falling back to V1:', v2Error.message);
+    }
+  }
+  
+  return await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
 }

@@ -94,25 +94,48 @@ async function internalOrAuthMiddleware(req: InternalRequest, res: Response, nex
   });
 }
 
-const activeBuffers = new Map<string, NodeJS.Timeout>();
-const processingBuffers = new Set<string>();
+import { isBufferActive, setBufferActive, clearBufferActive } from '../services/bufferStateService.js';
 
-async function processExpiredBuffers() {
+const activeBuffers = new Map<string, NodeJS.Timeout>();
+
+async function processExpiredBuffersLegacy() {
   try {
+    const now = new Date();
+    const lockUntil = new Date(Date.now() + 7200000);
+    
     const expiredBuffers = await prisma.messageBuffer.findMany({
       where: {
-        expiresAt: { lte: new Date() }
+        expiresAt: { lte: now },
+        OR: [
+          { processingUntil: null },
+          { processingUntil: { lt: now } }
+        ]
       }
     });
     
     for (const buffer of expiredBuffers) {
       const bufferKey = `${buffer.businessId}:${buffer.contactPhone}`;
       
-      if (activeBuffers.has(bufferKey) || processingBuffers.has(bufferKey)) {
+      if (activeBuffers.has(bufferKey)) {
         continue;
       }
       
-      processingBuffers.add(bufferKey);
+      const claimed = await prisma.messageBuffer.updateMany({
+        where: {
+          id: buffer.id,
+          OR: [
+            { processingUntil: null },
+            { processingUntil: { lt: now } }
+          ]
+        },
+        data: {
+          processingUntil: lockUntil
+        }
+      });
+      
+      if (claimed.count === 0) {
+        continue;
+      }
       
       try {
         console.log(`[BUFFER-WORKER] Processing expired buffer for ${bufferKey}`);
@@ -126,32 +149,31 @@ async function processExpiredBuffers() {
           where: { businessId: buffer.businessId }
         });
         
-        if (business && business.botEnabled) {
-          await prisma.messageBuffer.delete({
-            where: { id: buffer.id }
-          });
-          
-          const contactJid = `${buffer.contactPhone}@s.whatsapp.net`;
-          const resolvedBackendId = instance?.instanceBackendId || `biz_${buffer.businessId.substring(0, 8)}`;
-          
-          await processWithAgentQueued(
-            buffer.businessId,
-            messages,
-            contactJid,
-            buffer.contactPhone,
-            '',
-            instance?.id,
-            resolvedBackendId
-          );
-        } else {
-          await prisma.messageBuffer.delete({
-            where: { id: buffer.id }
-          });
+        if (!business || !business.botEnabled) {
+          await prisma.messageBuffer.delete({ where: { id: buffer.id } });
+          continue;
         }
+        
+        const contactJid = `${buffer.contactPhone}@s.whatsapp.net`;
+        const resolvedBackendId = instance?.instanceBackendId || `biz_${buffer.businessId.substring(0, 8)}`;
+        
+        await processWithAgentQueued(
+          buffer.businessId,
+          messages,
+          contactJid,
+          buffer.contactPhone,
+          '',
+          instance?.id,
+          resolvedBackendId
+        );
+        
+        await prisma.messageBuffer.delete({ where: { id: buffer.id } });
       } catch (error) {
         console.error(`[BUFFER-WORKER] Error processing buffer ${bufferKey}:`, error);
-      } finally {
-        processingBuffers.delete(bufferKey);
+        await prisma.messageBuffer.update({
+          where: { id: buffer.id },
+          data: { processingUntil: null }
+        }).catch(() => {});
       }
     }
   } catch (error) {
@@ -159,7 +181,21 @@ async function processExpiredBuffers() {
   }
 }
 
-setInterval(processExpiredBuffers, 5000);
+let legacyBufferInterval: NodeJS.Timeout | null = null;
+
+export function startLegacyBufferProcessor(): void {
+  if (legacyBufferInterval) return;
+  legacyBufferInterval = setInterval(processExpiredBuffersLegacy, 5000);
+  console.log('[Agent] Legacy buffer processor started');
+}
+
+export function stopLegacyBufferProcessor(): void {
+  if (legacyBufferInterval) {
+    clearInterval(legacyBufferInterval);
+    legacyBufferInterval = null;
+    console.log('[Agent] Legacy buffer processor stopped');
+  }
+}
 
 const S3_BASE_URL = process.env.MINIO_PUBLIC_URL || 'https://memoriaback.iamhuble.space/n8nback';
 

@@ -43,6 +43,9 @@ let bullmqModules: {
   stopMessageBufferWorker: () => Promise<void>;
   startAIResponseWorker: () => any;
   stopAIResponseWorker: () => Promise<void>;
+  startExpiredBufferWorker: () => any;
+  stopExpiredBufferWorker: () => Promise<void>;
+  scheduleExpiredBufferCheck: () => Promise<void>;
 } | null = null;
 
 const app = express();
@@ -116,12 +119,13 @@ async function initializeWorkers(): Promise<void> {
     try {
       console.log('Redis available - initializing BullMQ workers...');
       
-      const [queuesIndex, reminderProc, inactivityProc, bufferProc, aiResponseProc] = await Promise.all([
+      const [queuesIndex, reminderProc, inactivityProc, bufferProc, aiResponseProc, expiredBufferProc] = await Promise.all([
         import('./services/queues/index.js'),
         import('./services/queues/reminderProcessor.js'),
         import('./services/queues/inactivityProcessor.js'),
         import('./services/queues/messageBufferProcessor.js'),
-        import('./services/queues/aiResponseProcessor.js')
+        import('./services/queues/aiResponseProcessor.js'),
+        import('./services/queues/expiredBufferProcessor.js')
       ]);
       
       queuesIndex.initializeQueues();
@@ -137,25 +141,37 @@ async function initializeWorkers(): Promise<void> {
         startMessageBufferWorker: bufferProc.startMessageBufferWorker,
         stopMessageBufferWorker: bufferProc.stopMessageBufferWorker,
         startAIResponseWorker: aiResponseProc.startAIResponseWorker,
-        stopAIResponseWorker: aiResponseProc.stopAIResponseWorker
+        stopAIResponseWorker: aiResponseProc.stopAIResponseWorker,
+        startExpiredBufferWorker: expiredBufferProc.startExpiredBufferWorker,
+        stopExpiredBufferWorker: expiredBufferProc.stopExpiredBufferWorker,
+        scheduleExpiredBufferCheck: expiredBufferProc.scheduleExpiredBufferCheck
       };
       
       bullmqModules.startReminderWorker();
       bullmqModules.startInactivityWorker();
       bullmqModules.startMessageBufferWorker();
       bullmqModules.startAIResponseWorker();
+      bullmqModules.startExpiredBufferWorker();
       
       await bullmqModules.scheduleInactivityChecks();
       await bullmqModules.schedulePendingReminders();
+      await bullmqModules.scheduleExpiredBufferCheck();
       
       console.log('All BullMQ workers initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize BullMQ, falling back to legacy worker:', error);
+      console.error('Failed to initialize BullMQ, falling back to legacy workers:', error);
       startLegacyReminderWorker();
+      const { startLegacyBufferProcessor } = await import('./routes/agent.js');
+      startLegacyBufferProcessor();
     }
   } else {
-    console.log('Redis not available - using legacy setInterval worker');
+    console.warn('⚠️ Redis not available - using legacy setInterval workers');
+    console.warn('⚠️ WARNING: Legacy mode does NOT support horizontal scaling!');
+    console.warn('⚠️ Running multiple replicas will cause duplicate processing.');
+    console.warn('⚠️ For production with multiple replicas, Redis is REQUIRED.');
     startLegacyReminderWorker();
+    const { startLegacyBufferProcessor } = await import('./routes/agent.js');
+    startLegacyBufferProcessor();
   }
 }
 
@@ -168,7 +184,11 @@ async function gracefulShutdown(): Promise<void> {
       await bullmqModules.stopInactivityWorker();
       await bullmqModules.stopMessageBufferWorker();
       await bullmqModules.stopAIResponseWorker();
+      await bullmqModules.stopExpiredBufferWorker();
       await bullmqModules.closeQueues();
+    } else {
+      const { stopLegacyBufferProcessor } = await import('./routes/agent.js');
+      stopLegacyBufferProcessor();
     }
     await closeRedisConnection();
     console.log('All workers and connections closed');

@@ -6,7 +6,8 @@ export const QUEUE_NAMES = {
   MESSAGE_BUFFER: 'efficore-message-buffer',
   WHATSAPP_INCOMING: 'efficore-whatsapp-incoming',
   INACTIVITY_CHECK: 'efficore-inactivity-check',
-  AI_RESPONSE: 'efficore-ai-response'
+  AI_RESPONSE: 'efficore-ai-response',
+  EXPIRED_BUFFER: 'efficore-expired-buffer'
 } as const;
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6389';
@@ -80,6 +81,7 @@ export interface AIResponseJobData {
   instanceId?: string;
   instanceBackendId?: string;
   priority?: 'high' | 'normal' | 'low';
+  bufferId?: string;
 }
 
 let reminderQueue: Queue<ReminderJobData> | null = null;

@@ -338,14 +338,20 @@ model ToolLog {
 }
 
 model MessageBuffer {
-  id          String   @id @default(uuid())
-  businessId  String
-  contactPhone String
-  messages    Json
-  createdAt   DateTime @default(now())
-  expiresAt   DateTime
+  id              String    @id @default(uuid())
+  businessId      String
+  contactPhone    String
+  messages        Json
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime
+  processingUntil DateTime?
+  retryCount      Int       @default(0)
+  failedAt        DateTime?
+  failureReason   String?
 
   @@unique([businessId, contactPhone])
+  @@index([expiresAt, processingUntil])
+  @@index([failedAt])
 }
 
 model MessageLog {
