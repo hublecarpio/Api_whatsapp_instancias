@@ -392,6 +392,7 @@ model ContactSettings {
   @@index([businessId, botDisabled])
   @@index([businessId, instanceId])
   @@index([instanceId, archivedAt])
+  @@index([businessId, contactPhone])
 }
 
 enum OrderStatus {

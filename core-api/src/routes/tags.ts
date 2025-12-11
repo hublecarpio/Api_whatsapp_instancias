@@ -635,12 +635,10 @@ router.get('/contact/:contact_phone/bot-status', authMiddleware, async (req: Aut
     
     const cleanPhone = contact_phone.replace(/\D/g, '').replace(/:.*$/, '');
     
-    const settings = await prisma.contactSettings.findUnique({
+    const settings = await prisma.contactSettings.findFirst({
       where: {
-        businessId_contactPhone: {
-          businessId: business_id as string,
-          contactPhone: cleanPhone
-        }
+        businessId: business_id as string,
+        contactPhone: cleanPhone
       }
     });
     
@@ -671,22 +669,27 @@ router.patch('/contact/:contact_phone/bot-toggle', authMiddleware, async (req: A
     
     const cleanPhone = contact_phone.replace(/\D/g, '').replace(/:.*$/, '');
     
-    const settings = await prisma.contactSettings.upsert({
+    let settings = await prisma.contactSettings.findFirst({
       where: {
-        businessId_contactPhone: {
-          businessId: business_id,
-          contactPhone: cleanPhone
-        }
-      },
-      create: {
         businessId: business_id,
-        contactPhone: cleanPhone,
-        botDisabled
-      },
-      update: {
-        botDisabled
+        contactPhone: cleanPhone
       }
     });
+    
+    if (settings) {
+      settings = await prisma.contactSettings.update({
+        where: { id: settings.id },
+        data: { botDisabled }
+      });
+    } else {
+      settings = await prisma.contactSettings.create({
+        data: {
+          businessId: business_id,
+          contactPhone: cleanPhone,
+          botDisabled
+        }
+      });
+    }
     
     res.json({
       success: true,
@@ -717,12 +720,10 @@ router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req:
       return;
     }
     
-    const settings = await prisma.contactSettings.findUnique({
+    const settings = await prisma.contactSettings.findFirst({
       where: {
-        businessId_contactPhone: {
-          businessId: business_id as string,
-          contactPhone: contact_phone
-        }
+        businessId: business_id as string,
+        contactPhone: contact_phone
       }
     });
     

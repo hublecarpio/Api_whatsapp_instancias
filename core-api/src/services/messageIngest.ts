@@ -97,12 +97,10 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     return;
   }
 
-  const contactSettings = await prisma.contactSettings.findUnique({
+  const contactSettings = await prisma.contactSettings.findFirst({
     where: {
-      businessId_contactPhone: {
-        businessId,
-        contactPhone: cleanPhone
-      }
+      businessId,
+      contactPhone: cleanPhone
     }
   });
 

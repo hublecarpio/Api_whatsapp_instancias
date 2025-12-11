@@ -191,12 +191,10 @@ export async function extractAndSaveContactData(
     }
 
     if (Object.keys(cleanData).length > 0) {
-      const existingSettings = await prisma.contactSettings.findUnique({
+      const existingSettings = await prisma.contactSettings.findFirst({
         where: {
-          businessId_contactPhone: {
-            businessId,
-            contactPhone
-          }
+          businessId,
+          contactPhone
         }
       });
 
@@ -208,22 +206,20 @@ export async function extractAndSaveContactData(
 
       const mergedData = { ...parsedNotes, extractedData: cleanData, lastExtracted: new Date().toISOString() };
 
-      await prisma.contactSettings.upsert({
-        where: {
-          businessId_contactPhone: {
+      if (existingSettings) {
+        await prisma.contactSettings.update({
+          where: { id: existingSettings.id },
+          data: { notes: JSON.stringify(mergedData) }
+        });
+      } else {
+        await prisma.contactSettings.create({
+          data: {
             businessId,
-            contactPhone
+            contactPhone,
+            notes: JSON.stringify(mergedData)
           }
-        },
-        update: {
-          notes: JSON.stringify(mergedData)
-        },
-        create: {
-          businessId,
-          contactPhone,
-          notes: JSON.stringify(mergedData)
-        }
-      });
+        });
+      }
 
       console.log(`[LEAD DATA] Extracted data for ${contactPhone}:`, cleanData);
     }

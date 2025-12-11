@@ -1,0 +1,28 @@
+ => [builder 7/9] COPY . .                                                                                                                                             0.1s
+ => [builder 8/9] RUN npx prisma generate                                                                                                                              4.3s
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             12.8s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.464                                                                                                                                                                       
+0.464 > core-api@1.0.0 build                                                                                                                                                
+0.464 > tsc
+0.464 
+12.73 src/routes/tags.ts(640,9): error TS2353: Object literal may only specify known properties, and 'businessId_contactPhone' does not exist in type 'ContactSettingsWhereUniqueInput'.
+12.73 src/routes/tags.ts(676,9): error TS2353: Object literal may only specify known properties, and 'businessId_contactPhone' does not exist in type 'ContactSettingsWhereUniqueInput'.
+12.73 src/routes/tags.ts(722,9): error TS2353: Object literal may only specify known properties, and 'businessId_contactPhone' does not exist in type 'ContactSettingsWhereUniqueInput'.
+12.73 src/routes/webhook.ts(165,17): error TS2353: Object literal may only specify known properties, and 'businessId_contactPhone' does not exist in type 'ContactSettingsWhereUniqueInput'.
+12.73 src/services/leadStageService.ts(196,11): error TS2353: Object literal may only specify known properties, and 'businessId_contactPhone' does not exist in type 'ContactSettingsWhereUniqueInput'.
+12.73 src/services/leadStageService.ts(213,11): error TS2353: Object literal may only specify known properties, and 'businessId_contactPhone' does not exist in type 'ContactSettingsWhereUniqueInput'.
+12.73 src/services/messageIngest.ts(102,7): error TS2353: Object literal may only specify known properties, and 'businessId_contactPhone' does not exist in type 'ContactSettingsWhereUniqueInput'.
+------
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# ^C
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# 

@@ -160,12 +160,10 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           
           if (!isFromMe && business.botEnabled) {
             const cleanPhoneForSettings = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
-            const contactSettings = await prisma.contactSettings.findUnique({
+            const contactSettings = await prisma.contactSettings.findFirst({
               where: {
-                businessId_contactPhone: {
-                  businessId,
-                  contactPhone: cleanPhoneForSettings
-                }
+                businessId,
+                contactPhone: cleanPhoneForSettings
               }
             });
             
