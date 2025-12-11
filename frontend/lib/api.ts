@@ -41,7 +41,10 @@ export const authApi = {
   me: () => api.get('/auth/me'),
   resendVerification: () => api.post('/auth/resend-verification'),
   verifyEmail: (token: string) => api.get(`/auth/verify-email?token=${token}`),
-  applyReferral: (code: string) => api.post('/auth/apply-referral', { code })
+  applyReferral: (code: string) => api.post('/auth/apply-referral', { code }),
+  getAdvisorInvitation: (token: string) => api.get(`/auth/advisor-invitation/${token}`),
+  advisorSignup: (data: { token: string; name: string; password: string }) =>
+    api.post('/auth/advisor-signup', data)
 };
 
 export const businessApi = {
@@ -134,7 +137,9 @@ export const messageApi = {
   conversation: (businessId: string, phone: string) => 
     api.get(`/messages/conversation/${phone}?business_id=${businessId}`),
   windowStatus: (businessId: string, phone: string) =>
-    api.get(`/messages/conversation/${phone}/window-status?business_id=${businessId}`)
+    api.get(`/messages/conversation/${phone}/window-status?business_id=${businessId}`),
+  send: (businessId: string, to: string, message: string) =>
+    api.post(`/wa/${businessId}/send`, { to, message })
 };
 
 export const mediaApi = {
@@ -360,4 +365,27 @@ export const agentWebhookApi = {
     api.get(`/agent/webhook/${businessId}`),
   update: (businessId: string, data: { webhookUrl: string | null; webhookEvents: string[] }) =>
     api.put(`/agent/webhook/${businessId}`, data)
+};
+
+export const advisorApi = {
+  invite: (data: { email: string; businessId: string }) =>
+    api.post('/advisor/invite', data),
+  getInvitations: (businessId: string) =>
+    api.get(`/advisor/invitations/${businessId}`),
+  cancelInvitation: (id: string) =>
+    api.delete(`/advisor/invitation/${id}`),
+  getTeam: (businessId: string) =>
+    api.get(`/advisor/team/${businessId}`),
+  removeAdvisor: (advisorId: string) =>
+    api.delete(`/advisor/team/${advisorId}`),
+  assignContact: (data: { businessId: string; contactPhone: string; advisorId: string }) =>
+    api.post('/advisor/assign', data),
+  removeAssignment: (businessId: string, contactPhone: string) =>
+    api.delete(`/advisor/assign/${businessId}/${encodeURIComponent(contactPhone)}`),
+  getAssignments: (businessId: string) =>
+    api.get(`/advisor/assignments/${businessId}`),
+  getMyBusiness: () =>
+    api.get('/advisor/my-business'),
+  getMyContacts: (businessId: string) =>
+    api.get(`/advisor/my-contacts/${businessId}`)
 };

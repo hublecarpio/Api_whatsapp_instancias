@@ -11,6 +11,8 @@ interface User {
   paymentLinkEnabled?: boolean;
   proBonusExpiresAt?: string;
   hasActiveBonus?: boolean;
+  role?: 'ADMIN' | 'ASESOR';
+  parentUserId?: string | null;
 }
 
 interface AuthState {
