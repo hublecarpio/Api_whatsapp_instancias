@@ -1,0 +1,20 @@
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             13.1s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.955                                                                                                                                                                       
+0.955 > core-api@1.0.0 build                                                                                                                                                
+0.955 > tsc                                                                                                                                                                 
+0.955                                                                                                                                                                       
+10.85 src/routes/superAdmin.ts(1435,9): error TS2322: Type '{ business: { select: { id: true; name: true; }; }; }' is not assignable to type 'never'.                       
+10.85 src/routes/superAdmin.ts(1445,35): error TS2339: Property 'name' does not exist on type 'never'.                                                                      
+------                                                                                                                                                                      
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
+[+] Building 71.7s (14/15)      

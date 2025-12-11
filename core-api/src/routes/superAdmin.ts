@@ -1431,22 +1431,12 @@ router.get('/events', superAdminMiddleware, async (req: SuperAdminRequest, res: 
         where,
         orderBy: { createdAt: 'desc' },
         take: parseInt(limit as string),
-        skip: parseInt(offset as string),
-        include: {
-          business: { select: { id: true, name: true } }
-        }
+        skip: parseInt(offset as string)
       }),
       prisma.systemEvent.count({ where })
     ]);
 
-    res.json({ 
-      events: events.map(e => ({
-        ...e,
-        businessName: e.business?.name || null,
-        business: undefined
-      })), 
-      total 
-    });
+    res.json({ events, total });
   } catch (error: any) {
     console.error('Get events error:', error);
     res.status(500).json({ error: 'Failed to get events' });
