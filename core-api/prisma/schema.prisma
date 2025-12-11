@@ -41,6 +41,70 @@ model ReferralCode {
   @@index([code])
 }
 
+enum SystemEventType {
+  USER_REGISTERED
+  USER_LOGIN
+  USER_LOGOUT
+  BUSINESS_CREATED
+  BUSINESS_UPDATED
+  INSTANCE_CREATED
+  INSTANCE_CONNECTED
+  INSTANCE_DISCONNECTED
+  INSTANCE_ERROR
+  MESSAGE_SENT
+  MESSAGE_RECEIVED
+  AI_RESPONSE
+  AI_ERROR
+  ORDER_CREATED
+  ORDER_PAID
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  SUBSCRIPTION_STARTED
+  SUBSCRIPTION_CANCELLED
+  TOOL_EXECUTED
+  TOOL_ERROR
+  WEBHOOK_RECEIVED
+  API_ERROR
+  SYSTEM_ERROR
+  REMINDER_SENT
+  APPOINTMENT_CREATED
+  APPOINTMENT_CONFIRMED
+}
+
+enum EventSeverity {
+  DEBUG
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+model SystemEvent {
+  id          String          @id @default(uuid())
+  eventType   SystemEventType
+  severity    EventSeverity   @default(INFO)
+  source      String
+  userId      String?
+  businessId  String?
+  instanceId  String?
+  message     String
+  details     Json?
+  metadata    Json?
+  ip          String?
+  userAgent   String?
+  duration    Int?
+  createdAt   DateTime        @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([severity, createdAt])
+  @@index([businessId, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([source, createdAt])
+}
+
 enum SubscriptionStatus {
   PENDING
   TRIAL

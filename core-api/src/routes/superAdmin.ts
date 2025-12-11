@@ -1145,4 +1145,237 @@ router.get('/referral-codes/:code/users', superAdminMiddleware, async (req: Supe
   }
 });
 
+// ============ SYSTEM EVENTS / DEV CONSOLE ============
+
+router.get('/events', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { 
+      limit = '100',
+      offset = '0',
+      severity,
+      eventType,
+      source,
+      businessId,
+      userId,
+      since
+    } = req.query;
+
+    const where: any = {};
+
+    if (severity) {
+      where.severity = severity;
+    }
+    if (eventType) {
+      where.eventType = eventType;
+    }
+    if (source) {
+      where.source = { contains: source as string };
+    }
+    if (businessId) {
+      where.businessId = businessId;
+    }
+    if (userId) {
+      where.userId = userId;
+    }
+    if (since) {
+      where.createdAt = { gte: new Date(since as string) };
+    }
+
+    const [events, total] = await Promise.all([
+      prisma.systemEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit as string),
+        skip: parseInt(offset as string)
+      }),
+      prisma.systemEvent.count({ where })
+    ]);
+
+    res.json({ events, total });
+  } catch (error: any) {
+    console.error('Get events error:', error);
+    res.status(500).json({ error: 'Failed to get events' });
+  }
+});
+
+router.get('/events/stats', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
+    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const [
+      totalToday,
+      totalLastHour,
+      byTypeToday,
+      bySeverityToday,
+      errorStats,
+      recentErrors
+    ] = await Promise.all([
+      prisma.systemEvent.count({ where: { createdAt: { gte: today } } }),
+      prisma.systemEvent.count({ where: { createdAt: { gte: lastHour } } }),
+      prisma.systemEvent.groupBy({
+        by: ['eventType'],
+        where: { createdAt: { gte: today } },
+        _count: true,
+        orderBy: { _count: { eventType: 'desc' } },
+        take: 10
+      }),
+      prisma.systemEvent.groupBy({
+        by: ['severity'],
+        where: { createdAt: { gte: today } },
+        _count: true
+      }),
+      prisma.systemEvent.count({
+        where: {
+          severity: { in: ['ERROR', 'CRITICAL'] },
+          createdAt: { gte: last24h }
+        }
+      }),
+      prisma.systemEvent.findMany({
+        where: { severity: { in: ['ERROR', 'CRITICAL'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      })
+    ]);
+
+    const severityMap = bySeverityToday.reduce<Record<string, number>>((acc, s) => {
+      acc[s.severity] = s._count;
+      return acc;
+    }, {});
+
+    res.json({
+      counts: {
+        today: totalToday,
+        lastHour: totalLastHour,
+        errors24h: errorStats
+      },
+      byType: byTypeToday.map(t => ({ type: t.eventType, count: t._count })),
+      bySeverity: severityMap,
+      recentErrors
+    });
+  } catch (error: any) {
+    console.error('Get event stats error:', error);
+    res.status(500).json({ error: 'Failed to get event stats' });
+  }
+});
+
+router.get('/events/sources', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const sources = await prisma.systemEvent.groupBy({
+      by: ['source'],
+      _count: true,
+      orderBy: { _count: { source: 'desc' } }
+    });
+
+    res.json({ sources: sources.map(s => ({ source: s.source, count: s._count })) });
+  } catch (error: any) {
+    console.error('Get sources error:', error);
+    res.status(500).json({ error: 'Failed to get sources' });
+  }
+});
+
+router.delete('/events/cleanup', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { olderThanDays = '30' } = req.query;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - parseInt(olderThanDays as string));
+
+    const result = await prisma.systemEvent.deleteMany({
+      where: { createdAt: { lt: cutoffDate } }
+    });
+
+    res.json({ deleted: result.count });
+  } catch (error: any) {
+    console.error('Cleanup events error:', error);
+    res.status(500).json({ error: 'Failed to cleanup events' });
+  }
+});
+
+// ============ COMMAND CENTER ============
+
+router.get('/command-center', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [
+      activeUsers,
+      newUsersToday,
+      activeInstances,
+      messagesToday,
+      ordersToday,
+      revenueToday,
+      tokenCostToday,
+      errorCount24h,
+      pendingReminders,
+      recentActivity
+    ] = await Promise.all([
+      prisma.user.count({ where: { subscriptionStatus: { in: ['TRIAL', 'ACTIVE'] } } }),
+      prisma.user.count({ where: { createdAt: { gte: today } } }),
+      prisma.whatsAppInstance.count({ where: { status: 'open' } }),
+      prisma.messageLog.count({ where: { createdAt: { gte: today } } }),
+      prisma.order.count({ where: { createdAt: { gte: today } } }),
+      prisma.order.aggregate({
+        where: { 
+          status: { in: ['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'] },
+          createdAt: { gte: today } 
+        },
+        _sum: { totalAmount: true }
+      }),
+      prisma.tokenUsage.aggregate({
+        where: { createdAt: { gte: today } },
+        _sum: { costUsd: true }
+      }),
+      prisma.systemEvent.count({
+        where: { severity: { in: ['ERROR', 'CRITICAL'] }, createdAt: { gte: last24h } }
+      }),
+      prisma.reminder.count({ where: { status: 'pending' } }),
+      prisma.systemEvent.findMany({
+        where: { severity: { in: ['INFO', 'WARNING', 'ERROR', 'CRITICAL'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          eventType: true,
+          severity: true,
+          source: true,
+          message: true,
+          createdAt: true
+        }
+      })
+    ]);
+
+    res.json({
+      health: {
+        status: errorCount24h > 10 ? 'degraded' : errorCount24h > 0 ? 'warning' : 'healthy',
+        errors24h: errorCount24h
+      },
+      users: {
+        active: activeUsers,
+        newToday: newUsersToday
+      },
+      whatsapp: {
+        connectedInstances: activeInstances
+      },
+      activity: {
+        messagesToday,
+        ordersToday,
+        revenueToday: revenueToday._sum.totalAmount || 0,
+        tokenCostToday: tokenCostToday._sum.costUsd || 0
+      },
+      pending: {
+        reminders: pendingReminders
+      },
+      recentActivity
+    });
+  } catch (error: any) {
+    console.error('Command center error:', error);
+    res.status(500).json({ error: 'Failed to get command center data' });
+  }
+});
+
 export default router;
