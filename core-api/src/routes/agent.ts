@@ -10,11 +10,46 @@ import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, is
 import { MetaCloudService } from '../services/metaCloud.js';
 import { createProductPaymentLink } from '../services/stripePayments.js';
 import { searchProductsIntelligent } from '../services/productSearch.js';
+import { queueAIResponse, getAIQueueStats } from '../services/queues/aiResponseProcessor.js';
+import { getAIResponseQueue } from '../services/queues/index.js';
 
 const router = Router();
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
+const USE_AI_QUEUE = process.env.USE_AI_QUEUE !== 'false';
+
+async function processWithAgentQueued(
+  businessId: string,
+  messages: string[],
+  phone: string,
+  contactPhone: string,
+  contactName: string,
+  instanceId?: string,
+  instanceBackendId?: string
+): Promise<{ response: string; tokensUsed?: number; queued?: boolean }> {
+  const queue = getAIResponseQueue();
+  
+  if (USE_AI_QUEUE && queue) {
+    const jobId = await queueAIResponse({
+      businessId,
+      contactPhone,
+      contactName,
+      messages,
+      phone,
+      instanceId,
+      instanceBackendId,
+      priority: 'normal'
+    });
+    
+    if (jobId) {
+      console.log(`[Agent] Message queued for parallel processing: ${jobId}`);
+      return { response: '', queued: true };
+    }
+  }
+  
+  return await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId);
+}
 
 interface InternalRequest extends Request {
   isInternal?: boolean;
@@ -99,7 +134,7 @@ async function processExpiredBuffers() {
           const contactJid = `${buffer.contactPhone}@s.whatsapp.net`;
           const resolvedBackendId = instance?.instanceBackendId || `biz_${buffer.businessId.substring(0, 8)}`;
           
-          await processWithAgent(
+          await processWithAgentQueued(
             buffer.businessId,
             messages,
             contactJid,
@@ -1712,7 +1747,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
             
             activeBuffers.delete(bufferKey);
             
-            await processWithAgent(
+            await processWithAgentQueued(
               business_id,
               messages,
               phone,
@@ -1737,7 +1772,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       });
     }
     
-    const result = await processWithAgent(
+    const result = await processWithAgentQueued(
       business_id,
       [user_message],
       phone,
@@ -1747,13 +1782,21 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       instanceBackendId
     );
     
-    res.json({
-      action: 'responded',
-      response: result.response,
-      botEnabled: true,
-      model: business.openaiModel,
-      tokensUsed: result.tokensUsed
-    });
+    if (result.queued) {
+      res.json({
+        action: 'queued',
+        message: 'Message queued for AI processing',
+        botEnabled: true
+      });
+    } else {
+      res.json({
+        action: 'responded',
+        response: result.response,
+        botEnabled: true,
+        model: business.openaiModel,
+        tokensUsed: result.tokensUsed
+      });
+    }
   } catch (error: any) {
     console.error('Agent think error:', error);
     
@@ -1847,6 +1890,20 @@ router.get('/memory/stats/:businessId', authMiddleware, async (req: AuthRequest,
     res.json(result);
   } catch (error: any) {
     console.error('Memory stats error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/queue/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const stats = await getAIQueueStats();
+    res.json({
+      queue: 'ai-response',
+      ...stats,
+      useQueue: USE_AI_QUEUE
+    });
+  } catch (error: any) {
+    console.error('Queue stats error:', error);
     res.status(500).json({ error: error.message });
   }
 });
