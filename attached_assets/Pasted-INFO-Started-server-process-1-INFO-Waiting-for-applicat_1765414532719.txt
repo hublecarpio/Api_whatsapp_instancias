@@ -1,0 +1,76 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:src.main:Agent V2 Advanced starting on port 5001
+INFO:src.main:Using model: gpt-4.1-mini
+INFO:src.main:Multi-agent graph initialized
+INFO:src.main:Features: Memory, Embeddings, Tools, Observer, Refiner
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5001 (Press CTRL+C to quit)
+INFO:     127.0.0.1:37342 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59540 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46824 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59036 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60262 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48350 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50542 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34156 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50506 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40458 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57632 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44332 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47950 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40424 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35728 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58722 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37744 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50062 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34666 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52044 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51330 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45108 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.0.1.4:36602 - "GET /health HTTP/1.1" 200 OK
+INFO:src.core.memory:Redis connected successfully
+INFO:src.core.graph:Executing vendor node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.core.graph:Building final response
+INFO:src.core.graph:Executing observer node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.core.graph:Executing refiner node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.agents.refiner:Saved learning for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11
+INFO:     10.0.1.4:36602 - "POST /generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54004 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.0.1.4:54874 - "GET /health HTTP/1.1" 200 OK
+INFO:src.core.graph:Executing vendor node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.core.graph:Building final response
+INFO:src.core.graph:Executing observer node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.core.graph:Executing refiner node
+INFO:     10.0.1.4:54874 - "POST /generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53152 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.0.1.4:36710 - "GET /health HTTP/1.1" 200 OK
+INFO:src.core.graph:Executing vendor node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.core.graph:Building final response
+INFO:src.core.graph:Executing observer node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.core.graph:Executing refiner node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.agents.refiner:Saved learning for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11
+INFO:     10.0.1.4:36710 - "POST /generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33464 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35764 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46038 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57176 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.0.1.4:42848 - "GET /health HTTP/1.1" 200 OK
+INFO:src.core.graph:Executing vendor node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.core.graph:Building final response
+INFO:src.core.graph:Executing observer node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.core.graph:Executing refiner node
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:src.agents.refiner:Saved learning for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11
+INFO:     10.0.1.4:42848 - "POST /generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44064 - "GET /health HTTP/1.1" 200 OK
