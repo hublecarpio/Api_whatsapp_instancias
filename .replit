@@ -15,6 +15,7 @@ WA_API_URL = "http://localhost:8080"
 CORE_API_PORT = "3001"
 CORE_API_URL = "http://localhost:3001"
 WA_PORT = "8080"
+GPT_PROMPT_URL = "https://chatgpt.com/g/g-693a9c0ebb208191b994b58410eac48b-efficore-promt-master"
 
 [userenv.development]
 FRONTEND_URL = "https://978db092-02f4-4062-bb4b-215586819a4b-00-if4lj5jm7ce2.picard.replit.dev"
