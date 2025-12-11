@@ -61,7 +61,7 @@ sleep 2
 
 echo ""
 echo "Running database migrations..."
-if npx prisma db push --skip-generate; then
+if npx prisma db push --skip-generate --accept-data-loss; then
   echo "Migrations completed successfully!"
 else
   echo "ERROR: Database migration failed!"
