@@ -28,7 +28,8 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Stripe Billing Integration**: Implements a 7-day free trial, weekly recurring payments via Stripe Checkout, webhook handling for payment events, and automatic account suspension.
 *   **Email Verification System**: Requires email verification for users to create WhatsApp instances, with server-side enforcement, a dedicated UI, and SMTP integration.
 *   **Robust Deployment**: Dockerized services with improved health checks, database wait logic, and environment variable support.
-*   **Super Admin Panel**: A centralized administration panel for platform monitoring, user/business management, WhatsApp instance control, token usage tracking, billing overview, and system health.
+*   **Super Admin Panel**: A centralized administration panel featuring Command Center (unified dashboard with real-time system health, key metrics, and activity feed), DevConsole (real-time event log viewer with auto-refresh, severity filtering, and detailed event inspection), plus user/business management, WhatsApp instance control, token usage tracking, billing overview, and referral code management.
+*   **System Event Logging**: Centralized eventLogger service tracks all platform events with severity levels (DEBUG, INFO, WARNING, ERROR, CRITICAL), sources, and structured metadata for comprehensive observability.
 *   **Centralized OpenAI API Management**: Uses a single platform-wide OpenAI API key, allows model selection, and logs token usage for cost tracking.
 *   **Per-Contact Bot Control**: Provides two-level bot control (global and per-contact) with a `botDisabled` flag, UI toggles, and visual indicators.
 *   **Dynamic Prompt Variables**: Supports dynamic variables like `{{now}}` with configurable timezones for businesses, replaced before sending prompts to OpenAI.
