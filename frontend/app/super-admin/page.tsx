@@ -23,7 +23,7 @@ export default function SuperAdminPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [overview, setOverview] = useState<OverviewData | null>(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('command');
 
   useEffect(() => {
     const savedToken = localStorage.getItem('superAdminToken');
@@ -165,29 +165,30 @@ export default function SuperAdminPage() {
       </header>
 
       <nav className="bg-dark-surface border-b border-dark-border px-6">
-        <div className="flex gap-1 -mb-px">
+        <div className="flex gap-1 -mb-px overflow-x-auto">
           {[
-            { id: 'overview', label: 'Resumen' },
-            { id: 'analytics', label: 'Pedidos y Pagos' },
-            { id: 'users', label: 'Usuarios' },
-            { id: 'businesses', label: 'Negocios' },
-            { id: 'whatsapp', label: 'WhatsApp' },
-            { id: 'tokens', label: 'Uso de Tokens' },
-            { id: 'messages', label: 'Mensajes' },
-            { id: 'billing', label: 'Facturacion' },
-            { id: 'agentv2', label: 'Agent V2' },
-            { id: 'referrals', label: 'Referidos' },
-            { id: 'system', label: 'Sistema' }
+            { id: 'command', label: 'Centro de Comando', icon: '⚡' },
+            { id: 'devconsole', label: 'Dev Console', icon: '🔧' },
+            { id: 'users', label: 'Usuarios', icon: '' },
+            { id: 'businesses', label: 'Negocios', icon: '' },
+            { id: 'whatsapp', label: 'WhatsApp', icon: '' },
+            { id: 'analytics', label: 'Ventas', icon: '' },
+            { id: 'billing', label: 'Facturacion', icon: '' },
+            { id: 'tokens', label: 'Tokens IA', icon: '' },
+            { id: 'agentv2', label: 'Agent V2', icon: '' },
+            { id: 'referrals', label: 'Referidos', icon: '' },
+            { id: 'system', label: 'Sistema', icon: '' }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-neon-blue text-neon-blue'
                   : 'border-transparent text-gray-400 hover:text-white'
               }`}
             >
+              {tab.icon && <span className="mr-1">{tab.icon}</span>}
               {tab.label}
             </button>
           ))}
@@ -195,6 +196,8 @@ export default function SuperAdminPage() {
       </nav>
 
       <main className="p-6">
+        {activeTab === 'command' && <CommandCenterTab token={token} />}
+        {activeTab === 'devconsole' && <DevConsoleTab token={token} />}
         {activeTab === 'overview' && overview && <OverviewTab data={overview} />}
         {activeTab === 'analytics' && <AnalyticsTab token={token} />}
         {activeTab === 'users' && <UsersTab token={token} />}
@@ -1755,6 +1758,408 @@ function ReferralsTab({ token }: { token: string }) {
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface CommandCenterData {
+  health: { status: string; errors24h: number };
+  users: { active: number; newToday: number };
+  whatsapp: { connectedInstances: number };
+  activity: { messagesToday: number; ordersToday: number; revenueToday: number; tokenCostToday: number };
+  pending: { reminders: number };
+  recentActivity: any[];
+}
+
+function CommandCenterTab({ token }: { token: string }) {
+  const [data, setData] = useState<CommandCenterData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  const fetchData = async () => {
+    try {
+      const res = await fetch('/api/super-admin/command-center', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await res.json();
+      setData(result);
+    } catch (err) {
+      console.error('Error fetching command center:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    let interval: NodeJS.Timeout;
+    if (autoRefresh) {
+      interval = setInterval(fetchData, 10000);
+    }
+    return () => clearInterval(interval);
+  }, [token, autoRefresh]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const healthColors = {
+    healthy: 'bg-accent-success',
+    warning: 'bg-accent-warning',
+    degraded: 'bg-accent-error'
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Centro de Comando</h2>
+          <p className="text-gray-400 text-sm">Vista unificada del estado del sistema</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-gray-400">
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={e => setAutoRefresh(e.target.checked)}
+              className="rounded"
+            />
+            Auto-refresh (10s)
+          </label>
+          <button onClick={fetchData} className="btn btn-ghost text-sm">
+            Actualizar
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-5 gap-4">
+        <div className="card flex items-center gap-3">
+          <div className={`w-4 h-4 rounded-full ${healthColors[data.health.status as keyof typeof healthColors] || 'bg-gray-500'}`} />
+          <div>
+            <p className="text-xl font-bold text-white capitalize">{data.health.status}</p>
+            <p className="text-xs text-gray-400">Estado del Sistema</p>
+          </div>
+        </div>
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-neon-blue">{data.users.active}</p>
+          <p className="text-xs text-gray-400">Usuarios Activos</p>
+          {data.users.newToday > 0 && (
+            <p className="text-xs text-accent-success">+{data.users.newToday} hoy</p>
+          )}
+        </div>
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-accent-success">{data.whatsapp.connectedInstances}</p>
+          <p className="text-xs text-gray-400">WhatsApp Conectados</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-white">{data.activity.messagesToday}</p>
+          <p className="text-xs text-gray-400">Mensajes Hoy</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-accent-warning">{data.health.errors24h}</p>
+          <p className="text-xs text-gray-400">Errores 24h</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        <div className="card bg-gradient-to-br from-neon-blue/10 to-transparent border-neon-blue/30">
+          <p className="text-sm text-gray-400">Pedidos Hoy</p>
+          <p className="text-2xl font-bold text-white">{data.activity.ordersToday}</p>
+        </div>
+        <div className="card bg-gradient-to-br from-accent-success/10 to-transparent border-accent-success/30">
+          <p className="text-sm text-gray-400">Revenue Hoy</p>
+          <p className="text-2xl font-bold text-accent-success">S/. {data.activity.revenueToday.toFixed(2)}</p>
+        </div>
+        <div className="card bg-gradient-to-br from-purple-500/10 to-transparent border-purple-500/30">
+          <p className="text-sm text-gray-400">Costo IA Hoy</p>
+          <p className="text-2xl font-bold text-purple-400">${data.activity.tokenCostToday.toFixed(4)}</p>
+        </div>
+        <div className="card bg-gradient-to-br from-accent-warning/10 to-transparent border-accent-warning/30">
+          <p className="text-sm text-gray-400">Recordatorios Pendientes</p>
+          <p className="text-2xl font-bold text-accent-warning">{data.pending.reminders}</p>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="text-lg font-semibold text-white mb-4">Actividad Reciente</h3>
+        {data.recentActivity.length === 0 ? (
+          <p className="text-gray-500 text-center py-4">No hay actividad reciente</p>
+        ) : (
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {data.recentActivity.map((event: any) => (
+              <div key={event.id} className="flex items-center gap-3 py-2 border-b border-dark-border">
+                <span className={`w-2 h-2 rounded-full ${
+                  event.severity === 'ERROR' || event.severity === 'CRITICAL' ? 'bg-accent-error' :
+                  event.severity === 'WARNING' ? 'bg-accent-warning' : 'bg-accent-success'
+                }`} />
+                <span className="text-xs text-gray-500 w-20">{event.source}</span>
+                <span className="text-sm text-gray-300 flex-1">{event.message}</span>
+                <span className="text-xs text-gray-500">
+                  {new Date(event.createdAt).toLocaleTimeString('es-PE')}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface SystemEvent {
+  id: string;
+  eventType: string;
+  severity: string;
+  source: string;
+  message: string;
+  details?: any;
+  businessId?: string;
+  userId?: string;
+  createdAt: string;
+}
+
+function DevConsoleTab({ token }: { token: string }) {
+  const [events, setEvents] = useState<SystemEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [severityFilter, setSeverityFilter] = useState<string>('');
+  const [sourceFilter, setSourceFilter] = useState<string>('');
+  const [stats, setStats] = useState<any>(null);
+  const [sources, setSources] = useState<{source: string; count: number}[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<SystemEvent | null>(null);
+
+  const fetchEvents = async () => {
+    try {
+      const params = new URLSearchParams({ limit: '100' });
+      if (severityFilter) params.append('severity', severityFilter);
+      if (sourceFilter) params.append('source', sourceFilter);
+      
+      const [eventsRes, statsRes, sourcesRes] = await Promise.all([
+        fetch(`/api/super-admin/events?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('/api/super-admin/events/stats', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('/api/super-admin/events/sources', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+
+      const eventsData = await eventsRes.json();
+      const statsData = await statsRes.json();
+      const sourcesData = await sourcesRes.json();
+
+      setEvents(eventsData.events || []);
+      setStats(statsData);
+      setSources(sourcesData.sources || []);
+    } catch (err) {
+      console.error('Error fetching events:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEvents();
+    let interval: NodeJS.Timeout;
+    if (autoRefresh) {
+      interval = setInterval(fetchEvents, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [token, autoRefresh, severityFilter, sourceFilter]);
+
+  const severityColors: Record<string, string> = {
+    DEBUG: 'text-gray-500 bg-gray-500/10',
+    INFO: 'text-neon-blue bg-neon-blue/10',
+    WARNING: 'text-accent-warning bg-accent-warning/10',
+    ERROR: 'text-accent-error bg-accent-error/10',
+    CRITICAL: 'text-red-500 bg-red-500/20 font-bold'
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            Dev Console
+            <span className="text-sm font-normal text-gray-400 bg-dark-surface px-2 py-1 rounded">
+              {events.length} eventos
+            </span>
+          </h2>
+          <p className="text-gray-400 text-sm">Logs y eventos del sistema en tiempo real</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-gray-400">
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={e => setAutoRefresh(e.target.checked)}
+              className="rounded"
+            />
+            Auto (5s)
+          </label>
+          <button onClick={fetchEvents} className="btn btn-ghost text-sm">
+            Actualizar
+          </button>
+        </div>
+      </div>
+
+      {stats && (
+        <div className="grid grid-cols-5 gap-3">
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-neon-blue">{stats.counts?.today || 0}</p>
+            <p className="text-xs text-gray-400">Eventos Hoy</p>
+          </div>
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-white">{stats.counts?.lastHour || 0}</p>
+            <p className="text-xs text-gray-400">Ultima Hora</p>
+          </div>
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-accent-error">{stats.counts?.errors24h || 0}</p>
+            <p className="text-xs text-gray-400">Errores 24h</p>
+          </div>
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-accent-success">{stats.bySeverity?.INFO || 0}</p>
+            <p className="text-xs text-gray-400">Info</p>
+          </div>
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-accent-warning">{stats.bySeverity?.WARNING || 0}</p>
+            <p className="text-xs text-gray-400">Warnings</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <select
+          value={severityFilter}
+          onChange={e => setSeverityFilter(e.target.value)}
+          className="input w-40"
+        >
+          <option value="">Todas las severidades</option>
+          <option value="DEBUG">DEBUG</option>
+          <option value="INFO">INFO</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
+        <select
+          value={sourceFilter}
+          onChange={e => setSourceFilter(e.target.value)}
+          className="input w-48"
+        >
+          <option value="">Todas las fuentes</option>
+          {sources.map(s => (
+            <option key={s.source} value={s.source}>{s.source} ({s.count})</option>
+          ))}
+        </select>
+        <button 
+          onClick={() => { setSeverityFilter(''); setSourceFilter(''); }}
+          className="btn btn-ghost text-sm"
+        >
+          Limpiar filtros
+        </button>
+      </div>
+
+      <div className="card p-0 overflow-hidden">
+        <div className="bg-dark-bg font-mono text-sm max-h-[600px] overflow-y-auto">
+          {events.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No hay eventos con estos filtros</p>
+          ) : (
+            events.map(event => (
+              <div 
+                key={event.id}
+                onClick={() => setSelectedEvent(event)}
+                className="flex items-start gap-2 px-3 py-2 border-b border-dark-border hover:bg-dark-hover cursor-pointer"
+              >
+                <span className="text-gray-600 text-xs w-20 flex-shrink-0">
+                  {new Date(event.createdAt).toLocaleTimeString('es-PE')}
+                </span>
+                <span className={`text-xs px-1.5 py-0.5 rounded w-16 text-center flex-shrink-0 ${severityColors[event.severity] || ''}`}>
+                  {event.severity}
+                </span>
+                <span className="text-purple-400 text-xs w-24 flex-shrink-0 truncate">
+                  {event.source}
+                </span>
+                <span className="text-gray-300 flex-1 truncate">{event.message}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {selectedEvent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="card max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-white">Detalle del Evento</h3>
+              <button onClick={() => setSelectedEvent(null)} className="text-gray-400 hover:text-white">
+                X
+              </button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-gray-500">Tipo</p>
+                  <p className="text-white font-mono">{selectedEvent.eventType}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Severidad</p>
+                  <span className={`text-xs px-2 py-1 rounded ${severityColors[selectedEvent.severity]}`}>
+                    {selectedEvent.severity}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-gray-500">Fuente</p>
+                  <p className="text-purple-400 font-mono">{selectedEvent.source}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Fecha</p>
+                  <p className="text-white">{new Date(selectedEvent.createdAt).toLocaleString('es-PE')}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-500">Mensaje</p>
+                <p className="text-white bg-dark-bg p-2 rounded">{selectedEvent.message}</p>
+              </div>
+              {selectedEvent.businessId && (
+                <div>
+                  <p className="text-gray-500">Business ID</p>
+                  <p className="text-gray-300 font-mono text-xs">{selectedEvent.businessId}</p>
+                </div>
+              )}
+              {selectedEvent.userId && (
+                <div>
+                  <p className="text-gray-500">User ID</p>
+                  <p className="text-gray-300 font-mono text-xs">{selectedEvent.userId}</p>
+                </div>
+              )}
+              {selectedEvent.details && (
+                <div>
+                  <p className="text-gray-500">Detalles</p>
+                  <pre className="text-gray-300 bg-dark-bg p-2 rounded overflow-x-auto text-xs">
+                    {JSON.stringify(selectedEvent.details, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
