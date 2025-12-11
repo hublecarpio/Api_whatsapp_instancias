@@ -41,6 +41,8 @@ let bullmqModules: {
   stopInactivityWorker: () => Promise<void>;
   startMessageBufferWorker: () => any;
   stopMessageBufferWorker: () => Promise<void>;
+  startAIResponseWorker: () => any;
+  stopAIResponseWorker: () => Promise<void>;
 } | null = null;
 
 const app = express();
@@ -114,11 +116,12 @@ async function initializeWorkers(): Promise<void> {
     try {
       console.log('Redis available - initializing BullMQ workers...');
       
-      const [queuesIndex, reminderProc, inactivityProc, bufferProc] = await Promise.all([
+      const [queuesIndex, reminderProc, inactivityProc, bufferProc, aiResponseProc] = await Promise.all([
         import('./services/queues/index.js'),
         import('./services/queues/reminderProcessor.js'),
         import('./services/queues/inactivityProcessor.js'),
-        import('./services/queues/messageBufferProcessor.js')
+        import('./services/queues/messageBufferProcessor.js'),
+        import('./services/queues/aiResponseProcessor.js')
       ]);
       
       queuesIndex.initializeQueues();
@@ -132,12 +135,15 @@ async function initializeWorkers(): Promise<void> {
         startInactivityWorker: inactivityProc.startInactivityWorker,
         stopInactivityWorker: inactivityProc.stopInactivityWorker,
         startMessageBufferWorker: bufferProc.startMessageBufferWorker,
-        stopMessageBufferWorker: bufferProc.stopMessageBufferWorker
+        stopMessageBufferWorker: bufferProc.stopMessageBufferWorker,
+        startAIResponseWorker: aiResponseProc.startAIResponseWorker,
+        stopAIResponseWorker: aiResponseProc.stopAIResponseWorker
       };
       
       bullmqModules.startReminderWorker();
       bullmqModules.startInactivityWorker();
       bullmqModules.startMessageBufferWorker();
+      bullmqModules.startAIResponseWorker();
       
       await bullmqModules.scheduleInactivityChecks();
       await bullmqModules.schedulePendingReminders();
@@ -161,6 +167,7 @@ async function gracefulShutdown(): Promise<void> {
       await bullmqModules.stopReminderWorker();
       await bullmqModules.stopInactivityWorker();
       await bullmqModules.stopMessageBufferWorker();
+      await bullmqModules.stopAIResponseWorker();
       await bullmqModules.closeQueues();
     }
     await closeRedisConnection();
