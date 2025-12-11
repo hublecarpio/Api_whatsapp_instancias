@@ -556,6 +556,50 @@ export default function OrdersPage() {
                         </div>
                       </div>
 
+                      {(order.status === 'PAID' || order.status === 'PROCESSING' || order.status === 'SHIPPED') && (
+                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 sm:p-4">
+                          <p className="text-blue-400 font-medium text-sm mb-3">Acciones Rapidas</p>
+                          <div className="flex flex-wrap gap-2">
+                            {order.status === 'PAID' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateStatus(order.id, 'PROCESSING');
+                                }}
+                                disabled={updatingStatus === order.id}
+                                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm rounded-lg transition-colors"
+                              >
+                                Iniciar Preparacion
+                              </button>
+                            )}
+                            {order.status === 'PROCESSING' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateStatus(order.id, 'SHIPPED');
+                                }}
+                                disabled={updatingStatus === order.id}
+                                className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm rounded-lg transition-colors"
+                              >
+                                Marcar En Camino
+                              </button>
+                            )}
+                            {order.status === 'SHIPPED' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateStatus(order.id, 'DELIVERED');
+                                }}
+                                disabled={updatingStatus === order.id}
+                                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm rounded-lg transition-colors"
+                              >
+                                Marcar Entregado
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t border-gray-700">
                         <div className="text-xs sm:text-sm text-gray-400">
                           {order.paidAt ? (

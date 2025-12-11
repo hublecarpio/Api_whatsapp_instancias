@@ -938,6 +938,60 @@ async function processWithAgent(
     });
   }
   
+  if (business.businessObjective === 'APPOINTMENTS') {
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'consultar_disponibilidad',
+        description: 'Consulta los horarios disponibles para agendar una cita en una fecha específica.',
+        parameters: {
+          type: 'object',
+          properties: {
+            fecha: {
+              type: 'string',
+              description: 'Fecha para consultar disponibilidad en formato YYYY-MM-DD'
+            }
+          },
+          required: ['fecha']
+        }
+      }
+    });
+    
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'agendar_cita',
+        description: 'Agenda una cita con el cliente en la fecha y hora especificada. Usa esta función cuando el cliente confirme que quiere agendar una cita y hayas verificado disponibilidad.',
+        parameters: {
+          type: 'object',
+          properties: {
+            fecha_hora: {
+              type: 'string',
+              description: 'Fecha y hora de la cita en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss)'
+            },
+            nombre_cliente: {
+              type: 'string',
+              description: 'Nombre completo del cliente'
+            },
+            servicio: {
+              type: 'string',
+              description: 'Tipo de servicio o motivo de la cita'
+            },
+            duracion_minutos: {
+              type: 'integer',
+              description: 'Duración de la cita en minutos (por defecto 60)'
+            },
+            notas: {
+              type: 'string',
+              description: 'Notas adicionales sobre la cita'
+            }
+          },
+          required: ['fecha_hora', 'nombre_cliente']
+        }
+      }
+    });
+  }
+  
   const modelToUse = getDefaultModel();
   
   const chatParams: any = {
@@ -1190,6 +1244,138 @@ async function processWithAgent(
           tool_call_id: toolCall.id,
           content: paymentResult
         });
+        continue;
+      }
+      
+      if (toolName === 'consultar_disponibilidad') {
+        const args = JSON.parse(fn.arguments);
+        const fecha = args.fecha;
+        
+        console.log(`[APPOINTMENT] Checking availability for ${fecha}`);
+        
+        try {
+          const response = await axios.get(
+            `${process.env.CORE_API_URL || 'http://localhost:3001'}/appointments/internal/availability`,
+            {
+              params: { businessId, date: fecha },
+              headers: { 'x-internal-secret': INTERNAL_AGENT_SECRET }
+            }
+          );
+          
+          const data = response.data;
+          let resultContent: string;
+          
+          if (data.available) {
+            const availableSlots = data.slots.filter((s: any) => s.available);
+            resultContent = JSON.stringify({
+              disponible: true,
+              horario_atencion: data.businessHours,
+              horarios_disponibles: availableSlots.map((s: any) => s.time),
+              horarios_ocupados: data.existingAppointments,
+              nota: availableSlots.length > 0 
+                ? `Hay ${availableSlots.length} horarios disponibles` 
+                : 'Todos los horarios están ocupados para esta fecha'
+            });
+          } else {
+            resultContent = JSON.stringify({
+              disponible: false,
+              razon: data.reason || 'No hay disponibilidad para esta fecha'
+            });
+          }
+          
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: resultContent
+          });
+        } catch (error: any) {
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ error: 'Error consultando disponibilidad', detalle: error.message })
+          });
+        }
+        continue;
+      }
+      
+      if (toolName === 'agendar_cita') {
+        const args = JSON.parse(fn.arguments);
+        const fechaHora = args.fecha_hora;
+        const nombreCliente = args.nombre_cliente;
+        const servicio = args.servicio || '';
+        const duracion = args.duracion_minutos || 60;
+        const notas = args.notas || '';
+        
+        console.log(`[APPOINTMENT] Scheduling for ${fechaHora}, client: ${nombreCliente}`);
+        
+        try {
+          const response = await axios.post(
+            `${process.env.CORE_API_URL || 'http://localhost:3001'}/appointments/internal/schedule`,
+            {
+              businessId,
+              contactPhone,
+              contactName: nombreCliente,
+              scheduledAt: fechaHora,
+              durationMinutes: duracion,
+              service: servicio,
+              notes: notas
+            },
+            {
+              headers: { 'x-internal-secret': INTERNAL_AGENT_SECRET }
+            }
+          );
+          
+          const data = response.data;
+          let resultContent: string;
+          
+          if (data.success) {
+            const apt = data.appointment;
+            const scheduledDate = new Date(apt.scheduledAt);
+            const dateStr = scheduledDate.toLocaleDateString('es-PE', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            });
+            const timeStr = scheduledDate.toLocaleTimeString('es-PE', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            });
+            
+            resultContent = JSON.stringify({
+              exito: true,
+              cita_id: apt.id,
+              fecha: dateStr,
+              hora: timeStr,
+              duracion: `${apt.durationMinutes} minutos`,
+              servicio: apt.service || 'No especificado',
+              mensaje: `Cita agendada exitosamente para ${dateStr} a las ${timeStr}`
+            });
+            console.log(`[APPOINTMENT] Created successfully: ${apt.id}`);
+          } else {
+            resultContent = JSON.stringify({
+              exito: false,
+              error: data.error || 'No se pudo agendar la cita'
+            });
+            console.log(`[APPOINTMENT] Failed: ${data.error}`);
+          }
+          
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: resultContent
+          });
+        } catch (error: any) {
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ 
+              exito: false, 
+              error: 'Error al agendar la cita', 
+              detalle: error.message 
+            })
+          });
+        }
         continue;
       }
       

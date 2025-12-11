@@ -17,18 +17,36 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     router.push('/login');
   };
 
-  const links = [
+  const businessObjective = (currentBusiness as any)?.businessObjective || 'SALES';
+  
+  const baseLinks = [
     { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: '💬' },
     { href: '/dashboard/templates', label: 'Templates', icon: '📄' },
+  ];
+  
+  const salesLinks = [
     { href: '/dashboard/products', label: 'Productos', icon: '📦' },
     { href: '/dashboard/orders', label: 'Pedidos', icon: '🛒' },
+  ];
+  
+  const appointmentLinks = [
+    { href: '/dashboard/appointments', label: 'Citas', icon: '📅' },
+  ];
+  
+  const commonLinks = [
     { href: '/dashboard/prompt', label: 'Agente IA', icon: '🤖' },
     { href: '/dashboard/chat', label: 'Chat', icon: '💭' },
     { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' },
     { href: '/dashboard/reminders', label: 'Seguimientos', icon: '⏰' },
     { href: '/dashboard/billing', label: 'Facturacion', icon: '💳' }
+  ];
+  
+  const links = [
+    ...baseLinks,
+    ...(businessObjective === 'APPOINTMENTS' ? appointmentLinks : salesLinks),
+    ...commonLinks
   ];
 
   const getStatusInfo = () => {

@@ -36,32 +36,41 @@ enum SubscriptionStatus {
   CANCELED
 }
 
-model Business {
-  id             String             @id @default(uuid())
-  userId         String
-  name           String
-  description    String?
-  industry       String?
-  logoUrl        String?
-  openaiApiKey   String?
-  openaiModel    String?            @default("gpt-4.1-mini")
-  botEnabled     Boolean            @default(true)
-  timezone       String             @default("America/Lima")
-  agentVersion   String             @default("v1")
-  agentV2Config  Json?
-  currencyCode   String             @default("PEN")
-  currencySymbol String             @default("S/.")
-  createdAt      DateTime           @default(now())
+enum BusinessObjective {
+  SALES
+  APPOINTMENTS
+}
 
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instances      WhatsAppInstance[]
-  products       Product[]
-  policy         Policy?
-  promptMaster   AgentPrompt?
-  messages       MessageLog[]
-  tags           Tag[]
-  followUpConfig FollowUpConfig?
-  reminders      Reminder[]
+model Business {
+  id                String             @id @default(uuid())
+  userId            String
+  name              String
+  description       String?
+  industry          String?
+  logoUrl           String?
+  openaiApiKey      String?
+  openaiModel       String?            @default("gpt-4.1-mini")
+  botEnabled        Boolean            @default(true)
+  timezone          String             @default("America/Lima")
+  agentVersion      String             @default("v1")
+  agentV2Config     Json?
+  currencyCode      String             @default("PEN")
+  currencySymbol    String             @default("S/.")
+  businessObjective BusinessObjective  @default(SALES)
+  appointmentConfig Json?
+  createdAt         DateTime           @default(now())
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instances         WhatsAppInstance[]
+  products          Product[]
+  policy            Policy?
+  promptMaster      AgentPrompt?
+  messages          MessageLog[]
+  tags              Tag[]
+  followUpConfig    FollowUpConfig?
+  reminders         Reminder[]
+  appointments      Appointment[]
+  availability      BusinessAvailability[]
 }
 
 enum WhatsAppProvider {
@@ -413,28 +422,34 @@ enum OrderStatus {
 }
 
 model Order {
-  id                   String      @id @default(uuid())
-  businessId           String
-  contactPhone         String
-  contactName          String?
-  email                String?
-  shippingAddress      String?
-  shippingCity         String?
-  shippingState        String?
-  shippingZip          String?
-  shippingCountry      String?
-  notes                String?
-  totalAmount          Float
-  currencyCode         String      @default("PEN")
-  currencySymbol       String      @default("S/.")
-  status               OrderStatus @default(PENDING_PAYMENT)
-  stripeSessionId      String?     @unique
+  id                    String      @id @default(uuid())
+  businessId            String
+  contactPhone          String
+  contactName           String?
+  email                 String?
+  shippingAddress       String?
+  shippingCity          String?
+  shippingState         String?
+  shippingZip           String?
+  shippingCountry       String?
+  notes                 String?
+  totalAmount           Float
+  currencyCode          String      @default("PEN")
+  currencySymbol        String      @default("S/.")
+  status                OrderStatus @default(PENDING_PAYMENT)
+  stripeSessionId       String?     @unique
   stripePaymentIntentId String?
-  paidAt               DateTime?
-  voucherImageUrl      String?
-  voucherReceivedAt    DateTime?
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
+  paidAt                DateTime?
+  voucherImageUrl       String?
+  voucherReceivedAt     DateTime?
+  deliveryAgentName     String?
+  deliveryAgentPhone    String?
+  deliveryNotes         String?
+  deliveredAt           DateTime?
+  preparationStartedAt  DateTime?
+  shippedAt             DateTime?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
 
   items OrderItem[]
 
@@ -593,4 +608,56 @@ model KnowledgeDocument {
   @@index([businessId])
   @@index([businessId, enabled])
   @@index([businessId, type])
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+model Appointment {
+  id                 String            @id @default(uuid())
+  businessId         String
+  contactPhone       String
+  contactName        String?
+  scheduledAt        DateTime
+  durationMinutes    Int               @default(60)
+  status             AppointmentStatus @default(PENDING)
+  service            String?
+  notes              String?
+  reminderSentAt     DateTime?
+  confirmedAt        DateTime?
+  cancelledAt        DateTime?
+  completedAt        DateTime?
+  cancellationReason String?
+  createdBy          String            @default("agent")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, scheduledAt])
+  @@index([businessId, status])
+  @@index([businessId, contactPhone])
+  @@index([scheduledAt])
+}
+
+model BusinessAvailability {
+  id          String   @id @default(uuid())
+  businessId  String
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  isBlocked   Boolean  @default(false)
+  blockDate   DateTime?
+  blockReason String?
+  createdAt   DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, dayOfWeek])
+  @@index([businessId, blockDate])
 }

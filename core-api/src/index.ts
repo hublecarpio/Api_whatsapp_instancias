@@ -22,6 +22,7 @@ import ordersRoutes from './routes/orders.js';
 import extractionRoutes from './routes/extraction.js';
 import agentV2Routes from './routes/agentV2.js';
 import knowledgeRoutes from './routes/knowledge.js';
+import appointmentsRoutes from './routes/appointments.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
 
@@ -91,6 +92,7 @@ app.use('/orders', ordersRoutes);
 app.use('/extraction', extractionRoutes);
 app.use('/agent-v2', agentV2Routes);
 app.use('/knowledge', knowledgeRoutes);
+app.use('/appointments', appointmentsRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
