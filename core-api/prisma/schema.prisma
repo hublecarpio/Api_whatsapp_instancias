@@ -377,16 +377,21 @@ model TokenUsage {
 }
 
 model ContactSettings {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   businessId   String
+  instanceId   String?
   contactPhone String
-  botDisabled  Boolean  @default(false)
+  contactName  String?
+  botDisabled  Boolean   @default(false)
   notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  @@unique([businessId, contactPhone])
+  @@unique([businessId, contactPhone, instanceId])
   @@index([businessId, botDisabled])
+  @@index([businessId, instanceId])
+  @@index([instanceId, archivedAt])
 }
 
 enum OrderStatus {
