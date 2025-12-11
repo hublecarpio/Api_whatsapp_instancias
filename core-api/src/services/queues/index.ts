@@ -5,7 +5,8 @@ export const QUEUE_NAMES = {
   REMINDERS: 'efficore-reminders',
   MESSAGE_BUFFER: 'efficore-message-buffer',
   WHATSAPP_INCOMING: 'efficore-whatsapp-incoming',
-  INACTIVITY_CHECK: 'efficore-inactivity-check'
+  INACTIVITY_CHECK: 'efficore-inactivity-check',
+  AI_RESPONSE: 'efficore-ai-response'
 } as const;
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6389';
@@ -70,10 +71,22 @@ export interface InactivityCheckJobData {
   configId: string;
 }
 
+export interface AIResponseJobData {
+  businessId: string;
+  contactPhone: string;
+  contactName: string;
+  messages: string[];
+  phone: string;
+  instanceId?: string;
+  instanceBackendId?: string;
+  priority?: 'high' | 'normal' | 'low';
+}
+
 let reminderQueue: Queue<ReminderJobData> | null = null;
 let messageBufferQueue: Queue<MessageBufferJobData> | null = null;
 let whatsappIncomingQueue: Queue<WhatsAppIncomingJobData> | null = null;
 let inactivityCheckQueue: Queue<InactivityCheckJobData> | null = null;
+let aiResponseQueue: Queue<AIResponseJobData> | null = null;
 
 export function initializeQueues(): void {
   const conn = getConnection();
@@ -146,8 +159,26 @@ export function initializeQueues(): void {
       }
     }
   });
+
+  aiResponseQueue = new Queue<AIResponseJobData>(QUEUE_NAMES.AI_RESPONSE, {
+    connection: conn,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 2000
+      },
+      removeOnComplete: {
+        age: 3600,
+        count: 2000
+      },
+      removeOnFail: {
+        age: 24 * 3600
+      }
+    }
+  });
   
-  console.log('BullMQ queues initialized');
+  console.log('BullMQ queues initialized (including AI Response queue)');
 }
 
 export function areQueuesInitialized(): boolean {
@@ -164,6 +195,10 @@ export function getMessageBufferQueue(): Queue<MessageBufferJobData> | null {
 
 export function getInactivityCheckQueue(): Queue<InactivityCheckJobData> | null {
   return inactivityCheckQueue;
+}
+
+export function getAIResponseQueue(): Queue<AIResponseJobData> | null {
+  return aiResponseQueue;
 }
 
 export function getQueueConnection(): Redis {
@@ -205,6 +240,7 @@ export async function closeQueues(): Promise<void> {
   if (messageBufferQueue) closeTasks.push(messageBufferQueue.close());
   if (whatsappIncomingQueue) closeTasks.push(whatsappIncomingQueue.close());
   if (inactivityCheckQueue) closeTasks.push(inactivityCheckQueue.close());
+  if (aiResponseQueue) closeTasks.push(aiResponseQueue.close());
   
   await Promise.all(closeTasks);
   
@@ -220,6 +256,7 @@ export async function closeQueues(): Promise<void> {
   messageBufferQueue = null;
   whatsappIncomingQueue = null;
   inactivityCheckQueue = null;
+  aiResponseQueue = null;
   
   console.log('All queues closed');
 }
