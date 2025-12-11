@@ -1,6 +1,7 @@
 import prisma from './prisma.js';
 import axios from 'axios';
 import { geminiService } from './gemini.js';
+import { assignNextRoundRobinAdvisor } from '../routes/advisor.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
@@ -108,6 +109,12 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
       }
     }
   });
+
+  try {
+    await assignNextRoundRobinAdvisor(businessId, cleanPhone);
+  } catch (err) {
+    console.error('[ROUND-ROBIN] Failed to assign advisor:', err);
+  }
 
   if (!business.botEnabled) {
     console.log('Bot disabled for business:', businessId);

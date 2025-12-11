@@ -348,4 +348,119 @@ router.get('/my-contacts/:businessId', async (req: AuthRequest, res: Response) =
   }
 });
 
+router.get('/round-robin/:businessId', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId },
+      select: {
+        roundRobinEnabled: true,
+        roundRobinAdvisors: true,
+        roundRobinLastIndex: true
+      }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    res.json(business);
+  } catch (error: any) {
+    console.error('Get round-robin config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/round-robin/:businessId', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { enabled, advisorIds } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (advisorIds) {
+      const validAdvisors = await prisma.user.findMany({
+        where: {
+          id: { in: advisorIds },
+          parentUserId: req.userId,
+          role: 'ASESOR'
+        },
+        select: { id: true }
+      });
+      
+      const validIds = validAdvisors.map(a => a.id);
+      
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          roundRobinEnabled: enabled ?? business.roundRobinEnabled,
+          roundRobinAdvisors: validIds,
+          roundRobinLastIndex: 0
+        }
+      });
+    } else {
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          roundRobinEnabled: enabled ?? business.roundRobinEnabled
+        }
+      });
+    }
+    
+    res.json({ message: 'Round-robin configuration updated' });
+  } catch (error: any) {
+    console.error('Update round-robin config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export async function assignNextRoundRobinAdvisor(businessId: string, contactPhone: string): Promise<string | null> {
+  const business = await prisma.business.findUnique({
+    where: { id: businessId },
+    select: {
+      roundRobinEnabled: true,
+      roundRobinAdvisors: true,
+      roundRobinLastIndex: true
+    }
+  });
+  
+  if (!business || !business.roundRobinEnabled || business.roundRobinAdvisors.length === 0) {
+    return null;
+  }
+  
+  const existingAssignment = await prisma.contactAssignment.findUnique({
+    where: { businessId_contactPhone: { businessId, contactPhone } }
+  });
+  
+  if (existingAssignment) {
+    return existingAssignment.userId;
+  }
+  
+  const nextIndex = business.roundRobinLastIndex % business.roundRobinAdvisors.length;
+  const nextAdvisorId = business.roundRobinAdvisors[nextIndex];
+  
+  await prisma.$transaction([
+    prisma.contactAssignment.create({
+      data: {
+        businessId,
+        contactPhone,
+        userId: nextAdvisorId
+      }
+    }),
+    prisma.business.update({
+      where: { id: businessId },
+      data: { roundRobinLastIndex: (nextIndex + 1) % business.roundRobinAdvisors.length }
+    })
+  ]);
+  
+  return nextAdvisorId;
+}
+
 export default router;

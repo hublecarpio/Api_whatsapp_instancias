@@ -232,6 +232,9 @@ model Business {
   webhookUrl        String?
   webhookEvents     String[]           @default([])
   webhookSecret     String?
+  roundRobinEnabled Boolean            @default(false)
+  roundRobinAdvisors String[]          @default([])
+  roundRobinLastIndex Int              @default(0)
   createdAt         DateTime           @default(now())
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)

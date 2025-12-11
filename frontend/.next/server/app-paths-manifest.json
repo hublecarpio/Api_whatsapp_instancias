@@ -1,1 +1,7 @@
-{}
+{
+  "/asesor/page": "app/asesor/page.js",
+  "/advisor-signup/page": "app/advisor-signup/page.js",
+  "/login/page": "app/login/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/chat/page": "app/dashboard/chat/page.js"
+}
