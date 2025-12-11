@@ -2193,9 +2193,6 @@ function CommandCenterTab({ token }: { token: string }) {
         <div className="card bg-gradient-to-br from-purple-500/10 to-transparent border-purple-500/30 p-3 sm:p-4">
           <p className="text-xs sm:text-sm text-gray-400">Costo IA (Hoy)</p>
           <p className="text-lg sm:text-2xl font-bold text-purple-400">${(data.activity.tokenCostToday || 0).toFixed(2)}</p>
-          {data.activity.tokenCostTotal > 0 && (
-            <p className="text-[10px] text-gray-500">Total: ${(data.activity.tokenCostTotal || 0).toFixed(2)}</p>
-          )}
         </div>
         <div className="card bg-gradient-to-br from-accent-warning/10 to-transparent border-accent-warning/30 p-3 sm:p-4">
           <p className="text-xs sm:text-sm text-gray-400">Reminders</p>
