@@ -101,7 +101,7 @@ const LINK_STATUS_COLORS: Record<string, string> = {
 export default function OrdersPage() {
   const { currentBusiness } = useBusinessStore();
   const { user } = useAuthStore();
-  const isPro = user?.isPro ?? false;
+  const canUsePaymentLinks = user?.paymentLinkEnabled ?? false;
   const [activeTab, setActiveTab] = useState<'orders' | 'links' | 'extraction'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([]);
@@ -277,10 +277,10 @@ export default function OrdersPage() {
     <div className="p-3 sm:p-6">
       <div className="mb-4 sm:mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-white">
-          {isPro ? 'Pedidos y Enlaces' : 'Pedidos y Vouchers'}
+          {canUsePaymentLinks ? 'Pedidos y Enlaces' : 'Pedidos y Vouchers'}
         </h1>
         <p className="text-gray-400 text-sm mt-1">
-          {isPro ? 'Gestiona pedidos y enlaces de pago' : 'Gestiona pedidos y confirma pagos con voucher'}
+          {canUsePaymentLinks ? 'Gestiona pedidos y enlaces de pago' : 'Gestiona pedidos y confirma pagos con voucher'}
         </p>
       </div>
 
@@ -314,7 +314,7 @@ export default function OrdersPage() {
               <p className="text-gray-400 text-xs">Entregados</p>
               <p className="text-2xl font-bold text-emerald-400">{metrics.delivered}</p>
             </div>
-            {!isPro && withVoucher.length > 0 && (
+            {!canUsePaymentLinks && withVoucher.length > 0 && (
               <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 col-span-2">
                 <p className="text-gray-400 text-xs">Vouchers por Confirmar</p>
                 <p className="text-2xl font-bold text-orange-400">{withVoucher.length}</p>
@@ -336,7 +336,7 @@ export default function OrdersPage() {
           >
             Pedidos ({orders.length})
           </button>
-          {isPro && (
+          {canUsePaymentLinks && (
             <button
               onClick={() => { setActiveTab('links'); setExpandedOrderId(null); setExpandedLinkId(null); }}
               className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
@@ -382,7 +382,7 @@ export default function OrdersPage() {
               </select>
             </>
           )}
-          {isPro && activeTab === 'links' && (
+          {canUsePaymentLinks && activeTab === 'links' && (
             <select
               value={linkStatusFilter}
               onChange={(e) => setLinkStatusFilter(e.target.value)}

@@ -200,7 +200,9 @@ router.post('/login', async (req: Request, res: Response) => {
         id: user.id, 
         name: user.name, 
         email: user.email,
-        emailVerified: user.emailVerified
+        emailVerified: user.emailVerified,
+        isPro: user.isPro,
+        paymentLinkEnabled: user.paymentLinkEnabled
       },
       token
     });
@@ -316,7 +318,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         subscriptionStatus: true,
         trialEndAt: true,
         stripeCustomerId: true,
-        isPro: true
+        isPro: true,
+        paymentLinkEnabled: true
       }
     });
     
@@ -328,7 +331,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       ...user,
       subscriptionStatus: user.subscriptionStatus.toLowerCase(),
       needsSubscription: user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED',
-      isPro: user.isPro
+      isPro: user.isPro,
+      paymentLinkEnabled: user.paymentLinkEnabled
     });
   } catch (error) {
     console.error('Get me error:', error);

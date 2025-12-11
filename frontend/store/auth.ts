@@ -8,6 +8,7 @@ interface User {
   subscriptionStatus?: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled';
   needsSubscription?: boolean;
   isPro?: boolean;
+  paymentLinkEnabled?: boolean;
 }
 
 interface AuthState {
