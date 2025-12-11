@@ -1,0 +1,50 @@
+ => [builder 4/5] COPY . .                                                                                                                                             0.7s 
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             30.3s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+1.607                                                                                                                                                                       
+1.607 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+1.607 > next build                                                                                                                                                          
+1.607                                                                                                                                                                       
+3.043 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+3.043 This information is used to shape Next.js' roadmap and prioritize features.
+3.043 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+3.043 https://nextjs.org/telemetry
+3.043 
+3.129   ▲ Next.js 14.2.16
+3.129 
+3.243    Creating an optimized production build ...
+22.70  ✓ Compiled successfully
+22.70    Linting and checking validity of types ...
+30.16 Failed to compile.
+30.16 
+30.16 ./app/dashboard/prompt/page.tsx:250:62
+30.16 Type error: Argument of type 'Partial<AgentFile>' is not assignable to parameter of type '{ name?: string | undefined; description?: string | undefined; triggerKeywords?: string | undefined; triggerContext?: string | undefined; order?: number | undefined; enabled?: boolean | undefined; }'.
+30.16   Types of property 'description' are incompatible.
+30.16     Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+30.16       Type 'null' is not assignable to type 'string | undefined'.
+30.16 
+30.16   248 |     
+30.16   249 |     try {
+30.16 > 250 |       await agentFilesApi.update(currentBusiness.id, fileId, data);
+30.16       |                                                              ^
+30.16   251 |       setSuccess('Archivo actualizado');
+30.16   252 |       loadAgentFiles();
+30.16   253 |       setEditingFile(null);
+30.23 npm notice
+30.23 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+30.23 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+30.23 npm notice To update run: npm install -g npm@11.7.0
+30.23 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+[+] Building 42.9s (25/25) FINISHED                                                                                                                          docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s

@@ -247,7 +247,15 @@ export default function PromptPage() {
     if (!currentBusiness) return;
     
     try {
-      await agentFilesApi.update(currentBusiness.id, fileId, data);
+      const cleanData: { name?: string; description?: string; triggerKeywords?: string; triggerContext?: string; order?: number; enabled?: boolean } = {};
+      if (data.name !== undefined && data.name !== null) cleanData.name = data.name;
+      if (data.description !== undefined && data.description !== null) cleanData.description = data.description;
+      if (data.triggerKeywords !== undefined && data.triggerKeywords !== null) cleanData.triggerKeywords = data.triggerKeywords;
+      if (data.triggerContext !== undefined && data.triggerContext !== null) cleanData.triggerContext = data.triggerContext;
+      if (data.order !== undefined) cleanData.order = data.order;
+      if (data.enabled !== undefined) cleanData.enabled = data.enabled;
+      
+      await agentFilesApi.update(currentBusiness.id, fileId, cleanData);
       setSuccess('Archivo actualizado');
       loadAgentFiles();
       setEditingFile(null);
