@@ -116,6 +116,22 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             return res.json({ received: true, ignored: 'group_message' });
           }
           
+          const providerMessageId = data.key?.id || data.messageId || data.id || null;
+          
+          if (providerMessageId) {
+            const existingMessage = await prisma.messageLog.findFirst({
+              where: {
+                businessId,
+                providerMessageId
+              }
+            });
+            
+            if (existingMessage) {
+              console.log(`[WEBHOOK] Duplicate message detected, skipping: ${providerMessageId}`);
+              return res.json({ received: true, ignored: 'duplicate_message' });
+            }
+          }
+          
           const instance = await prisma.whatsAppInstance.findFirst({
             where: { businessId }
           });
@@ -168,6 +184,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             data: {
               businessId,
               instanceId: instance?.id,
+              providerMessageId: providerMessageId || undefined,
               direction: isFromMe ? 'outbound' : 'inbound',
               sender: isFromMe ? undefined : contactPhone,
               recipient: isFromMe ? contactPhone : undefined,

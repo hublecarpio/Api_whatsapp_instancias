@@ -44,6 +44,18 @@ export async function addToMessageBuffer(
   const timeout = setTimeout(async () => {
     pendingBuffers.delete(bufferKey);
     
+    const jobId = `buffer-${bufferKey}`;
+    const existingJobInQueue = await queue.getJob(jobId);
+    if (existingJobInQueue) {
+      const state = await existingJobInQueue.getState();
+      if (state === 'completed' || state === 'failed') {
+        await existingJobInQueue.remove();
+      } else {
+        console.log(`[BUFFER] Job ${jobId} already exists in state ${state}, skipping`);
+        return;
+      }
+    }
+    
     await queue.add(
       `buffer-${bufferKey}`,
       {
@@ -53,7 +65,7 @@ export async function addToMessageBuffer(
         messages
       },
       {
-        jobId: `buffer-${bufferKey}-${Date.now()}`
+        jobId
       }
     );
   }, bufferDelayMs);

@@ -240,18 +240,21 @@ model MessageBuffer {
 }
 
 model MessageLog {
-  id         String   @id @default(uuid())
-  businessId String
-  instanceId String?
-  direction  String
-  sender     String?
-  recipient  String?
-  message    String?
-  mediaUrl   String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  id                String   @id @default(uuid())
+  businessId        String
+  instanceId        String?
+  providerMessageId String?
+  direction         String
+  sender            String?
+  recipient         String?
+  message           String?
+  mediaUrl          String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, providerMessageId])
 }
 
 model Tag {

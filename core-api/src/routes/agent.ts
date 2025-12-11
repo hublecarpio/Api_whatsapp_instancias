@@ -60,6 +60,71 @@ async function internalOrAuthMiddleware(req: InternalRequest, res: Response, nex
 }
 
 const activeBuffers = new Map<string, NodeJS.Timeout>();
+const processingBuffers = new Set<string>();
+
+async function processExpiredBuffers() {
+  try {
+    const expiredBuffers = await prisma.messageBuffer.findMany({
+      where: {
+        expiresAt: { lte: new Date() }
+      }
+    });
+    
+    for (const buffer of expiredBuffers) {
+      const bufferKey = `${buffer.businessId}:${buffer.contactPhone}`;
+      
+      if (activeBuffers.has(bufferKey) || processingBuffers.has(bufferKey)) {
+        continue;
+      }
+      
+      processingBuffers.add(bufferKey);
+      
+      try {
+        console.log(`[BUFFER-WORKER] Processing expired buffer for ${bufferKey}`);
+        const messages = buffer.messages as string[];
+        
+        const business = await prisma.business.findUnique({
+          where: { id: buffer.businessId }
+        });
+        
+        const instance = await prisma.whatsAppInstance.findFirst({
+          where: { businessId: buffer.businessId }
+        });
+        
+        if (business && business.botEnabled) {
+          await prisma.messageBuffer.delete({
+            where: { id: buffer.id }
+          });
+          
+          const contactJid = `${buffer.contactPhone}@s.whatsapp.net`;
+          const resolvedBackendId = instance?.instanceBackendId || `biz_${buffer.businessId.substring(0, 8)}`;
+          
+          await processWithAgent(
+            buffer.businessId,
+            messages,
+            contactJid,
+            buffer.contactPhone,
+            '',
+            instance?.id,
+            resolvedBackendId
+          );
+        } else {
+          await prisma.messageBuffer.delete({
+            where: { id: buffer.id }
+          });
+        }
+      } catch (error) {
+        console.error(`[BUFFER-WORKER] Error processing buffer ${bufferKey}:`, error);
+      } finally {
+        processingBuffers.delete(bufferKey);
+      }
+    }
+  } catch (error) {
+    console.error('[BUFFER-WORKER] Error in buffer worker:', error);
+  }
+}
+
+setInterval(processExpiredBuffers, 5000);
 
 const S3_BASE_URL = process.env.MINIO_PUBLIC_URL || 'https://memoriaback.iamhuble.space/n8nback';
 
