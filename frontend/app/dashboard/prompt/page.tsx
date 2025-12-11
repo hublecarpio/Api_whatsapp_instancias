@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
-import { promptApi, toolsApi, businessApi, agentV2Api, agentFilesApi } from '@/lib/api';
+import { promptApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi } from '@/lib/api';
 import { SkillsV2Panel, PromptsV2Panel, LeadMemoryPanel, RulesLearnedPanel, KnowledgePanel } from '@/components/AgentV2';
 
 interface ToolParameter {
@@ -148,7 +148,15 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'skills' | 'prompts' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config'>('prompt');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'skills' | 'prompts' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config' | 'api'>('prompt');
+  
+  const [apiKeyInfo, setApiKeyInfo] = useState<{ hasApiKey: boolean; prefix: string | null; createdAt: string | null } | null>(null);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [webhookConfig, setWebhookConfig] = useState<{ webhookUrl: string | null; webhookEvents: string[]; webhookSecret: string | null; availableEvents: string[] } | null>(null);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
+  const [loadingApiKey, setLoadingApiKey] = useState(false);
+  const [loadingWebhook, setLoadingWebhook] = useState(false);
   
   const [agentFiles, setAgentFiles] = useState<AgentFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
@@ -185,8 +193,92 @@ export default function PromptPage() {
   useEffect(() => {
     if (currentBusiness && agentVersion === 'v2') {
       loadV2Data();
+      loadApiKeyInfo();
+      loadWebhookConfig();
     }
   }, [agentVersion]);
+
+  const loadApiKeyInfo = async () => {
+    if (!currentBusiness) return;
+    try {
+      const res = await agentApiKeyApi.get(currentBusiness.id);
+      setApiKeyInfo(res.data);
+    } catch (err) {
+      console.error('Error loading API key info:', err);
+    }
+  };
+
+  const loadWebhookConfig = async () => {
+    if (!currentBusiness) return;
+    try {
+      const res = await agentWebhookApi.get(currentBusiness.id);
+      setWebhookConfig(res.data);
+      setWebhookUrl(res.data.webhookUrl || '');
+      setSelectedEvents(res.data.webhookEvents || []);
+    } catch (err) {
+      console.error('Error loading webhook config:', err);
+    }
+  };
+
+  const handleGenerateApiKey = async () => {
+    if (!currentBusiness) return;
+    if (apiKeyInfo?.hasApiKey && !confirm('Esto revocara la API key actual y generara una nueva. Continuar?')) return;
+    
+    setLoadingApiKey(true);
+    setError('');
+    try {
+      const res = await agentApiKeyApi.create(currentBusiness.id);
+      setNewApiKey(res.data.apiKey);
+      setApiKeyInfo({ hasApiKey: true, prefix: res.data.prefix, createdAt: res.data.createdAt });
+      setSuccess('API key generada. Guardala ahora, no podras verla de nuevo.');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al generar API key');
+    } finally {
+      setLoadingApiKey(false);
+    }
+  };
+
+  const handleRevokeApiKey = async () => {
+    if (!currentBusiness || !confirm('Esto revocara la API key. Las integraciones que la usen dejaran de funcionar. Continuar?')) return;
+    
+    setLoadingApiKey(true);
+    setError('');
+    try {
+      await agentApiKeyApi.revoke(currentBusiness.id);
+      setApiKeyInfo({ hasApiKey: false, prefix: null, createdAt: null });
+      setNewApiKey(null);
+      setSuccess('API key revocada');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al revocar API key');
+    } finally {
+      setLoadingApiKey(false);
+    }
+  };
+
+  const handleSaveWebhook = async () => {
+    if (!currentBusiness) return;
+    
+    setLoadingWebhook(true);
+    setError('');
+    try {
+      const res = await agentWebhookApi.update(currentBusiness.id, {
+        webhookUrl: webhookUrl || null,
+        webhookEvents: selectedEvents
+      });
+      setWebhookConfig(res.data);
+      setSuccess('Webhook configurado correctamente');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al configurar webhook');
+    } finally {
+      setLoadingWebhook(false);
+    }
+  };
+
+  const handleToggleEvent = (event: string) => {
+    setSelectedEvents(prev => 
+      prev.includes(event) ? prev.filter(e => e !== event) : [...prev, event]
+    );
+  };
 
   const loadData = async () => {
     if (!currentBusiness) return;
@@ -902,6 +994,14 @@ export default function PromptPage() {
             }`}
           >
             Configuracion
+          </button>
+          <button
+            onClick={() => setActiveV2Tab('api')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'api' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            API & Webhooks
           </button>
         </div>
       )}
@@ -1676,6 +1776,144 @@ export default function PromptPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'api' && (
+        <div className="space-y-6">
+          <div className="card">
+            <h2 className="text-lg font-semibold text-white mb-2">API Key</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Genera una API key para acceder a los endpoints de tu negocio desde aplicaciones externas.
+            </p>
+
+            {newApiKey && (
+              <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-4 mb-4">
+                <p className="text-sm text-accent-success font-medium mb-2">Tu nueva API key (guardala ahora):</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-dark-surface p-2 rounded text-xs text-white font-mono break-all">
+                    {newApiKey}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(newApiKey);
+                      setSuccess('API key copiada');
+                    }}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  Esta es la unica vez que veras esta key. Guardala en un lugar seguro.
+                </p>
+              </div>
+            )}
+
+            {apiKeyInfo?.hasApiKey && !newApiKey && (
+              <div className="bg-dark-surface rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-300">API Key activa</p>
+                    <p className="text-xs text-gray-500 font-mono mt-1">{apiKeyInfo.prefix}...</p>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Creada: {apiKeyInfo.createdAt ? new Date(apiKeyInfo.createdAt).toLocaleDateString() : '-'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleGenerateApiKey}
+                disabled={loadingApiKey}
+                className="btn btn-primary"
+              >
+                {loadingApiKey ? 'Generando...' : apiKeyInfo?.hasApiKey ? 'Regenerar API Key' : 'Generar API Key'}
+              </button>
+              {apiKeyInfo?.hasApiKey && (
+                <button
+                  onClick={handleRevokeApiKey}
+                  disabled={loadingApiKey}
+                  className="btn btn-danger"
+                >
+                  Revocar
+                </button>
+              )}
+            </div>
+
+            <div className="mt-4 p-3 bg-dark-surface rounded-lg">
+              <p className="text-xs text-gray-400 mb-2">Uso:</p>
+              <code className="text-xs text-gray-300 font-mono">
+                Authorization: Bearer efk_...
+              </code>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2 className="text-lg font-semibold text-white mb-2">Webhook</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Configura un webhook para recibir notificaciones de eventos en tiempo real.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">URL del Webhook</label>
+                <input
+                  type="url"
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  placeholder="https://tu-servidor.com/webhook"
+                  className="input"
+                />
+                <p className="text-xs text-gray-500 mt-1">Debe ser HTTPS</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Eventos</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(webhookConfig?.availableEvents || ['user_message', 'agent_message', 'state_change', 'tool_call', 'stage_change']).map(event => (
+                    <label key={event} className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg cursor-pointer hover:bg-dark-hover">
+                      <input
+                        type="checkbox"
+                        checked={selectedEvents.includes(event)}
+                        onChange={() => handleToggleEvent(event)}
+                        className="w-4 h-4 rounded border-gray-600 bg-dark-hover text-neon-blue focus:ring-neon-blue"
+                      />
+                      <span className="text-sm text-gray-300">{event.replace(/_/g, ' ')}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {webhookConfig?.webhookSecret && (
+                <div className="p-3 bg-dark-surface rounded-lg">
+                  <p className="text-xs text-gray-400 mb-1">Webhook Secret (para verificar firmas):</p>
+                  <code className="text-xs text-gray-300 font-mono break-all">{webhookConfig.webhookSecret}</code>
+                </div>
+              )}
+
+              <button
+                onClick={handleSaveWebhook}
+                disabled={loadingWebhook}
+                className="btn btn-primary"
+              >
+                {loadingWebhook ? 'Guardando...' : 'Guardar Webhook'}
+              </button>
+            </div>
+          </div>
+
+          <div className="card bg-dark-surface/50">
+            <h3 className="text-sm font-semibold text-gray-300 mb-2">Formato de Eventos</h3>
+            <div className="text-xs text-gray-400 space-y-2">
+              <p><strong>user_message:</strong> Cuando un usuario envia un mensaje (incluye texto, imagenes, audio, video)</p>
+              <p><strong>agent_message:</strong> Cuando el agente responde (incluye respuesta y media enviada)</p>
+              <p><strong>state_change:</strong> Cuando cambia el estado del cliente (etapa, tags)</p>
+              <p><strong>tool_call:</strong> Cuando el agente ejecuta una herramienta</p>
+              <p><strong>stage_change:</strong> Cuando el cliente avanza de etapa</p>
+            </div>
           </div>
         </div>
       )}

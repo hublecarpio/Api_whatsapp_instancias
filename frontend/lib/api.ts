@@ -345,3 +345,19 @@ export const agentFilesApi = {
   reorder: (businessId: string, fileOrders: { id: string; order: number }[]) =>
     api.put(`/agent/files/${businessId}/reorder`, { fileOrders })
 };
+
+export const agentApiKeyApi = {
+  get: (businessId: string) =>
+    api.get(`/agent/api-key/${businessId}`),
+  create: (businessId: string) =>
+    api.post(`/agent/api-key/${businessId}`),
+  revoke: (businessId: string) =>
+    api.delete(`/agent/api-key/${businessId}`)
+};
+
+export const agentWebhookApi = {
+  get: (businessId: string) =>
+    api.get(`/agent/webhook/${businessId}`),
+  update: (businessId: string, data: { webhookUrl: string | null; webhookEvents: string[] }) =>
+    api.put(`/agent/webhook/${businessId}`, data)
+};
