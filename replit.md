@@ -25,7 +25,7 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Multimodal Response Handling**: Automatically detects and sends various media types and handles S3 shortcodes or full URLs.
 *   **Reminder/Follow-up System**: A background worker for inactivity detection and scheduling AI-generated follow-ups or manual reminders, respecting business timezones.
 *   **Redis + BullMQ Queue System**: Uses Redis and BullMQ for robust job processing, including reminders, message buffering, WhatsApp message handling, and AI response processing, with automatic fallback and retry logic.
-*   **BullMQ AI Response Queue**: High-concurrency AI processing queue (configurable via `WORKER_CONCURRENCY`, default 20) that parallelizes OpenAI API calls. Supports OpenAI Tier 4 rate limits (10,000 req/min) by processing multiple AI requests simultaneously. Includes graceful fallback to synchronous processing when Redis is unavailable. Monitor via `/agent/queue-stats` endpoint.
+*   **BullMQ AI Response Queue**: High-concurrency AI processing queue (configurable via `WORKER_CONCURRENCY`, default 40) that parallelizes OpenAI API calls. Supports OpenAI Tier 4 rate limits (10,000 req/min) by processing multiple AI requests simultaneously. Includes graceful fallback to synchronous processing when Redis is unavailable. Optimized with 120s lock duration and stalled job handling for stability. Monitor via `/agent/queue-stats` endpoint.
 *   **Stripe Billing Integration**: Implements a 7-day free trial, weekly recurring payments via Stripe Checkout, webhook handling for payment events, and automatic account suspension.
 *   **Email Verification System**: Requires email verification for users to create WhatsApp instances, with server-side enforcement, a dedicated UI, and SMTP integration.
 *   **Robust Deployment**: Dockerized services with improved health checks, database wait logic, and environment variable support.
@@ -34,7 +34,7 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Centralized OpenAI API Management**: Uses a single platform-wide OpenAI API key, allows model selection, and logs token usage for cost tracking.
 *   **Per-Contact Bot Control**: Provides two-level bot control (global and per-contact) with a `botDisabled` flag, UI toggles, and visual indicators.
 *   **Dynamic Prompt Variables**: Supports dynamic variables like `{{now}}` with configurable timezones for businesses, replaced before sending prompts to OpenAI.
-*   **Agent V2 - Multi-Agent AI System (Python/LangGraph)**: An advanced Python microservice with 3-brain architecture (Vendor → Observer → Refiner). Features 5 executable tools (search_product, payment, followup, media, crm), Redis-backed memory persistence, OpenAI embeddings for semantic product search, and dynamic learning system that saves rules per business. Restricted to Pro tier users.
+*   **Agent V2 - Multi-Agent AI System (Python/LangGraph)**: An advanced Python microservice with 3-brain architecture (Vendor → Observer → Refiner). Features 5 executable tools (search_product, payment, followup, media, crm), Redis-backed memory persistence, OpenAI embeddings for semantic product search with Redis-based embedding cache (7-day TTL), and dynamic learning system that saves rules per business. Runs with gunicorn multi-worker (configurable via `WORKERS` env, default 4) for horizontal scaling. Restricted to Pro tier users.
 *   **Production-Grade Baileys Stability**: Features Redis session state, watchdog heartbeat, rate limiting, anti-burst protection, exponential backoff, and robust error handling.
 *   **Gemini Multimedia Processing**: Integrates Google Gemini API for audio transcription, image analysis, and video analysis to enrich message context for AI.
 *   **Meta Cloud Media Upload Flow**: Handles downloading media from storage, uploading to Meta's API, and converting audio to compatible formats.
@@ -72,8 +72,8 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 ### Services That Can Scale:
 | Service | Scalable | Notes |
 |---------|----------|-------|
-| Core API | ✅ Yes | Requires Redis. Default 2 replicas. |
-| Agent V2 | ✅ Yes | Stateless with Redis memory. Default 2 replicas. |
+| Core API | ✅ Yes | Requires Redis. Default 3 replicas, WORKER_CONCURRENCY=40. |
+| Agent V2 | ✅ Yes | Stateless with Redis memory/cache. Default 2 replicas × 4 workers = 8 total. |
 | Frontend | ✅ Yes | Stateless. Default 1 replica. |
 | WhatsApp API (Baileys) | ⚠️ Limited | One instance per WhatsApp number due to session persistence. |
 | WhatsApp API (Meta Cloud) | ✅ Yes | Fully scalable via webhooks. |
@@ -88,14 +88,15 @@ docker service scale efficore_frontend=3
 ### Capacity Estimates:
 | Replicas (Core + V2) | Concurrent AI Requests | Businesses (40 clients each) |
 |----------------------|------------------------|------------------------------|
-| 2 + 2 (default) | ~80/min | 50-100 |
-| 4 + 4 | ~160/min | 100-200 |
-| 8 + 8 | ~320/min | 200-400 |
+| 3 + 2 (default) | ~200/min | 100-200 (~1,000 users) |
+| 4 + 4 | ~320/min | 200-400 |
+| 8 + 8 | ~640/min | 400-800 |
 
 ### Prerequisites for Scaling:
 1. **Redis is REQUIRED** - Without Redis, duplicate processing will occur
 2. **Database Connection Pooling** - Consider PgBouncer for >4 replicas
-3. **WORKER_CONCURRENCY** env var controls AI parallelism per Core API replica (default: 20)
+3. **WORKER_CONCURRENCY** env var controls AI parallelism per Core API replica (default: 40)
+4. **WORKERS** env var controls gunicorn workers per Agent V2 replica (default: 4)
 
 ## External Dependencies
 
