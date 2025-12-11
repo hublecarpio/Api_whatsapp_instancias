@@ -40,7 +40,8 @@ export const authApi = {
     api.post('/auth/login', data),
   me: () => api.get('/auth/me'),
   resendVerification: () => api.post('/auth/resend-verification'),
-  verifyEmail: (token: string) => api.get(`/auth/verify-email?token=${token}`)
+  verifyEmail: (token: string) => api.get(`/auth/verify-email?token=${token}`),
+  applyReferral: (code: string) => api.post('/auth/apply-referral', { code })
 };
 
 export const businessApi = {

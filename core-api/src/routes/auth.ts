@@ -319,7 +319,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         trialEndAt: true,
         stripeCustomerId: true,
         isPro: true,
-        paymentLinkEnabled: true
+        paymentLinkEnabled: true,
+        proBonusExpiresAt: true
       }
     });
     
@@ -327,12 +328,16 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    const hasActiveBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
+    
     res.json({
       ...user,
       subscriptionStatus: user.subscriptionStatus.toLowerCase(),
       needsSubscription: user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED',
-      isPro: user.isPro,
-      paymentLinkEnabled: user.paymentLinkEnabled
+      isPro: user.isPro || hasActiveBonus,
+      paymentLinkEnabled: user.paymentLinkEnabled || hasActiveBonus,
+      proBonusExpiresAt: user.proBonusExpiresAt,
+      hasActiveBonus
     });
   } catch (error) {
     console.error('Get me error:', error);

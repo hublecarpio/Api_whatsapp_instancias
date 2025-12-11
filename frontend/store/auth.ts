@@ -9,6 +9,8 @@ interface User {
   needsSubscription?: boolean;
   isPro?: boolean;
   paymentLinkEnabled?: boolean;
+  proBonusExpiresAt?: string;
+  hasActiveBonus?: boolean;
 }
 
 interface AuthState {

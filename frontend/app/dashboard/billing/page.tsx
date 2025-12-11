@@ -1,19 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { billingApi } from '@/lib/api';
+import { billingApi, authApi } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 
 interface SubscriptionStatus {
   subscriptionStatus: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled';
   trialEndAt: string | null;
   nextPayment: string | null;
   hasSubscription: boolean;
+  proBonusExpiresAt?: string | null;
+  hasActiveBonus?: boolean;
 }
 
 export default function BillingPage() {
+  const { user, updateUser } = useAuthStore();
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralMessage, setReferralMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
     loadSubscriptionStatus();
@@ -74,6 +81,32 @@ export default function BillingPage() {
       alert('Error al reactivar la suscripcion');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleApplyReferral = async () => {
+    if (!referralCode.trim()) {
+      setReferralMessage({ type: 'error', text: 'Ingresa un codigo de referido' });
+      return;
+    }
+    
+    setReferralLoading(true);
+    setReferralMessage(null);
+    
+    try {
+      const response = await authApi.applyReferral(referralCode.trim());
+      setReferralMessage({ type: 'success', text: response.data.message });
+      setReferralCode('');
+      
+      const meResponse = await authApi.me();
+      updateUser(meResponse.data);
+      
+      await loadSubscriptionStatus();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || 'Error al aplicar el codigo';
+      setReferralMessage({ type: 'error', text: errorMsg });
+    } finally {
+      setReferralLoading(false);
     }
   };
 
@@ -202,6 +235,56 @@ export default function BillingPage() {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="card mb-6">
+        <h2 className="text-lg font-semibold text-white mb-2">Codigo de Referido</h2>
+        <p className="text-gray-400 text-sm mb-4">
+          Si tienes un codigo de referido, ingrésalo aqui para obtener dias de prueba Pro gratis.
+        </p>
+        
+        {user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date() && (
+          <div className="bg-accent-primary/10 border border-accent-primary/30 rounded-lg p-4 mb-4">
+            <p className="text-accent-primary font-medium flex items-center gap-2">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Bonus Pro Activo
+            </p>
+            <p className="text-accent-primary/70 text-sm mt-1">
+              Tienes acceso Pro hasta el <strong>{formatDate(user.proBonusExpiresAt)}</strong>
+            </p>
+          </div>
+        )}
+        
+        {(!user?.proBonusExpiresAt || new Date(user.proBonusExpiresAt) <= new Date()) && (
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+              placeholder="Ingresa tu codigo"
+              className="flex-1 bg-dark-hover border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary"
+            />
+            <button
+              onClick={handleApplyReferral}
+              disabled={referralLoading}
+              className="btn btn-primary whitespace-nowrap"
+            >
+              {referralLoading ? 'Aplicando...' : 'Aplicar Codigo'}
+            </button>
+          </div>
+        )}
+        
+        {referralMessage && (
+          <div className={`mt-3 p-3 rounded-lg ${
+            referralMessage.type === 'success' 
+              ? 'bg-accent-success/10 border border-accent-success/30 text-accent-success' 
+              : 'bg-accent-error/10 border border-accent-error/30 text-accent-error'
+          }`}>
+            {referralMessage.text}
+          </div>
+        )}
       </div>
 
       <div className="card">
