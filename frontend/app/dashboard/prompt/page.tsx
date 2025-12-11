@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { promptApi, toolsApi, businessApi, agentV2Api } from '@/lib/api';
-import { SkillsV2Panel, PromptsV2Panel, LeadMemoryPanel, RulesLearnedPanel } from '@/components/AgentV2';
+import { SkillsV2Panel, PromptsV2Panel, LeadMemoryPanel, RulesLearnedPanel, KnowledgePanel } from '@/components/AgentV2';
 
 interface ToolParameter {
   name: string;
@@ -135,7 +135,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'skills' | 'prompts' | 'memory' | 'rules' | 'config'>('skills');
+  const [activeV2Tab, setActiveV2Tab] = useState<'skills' | 'prompts' | 'memory' | 'rules' | 'knowledge' | 'config'>('skills');
 
   useEffect(() => {
     if (currentBusiness) {
@@ -706,6 +706,14 @@ export default function PromptPage() {
             Reglas ({learnedRules.length})
           </button>
           <button
+            onClick={() => setActiveV2Tab('knowledge')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'knowledge' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Conocimiento
+          </button>
+          <button
             onClick={() => {
               setActiveV2Tab('config');
               setActiveTab('config');
@@ -751,6 +759,10 @@ export default function PromptPage() {
           onDeleteRule={handleDeleteRule}
           onRefresh={handleRefreshRules}
         />
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'knowledge' && (
+        <KnowledgePanel businessId={currentBusiness.id} />
       )}
 
       {agentVersion === 'v1' && activeTab === 'prompt' && (

@@ -2,9 +2,8 @@ from typing import Dict, Any, Optional, List
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 import json
-import os
 import logging
-from pathlib import Path
+import redis
 
 from ..config import get_settings
 from ..schemas.vendor_state import ObserverOutput, RefinerOutput
@@ -46,16 +45,26 @@ Responde ÚNICAMENTE con un JSON válido:
 """
 
 
+def _get_redis_client() -> Optional[redis.Redis]:
+    settings = get_settings()
+    if settings.redis_url:
+        try:
+            client = redis.from_url(settings.redis_url, decode_responses=True)
+            client.ping()
+            return client
+        except Exception as e:
+            logger.warning(f"Redis connection failed: {e}")
+    return None
+
+
 class RefinerAgent:
     def __init__(self):
         self.settings = get_settings()
         self.llm = ChatOpenAI(
             api_key=self.settings.openai_api_key,
-            model="gpt-4o-mini",
+            model=self.settings.refiner_model,
             temperature=0.3
         )
-        self.learning_dir = Path(__file__).parent.parent / "learning"
-        self.learning_dir.mkdir(exist_ok=True)
     
     async def refine(
         self,
@@ -126,13 +135,20 @@ Genera nuevas reglas basadas en este análisis. No repitas reglas existentes.
             return RefinerOutput()
     
     def _save_learning(self, business_id: str, output: RefinerOutput) -> None:
-        filepath = self.learning_dir / f"ajustes_{business_id}.json"
+        """Save learning to Redis for persistence"""
+        client = _get_redis_client()
+        
+        if client is None:
+            logger.warning("Redis not available, learning not saved")
+            return
         
         try:
+            key = f"agent_v2:rules:{business_id}"
+            
             existing_data = {"reglas": [], "respuestas": []}
-            if filepath.exists():
-                with open(filepath, "r", encoding="utf-8") as f:
-                    existing_data = json.load(f)
+            existing_raw = client.get(key)
+            if existing_raw:
+                existing_data = json.loads(existing_raw)
             
             for rule in output.nuevas_reglas:
                 if rule not in existing_data["reglas"]:
@@ -142,21 +158,28 @@ Genera nuevas reglas basadas en este análisis. No repitas reglas existentes.
                 if resp not in existing_data["respuestas"]:
                     existing_data["respuestas"].append(resp)
             
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(existing_data, f, ensure_ascii=False, indent=2)
+            existing_data["reglas"] = existing_data["reglas"][-50:]
+            existing_data["respuestas"] = existing_data["respuestas"][-30:]
             
-            logger.info(f"Saved learning for business {business_id}")
+            client.set(key, json.dumps(existing_data, ensure_ascii=False), ex=60*60*24*90)
+            
+            logger.info(f"Saved learning for business {business_id} to Redis")
             
         except Exception as e:
             logger.error(f"Error saving learning: {e}")
     
     def load_learning(self, business_id: str) -> Dict[str, Any]:
-        filepath = self.learning_dir / f"ajustes_{business_id}.json"
+        """Load learning from Redis"""
+        client = _get_redis_client()
+        
+        if client is None:
+            return {"reglas": [], "respuestas": []}
         
         try:
-            if filepath.exists():
-                with open(filepath, "r", encoding="utf-8") as f:
-                    return json.load(f)
+            key = f"agent_v2:rules:{business_id}"
+            data = client.get(key)
+            if data:
+                return json.loads(data)
         except Exception as e:
             logger.error(f"Error loading learning: {e}")
         

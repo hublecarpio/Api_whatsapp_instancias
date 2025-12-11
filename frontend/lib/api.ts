@@ -301,3 +301,18 @@ export const agentV2Api = {
   generateEmbeddings: (businessId: string) =>
     api.post(`/agent-v2/embeddings/${businessId}`)
 };
+
+export const knowledgeApi = {
+  list: (businessId: string) =>
+    api.get(`/knowledge/${businessId}`),
+  get: (businessId: string, documentId: string) =>
+    api.get(`/knowledge/${businessId}/${documentId}`),
+  create: (businessId: string, data: { title: string; content: string; type?: string }) =>
+    api.post(`/knowledge/${businessId}`, data),
+  update: (businessId: string, documentId: string, data: { title?: string; content?: string; type?: string; enabled?: boolean }) =>
+    api.put(`/knowledge/${businessId}/${documentId}`, data),
+  delete: (businessId: string, documentId: string) =>
+    api.delete(`/knowledge/${businessId}/${documentId}`),
+  search: (businessId: string, query: string, limit?: number) =>
+    api.post(`/knowledge/${businessId}/search`, { query, limit })
+};

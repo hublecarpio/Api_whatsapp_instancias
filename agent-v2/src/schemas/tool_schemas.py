@@ -76,3 +76,15 @@ class CRMOutput(BaseModel):
     action_performed: Optional[str] = None
     message: Optional[str] = None
     updated_data: Optional[Dict[str, Any]] = None
+
+
+class SearchKnowledgeInput(BaseModel):
+    query: str = Field(..., description="Pregunta o tema a buscar en la base de conocimiento")
+    max_results: int = Field(default=3, description="Máximo de documentos a retornar")
+
+
+class SearchKnowledgeOutput(BaseModel):
+    success: bool
+    results: List[Dict[str, Any]] = Field(default_factory=list)
+    context: Optional[str] = None
+    message: Optional[str] = None

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 import json
@@ -36,7 +36,9 @@ def build_vendor_system_prompt(
     memory: Dict[str, Any],
     dynamic_rules: list,
     current_time: str,
-    tools_available: list
+    tools_available: list,
+    knowledge_context: Optional[str] = None,
+    observer_feedback: Optional[str] = None
 ) -> str:
     prompt = f"""Eres un agente de ventas profesional para {profile.business_name}.
 
@@ -56,24 +58,40 @@ Debes responder ÚNICAMENTE con un JSON válido en este formato:
 {{
   "accion": "respuesta" | "tool",
   "mensaje": "tu mensaje al cliente (solo si accion es 'respuesta')",
-  "nombre_tool": "search_product" | "payment" | "followup" | "media" | "crm" | null,
+  "nombre_tool": "search_product" | "payment" | "followup" | "media" | "crm" | "search_knowledge" | null,
   "input_tool": {{...}} 
 }}
 ```
-
-## HERRAMIENTAS DISPONIBLES:
 """
 
+    if observer_feedback:
+        prompt += f"""
+## CORRECCIÓN DEL SISTEMA (IMPORTANTE):
+{observer_feedback}
+Por favor, corrige tu respuesta anterior considerando este feedback.
+
+"""
+
+    prompt += "## HERRAMIENTAS DISPONIBLES:\n"
     for tool in tools_available:
         prompt += f"- **{tool['name']}**: {tool['description']}\n"
 
     prompt += """
 ## CUÁNDO USAR CADA HERRAMIENTA:
 - **search_product**: Cuando el cliente pregunta por un producto específico o quiere ver opciones
+- **search_knowledge**: Cuando el cliente pregunta algo que podría estar en la documentación del negocio
 - **payment**: Cuando el cliente confirma que quiere comprar algo
 - **followup**: Cuando detectas que el cliente necesita tiempo para decidir
 - **media**: Cuando necesitas enviar una imagen de producto al cliente
 - **crm**: Para actualizar el estado del lead (etapa, tags, intención)
+
+"""
+
+    if knowledge_context:
+        prompt += f"""## CONTEXTO DE LA BASE DE CONOCIMIENTO:
+{knowledge_context}
+
+Usa esta información para responder preguntas del cliente cuando sea relevante.
 
 """
 
@@ -124,10 +142,10 @@ Debes responder ÚNICAMENTE con un JSON válido en este formato:
 ## DIRECTRICES FINALES:
 1. Sé profesional pero amigable
 2. Sé conciso y directo
-3. Si no tienes información, indícalo honestamente
+3. Si no tienes información, usa search_knowledge o indica honestamente que no sabes
 4. Usa emojis de forma moderada
 5. SIEMPRE responde con el JSON estructurado
-6. Si el cliente pregunta algo fuera de tu conocimiento, responde normalmente sin usar tools
+6. Si el cliente pregunta algo fuera de tu conocimiento, intenta usar search_knowledge primero
 
 RECUERDA: Tu respuesta debe ser ÚNICAMENTE el JSON estructurado, nada más.
 """
@@ -140,8 +158,13 @@ class VendorAgent:
         self.settings = get_settings()
         self.llm = ChatOpenAI(
             api_key=self.settings.openai_api_key,
-            model=self.settings.openai_model,
+            model=self.settings.vendor_model,
             temperature=0.7
+        )
+        self.refine_llm = ChatOpenAI(
+            api_key=self.settings.openai_api_key,
+            model=self.settings.refine_model,
+            temperature=0.5
         )
     
     async def process(
@@ -152,7 +175,9 @@ class VendorAgent:
         lead_memory: Dict[str, Any],
         dynamic_rules: list,
         tools_available: list,
-        sender_name: Optional[str] = None
+        sender_name: Optional[str] = None,
+        knowledge_context: Optional[str] = None,
+        observer_feedback: Optional[str] = None
     ) -> tuple[AgentAction, int]:
         current_time = get_current_time_formatted(business_profile.timezone)
         
@@ -161,12 +186,15 @@ class VendorAgent:
             memory=lead_memory,
             dynamic_rules=dynamic_rules,
             current_time=current_time,
-            tools_available=tools_available
+            tools_available=tools_available,
+            knowledge_context=knowledge_context,
+            observer_feedback=observer_feedback
         )
         
         messages = [SystemMessage(content=system_prompt)]
         
-        for msg in conversation_history[-10:]:
+        history_limit = 8
+        for msg in conversation_history[-history_limit:]:
             role = msg.get("role", "user")
             content = msg.get("content", "")
             if role == "user":
@@ -197,6 +225,52 @@ class VendorAgent:
                 accion=ActionType.RESPONSE,
                 mensaje="Lo siento, tuve un problema procesando tu mensaje. ¿Podrías repetirlo?"
             ), 0
+    
+    async def refine_with_tool_result(
+        self,
+        original_message: str,
+        tool_name: str,
+        tool_result: str,
+        current_message: str,
+        business_profile: BusinessProfile
+    ) -> tuple[str, int]:
+        """Second pass: Vendor reasons about tool result to craft better response"""
+        
+        refine_prompt = f"""Eres un agente de ventas para {business_profile.business_name}.
+
+El cliente preguntó: "{current_message}"
+
+Ejecutaste la herramienta "{tool_name}" y obtuviste este resultado:
+{tool_result}
+
+Tu mensaje original era: "{original_message or 'ninguno'}"
+
+Ahora, genera una respuesta NATURAL y CONVERSACIONAL para el cliente que:
+1. Integre la información del resultado de la herramienta
+2. Sea amigable y profesional
+3. Guíe al cliente hacia el siguiente paso (si aplica)
+4. NO menciones que usaste herramientas o sistemas internos
+
+Responde SOLO con el mensaje para el cliente, sin JSON ni formato especial.
+"""
+        
+        messages = [HumanMessage(content=refine_prompt)]
+        
+        try:
+            response = self.refine_llm.invoke(messages)
+            
+            tokens_used = 0
+            if hasattr(response, "response_metadata"):
+                usage = response.response_metadata.get("token_usage", {})
+                tokens_used = usage.get("total_tokens", 0)
+            
+            return response.content.strip(), tokens_used
+            
+        except Exception as e:
+            logger.error(f"Vendor refine error: {e}")
+            if original_message:
+                return f"{original_message}\n\n{tool_result}", 0
+            return tool_result, 0
     
     def _parse_response(self, content: str) -> AgentAction:
         try:

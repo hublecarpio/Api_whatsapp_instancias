@@ -206,6 +206,7 @@ async def generate_response(request: GenerateRequest):
             "sender_phone": request.sender_phone,
             "sender_name": request.sender_name,
             "embedded_products": embedded_products,
+            "knowledge_context": None,
             "dynamic_rules": dynamic_rules,
             "conversation_history": conversation_history,
             "vendor_action": None,
@@ -215,7 +216,10 @@ async def generate_response(request: GenerateRequest):
             "refiner_output": None,
             "tokens_used": 0,
             "iteration_count": 0,
-            "max_iterations": 5
+            "max_iterations": 5,
+            "retry_count": 0,
+            "needs_retry": False,
+            "observer_feedback": None
         }
         
         graph = get_agent_graph()

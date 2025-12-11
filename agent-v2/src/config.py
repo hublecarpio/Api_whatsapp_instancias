@@ -4,7 +4,13 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "gpt-4o"
+    
+    vendor_model: str = "gpt-4o"
+    refine_model: str = "gpt-4o-mini"
+    observer_model: str = "gpt-4o-mini"
+    refiner_model: str = "gpt-4o-mini"
+    embedding_model: str = "text-embedding-3-small"
     
     database_url: str = ""
     redis_url: str = ""

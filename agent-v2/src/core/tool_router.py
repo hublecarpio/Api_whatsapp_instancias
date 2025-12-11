@@ -7,13 +7,15 @@ from ..schemas.tool_schemas import (
     PaymentInput, PaymentOutput,
     FollowupInput, FollowupOutput,
     MediaInput, MediaOutput,
-    CRMInput, CRMOutput
+    CRMInput, CRMOutput,
+    SearchKnowledgeInput, SearchKnowledgeOutput
 )
 from ..tools.search_product import SearchProductTool
 from ..tools.payment import PaymentTool
 from ..tools.followup import FollowupTool
 from ..tools.media import MediaTool
 from ..tools.crm import CRMTool
+from ..tools.search_knowledge import SearchKnowledgeTool
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,13 @@ TOOL_DEFINITIONS = {
         "input_schema": CRMInput,
         "output_schema": CRMOutput,
         "handler": CRMTool
+    },
+    "search_knowledge": {
+        "name": "search_knowledge",
+        "description": "Busca en la base de conocimiento del negocio para responder preguntas sobre políticas, FAQs, guías y documentación.",
+        "input_schema": SearchKnowledgeInput,
+        "output_schema": SearchKnowledgeOutput,
+        "handler": SearchKnowledgeTool
     }
 }
 
@@ -107,6 +116,8 @@ class ToolRouter:
                 result = await handler.run(validated_input, self.embedded_products)
             elif tool_name == "media":
                 result = await handler.run(validated_input, self.products)
+            elif tool_name == "search_knowledge":
+                result = await handler.run(validated_input, self.context)
             else:
                 result = await handler.run(validated_input)
             
@@ -151,6 +162,9 @@ def format_tool_result(result: Dict[str, Any]) -> str:
         
         if "media_url" in result and result["media_url"]:
             return f"{message}\n\nURL: {result['media_url']}"
+        
+        if "context" in result and result["context"]:
+            return f"{message}\n\nInformación encontrada:\n{result['context']}"
         
         return message
     else:

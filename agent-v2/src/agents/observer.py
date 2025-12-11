@@ -53,7 +53,7 @@ class ObserverAgent:
         self.settings = get_settings()
         self.llm = ChatOpenAI(
             api_key=self.settings.openai_api_key,
-            model="gpt-4o-mini",
+            model=self.settings.observer_model,
             temperature=0.3
         )
     
