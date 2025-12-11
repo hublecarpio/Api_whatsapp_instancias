@@ -6,7 +6,7 @@ import { generateVerificationToken, hashToken, sendVerificationEmail, sendPasswo
 
 const router = Router();
 
-const APP_DOMAIN = process.env.APP_DOMAIN || `https://${process.env.REPLIT_DEV_DOMAIN}`;
+const APP_DOMAIN = process.env.APP_DOMAIN || process.env.FRONTEND_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
 const PASSWORD_RESET_EXPIRY_HOURS = 1;
 const RESEND_THROTTLE_MINUTES = 2;
