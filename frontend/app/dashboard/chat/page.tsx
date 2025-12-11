@@ -137,6 +137,9 @@ export default function ChatPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
   const [loadingTeam, setLoadingTeam] = useState(false);
+  const [roundRobinEnabled, setRoundRobinEnabled] = useState(false);
+  const [roundRobinAdvisors, setRoundRobinAdvisors] = useState<string[]>([]);
+  const [savingRoundRobin, setSavingRoundRobin] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -226,18 +229,51 @@ export default function ChatPage() {
     if (!currentBusiness) return;
     setLoadingTeam(true);
     try {
-      const [teamRes, invitationsRes, assignmentsRes] = await Promise.all([
+      const [teamRes, invitationsRes, assignmentsRes, roundRobinRes] = await Promise.all([
         advisorApi.getTeam(currentBusiness.id),
         advisorApi.getInvitations(currentBusiness.id),
-        advisorApi.getAssignments(currentBusiness.id)
+        advisorApi.getAssignments(currentBusiness.id),
+        advisorApi.getRoundRobin(currentBusiness.id)
       ]);
       setAdvisors(teamRes.data);
       setInvitations(invitationsRes.data.filter((i: AdvisorInvitation) => !i.acceptedAt));
       setContactAssignments(assignmentsRes.data);
+      setRoundRobinEnabled(roundRobinRes.data.roundRobinEnabled);
+      setRoundRobinAdvisors(roundRobinRes.data.roundRobinAdvisors || []);
     } catch (err) {
       console.error('Failed to fetch team data:', err);
     } finally {
       setLoadingTeam(false);
+    }
+  };
+
+  const handleToggleRoundRobin = async () => {
+    if (!currentBusiness) return;
+    setSavingRoundRobin(true);
+    try {
+      const newEnabled = !roundRobinEnabled;
+      await advisorApi.updateRoundRobin(currentBusiness.id, { enabled: newEnabled });
+      setRoundRobinEnabled(newEnabled);
+    } catch (err) {
+      console.error('Failed to toggle round-robin:', err);
+    } finally {
+      setSavingRoundRobin(false);
+    }
+  };
+
+  const handleToggleRoundRobinAdvisor = async (advisorId: string) => {
+    if (!currentBusiness) return;
+    setSavingRoundRobin(true);
+    try {
+      const newAdvisors = roundRobinAdvisors.includes(advisorId)
+        ? roundRobinAdvisors.filter(id => id !== advisorId)
+        : [...roundRobinAdvisors, advisorId];
+      await advisorApi.updateRoundRobin(currentBusiness.id, { advisorIds: newAdvisors });
+      setRoundRobinAdvisors(newAdvisors);
+    } catch (err) {
+      console.error('Failed to update round-robin advisors:', err);
+    } finally {
+      setSavingRoundRobin(false);
     }
   };
 
@@ -1528,6 +1564,55 @@ export default function ChatPage() {
                       </div>
                     )}
                   </div>
+
+                  {advisors.length > 0 && (
+                    <div className="pt-4 border-t border-dark-border">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="text-sm font-medium text-white">Asignacion rotativa</h4>
+                          <p className="text-xs text-gray-500">Asigna nuevos leads automaticamente entre asesores seleccionados</p>
+                        </div>
+                        <button
+                          onClick={handleToggleRoundRobin}
+                          disabled={savingRoundRobin || roundRobinAdvisors.length === 0}
+                          className={`relative w-11 h-6 rounded-full transition-colors ${
+                            roundRobinEnabled ? 'bg-neon-blue' : 'bg-dark-surface'
+                          } ${savingRoundRobin || roundRobinAdvisors.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                            roundRobinEnabled ? 'translate-x-5' : 'translate-x-0'
+                          }`} />
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {advisors.map(advisor => (
+                          <label 
+                            key={advisor.id} 
+                            className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                              roundRobinAdvisors.includes(advisor.id) ? 'bg-neon-blue/10' : 'bg-dark-surface hover:bg-dark-hover'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={roundRobinAdvisors.includes(advisor.id)}
+                              onChange={() => handleToggleRoundRobinAdvisor(advisor.id)}
+                              disabled={savingRoundRobin}
+                              className="w-4 h-4 rounded border-dark-border bg-dark-surface text-neon-blue focus:ring-neon-blue focus:ring-offset-0"
+                            />
+                            <span className="text-sm text-white">{advisor.name}</span>
+                            {roundRobinAdvisors.includes(advisor.id) && (
+                              <span className="ml-auto text-xs text-neon-blue">En rotacion</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                      {roundRobinEnabled && roundRobinAdvisors.length > 0 && (
+                        <p className="mt-2 text-xs text-accent-success">
+                          Activo: Los nuevos leads se asignaran entre {roundRobinAdvisors.length} asesor{roundRobinAdvisors.length > 1 ? 'es' : ''}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {advisors.length > 0 && selectedPhone && (
                     <div className="pt-4 border-t border-dark-border">
