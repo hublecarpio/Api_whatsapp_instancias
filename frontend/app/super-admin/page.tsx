@@ -1876,7 +1876,14 @@ interface CommandCenterData {
   health: { status: string; errors24h: number };
   users: { active: number; newToday: number };
   whatsapp: { connectedInstances: number };
-  activity: { messagesToday: number; ordersToday: number; revenueToday: number; tokenCostToday: number };
+  platform: { 
+    stripeSubscribers: number; 
+    enterpriseSubscribers: number; 
+    totalPaying: number;
+    revenueWeekly: number; 
+    revenueMRR: number;
+  };
+  activity: { messagesToday: number; ordersToday: number; tokenCostToday: number };
   pending: { reminders: number };
   recentActivity: any[];
 }
@@ -1978,13 +1985,21 @@ function CommandCenterTab({ token }: { token: string }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-        <div className="card bg-gradient-to-br from-neon-blue/10 to-transparent border-neon-blue/30 p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-gray-400">Pedidos</p>
-          <p className="text-lg sm:text-2xl font-bold text-white">{data.activity.ordersToday}</p>
-        </div>
         <div className="card bg-gradient-to-br from-accent-success/10 to-transparent border-accent-success/30 p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-gray-400">Revenue</p>
-          <p className="text-lg sm:text-2xl font-bold text-accent-success">S/. {data.activity.revenueToday.toFixed(0)}</p>
+          <p className="text-xs sm:text-sm text-gray-400">Suscriptores</p>
+          <p className="text-lg sm:text-2xl font-bold text-accent-success">{data.platform?.totalPaying || 0}</p>
+          <p className="text-[10px] text-gray-500">
+            {data.platform?.stripeSubscribers || 0} Stripe · {data.platform?.enterpriseSubscribers || 0} Enterprise
+          </p>
+        </div>
+        <div className="card bg-gradient-to-br from-green-500/10 to-transparent border-green-500/30 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-400">Ingresos/Semana</p>
+          <p className="text-lg sm:text-2xl font-bold text-green-400">${data.platform?.revenueWeekly || 0}</p>
+          <p className="text-[10px] text-gray-500">MRR: ${data.platform?.revenueMRR || 0}</p>
+        </div>
+        <div className="card bg-gradient-to-br from-neon-blue/10 to-transparent border-neon-blue/30 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-400">Pedidos Hoy</p>
+          <p className="text-lg sm:text-2xl font-bold text-neon-blue">{data.activity.ordersToday}</p>
         </div>
         <div className="card bg-gradient-to-br from-purple-500/10 to-transparent border-purple-500/30 p-3 sm:p-4">
           <p className="text-xs sm:text-sm text-gray-400">Costo IA</p>

@@ -1504,7 +1504,6 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     const [
       activeUsers,
@@ -1512,7 +1511,8 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
       activeInstances,
       messagesToday,
       ordersToday,
-      revenueToday,
+      stripeSubscribers,
+      enterpriseSubscribers,
       tokenCostToday,
       errorCount24h,
       pendingReminders,
@@ -1523,12 +1523,11 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
       prisma.whatsAppInstance.count({ where: { status: 'open' } }),
       prisma.messageLog.count({ where: { createdAt: { gte: today } } }),
       prisma.order.count({ where: { createdAt: { gte: today } } }),
-      prisma.order.aggregate({
-        where: { 
-          status: { in: ['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'] },
-          createdAt: { gte: today } 
-        },
-        _sum: { totalAmount: true }
+      prisma.subscription.count({ 
+        where: { source: 'STRIPE', status: 'ACTIVE' } 
+      }),
+      prisma.subscription.count({ 
+        where: { source: 'ENTERPRISE', status: 'ACTIVE' } 
       }),
       prisma.tokenUsage.aggregate({
         where: { createdAt: { gte: today } },
@@ -1553,6 +1552,10 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
       })
     ]);
 
+    const weeklyPriceUsd = 50;
+    const platformRevenueWeekly = stripeSubscribers * weeklyPriceUsd;
+    const platformRevenueMRR = platformRevenueWeekly * 4;
+
     res.json({
       health: {
         status: errorCount24h > 10 ? 'degraded' : errorCount24h > 0 ? 'warning' : 'healthy',
@@ -1565,10 +1568,16 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
       whatsapp: {
         connectedInstances: activeInstances
       },
+      platform: {
+        stripeSubscribers,
+        enterpriseSubscribers,
+        totalPaying: stripeSubscribers + enterpriseSubscribers,
+        revenueWeekly: platformRevenueWeekly,
+        revenueMRR: platformRevenueMRR
+      },
       activity: {
         messagesToday,
         ordersToday,
-        revenueToday: revenueToday._sum.totalAmount || 0,
         tokenCostToday: tokenCostToday._sum.costUsd || 0
       },
       pending: {
