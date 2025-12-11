@@ -1944,4 +1944,197 @@ router.get('/queue/stats', authMiddleware, async (req: AuthRequest, res: Respons
   }
 });
 
+import crypto from 'crypto';
+
+function hashApiKey(key: string): string {
+  return crypto.createHash('sha256').update(key).digest('hex');
+}
+
+function generateApiKey(): string {
+  return `efk_${crypto.randomBytes(32).toString('hex')}`;
+}
+
+router.post('/api-key/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (business.agentVersion !== 'v2') {
+      return res.status(400).json({ error: 'API keys are only available for V2 agents' });
+    }
+    
+    const apiKey = generateApiKey();
+    const apiKeyHash = hashApiKey(apiKey);
+    const apiKeyPrefix = apiKey.substring(0, 12);
+    
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        apiKeyHash,
+        apiKeyPrefix,
+        apiKeyCreatedAt: new Date()
+      }
+    });
+    
+    res.json({
+      apiKey,
+      prefix: apiKeyPrefix,
+      createdAt: new Date(),
+      message: 'API key created. Save it now - you will not be able to see it again.'
+    });
+  } catch (error: any) {
+    console.error('Generate API key error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/api-key/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId },
+      select: {
+        apiKeyPrefix: true,
+        apiKeyCreatedAt: true,
+        agentVersion: true
+      }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    res.json({
+      hasApiKey: !!business.apiKeyPrefix,
+      prefix: business.apiKeyPrefix,
+      createdAt: business.apiKeyCreatedAt,
+      agentVersion: business.agentVersion
+    });
+  } catch (error: any) {
+    console.error('Get API key info error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/api-key/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        apiKeyHash: null,
+        apiKeyPrefix: null,
+        apiKeyCreatedAt: null
+      }
+    });
+    
+    res.json({ message: 'API key revoked' });
+  } catch (error: any) {
+    console.error('Revoke API key error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const WEBHOOK_EVENTS = [
+  'user_message',
+  'agent_message', 
+  'state_change',
+  'tool_call',
+  'stage_change'
+];
+
+router.put('/webhook/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { webhookUrl, webhookEvents } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (business.agentVersion !== 'v2') {
+      return res.status(400).json({ error: 'Webhooks are only available for V2 agents' });
+    }
+    
+    if (webhookUrl && !webhookUrl.startsWith('https://')) {
+      return res.status(400).json({ error: 'Webhook URL must use HTTPS' });
+    }
+    
+    const validEvents = (webhookEvents || []).filter((e: string) => WEBHOOK_EVENTS.includes(e));
+    
+    const webhookSecret = business.webhookSecret || `whs_${crypto.randomBytes(16).toString('hex')}`;
+    
+    await prisma.business.update({
+      where: { id: businessId },
+      data: {
+        webhookUrl: webhookUrl || null,
+        webhookEvents: validEvents,
+        webhookSecret
+      }
+    });
+    
+    res.json({
+      webhookUrl: webhookUrl || null,
+      webhookEvents: validEvents,
+      webhookSecret,
+      availableEvents: WEBHOOK_EVENTS
+    });
+  } catch (error: any) {
+    console.error('Update webhook error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/webhook/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId },
+      select: {
+        webhookUrl: true,
+        webhookEvents: true,
+        webhookSecret: true,
+        agentVersion: true
+      }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    res.json({
+      webhookUrl: business.webhookUrl,
+      webhookEvents: business.webhookEvents,
+      webhookSecret: business.webhookSecret,
+      availableEvents: WEBHOOK_EVENTS,
+      agentVersion: business.agentVersion
+    });
+  } catch (error: any) {
+    console.error('Get webhook error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
