@@ -5,6 +5,20 @@ import { WebhookPayload } from '../utils/types';
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF = 1000;
 
+// In-memory deduplication for message events (prevents duplicate webhook calls)
+const processedMessages = new Map<string, number>();
+const MESSAGE_DEDUP_TTL_MS = 60000; // 1 minute TTL
+
+// Cleanup old entries every 30 seconds
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamp] of processedMessages.entries()) {
+    if (now - timestamp > MESSAGE_DEDUP_TTL_MS) {
+      processedMessages.delete(key);
+    }
+  }
+}, 30000);
+
 export class WebhookDispatcher {
   private static async sendWithRetry(
     url: string,
@@ -59,6 +73,23 @@ export class WebhookDispatcher {
     if (!url) {
       logger.debug({ instanceId, event }, 'No webhook URL configured, skipping dispatch');
       return false;
+    }
+
+    // Deduplicate message.received events using messageId
+    // Baileys uses payload.messageId, but also check payload.key?.id for compatibility
+    if (event === 'message.received') {
+      const messageId = payload?.messageId || payload?.key?.id;
+      
+      if (messageId) {
+        const dedupKey = `${instanceId}:${messageId}`;
+        
+        if (processedMessages.has(dedupKey)) {
+          logger.debug({ instanceId, event, messageId }, 'Duplicate message detected, skipping webhook dispatch');
+          return false;
+        }
+        
+        processedMessages.set(dedupKey, Date.now());
+      }
     }
 
     const webhookPayload: WebhookPayload = {

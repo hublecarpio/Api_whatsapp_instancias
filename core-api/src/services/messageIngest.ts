@@ -22,10 +22,26 @@ export interface IncomingMessage {
   location?: { latitude: number; longitude: number; name?: string; address?: string };
 }
 
-export async function processIncomingMessage(message: IncomingMessage): Promise<void> {
+export async function processIncomingMessage(message: IncomingMessage): Promise<boolean> {
   const { businessId, instanceId, provider, from, pushName, type, text, mediaUrl, caption } = message;
 
   const cleanPhone = from.replace(/\D/g, '');
+  
+  // DEDUPLICATION: Check if message already processed using providerMessageId
+  const providerMessageId = message.messageId;
+  if (providerMessageId) {
+    const existingMessage = await prisma.messageLog.findFirst({
+      where: {
+        businessId,
+        providerMessageId
+      }
+    });
+    
+    if (existingMessage) {
+      console.log(`[DEDUP] Message ${providerMessageId} already processed, skipping`);
+      return false;
+    }
+  }
 
   const business = await prisma.business.findUnique({
     where: { id: businessId },
@@ -40,7 +56,7 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
 
   if (!business) {
     console.error('Business not found:', businessId);
-    return;
+    return false;
   }
 
   let messageText = text || caption || (type === 'location' ? `Location: ${message.location?.latitude}, ${message.location?.longitude}` : '');
@@ -80,6 +96,7 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
       recipient: business.name,
       message: messageText,
       mediaUrl,
+      providerMessageId: providerMessageId || undefined,
       metadata: {
         pushName,
         type,
@@ -94,7 +111,7 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
 
   if (!business.botEnabled) {
     console.log('Bot disabled for business:', businessId);
-    return;
+    return true;
   }
 
   const contactSettings = await prisma.contactSettings.findFirst({
@@ -106,7 +123,7 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
 
   if (contactSettings?.botDisabled) {
     console.log('Bot disabled for contact:', cleanPhone, 'in business:', businessId);
-    return;
+    return true;
   }
 
   const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
@@ -124,8 +141,10 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     }, {
       headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
     });
+    return true;
   } catch (error: any) {
     console.error('Failed to process with AI agent:', error.message);
+    return false;
   }
 }
 
