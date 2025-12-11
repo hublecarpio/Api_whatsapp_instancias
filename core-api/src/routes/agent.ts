@@ -579,15 +579,37 @@ async function processWithAgent(
   }
   
   if (business.agentVersion === 'v2') {
-    const instance = business.instances?.[0];
-    const backendId = instanceId || instance?.instanceBackendId || undefined;
+    let instance = business.instances?.[0];
+    let backendId = instance?.instanceBackendId;
+    
+    if (instanceId) {
+      const foundInstance = business.instances?.find((i: any) => i.id === instanceId);
+      if (foundInstance) {
+        instance = foundInstance;
+        backendId = foundInstance.instanceBackendId;
+      } else {
+        const dbInstance = await prisma.whatsAppInstance.findUnique({
+          where: { id: instanceId }
+        });
+        if (dbInstance && dbInstance.instanceBackendId) {
+          backendId = dbInstance.instanceBackendId;
+          console.log(`[Agent V2] Instance loaded from DB: ${instanceId} -> backendId: ${backendId}`);
+        }
+      }
+    }
+    
+    if (!backendId) {
+      console.error(`[Agent V2] No backendId found for instance ${instanceId || 'default'}, cannot send message`);
+    }
+    
+    console.log(`[Agent V2] Using instance: ${instanceId || instance?.id} -> backendId: ${backendId}`);
     
     try {
       const v2Available = await isAgentV2Available();
       if (!v2Available) {
         console.log('[Agent V2] Service unavailable, falling back to V1');
       } else {
-        return await processWithAgentV2(business, messages, contactPhone, contactName, phone, backendId);
+        return await processWithAgentV2(business, messages, contactPhone, contactName, phone, backendId || undefined);
       }
     } catch (v2Error: any) {
       console.error('[Agent V2] Error, falling back to V1:', v2Error.message);
