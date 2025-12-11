@@ -115,6 +115,42 @@ export default function OrdersPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [confirmingPayment, setConfirmingPayment] = useState<string | null>(null);
   const [voucherModalUrl, setVoucherModalUrl] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredOrders = orders.filter(order => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      order.contactName?.toLowerCase().includes(query) ||
+      order.contactPhone.includes(query) ||
+      order.id.toLowerCase().includes(query)
+    );
+  });
+
+  const getMetrics = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const todayOrders = orders.filter(o => new Date(o.createdAt) >= today);
+    const weekOrders = orders.filter(o => new Date(o.createdAt) >= weekAgo);
+    const paidOrders = orders.filter(o => ['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status));
+    const totalRevenue = paidOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+    const pendingCount = orders.filter(o => ['PENDING_PAYMENT', 'AWAITING_VOUCHER'].includes(o.status)).length;
+    const processingCount = orders.filter(o => ['PROCESSING', 'SHIPPED'].includes(o.status)).length;
+
+    return {
+      total: orders.length,
+      todayCount: todayOrders.length,
+      weekCount: weekOrders.length,
+      revenue: totalRevenue,
+      pending: pendingCount,
+      processing: processingCount,
+      delivered: orders.filter(o => o.status === 'DELIVERED').length,
+      currencySymbol: orders[0]?.currencySymbol || 'S/.'
+    };
+  };
 
   useEffect(() => {
     if (currentBusiness?.id) {
@@ -248,38 +284,42 @@ export default function OrdersPage() {
         </p>
       </div>
 
-      {!isPro && (() => {
+      {(() => {
+        const metrics = getMetrics();
         const awaitingVoucher = orders.filter(o => o.status === 'AWAITING_VOUCHER');
         const withVoucher = awaitingVoucher.filter(o => o.voucherImageUrl);
         return (
-          <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-orange-400 text-sm font-medium">Esperando Voucher</span>
-              </div>
-              <p className="text-2xl font-bold text-white mt-1">{awaitingVoucher.length - withVoucher.length}</p>
-            </div>
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span className="text-blue-400 text-sm font-medium">Voucher Recibido</span>
-              </div>
-              <p className="text-2xl font-bold text-white mt-1">{withVoucher.length}</p>
+          <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="bg-neon-blue/10 border border-neon-blue/30 rounded-lg p-3">
+              <p className="text-gray-400 text-xs">Total Pedidos</p>
+              <p className="text-2xl font-bold text-white">{metrics.total}</p>
             </div>
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-green-400 text-sm font-medium">Pagados</span>
-              </div>
-              <p className="text-2xl font-bold text-white mt-1">{orders.filter(o => o.status === 'PAID').length}</p>
+              <p className="text-gray-400 text-xs">Ingresos</p>
+              <p className="text-xl font-bold text-green-400">{metrics.currencySymbol}{metrics.revenue.toFixed(0)}</p>
             </div>
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+              <p className="text-gray-400 text-xs">Hoy</p>
+              <p className="text-2xl font-bold text-yellow-400">{metrics.todayCount}</p>
+            </div>
+            <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+              <p className="text-gray-400 text-xs">Semana</p>
+              <p className="text-2xl font-bold text-purple-400">{metrics.weekCount}</p>
+            </div>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+              <p className="text-gray-400 text-xs">En Proceso</p>
+              <p className="text-2xl font-bold text-blue-400">{metrics.processing}</p>
+            </div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+              <p className="text-gray-400 text-xs">Entregados</p>
+              <p className="text-2xl font-bold text-emerald-400">{metrics.delivered}</p>
+            </div>
+            {!isPro && withVoucher.length > 0 && (
+              <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 col-span-2">
+                <p className="text-gray-400 text-xs">Vouchers por Confirmar</p>
+                <p className="text-2xl font-bold text-orange-400">{withVoucher.length}</p>
+              </div>
+            )}
           </div>
         );
       })()}
@@ -320,18 +360,27 @@ export default function OrdersPage() {
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1">
           {activeTab === 'orders' && (
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="flex-1 sm:flex-none bg-[#2a2a2a] border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
-            >
-              <option value="">Todos</option>
-              {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
+            <>
+              <input
+                type="text"
+                placeholder="Buscar por nombre o telefono..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 sm:w-64 bg-[#2a2a2a] border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500"
+              />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-[#2a2a2a] border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
+              >
+                <option value="">Todos</option>
+                {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </>
           )}
           {isPro && activeTab === 'links' && (
             <select
@@ -377,7 +426,7 @@ export default function OrdersPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {orders.map(order => {
+            {filteredOrders.map(order => {
               const isExpanded = expandedOrderId === order.id;
               return (
                 <div
