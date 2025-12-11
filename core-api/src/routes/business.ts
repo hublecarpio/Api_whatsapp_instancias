@@ -73,7 +73,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, industry, logoUrl, agentVersion, timezone } = req.body;
+    const { name, description, industry, logoUrl, agentVersion, timezone, currencyCode, currencySymbol, businessObjective } = req.body;
     
     const existing = await prisma.business.findFirst({
       where: { id: req.params.id, userId: req.userId }
@@ -100,6 +100,11 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (industry !== undefined) updateData.industry = industry;
     if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
     if (timezone !== undefined) updateData.timezone = timezone;
+    if (currencyCode !== undefined) updateData.currencyCode = currencyCode;
+    if (currencySymbol !== undefined) updateData.currencySymbol = currencySymbol;
+    if (businessObjective !== undefined && ['SALES', 'APPOINTMENTS'].includes(businessObjective)) {
+      updateData.businessObjective = businessObjective;
+    }
     if (agentVersion !== undefined && ['v1', 'v2'].includes(agentVersion)) {
       updateData.agentVersion = agentVersion;
     }

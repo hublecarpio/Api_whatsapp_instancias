@@ -1,10 +1,9 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/page": "app/page.js",
   "/login/page": "app/login/page.js",
-  "/dashboard/business/page": "app/dashboard/business/page.js",
   "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
+  "/dashboard/business/page": "app/dashboard/business/page.js",
   "/dashboard/products/page": "app/dashboard/products/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/templates/page": "app/dashboard/templates/page.js"
+  "/dashboard/templates/page": "app/dashboard/templates/page.js",
+  "/dashboard/appointments/page": "app/dashboard/appointments/page.js"
 }
