@@ -275,6 +275,99 @@ export default function BusinessPage() {
 
       {currentBusiness && (
         <>
+          {(currentBusiness as any).businessContext && (
+            <div className="card mb-6 border-neon-blue/30">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-white">Contexto del Negocio</h2>
+                <span className="text-xs bg-neon-blue/20 text-neon-blue px-2 py-1 rounded">
+                  Desde Prompt Master
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">
+                Datos inyectados desde Efficore Prompt Master. Para editar, usa el GPT y vuelve a enviar.
+              </p>
+              <div className="space-y-4">
+                {(currentBusiness as any).businessContext.producto_principal && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Producto Principal</label>
+                    <p className="text-sm text-white bg-dark-bg rounded p-2">{(currentBusiness as any).businessContext.producto_principal}</p>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.objetivo_negocio && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Objetivo del Negocio</label>
+                    <p className="text-sm text-white bg-dark-bg rounded p-2">{(currentBusiness as any).businessContext.objetivo_negocio}</p>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.cliente_ideal && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Cliente Ideal</label>
+                    <p className="text-sm text-white bg-dark-bg rounded p-2">{(currentBusiness as any).businessContext.cliente_ideal}</p>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.dolores_principales && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Dolores Principales</label>
+                    <p className="text-sm text-white bg-dark-bg rounded p-2">{(currentBusiness as any).businessContext.dolores_principales}</p>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.objeciones_frecuentes && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Objeciones Frecuentes</label>
+                    <p className="text-sm text-white bg-dark-bg rounded p-2">{(currentBusiness as any).businessContext.objeciones_frecuentes}</p>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.tono_agente && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Tono del Agente</label>
+                    <p className="text-sm text-white bg-dark-bg rounded p-2">{(currentBusiness as any).businessContext.tono_agente}</p>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.jergas?.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Jergas / Expresiones</label>
+                    <div className="flex flex-wrap gap-1">
+                      {(currentBusiness as any).businessContext.jergas.map((j: string, i: number) => (
+                        <span key={i} className="text-xs bg-dark-bg text-gray-300 px-2 py-1 rounded">{j}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.info_operativa && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Info Operativa</label>
+                    <p className="text-sm text-white bg-dark-bg rounded p-2">{(currentBusiness as any).businessContext.info_operativa}</p>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.preguntas_frecuentes?.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Preguntas Frecuentes</label>
+                    <ul className="text-sm text-white bg-dark-bg rounded p-2 list-disc list-inside space-y-1">
+                      {(currentBusiness as any).businessContext.preguntas_frecuentes.map((p: string, i: number) => (
+                        <li key={i}>{p}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.enlaces_relevantes?.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Enlaces Relevantes</label>
+                    <div className="space-y-1">
+                      {(currentBusiness as any).businessContext.enlaces_relevantes.map((e: string, i: number) => (
+                        <a key={i} href={e} target="_blank" rel="noopener noreferrer" className="block text-sm text-neon-blue hover:underline">{e}</a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(currentBusiness as any).businessContext.lastUpdated && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Actualizado: {new Date((currentBusiness as any).businessContext.lastUpdated).toLocaleString('es-PE')}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="card mb-6">
             <h2 className="text-lg font-semibold text-white mb-4">Politicas del negocio</h2>
             <div className="space-y-4">
