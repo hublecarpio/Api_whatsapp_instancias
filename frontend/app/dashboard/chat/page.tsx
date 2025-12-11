@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
@@ -65,6 +65,29 @@ interface DailyContactStats {
   remaining: number;
 }
 
+interface Advisor {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  _count: { contactAssignments: number };
+}
+
+interface AdvisorInvitation {
+  id: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+}
+
+interface ContactAssignment {
+  businessId: string;
+  contactPhone: string;
+  userId: string;
+  user: { id: string; name: string; email: string };
+}
+
 export default function ChatPage() {
   const { currentBusiness } = useBusinessStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -106,6 +129,13 @@ export default function ChatPage() {
   const [contactData, setContactData] = useState<Record<string, any>>({});
   const [currentStage, setCurrentStage] = useState<{id: string; name: string; color: string} | null>(null);
   const [showContactPanel, setShowContactPanel] = useState(false);
+  const [showTeamPanel, setShowTeamPanel] = useState(false);
+  const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [invitations, setInvitations] = useState<AdvisorInvitation[]>([]);
+  const [contactAssignments, setContactAssignments] = useState<ContactAssignment[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [loadingTeam, setLoadingTeam] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -189,6 +219,78 @@ export default function ChatPage() {
     } catch (err) {
       console.error('Failed to fetch tags:', err);
     }
+  };
+
+  const fetchTeamData = async () => {
+    if (!currentBusiness) return;
+    setLoadingTeam(true);
+    try {
+      const [teamRes, invitationsRes, assignmentsRes] = await Promise.all([
+        advisorApi.getTeam(currentBusiness.id),
+        advisorApi.getInvitations(currentBusiness.id),
+        advisorApi.getAssignments(currentBusiness.id)
+      ]);
+      setAdvisors(teamRes.data);
+      setInvitations(invitationsRes.data.filter((i: AdvisorInvitation) => !i.acceptedAt));
+      setContactAssignments(assignmentsRes.data);
+    } catch (err) {
+      console.error('Failed to fetch team data:', err);
+    } finally {
+      setLoadingTeam(false);
+    }
+  };
+
+  const handleInviteAdvisor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentBusiness || !inviteEmail.trim()) return;
+    setInviting(true);
+    try {
+      await advisorApi.invite({ email: inviteEmail.trim(), businessId: currentBusiness.id });
+      setInviteEmail('');
+      fetchTeamData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al enviar invitacion');
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleCancelInvitation = async (id: string) => {
+    try {
+      await advisorApi.cancelInvitation(id);
+      fetchTeamData();
+    } catch (err) {
+      console.error('Failed to cancel invitation:', err);
+    }
+  };
+
+  const handleRemoveAdvisor = async (advisorId: string) => {
+    if (!confirm('Seguro que deseas eliminar este asesor?')) return;
+    try {
+      await advisorApi.removeAdvisor(advisorId);
+      fetchTeamData();
+    } catch (err) {
+      console.error('Failed to remove advisor:', err);
+    }
+  };
+
+  const handleAssignContact = async (phone: string, advisorId: string) => {
+    if (!currentBusiness) return;
+    try {
+      if (advisorId) {
+        await advisorApi.assignContact({ businessId: currentBusiness.id, contactPhone: phone, advisorId });
+      } else {
+        await advisorApi.removeAssignment(currentBusiness.id, phone);
+      }
+      fetchTeamData();
+    } catch (err) {
+      console.error('Failed to assign contact:', err);
+    }
+  };
+
+  const getContactAdvisor = (phone: string): { id: string; name: string } | null => {
+    const assignment = contactAssignments.find(a => a.contactPhone === phone);
+    return assignment ? { id: assignment.userId, name: assignment.user.name } : null;
   };
 
   const handleAssignTag = async (phone: string, tagId: string) => {
@@ -785,6 +887,13 @@ export default function ChatPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
                   )}
                 </button>
+                <button 
+                  onClick={() => { setShowTeamPanel(true); fetchTeamData(); }} 
+                  className="p-1.5 rounded-lg text-gray-400 hover:bg-dark-hover transition-colors" 
+                  title="Equipo de asesores"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                </button>
               </div>
             </div>
             <div className="relative mb-2">
@@ -1288,6 +1397,113 @@ export default function ChatPage() {
                 <p className="text-xs text-gray-500 text-center">
                   Para numeros nuevos en Meta Cloud, usa una plantilla aprobada
                 </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTeamPanel && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowTeamPanel(false)}>
+          <div className="bg-dark-card rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-dark-border flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Equipo de Asesores</h3>
+              <button onClick={() => setShowTeamPanel(false)} className="p-1 text-gray-400 hover:text-white">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <div className="p-4 border-b border-dark-border">
+              <form onSubmit={handleInviteAdvisor} className="flex gap-2">
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="Email del asesor a invitar..."
+                  className="flex-1 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-blue"
+                />
+                <button 
+                  type="submit" 
+                  disabled={inviting || !inviteEmail.trim()}
+                  className="px-4 py-2 bg-neon-blue text-dark-bg rounded-lg font-medium hover:bg-neon-blue-light disabled:opacity-50 transition-colors text-sm"
+                >
+                  {inviting ? '...' : 'Invitar'}
+                </button>
+              </form>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {loadingTeam ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-neon-blue mx-auto" />
+                </div>
+              ) : (
+                <>
+                  {invitations.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-400 mb-2">Invitaciones pendientes</h4>
+                      <div className="space-y-2">
+                        {invitations.map(inv => (
+                          <div key={inv.id} className="flex items-center justify-between p-3 bg-dark-surface rounded-lg">
+                            <div>
+                              <p className="text-white text-sm">{inv.email}</p>
+                              <p className="text-xs text-gray-500">Expira: {new Date(inv.expiresAt).toLocaleDateString()}</p>
+                            </div>
+                            <button 
+                              onClick={() => handleCancelInvitation(inv.id)}
+                              className="text-xs text-accent-error hover:underline"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-400 mb-2">Asesores activos ({advisors.length})</h4>
+                    {advisors.length === 0 ? (
+                      <p className="text-sm text-gray-500 py-4 text-center">No hay asesores en tu equipo</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {advisors.map(advisor => (
+                          <div key={advisor.id} className="flex items-center justify-between p-3 bg-dark-surface rounded-lg">
+                            <div>
+                              <p className="text-white text-sm font-medium">{advisor.name}</p>
+                              <p className="text-xs text-gray-500">{advisor.email}</p>
+                              <p className="text-xs text-gray-500">{advisor._count.contactAssignments} contactos asignados</p>
+                            </div>
+                            <button 
+                              onClick={() => handleRemoveAdvisor(advisor.id)}
+                              className="p-1.5 text-gray-400 hover:text-accent-error transition-colors"
+                              title="Eliminar asesor"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {advisors.length > 0 && selectedPhone && (
+                    <div className="pt-4 border-t border-dark-border">
+                      <h4 className="text-sm font-medium text-gray-400 mb-2">Asignar conversacion actual</h4>
+                      <p className="text-xs text-gray-500 mb-2">Contacto: {selectedContactName || selectedPhone}</p>
+                      <select
+                        value={getContactAdvisor(selectedPhone)?.id || ''}
+                        onChange={(e) => handleAssignContact(selectedPhone, e.target.value)}
+                        className="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-blue"
+                      >
+                        <option value="">Sin asignar</option>
+                        {advisors.map(a => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
