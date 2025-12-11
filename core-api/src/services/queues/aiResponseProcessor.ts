@@ -9,8 +9,9 @@ import axios from 'axios';
 import OpenAI from 'openai';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
-const WORKER_CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '20', 10);
+const WORKER_CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '40', 10);
 const QUEUE_ADD_TIMEOUT = 5000;
+const LOCK_DURATION = 120000;
 
 let aiResponseWorker: Worker<AIResponseJobData> | null = null;
 
@@ -205,7 +206,7 @@ async function processWithAgentV2Worker(
   }
   
   if (result.tokens_used) {
-    await logTokenUsage({
+    logTokenUsage({
       businessId: business.id,
       userId: business.userId,
       feature: 'agent_v2_worker',
@@ -213,7 +214,7 @@ async function processWithAgentV2Worker(
       promptTokens: Math.floor(result.tokens_used * 0.7),
       completionTokens: Math.floor(result.tokens_used * 0.3),
       totalTokens: result.tokens_used
-    });
+    }).catch(err => console.error('[AI Worker] Token logging failed:', err.message));
   }
   
   const aiResponse = result.response || '';
@@ -316,7 +317,7 @@ async function processWithAgentV1Worker(
   const tokensUsed = completion.usage?.total_tokens;
   
   if (completion.usage) {
-    await logTokenUsage({
+    logTokenUsage({
       businessId: business.id,
       userId: business.userId,
       feature: 'agent_v1_worker',
@@ -324,7 +325,7 @@ async function processWithAgentV1Worker(
       promptTokens: completion.usage.prompt_tokens,
       completionTokens: completion.usage.completion_tokens,
       totalTokens: completion.usage.total_tokens
-    });
+    }).catch(err => console.error('[AI Worker] Token logging failed:', err.message));
   }
   
   if (instanceBackendId && aiResponse) {
@@ -377,7 +378,10 @@ export function startAIResponseWorker(): Worker<AIResponseJobData> {
     },
     {
       connection,
-      concurrency: WORKER_CONCURRENCY
+      concurrency: WORKER_CONCURRENCY,
+      lockDuration: LOCK_DURATION,
+      stalledInterval: 60000,
+      maxStalledCount: 2
     }
   );
 
