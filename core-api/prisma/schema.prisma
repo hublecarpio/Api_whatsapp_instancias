@@ -79,8 +79,42 @@ model WhatsAppInstance {
   lastConnection    DateTime?
   createdAt         DateTime         @default(now())
 
-  business       Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business       Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
   metaCredential MetaCredential?
+  history        WhatsAppInstanceHistory[]
+}
+
+enum InstanceEventType {
+  CREATED
+  CONNECTED
+  DISCONNECTED
+  PROVIDER_CHANGED
+  DELETED
+  RECONNECTED
+  QR_GENERATED
+  SESSION_EXPIRED
+  ERROR
+}
+
+model WhatsAppInstanceHistory {
+  id              String            @id @default(uuid())
+  instanceId      String?
+  businessId      String
+  eventType       InstanceEventType
+  previousProvider WhatsAppProvider?
+  newProvider     WhatsAppProvider?
+  previousStatus  String?
+  newStatus       String?
+  phoneNumber     String?
+  backendId       String?
+  details         String?
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+
+  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, createdAt])
+  @@index([instanceId, createdAt])
 }
 
 model MetaCredential {

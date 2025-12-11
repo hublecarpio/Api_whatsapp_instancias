@@ -4,6 +4,7 @@ import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireEmailVerified } from '../middleware/billing.js';
 import { MetaCloudService } from '../services/metaCloud.js';
+import { recordInstanceEvent, getInstanceHistory, cleanupOrphanedInstance, validateAndCleanInstances } from '../services/instanceHistory.js';
 
 const router = Router();
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:5000';
@@ -39,11 +40,36 @@ router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Respo
     }
     
     const existing = await prisma.whatsAppInstance.findFirst({
-      where: { businessId }
+      where: { businessId },
+      include: { metaCredential: true }
     });
     
     if (existing) {
-      return res.status(400).json({ error: 'Instance already exists for this business' });
+      await recordInstanceEvent({
+        instanceId: existing.id,
+        businessId,
+        eventType: 'PROVIDER_CHANGED',
+        previousProvider: existing.provider,
+        newProvider: 'BAILEYS',
+        previousStatus: existing.status,
+        phoneNumber: existing.phoneNumber,
+        backendId: existing.instanceBackendId,
+        details: `Switching from ${existing.provider} to BAILEYS`
+      });
+      
+      if (existing.provider === 'BAILEYS' && existing.instanceBackendId) {
+        try {
+          await axios.delete(`${WA_API_URL}/instances/${existing.instanceBackendId}`);
+        } catch (err) {
+          console.log('Previous Baileys instance cleanup failed (may not exist)');
+        }
+      }
+      
+      if (existing.metaCredential) {
+        await prisma.metaCredential.delete({ where: { instanceId: existing.id } }).catch(() => {});
+      }
+      await prisma.whatsAppInstance.delete({ where: { id: existing.id } });
+      console.log(`Cleaned up previous instance ${existing.id} before creating new Baileys instance`);
     }
     
     const instanceId = `biz_${businessId.substring(0, 8)}`;
@@ -62,6 +88,16 @@ router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Respo
         status: 'pending_qr',
         phoneNumber: phoneNumber || null
       }
+    });
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId,
+      eventType: 'CREATED',
+      newProvider: 'BAILEYS',
+      newStatus: 'pending_qr',
+      backendId: instanceId,
+      details: 'New Baileys instance created'
     });
     
     res.status(201).json({
@@ -99,11 +135,36 @@ router.post('/create-meta', requireEmailVerified, async (req: AuthRequest, res: 
     }
     
     const existing = await prisma.whatsAppInstance.findFirst({
-      where: { businessId }
+      where: { businessId },
+      include: { metaCredential: true }
     });
     
     if (existing) {
-      return res.status(400).json({ error: 'Instance already exists for this business. Delete it first.' });
+      await recordInstanceEvent({
+        instanceId: existing.id,
+        businessId,
+        eventType: 'PROVIDER_CHANGED',
+        previousProvider: existing.provider,
+        newProvider: 'META_CLOUD',
+        previousStatus: existing.status,
+        phoneNumber: existing.phoneNumber,
+        backendId: existing.instanceBackendId,
+        details: `Switching from ${existing.provider} to META_CLOUD`
+      });
+      
+      if (existing.provider === 'BAILEYS' && existing.instanceBackendId) {
+        try {
+          await axios.delete(`${WA_API_URL}/instances/${existing.instanceBackendId}`);
+        } catch (err) {
+          console.log('Previous Baileys instance cleanup failed (may not exist)');
+        }
+      }
+      
+      if (existing.metaCredential) {
+        await prisma.metaCredential.delete({ where: { instanceId: existing.id } }).catch(() => {});
+      }
+      await prisma.whatsAppInstance.delete({ where: { id: existing.id } });
+      console.log(`Cleaned up previous instance ${existing.id} before creating Meta Cloud instance`);
     }
     
     const metaService = new MetaCloudService({
@@ -147,6 +208,16 @@ router.post('/create-meta', requireEmailVerified, async (req: AuthRequest, res: 
     });
     
     const webhookUrl = getPublicWebhookUrl(`/webhook/meta/${instance.id}`);
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId,
+      eventType: 'CREATED',
+      newProvider: 'META_CLOUD',
+      newStatus: 'connected',
+      phoneNumber: instance.phoneNumber,
+      details: 'New Meta Cloud instance created'
+    });
     
     res.status(201).json({
       instance: {
@@ -439,9 +510,21 @@ router.post('/:businessId/restart', async (req: AuthRequest, res: Response) => {
       { webhook: webhookUrl }
     );
     
+    const previousStatus = instance.status;
     await prisma.whatsAppInstance.update({
       where: { id: instance.id },
       data: { status: 'pending_qr', qr: null }
+    });
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId: req.params.businessId,
+      eventType: 'RECONNECTED',
+      previousStatus,
+      newStatus: 'pending_qr',
+      phoneNumber: instance.phoneNumber,
+      backendId: instance.instanceBackendId,
+      details: 'Instance restarted manually'
     });
     
     console.log(`Instance ${instance.instanceBackendId} restarted with webhook: ${webhookUrl}`);
@@ -467,6 +550,17 @@ router.delete('/:businessId', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'No WhatsApp instance for this business' });
     }
     
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId: req.params.businessId,
+      eventType: 'DELETED',
+      previousProvider: instance.provider,
+      previousStatus: instance.status,
+      phoneNumber: instance.phoneNumber,
+      backendId: instance.instanceBackendId,
+      details: 'Instance deleted manually by user'
+    });
+    
     try {
       await axios.delete(`${WA_API_URL}/instances/${instance.instanceBackendId}`);
     } catch (err) {
@@ -479,6 +573,42 @@ router.delete('/:businessId', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Delete instance error:', error);
     res.status(500).json({ error: 'Failed to delete instance' });
+  }
+});
+
+router.get('/:businessId/history', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const limit = parseInt(req.query.limit as string) || 50;
+    const history = await getInstanceHistory(req.params.businessId, limit);
+    
+    res.json(history);
+  } catch (error) {
+    console.error('Get instance history error:', error);
+    res.status(500).json({ error: 'Failed to get instance history' });
+  }
+});
+
+router.post('/:businessId/validate', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const results = await validateAndCleanInstances(req.params.businessId, WA_API_URL);
+    
+    res.json({
+      message: 'Validation complete',
+      ...results
+    });
+  } catch (error) {
+    console.error('Validate instances error:', error);
+    res.status(500).json({ error: 'Failed to validate instances' });
   }
 });
 
