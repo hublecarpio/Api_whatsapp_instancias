@@ -41,6 +41,10 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Provider-Separated Token Usage Tracking**: Tracks token usage by provider (OpenAI/Gemini) and feature, displayed in the super admin dashboard.
 *   **Pro-Tier Payment Links**: Restricts Stripe payment link generation to Pro users, while non-Pro users require manual order confirmation.
 *   **Voucher-Based Payment Confirmation (V1)**: For non-Pro users, orders are created with AWAITING_VOUCHER status. When clients send payment proof images via WhatsApp, the system auto-attaches them to pending orders. Operators can view vouchers in the dashboard and confirm payments with a single click.
+*   **Dual Business Objectives (SALES/APPOINTMENTS)**: Businesses can toggle between SALES mode (e-commerce with orders, products, delivery tracking) and APPOINTMENTS mode (service businesses with calendar scheduling, availability management). The sidebar dynamically shows relevant menu items and the AI agent registers appropriate tools based on the selected objective.
+*   **Appointment Scheduling System**: Full CRUD for appointments with status tracking (PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW), double-booking prevention using comprehensive overlap detection, and automatic reminder scheduling. Includes `agendar_cita` and `consultar_disponibilidad` AI tools for natural language scheduling.
+*   **Business Availability Configuration**: Businesses can configure working hours per day of the week and block specific dates. The availability system validates all appointment requests against configured hours and existing bookings.
+*   **Delivery Tracking**: Orders now include DELIVERED status with delivery agent assignment and delivery timestamp tracking. Quick action buttons in the Orders UI enable easy status progression (Paid → Processing → Shipped → Delivered).
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
