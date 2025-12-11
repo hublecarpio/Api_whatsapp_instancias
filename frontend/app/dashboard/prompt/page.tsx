@@ -162,6 +162,11 @@ export default function PromptPage() {
     triggerContext: ''
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  const [injectionCode, setInjectionCode] = useState<string | null>(null);
+  const [gptUrl, setGptUrl] = useState<string | null>(null);
+  const [loadingInjection, setLoadingInjection] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -170,6 +175,7 @@ export default function PromptPage() {
       setAgentVersion(version);
       loadData();
       loadAgentFiles();
+      loadInjectionCode();
       if (version === 'v2') {
         loadV2Data();
       }
@@ -213,6 +219,42 @@ export default function PromptPage() {
       console.error('Error loading agent files:', err);
     } finally {
       setLoadingFiles(false);
+    }
+  };
+
+  const loadInjectionCode = async () => {
+    if (!currentBusiness) return;
+    
+    try {
+      const res = await businessApi.getInjectionCode(currentBusiness.id);
+      setInjectionCode(res.data.injectionCode);
+      setGptUrl(res.data.gptUrl);
+    } catch (err) {
+      console.error('Error loading injection code:', err);
+    }
+  };
+
+  const handleGenerateCode = async () => {
+    if (!currentBusiness) return;
+    
+    setLoadingInjection(true);
+    try {
+      const res = await businessApi.generateInjectionCode(currentBusiness.id);
+      setInjectionCode(res.data.injectionCode);
+      setGptUrl(res.data.gptUrl);
+      setSuccess('Codigo generado correctamente');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al generar codigo');
+    } finally {
+      setLoadingInjection(false);
+    }
+  };
+
+  const handleCopyCode = () => {
+    if (injectionCode) {
+      navigator.clipboard.writeText(injectionCode);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
     }
   };
 
@@ -937,35 +979,101 @@ export default function PromptPage() {
       )}
 
       {agentVersion === 'v1' && activeTab === 'prompt' && (
-        <div className="card">
-          <h2 className="text-lg font-semibold text-white mb-4">Prompt maestro</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            Este es el prompt que define como se comporta tu agente de IA. 
-            El contexto de productos y politicas se anadira automaticamente.
-          </p>
-          
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="input font-mono text-sm resize-none"
-            rows={15}
-            placeholder="Escribe las instrucciones para tu agente IA..."
-          />
+        <div className="space-y-4">
+          <div className="card bg-gradient-to-r from-neon-blue/10 to-purple-500/10 border-neon-blue/30">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-white font-semibold flex items-center gap-2">
+                  <svg className="w-5 h-5 text-neon-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Configuracion con IA
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  Usa nuestro GPT asistente para configurar tu prompt automaticamente.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                {injectionCode ? (
+                  <>
+                    <div className="flex items-center gap-2 bg-dark-bg rounded-lg px-3 py-2">
+                      <span className="text-gray-400 text-sm">Codigo:</span>
+                      <span className="font-mono text-neon-blue font-bold tracking-wider">{injectionCode}</span>
+                      <button
+                        onClick={handleCopyCode}
+                        className="ml-2 text-gray-400 hover:text-white transition-colors"
+                        title="Copiar codigo"
+                      >
+                        {copiedCode ? (
+                          <svg className="w-4 h-4 text-accent-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    {gptUrl && (
+                      <a
+                        href={gptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-primary text-center"
+                      >
+                        Ir al GPT
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    onClick={handleGenerateCode}
+                    disabled={loadingInjection}
+                    className="btn btn-primary"
+                  >
+                    {loadingInjection ? 'Generando...' : 'Generar codigo de acceso'}
+                  </button>
+                )}
+              </div>
+            </div>
+            {injectionCode && (
+              <p className="text-xs text-gray-500 mt-3 border-t border-dark-border pt-3">
+                Copia el codigo y ve al GPT. Cuando el GPT te pida tus datos, ingresa tu email y este codigo para verificar tu identidad.
+              </p>
+            )}
+          </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
-            <button
-              onClick={() => setPrompt(DEFAULT_PROMPT)}
-              className="btn btn-secondary w-full sm:w-auto"
-            >
-              Restaurar por defecto
-            </button>
-            <button
-              onClick={handleSavePrompt}
-              disabled={loading || !prompt}
-              className="btn btn-primary w-full sm:w-auto"
-            >
-              {loading ? 'Guardando...' : 'Guardar'}
-            </button>
+          <div className="card">
+            <h2 className="text-lg font-semibold text-white mb-4">Prompt maestro</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Este es el prompt que define como se comporta tu agente de IA. 
+              El contexto de productos y politicas se anadira automaticamente.
+            </p>
+            
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="input font-mono text-sm resize-none"
+              rows={15}
+              placeholder="Escribe las instrucciones para tu agente IA..."
+            />
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+              <button
+                onClick={() => setPrompt(DEFAULT_PROMPT)}
+                className="btn btn-secondary w-full sm:w-auto"
+              >
+                Restaurar por defecto
+              </button>
+              <button
+                onClick={handleSavePrompt}
+                disabled={loading || !prompt}
+                className="btn btn-primary w-full sm:w-auto"
+              >
+                {loading ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
           </div>
         </div>
       )}

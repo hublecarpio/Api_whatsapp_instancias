@@ -15,6 +15,7 @@ router.post('/inject-prompt', async (req: Request, res: Response) => {
 
     const {
       identificador,
+      codigo_verificacion,
       nombre_negocio,
       rubro,
       producto_principal,
@@ -32,6 +33,10 @@ router.post('/inject-prompt', async (req: Request, res: Response) => {
 
     if (!identificador) {
       return res.status(400).json({ error: 'Se requiere el identificador (email)' });
+    }
+
+    if (!codigo_verificacion) {
+      return res.status(400).json({ error: 'Se requiere el codigo_verificacion' });
     }
 
     if (!prompt_comercial_final) {
@@ -52,6 +57,10 @@ router.post('/inject-prompt', async (req: Request, res: Response) => {
     }
 
     const business = user.businesses[0];
+
+    if (!business.injectionCode || business.injectionCode !== codigo_verificacion.toUpperCase()) {
+      return res.status(401).json({ error: 'Codigo de verificacion invalido' });
+    }
 
     const businessContext = {
       producto_principal: producto_principal || null,

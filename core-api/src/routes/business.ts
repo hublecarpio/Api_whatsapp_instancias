@@ -189,4 +189,53 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/:id/generate-injection-code', async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await prisma.business.findFirst({
+      where: { id: req.params.id, userId: req.userId }
+    });
+    
+    if (!existing) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase() + 
+                 Math.random().toString(36).substring(2, 6).toUpperCase();
+    
+    const business = await prisma.business.update({
+      where: { id: req.params.id },
+      data: { injectionCode: code }
+    });
+    
+    res.json({ 
+      injectionCode: business.injectionCode,
+      gptUrl: process.env.GPT_PROMPT_URL || null
+    });
+  } catch (error) {
+    console.error('Generate injection code error:', error);
+    res.status(500).json({ error: 'Failed to generate code' });
+  }
+});
+
+router.get('/:id/injection-code', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await prisma.business.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+      select: { injectionCode: true }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    res.json({ 
+      injectionCode: business.injectionCode,
+      gptUrl: process.env.GPT_PROMPT_URL || null
+    });
+  } catch (error) {
+    console.error('Get injection code error:', error);
+    res.status(500).json({ error: 'Failed to get code' });
+  }
+});
+
 export default router;

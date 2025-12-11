@@ -51,7 +51,9 @@ export const businessApi = {
   updateOpenAI: (id: string, data: any) => api.put(`/business/${id}/openai`, data),
   toggleBot: (id: string, enabled?: boolean) => 
     api.put(`/business/${id}/bot-toggle`, { botEnabled: enabled }),
-  delete: (id: string) => api.delete(`/business/${id}`)
+  delete: (id: string) => api.delete(`/business/${id}`),
+  getInjectionCode: (id: string) => api.get(`/business/${id}/injection-code`),
+  generateInjectionCode: (id: string) => api.post(`/business/${id}/generate-injection-code`)
 };
 
 export const productApi = {
