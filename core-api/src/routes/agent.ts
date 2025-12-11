@@ -557,7 +557,8 @@ async function processWithAgent(
   phone: string,
   contactPhone: string,
   contactName: string,
-  instanceId?: string
+  instanceId?: string,
+  instanceBackendIdParam?: string
 ): Promise<{ response: string; tokensUsed?: number }> {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
@@ -580,9 +581,9 @@ async function processWithAgent(
   
   if (business.agentVersion === 'v2') {
     let instance = business.instances?.[0];
-    let backendId = instance?.instanceBackendId;
+    let backendId = instanceBackendIdParam || instance?.instanceBackendId;
     
-    if (instanceId) {
+    if (!backendId && instanceId) {
       const foundInstance = business.instances?.find((i: any) => i.id === instanceId);
       if (foundInstance) {
         instance = foundInstance;
@@ -602,7 +603,7 @@ async function processWithAgent(
       console.error(`[Agent V2] No backendId found for instance ${instanceId || 'default'}, cannot send message`);
     }
     
-    console.log(`[Agent V2] Using instance: ${instanceId || instance?.id} -> backendId: ${backendId}`);
+    console.log(`[Agent V2] Using backendId: ${backendId} (from param: ${!!instanceBackendIdParam})`);
     
     try {
       const v2Available = await isAgentV2Available();
@@ -1265,7 +1266,7 @@ async function processWithAgent(
 
 router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Response) => {
   try {
-    const { business_id, user_message, phone, phoneNumber, contactName, instanceId } = req.body;
+    const { business_id, user_message, phone, phoneNumber, contactName, instanceId, instanceBackendId } = req.body;
     
     if (!business_id || !user_message || !phone) {
       return res.status(400).json({ error: 'business_id, user_message and phone are required' });
@@ -1342,7 +1343,8 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
               phone,
               contactPhone,
               contactName,
-              instanceId
+              instanceId,
+              instanceBackendId
             );
           }
         } catch (error) {
@@ -1366,7 +1368,8 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       phone,
       contactPhone,
       contactName,
-      instanceId
+      instanceId,
+      instanceBackendId
     );
     
     res.json({

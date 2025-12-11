@@ -199,7 +199,8 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                   phone: contactJid,
                   phoneNumber: contactPhone,
                   contactName,
-                  instanceId: instance?.id
+                  instanceId: instance?.id,
+                  instanceBackendId: instance?.instanceBackendId
                 }, {
                   headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
                 });

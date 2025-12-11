@@ -1,0 +1,100 @@
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+Scheduled global inactivity check every 60 seconds
+Scheduled 0 pending reminders to queue
+All BullMQ workers initialized successfully
+Restart instance error: { success: false, error: "Instance 'biz_d96c0b3d' not found" }
+Restart instance error: { success: false, error: "Instance 'biz_d96c0b3d' not found" }
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+WA backend delete failed (maybe already deleted)
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: qr.update
+Webhook payload: {
+  "qrCode": "data:image/png;base64,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"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: connection.close
+Webhook payload: {
+  "statusCode": 515,
+  "shouldReconnect": true,
+  "reason": "Stream Errored (restart required)"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: connection.open
+Webhook payload: {
+  "status": "connected",
+  "timestamp": "2025-12-11T01:56:28.747Z"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.sent
+Webhook payload: {
+  "to": "51910668617@s.whatsapp.net",
+  "type": "text",
+  "messageId": "3EB00226F928A8E10ACB5C"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB00226F928A8E10ACB5C",
+  "remoteJid": "51910668617@s.whatsapp.net",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB00226F928A8E10ACB5C",
+  "remoteJid": "51910668617@s.whatsapp.net",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB00226F928A8E10ACB5C",
+  "remoteJid": "51910668617@s.whatsapp.net",
+  "status": "delivered",
+  "statusCode": 3
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB00226F928A8E10ACB5C",
+  "remoteJid": "249293424357504@lid",
+  "status": "read",
+  "statusCode": 4
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.received
+Webhook payload: {
+  "from": "249293424357504@lid",
+  "sender": "51910668617@s.whatsapp.net",
+  "pushName": "Huble Consulting",
+  "phoneNumber": "51910668617",
+  "messageId": "A5CF77C43453B159D85F16322191352F",
+  "timestamp": 1765418212,
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": false,
+  "type": "text",
+  "text": "Hola"
+}
+[GEMINI] Lead stage analysis: {
+  stageName: 'Nuevo',
+  confidence: 0.95,
+  reasoning: "El agente está enviando múltiples mensajes de saludo sin que el cliente haya respondido o interactuado. Esto indica que el cliente aún no ha mostrado ningún interés ni ha iniciado una conversación real. Por lo tanto, se encuentra en la etapa inicial de 'Nuevo'."
+}
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: null,
+  telefono_alternativo: null
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB00226F928A8E10ACB5C",
+  "remoteJid": "51910668617@s.whatsapp.net",
+  "status": "sent",
+  "statusCode": 2
+}
+Could not mark messages as read: Request failed with status code 404
+Failed to send WhatsApp message (V2): {
+  success: false,
+  error: "Instance 'a33334cf-7a34-49e0-8374-035c68a024bc' not found"
+}
