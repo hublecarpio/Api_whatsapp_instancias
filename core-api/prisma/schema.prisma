@@ -135,6 +135,7 @@ model Business {
   currencySymbol    String             @default("S/.")
   businessObjective BusinessObjective  @default(SALES)
   appointmentConfig Json?
+  businessContext   Json?
   createdAt         DateTime           @default(now())
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
