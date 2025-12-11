@@ -62,6 +62,8 @@ class ToolCall(BaseModel):
     tool_name: str
     parameters: Dict[str, Any]
     result: Optional[str] = None
+    success: bool = True
+    error: Optional[str] = None
 
 
 class GenerateResponse(BaseModel):
@@ -211,6 +213,9 @@ async def generate_response(request: GenerateRequest):
             "conversation_history": conversation_history,
             "vendor_action": None,
             "tool_result": None,
+            "tool_success": True,
+            "tool_error": None,
+            "tool_calls": [],
             "final_response": None,
             "observer_output": None,
             "refiner_output": None,
@@ -234,6 +239,18 @@ async def generate_response(request: GenerateRequest):
         observer_output = result.get("observer_output")
         refiner_output = result.get("refiner_output")
         vendor_action = result.get("vendor_action", {})
+        tool_calls_raw = result.get("tool_calls", [])
+        
+        tool_calls_response = [
+            ToolCall(
+                tool_name=tc.get("tool_name", ""),
+                parameters=tc.get("tool_input", {}),
+                result=tc.get("result"),
+                success=tc.get("success", True),
+                error=tc.get("error")
+            )
+            for tc in tool_calls_raw
+        ]
         
         new_rules_count = 0
         if refiner_output:
@@ -254,6 +271,7 @@ async def generate_response(request: GenerateRequest):
             response=final_response,
             tool=tool_name,
             tool_input=tool_input,
+            tool_calls=tool_calls_response,
             tokens_used=tokens_used,
             model=settings.openai_model,
             observer_insights=observer_output,

@@ -1,4 +1,4 @@
-from typing import Dict, Any, TypedDict, Annotated, Sequence, Optional, List
+from typing import Dict, Any, TypedDict, Annotated, Sequence, Optional, List, cast
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -18,6 +18,14 @@ MIN_CONTEXT_FOR_OBSERVER = 3
 MAX_RETRY_ATTEMPTS = 2
 
 
+class ToolCallRecord(TypedDict):
+    tool_name: str
+    tool_input: Dict[str, Any]
+    result: str
+    success: bool
+    error: Optional[str]
+
+
 class GraphState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     business_profile: Dict[str, Any]
@@ -31,6 +39,9 @@ class GraphState(TypedDict):
     conversation_history: list
     vendor_action: Optional[Dict[str, Any]]
     tool_result: Optional[str]
+    tool_success: bool
+    tool_error: Optional[str]
+    tool_calls: List[ToolCallRecord]
     final_response: Optional[str]
     observer_output: Optional[Dict[str, Any]]
     refiner_output: Optional[Dict[str, Any]]
@@ -98,7 +109,11 @@ async def tool_router_node(state: GraphState) -> Dict[str, Any]:
     tool_input = vendor_action.get("input_tool", {})
     
     if not tool_name:
-        return {"tool_result": None}
+        return {
+            "tool_result": None,
+            "tool_success": True,
+            "tool_error": None
+        }
     
     context = build_tool_context(state)
     
@@ -106,8 +121,28 @@ async def tool_router_node(state: GraphState) -> Dict[str, Any]:
     result = await router.execute_tool(tool_name, tool_input)
     
     result_text = format_tool_result(result)
+    tool_success = result.get("success", False)
+    tool_error = result.get("error") if not tool_success else None
     
-    return {"tool_result": result_text}
+    tool_call_record: ToolCallRecord = {
+        "tool_name": tool_name,
+        "tool_input": tool_input or {},
+        "result": result_text,
+        "success": tool_success,
+        "error": tool_error
+    }
+    
+    existing_calls = list(state.get("tool_calls", []))
+    existing_calls.append(tool_call_record)
+    
+    logger.info(f"Tool {tool_name} executed: success={tool_success}")
+    
+    return {
+        "tool_result": result_text,
+        "tool_success": tool_success,
+        "tool_error": tool_error,
+        "tool_calls": existing_calls
+    }
 
 
 async def vendor_refine_node(state: GraphState) -> Dict[str, Any]:
@@ -116,17 +151,26 @@ async def vendor_refine_node(state: GraphState) -> Dict[str, Any]:
     
     vendor_action = state.get("vendor_action", {})
     tool_result = state.get("tool_result")
+    tool_success = state.get("tool_success", True)
+    tool_error = state.get("tool_error")
     
     if not tool_result:
         return {"final_response": vendor_action.get("mensaje", "")}
+    
+    if not tool_success and tool_error:
+        logger.warning(f"Tool execution failed: {tool_error}")
+        error_context = f"La herramienta falló: {tool_error}. Resultado: {tool_result}"
+    else:
+        error_context = None
     
     vendor = get_vendor_agent()
     refined_response, tokens = await vendor.refine_with_tool_result(
         original_message=vendor_action.get("mensaje", ""),
         tool_name=vendor_action.get("nombre_tool", ""),
-        tool_result=tool_result,
+        tool_result=tool_result if not error_context else error_context,
         current_message=state["current_message"],
-        business_profile=BusinessProfile.from_context(state["business_profile"])
+        business_profile=BusinessProfile.from_context(state["business_profile"]),
+        tool_failed=not tool_success
     )
     
     return {

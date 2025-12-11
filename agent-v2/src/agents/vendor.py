@@ -232,11 +232,29 @@ class VendorAgent:
         tool_name: str,
         tool_result: str,
         current_message: str,
-        business_profile: BusinessProfile
+        business_profile: BusinessProfile,
+        tool_failed: bool = False
     ) -> tuple[str, int]:
         """Second pass: Vendor reasons about tool result to craft better response"""
         
-        refine_prompt = f"""Eres un agente de ventas para {business_profile.business_name}.
+        if tool_failed:
+            refine_prompt = f"""Eres un agente de ventas para {business_profile.business_name}.
+
+El cliente preguntó: "{current_message}"
+
+Intentaste usar la herramienta "{tool_name}" pero falló con este error:
+{tool_result}
+
+Genera una respuesta NATURAL y CONVERSACIONAL para el cliente que:
+1. NO menciones errores técnicos ni herramientas internas
+2. Ofrece una alternativa o pide más información si es necesario
+3. Mantén un tono profesional y amigable
+4. Si no puedes ayudar directamente, ofrece asistencia manual
+
+Responde SOLO con el mensaje para el cliente, sin JSON ni formato especial.
+"""
+        else:
+            refine_prompt = f"""Eres un agente de ventas para {business_profile.business_name}.
 
 El cliente preguntó: "{current_message}"
 
