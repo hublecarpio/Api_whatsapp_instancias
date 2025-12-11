@@ -24,6 +24,7 @@ interface Message {
     mediaAnalysis?: string;
     mediaType?: string;
     type?: string;
+    pending?: boolean;
   };
 }
 
@@ -596,41 +597,61 @@ export default function ChatPage() {
     e.preventDefault();
     if (!currentBusiness || !selectedPhone || (!newMessage.trim() && !previewFile)) return;
 
+    const tempId = `temp-${Date.now()}`;
+    const messageCopy = newMessage;
+    const fileCopy = previewFile;
+
+    const optimisticMessage: Message = {
+      id: tempId,
+      direction: 'outbound',
+      message: previewFile ? undefined : messageCopy,
+      mediaUrl: previewFile?.url,
+      createdAt: new Date().toISOString(),
+      metadata: { 
+        pending: true,
+        mediaType: previewFile?.type
+      }
+    };
+
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage('');
     setSending(true);
     setError(null);
 
     try {
-      if (previewFile) {
+      if (fileCopy) {
         setUploading(true);
-        const uploadRes = await mediaApi.upload(currentBusiness.id, previewFile.file);
+        const uploadRes = await mediaApi.upload(currentBusiness.id, fileCopy.file);
         const { url, type, mimetype } = uploadRes.data;
         
         const sendData: any = { to: selectedPhone };
         if (type === 'image') {
           sendData.imageUrl = url;
-          sendData.message = newMessage || undefined;
+          sendData.message = messageCopy || undefined;
         } else if (type === 'video') {
           sendData.videoUrl = url;
-          sendData.message = newMessage || undefined;
+          sendData.message = messageCopy || undefined;
         } else if (type === 'audio') {
           sendData.audioUrl = url;
         } else {
           sendData.fileUrl = url;
-          sendData.fileName = previewFile.file.name;
-          sendData.mimeType = mimetype || previewFile.file.type;
+          sendData.fileName = fileCopy.file.name;
+          sendData.mimeType = mimetype || fileCopy.file.type;
         }
         
         await waApi.send(currentBusiness.id, sendData);
         setPreviewFile(null);
         setUploading(false);
       } else {
-        await waApi.send(currentBusiness.id, { to: selectedPhone, message: newMessage });
+        await waApi.send(currentBusiness.id, { to: selectedPhone, message: messageCopy });
       }
       
-      setNewMessage('');
       fetchMessages(selectedPhone);
     } catch (err: any) {
       console.error('Failed to send message:', err);
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setNewMessage(messageCopy);
+      if (fileCopy) setPreviewFile(fileCopy);
       setError(err.response?.data?.error || 'Error al enviar mensaje');
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -1070,7 +1091,7 @@ export default function ChatPage() {
               >
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`chat-bubble ${msg.direction === 'outbound' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'}`}>
+                    <div className={`chat-bubble ${msg.direction === 'outbound' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'} ${msg.metadata?.pending ? 'opacity-70' : ''}`}>
                       {msg.mediaUrl && renderMedia(msg.mediaUrl, msg.direction === 'outbound', msg.metadata?.mediaType || msg.metadata?.type)}
                       {msg.message && <p className="break-words whitespace-pre-wrap text-sm sm:text-base">{msg.message}</p>}
                       {msg.direction === 'inbound' && msg.metadata?.mediaAnalysis && (
