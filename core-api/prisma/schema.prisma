@@ -388,7 +388,7 @@ model ContactSettings {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  @@unique([businessId, contactPhone, instanceId])
+  @@index([businessId, contactPhone, instanceId])
   @@index([businessId, botDisabled])
   @@index([businessId, instanceId])
   @@index([instanceId, archivedAt])
