@@ -1,7 +1,9 @@
 {
+  "/login/page": "app/login/page.js",
   "/dashboard/contacts/page": "app/dashboard/contacts/page.js",
-  "/dashboard/billing/page": "app/dashboard/billing/page.js",
   "/dashboard/chat/page": "app/dashboard/chat/page.js",
   "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
-  "/dashboard/reminders/page": "app/dashboard/reminders/page.js"
+  "/dashboard/billing/page": "app/dashboard/billing/page.js",
+  "/dashboard/reminders/page": "app/dashboard/reminders/page.js",
+  "/dashboard/tags/page": "app/dashboard/tags/page.js"
 }

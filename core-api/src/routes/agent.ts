@@ -821,6 +821,28 @@ async function processWithAgent(
   
   systemPrompt = replacePromptVariables(systemPrompt, business.timezone || 'America/Lima');
   
+  // Load agent files for file library feature
+  const agentFiles = await prisma.agentFile.findMany({
+    where: { 
+      prompt: { businessId },
+      enabled: true 
+    },
+    orderBy: { order: 'asc' }
+  });
+  
+  if (agentFiles.length > 0) {
+    systemPrompt += `\n\n## Archivos disponibles para enviar:`;
+    systemPrompt += `\nTienes acceso a ${agentFiles.length} archivos que puedes enviar al cliente cuando sea relevante.`;
+    systemPrompt += `\nUsa la función enviar_archivo cuando el cliente pregunte por alguno de estos temas o cuando sea apropiado según el contexto:`;
+    agentFiles.forEach((file, idx) => {
+      systemPrompt += `\n- [ID:${file.id}] ${file.name}`;
+      if (file.description) systemPrompt += `: ${file.description}`;
+      if (file.triggerKeywords) systemPrompt += ` (keywords: ${file.triggerKeywords})`;
+      if (file.triggerContext) systemPrompt += ` | Enviar cuando: ${file.triggerContext}`;
+    });
+    systemPrompt += `\n\nIMPORTANTE: Cuando detectes que el cliente pregunta por algo relacionado a estos archivos (por keywords o contexto), usa enviar_archivo con el ID correspondiente.`;
+  }
+  
   const recentMessages = await prisma.messageLog.findMany({
     where: { 
       businessId,
@@ -987,6 +1009,31 @@ async function processWithAgent(
             }
           },
           required: ['fecha_hora', 'nombre_cliente']
+        }
+      }
+    });
+  }
+  
+  // Add file sending tool if agent files exist
+  if (agentFiles.length > 0) {
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'enviar_archivo',
+        description: 'Envía un archivo (documento, imagen, catálogo, plano, etc.) al cliente. Usa esta función cuando el cliente pregunte por información que está disponible en los archivos del negocio.',
+        parameters: {
+          type: 'object',
+          properties: {
+            archivo_id: {
+              type: 'string',
+              description: 'ID del archivo a enviar (obtenido de la lista de archivos disponibles)'
+            },
+            mensaje_acompanante: {
+              type: 'string',
+              description: 'Mensaje breve que acompaña al archivo (ej: "Aquí tienes nuestro catálogo de departamentos")'
+            }
+          },
+          required: ['archivo_id']
         }
       }
     });
@@ -1376,6 +1423,43 @@ async function processWithAgent(
             })
           });
         }
+        continue;
+      }
+      
+      // Handle file sending tool
+      if (toolName === 'enviar_archivo') {
+        const args = JSON.parse(fn.arguments);
+        const archivoId = args.archivo_id;
+        const mensajeAcompanante = args.mensaje_acompanante || '';
+        
+        console.log(`[AGENT FILE] Sending file ${archivoId}`);
+        
+        const archivo = agentFiles.find(f => f.id === archivoId);
+        
+        if (!archivo) {
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ exito: false, error: 'Archivo no encontrado' })
+          });
+          continue;
+        }
+        
+        // We return the file URL so it gets sent with the response
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify({
+            exito: true,
+            archivo_url: archivo.fileUrl,
+            archivo_nombre: archivo.name,
+            tipo: archivo.fileType,
+            mensaje: mensajeAcompanante || `Enviando ${archivo.name}`,
+            instruccion: `Incluye esta URL en tu respuesta para que se envíe el archivo: ${archivo.fileUrl}`
+          })
+        });
+        
+        console.log(`[AGENT FILE] File found: ${archivo.name}, URL: ${archivo.fileUrl}`);
         continue;
       }
       
