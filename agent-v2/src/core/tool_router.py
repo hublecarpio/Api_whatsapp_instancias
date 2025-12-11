@@ -16,6 +16,7 @@ from ..tools.followup import FollowupTool
 from ..tools.media import MediaTool
 from ..tools.crm import CRMTool
 from ..tools.search_knowledge import SearchKnowledgeTool
+from ..tools.custom_tool import CustomToolHandler, CustomToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -73,20 +74,68 @@ class ToolRouter:
         self.products = context.get("products", []) if context else []
         self.business_id = context.get("business_id", "") if context else ""
         self.lead_id = context.get("lead_id", "") if context else ""
+        self.custom_tools: Dict[str, Dict[str, Any]] = {}
+        self._load_custom_tools()
+    
+    def _load_custom_tools(self):
+        """Carga las tools personalizadas del contexto."""
+        user_tools = self.context.get("custom_tools", [])
+        for tool in user_tools:
+            if tool.get("enabled", True):
+                tool_name = f"custom_{tool.get('name', 'tool')}"
+                tool_name = tool_name.replace(" ", "_").lower()
+                self.custom_tools[tool_name] = {
+                    "name": tool_name,
+                    "original_name": tool.get("name", ""),
+                    "description": tool.get("description", "Tool personalizada"),
+                    "url": tool.get("url", ""),
+                    "method": tool.get("method", "POST"),
+                    "headers": tool.get("headers"),
+                    "bodyTemplate": tool.get("bodyTemplate"),
+                    "parameters": tool.get("parameters", [])
+                }
+        logger.info(f"Loaded {len(self.custom_tools)} custom tools")
     
     def get_available_tools(self) -> List[Dict[str, str]]:
-        return [
+        tools = [
             {
                 "name": tool["name"],
                 "description": tool["description"]
             }
             for tool in TOOL_DEFINITIONS.values()
         ]
+        for tool in self.custom_tools.values():
+            params_desc = ""
+            if tool.get("parameters"):
+                params = [p.get("name", "") for p in tool["parameters"] if p.get("required", True)]
+                if params:
+                    params_desc = f" (Requiere: {', '.join(params)})"
+            tools.append({
+                "name": tool["name"],
+                "description": f"{tool['description']}{params_desc}"
+            })
+        return tools
     
     def get_tools_for_prompt(self) -> str:
         tools_text = "## Herramientas disponibles:\n\n"
+        tools_text += "### Herramientas integradas:\n"
         for tool in TOOL_DEFINITIONS.values():
             tools_text += f"- **{tool['name']}**: {tool['description']}\n"
+        
+        if self.custom_tools:
+            tools_text += "\n### Herramientas personalizadas del negocio:\n"
+            for tool in self.custom_tools.values():
+                params_info = ""
+                if tool.get("parameters"):
+                    params = tool["parameters"]
+                    param_descs = []
+                    for p in params:
+                        req = "*" if p.get("required", True) else ""
+                        param_descs.append(f"{p.get('name', '')}{req}: {p.get('description', '')}")
+                    if param_descs:
+                        params_info = f"\n  Parámetros: {'; '.join(param_descs)}"
+                tools_text += f"- **{tool['name']}**: {tool['description']}{params_info}\n"
+        
         return tools_text
     
     async def execute_tool(
@@ -94,6 +143,9 @@ class ToolRouter:
         tool_name: str, 
         input_data: Dict[str, Any]
     ) -> Dict[str, Any]:
+        if tool_name in self.custom_tools:
+            return await self._execute_custom_tool(tool_name, input_data)
+        
         if tool_name not in TOOL_DEFINITIONS:
             return {
                 "success": False,
@@ -131,7 +183,36 @@ class ToolRouter:
                 "message": f"Error al ejecutar {tool_name}: {str(e)}"
             }
     
+    async def _execute_custom_tool(
+        self,
+        tool_name: str,
+        input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Ejecuta una tool personalizada del usuario."""
+        tool_config = self.custom_tools.get(tool_name)
+        if not tool_config:
+            return {
+                "success": False,
+                "error": f"Custom tool '{tool_name}' not found",
+                "message": f"Tool personalizada no encontrada: {tool_name}"
+            }
+        
+        try:
+            logger.info(f"Executing custom tool: {tool_name}")
+            result = await CustomToolHandler.run(tool_config, input_data)
+            return result.model_dump()
+        except Exception as e:
+            logger.error(f"Error executing custom tool {tool_name}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Error al ejecutar tool personalizada: {str(e)}"
+            }
+    
     def validate_tool_call(self, tool_name: str, input_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+        if tool_name in self.custom_tools:
+            return True, None
+        
         if tool_name not in TOOL_DEFINITIONS:
             return False, f"Tool '{tool_name}' no existe"
         

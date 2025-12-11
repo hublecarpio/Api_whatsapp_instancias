@@ -467,10 +467,23 @@ async function processWithAgentV2(
     take: historyLimit
   });
   
+  const userTools = business.promptMaster?.tools || [];
+  const toolsConfig = userTools.map((t: any) => ({
+    name: t.name,
+    description: t.description,
+    url: t.url,
+    method: t.method || 'POST',
+    headers: t.headers,
+    bodyTemplate: t.bodyTemplate,
+    parameters: t.parameters,
+    enabled: t.enabled ?? true
+  }));
+  
   const conversationHistory = buildConversationHistory(recentMessages.reverse());
   const businessContext = buildBusinessContext(
     business, 
-    business.promptMaster?.prompt
+    business.promptMaster?.prompt,
+    toolsConfig
   );
   
   const combinedMessage = messages.join('\n');

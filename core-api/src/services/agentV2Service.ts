@@ -88,9 +88,21 @@ export async function generateWithAgentV2(
   }
 }
 
+interface ToolConfig {
+  name: string;
+  description: string;
+  url: string;
+  method: string;
+  headers?: Record<string, string>;
+  bodyTemplate?: any;
+  parameters?: any[];
+  enabled: boolean;
+}
+
 export function buildBusinessContext(
   business: any,
-  customPrompt?: string
+  customPrompt?: string,
+  tools?: ToolConfig[]
 ): BusinessContext {
   const policies: string[] = [];
   
@@ -116,6 +128,8 @@ export function buildBusinessContext(
     stock: p.stock
   }));
   
+  const enabledTools = (tools || []).filter(t => t.enabled);
+  
   return {
     business_id: business.id,
     business_name: business.name,
@@ -123,8 +137,8 @@ export function buildBusinessContext(
     products,
     policies,
     custom_prompt: customPrompt,
-    tools_enabled: false,
-    tools_config: []
+    tools_enabled: enabledTools.length > 0,
+    tools_config: enabledTools
   };
 }
 

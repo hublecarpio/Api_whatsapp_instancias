@@ -42,6 +42,19 @@ class GraphState(TypedDict):
     observer_feedback: Optional[str]
 
 
+def build_tool_context(state: GraphState) -> Dict[str, Any]:
+    """Construye el contexto para el ToolRouter incluyendo custom_tools."""
+    business_profile = state.get("business_profile", {})
+    return {
+        "embedded_products": state.get("embedded_products", []),
+        "products": [p.get("product", p) for p in state.get("embedded_products", [])],
+        "business_id": business_profile.get("business_id", ""),
+        "lead_id": state.get("sender_phone", ""),
+        "knowledge_context": state.get("knowledge_context"),
+        "custom_tools": business_profile.get("tools_config", [])
+    }
+
+
 async def vendor_node(state: GraphState) -> Dict[str, Any]:
     logger.info("Executing vendor node")
     
@@ -51,7 +64,8 @@ async def vendor_node(state: GraphState) -> Dict[str, Any]:
     knowledge_context = state.get("knowledge_context")
     observer_feedback = state.get("observer_feedback")
     
-    tool_router = ToolRouter()
+    tool_context = build_tool_context(state)
+    tool_router = ToolRouter(tool_context)
     tools_available = tool_router.get_available_tools()
     
     vendor = get_vendor_agent()
@@ -86,13 +100,7 @@ async def tool_router_node(state: GraphState) -> Dict[str, Any]:
     if not tool_name:
         return {"tool_result": None}
     
-    context = {
-        "embedded_products": state.get("embedded_products", []),
-        "products": [p.get("product", p) for p in state.get("embedded_products", [])],
-        "business_id": state["business_profile"].get("business_id", ""),
-        "lead_id": state["sender_phone"],
-        "knowledge_context": state.get("knowledge_context")
-    }
+    context = build_tool_context(state)
     
     router = ToolRouter(context)
     result = await router.execute_tool(tool_name, tool_input)
