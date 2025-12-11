@@ -1,0 +1,211 @@
+============================================
+Core API - Starting up...
+============================================
+Environment check:
+  CORE_API_PORT: 4001
+  NODE_ENV: production
+  DATABASE_URL: [SET]
+Database connection:
+  Host: postgres
+
+  Port: 5432
+Waiting for database to be ready...
+Database is reachable!
+Running database migrations...
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "whatsapp_saas", schema "public" at "postgres:5432"
+🚀  Your database is now in sync with your Prisma schema. Done in 176ms
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.7.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+npm notice To update run: npm install -g npm@11.7.0
+npm notice
+Migrations completed successfully!
+Starting Core API on port 4001...
+🚀 Core API running at http://0.0.0.0:4001
+Super Admin sessions: Redis connected
+Redis connected successfully
+Super Admin sessions: Redis ready
+Redis is available
+Redis available - initializing BullMQ workers...
+BullMQ queues initialized
+Reminder worker started with BullMQ
+Inactivity check worker started with BullMQ
+Message buffer worker started with BullMQ
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+Scheduled global inactivity check every 60 seconds
+Scheduled 0 pending reminders to queue
+All BullMQ workers initialized successfully
+WA backend delete failed (maybe already deleted)
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: connection.close
+Webhook payload: {
+  "statusCode": 401,
+  "shouldReconnect": false,
+  "reason": "Connection Failure"
+}
+Instance biz_d96c0b3d restarted with webhook: http://core-api:4001/webhook/d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: qr.update
+Webhook payload: {
+  "qrCode": "data:image/png;base64,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"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: connection.close
+Webhook payload: {
+  "statusCode": 515,
+  "shouldReconnect": true,
+  "reason": "Stream Errored (restart required)"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: connection.open
+Webhook payload: {
+  "status": "connected",
+  "timestamp": "2025-12-11T01:32:14.372Z"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.sent
+Webhook payload: {
+  "to": "51902415576@s.whatsapp.net",
+  "type": "text",
+  "messageId": "3EB0457C789BC87D1048EB"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3AA0F3EE223946AF79A1",
+  "remoteJid": "51992517373@s.whatsapp.net",
+  "status": "read",
+  "statusCode": 4
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB0457C789BC87D1048EB",
+  "remoteJid": "51902415576@s.whatsapp.net",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB0457C789BC87D1048EB",
+  "remoteJid": "51902415576@s.whatsapp.net",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB0457C789BC87D1048EB",
+  "remoteJid": "51902415576@s.whatsapp.net",
+  "status": "delivered",
+  "statusCode": 3
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "A580033B60EB331AFD0E8EDDDF7A0374",
+  "remoteJid": "51910668617@s.whatsapp.net",
+  "status": "read",
+  "statusCode": 4
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB0457C789BC87D1048EB",
+  "remoteJid": "51902415576@s.whatsapp.net",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.received
+Webhook payload: {
+  "from": "58987668082774@lid",
+  "sender": "51902415576@s.whatsapp.net",
+  "pushName": "",
+  "phoneNumber": "51902415576",
+  "messageId": "8DDDA183AC66923475",
+  "timestamp": 1765416777,
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": false,
+  "type": "text",
+  "text": "Hola, ¿en qué puedo ayudarte hoy con respecto al proyecto Neo Lloque?"
+}
+[GEMINI] Lead stage analysis: {
+  stageName: 'Interesado',
+  confidence: 0.9,
+  reasoning: "El agente menciona el 'proyecto Neo Lloque' y pregunta si el cliente tiene dudas antes de una videollamada programada para mañana. Esto implica que el cliente ha mostrado interés previo en el proyecto y se está avanzando en el proceso de venta."
+}
+[LEAD STAGE] Updated 51902415576 to "Interesado" (confidence: 0.9)
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: null,
+  telefono_alternativo: null
+}
+Could not mark messages as read: Request failed with status code 404
+Failed to send WhatsApp message (V2): {
+  success: false,
+  error: "Instance '3e93b2a0-72ed-4d3a-ab7b-ea40b9d54a8c' not found"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.received
+Webhook payload: {
+  "from": "51910668617@s.whatsapp.net",
+  "sender": "51910668617@s.whatsapp.net",
+  "pushName": "Iam Huble",
+  "phoneNumber": "51910668617",
+  "messageId": "A595959D9017465413EA59042208CBF5",
+  "timestamp": 1765416810,
+  "isGroup": false,
+  "isLid": false,
+  "isFromMe": true,
+  "type": "text",
+  "text": "Hola"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "A595959D9017465413EA59042208CBF5",
+  "remoteJid": "51910668617@s.whatsapp.net",
+  "status": "delivered",
+  "statusCode": 3
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "A595959D9017465413EA59042208CBF5",
+  "remoteJid": "249293424357504@lid",
+  "status": "read",
+  "statusCode": 4
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.received
+Webhook payload: {
+  "from": "249293424357504@lid",
+  "sender": "51910668617@s.whatsapp.net",
+  "pushName": "Huble Consulting",
+  "phoneNumber": "51910668617",
+  "messageId": "A57D40C0F263ABFA9D1E4D59462C6DE6",
+  "timestamp": 1765416817,
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": false,
+  "type": "text",
+  "text": "Hola"
+}
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.95,
+  reasoning: 'El agente ha contactado repetidamente al cliente potencial ofreciendo ayuda. El cliente no ha respondido ni mostrado interés explícito, pero tampoco ha rechazado la oferta. Por lo tanto, se encuentra en una etapa donde se está esperando una respuesta o acción por parte del cliente.'
+}
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: null,
+  telefono_alternativo: null
+}
+Could not mark messages as read: Request failed with status code 404
+Failed to send WhatsApp message (V2): {
+  success: false,
+  error: "Instance '3e93b2a0-72ed-4d3a-ab7b-ea40b9d54a8c' not found"
+}

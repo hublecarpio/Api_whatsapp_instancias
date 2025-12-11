@@ -1,0 +1,100 @@
+  "statusCode": 4
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "3EB0457C789BC87D1048EB",
+  "remoteJid": "51902415576@s.whatsapp.net",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.received
+Webhook payload: {
+  "from": "58987668082774@lid",
+  "sender": "51902415576@s.whatsapp.net",
+  "pushName": "",
+  "phoneNumber": "51902415576",
+  "messageId": "8DDDA183AC66923475",
+  "timestamp": 1765416777,
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": false,
+  "type": "text",
+  "text": "Hola, ¿en qué puedo ayudarte hoy con respecto al proyecto Neo Lloque?"
+}
+[GEMINI] Lead stage analysis: {
+  stageName: 'Interesado',
+  confidence: 0.9,
+  reasoning: "El agente menciona el 'proyecto Neo Lloque' y pregunta si el cliente tiene dudas antes de una videollamada programada para mañana. Esto implica que el cliente ha mostrado interés previo en el proyecto y se está avanzando en el proceso de venta."
+}
+[LEAD STAGE] Updated 51902415576 to "Interesado" (confidence: 0.9)
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: null,
+  telefono_alternativo: null
+}
+Could not mark messages as read: Request failed with status code 404
+Failed to send WhatsApp message (V2): {
+  success: false,
+  error: "Instance '3e93b2a0-72ed-4d3a-ab7b-ea40b9d54a8c' not found"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.received
+Webhook payload: {
+  "from": "51910668617@s.whatsapp.net",
+  "sender": "51910668617@s.whatsapp.net",
+  "pushName": "Iam Huble",
+  "phoneNumber": "51910668617",
+  "messageId": "A595959D9017465413EA59042208CBF5",
+  "timestamp": 1765416810,
+  "isGroup": false,
+  "isLid": false,
+  "isFromMe": true,
+  "type": "text",
+  "text": "Hola"
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "A595959D9017465413EA59042208CBF5",
+  "remoteJid": "51910668617@s.whatsapp.net",
+  "status": "delivered",
+  "statusCode": 3
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.status
+Webhook payload: {
+  "messageId": "A595959D9017465413EA59042208CBF5",
+  "remoteJid": "249293424357504@lid",
+  "status": "read",
+  "statusCode": 4
+}
+Webhook received for business d96c0b3d-3bf7-4f90-a1f4-f5f33d796f11: message.received
+Webhook payload: {
+  "from": "249293424357504@lid",
+  "sender": "51910668617@s.whatsapp.net",
+  "pushName": "Huble Consulting",
+  "phoneNumber": "51910668617",
+  "messageId": "A57D40C0F263ABFA9D1E4D59462C6DE6",
+  "timestamp": 1765416817,
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": false,
+  "type": "text",
+  "text": "Hola"
+}
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.95,
+  reasoning: 'El agente ha contactado repetidamente al cliente potencial ofreciendo ayuda. El cliente no ha respondido ni mostrado interés explícito, pero tampoco ha rechazado la oferta. Por lo tanto, se encuentra en una etapa donde se está esperando una respuesta o acción por parte del cliente.'
+}
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: null,
+  telefono_alternativo: null
+}
+Could not mark messages as read: Request failed with status code 404
+Failed to send WhatsApp message (V2): {
+  success: false,
+  error: "Instance '3e93b2a0-72ed-4d3a-ab7b-ea40b9d54a8c' not found"
+}
