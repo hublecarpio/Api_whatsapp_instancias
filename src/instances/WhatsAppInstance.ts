@@ -1303,19 +1303,42 @@ export class WhatsAppInstance {
   }
 
   async destroy(): Promise<void> {
-    this.stopWatchdog();
+    this.logger.info('Starting instance destruction...');
+    
+    // Set flags FIRST to prevent any reconnection attempts
     this.isClosing = true;
     this.isDeleted = true;
+    this.stopWatchdog();
+    
+    // Small delay to ensure any in-flight events see the flags
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     if (this.socket) {
-      this.logger.info('Destroying instance...');
+      this.logger.info('Destroying instance - removing listeners and closing socket...');
       try {
+        // Remove all event listeners BEFORE closing
         this.socket.ev.removeAllListeners('connection.update');
         this.socket.ev.removeAllListeners('messages.upsert');
         this.socket.ev.removeAllListeners('creds.update');
+        this.socket.ev.removeAllListeners('messages.update');
+        this.socket.ev.removeAllListeners('message-receipt.update');
+        
+        // Try to logout properly first (tells WhatsApp servers we're disconnecting)
+        try {
+          await this.socket.logout();
+          this.logger.info('Logged out from WhatsApp successfully');
+        } catch (logoutError: any) {
+          // Logout may fail if already disconnected, that's OK
+          this.logger.debug({ error: logoutError.message }, 'Logout attempt (may fail if not connected)');
+        }
+        
+        // Wait a bit for logout to complete
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Now close the socket
         this.socket.end(undefined);
-      } catch (error) {
-        // Ignore close errors
+      } catch (error: any) {
+        this.logger.debug({ error: error.message }, 'Error during socket cleanup (ignored)');
       }
       this.socket = null;
     }
@@ -1323,6 +1346,7 @@ export class WhatsAppInstance {
     this.status = 'disconnected';
     this.qrCode = null;
     this.webhook = '';
+    this.logger.info('Instance destroyed successfully');
   }
 
   async clearSession(): Promise<void> {

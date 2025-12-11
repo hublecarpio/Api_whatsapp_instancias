@@ -144,14 +144,21 @@ export class InstanceManager {
       return false;
     }
 
-    logger.info({ instanceId: id }, 'Deleting instance');
+    logger.info({ instanceId: id }, 'Deleting instance - starting cleanup');
 
+    // Destroy first (closes socket, sets flags, calls logout)
     await instance.destroy();
-    instance.clearSession();
     
+    // Then clear session data (Redis + files)
+    await instance.clearSession();
+    
+    // Remove from memory
     this.instances.delete(id);
+    
+    // Update persistent metadata
     this.saveMetadata();
 
+    logger.info({ instanceId: id }, 'Instance deleted successfully');
     return true;
   }
 
