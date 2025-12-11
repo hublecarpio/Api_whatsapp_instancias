@@ -123,13 +123,29 @@ export default function AsesorPage() {
     e.preventDefault();
     if (!messageInput.trim() || !selectedConversation || !selectedBusiness || sending) return;
 
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
+      direction: 'outbound',
+      message: messageInput,
+      mediaUrl: null,
+      mediaType: null,
+      createdAt: new Date().toISOString(),
+      metadata: { pending: true }
+    };
+
+    setMessages(prev => [...prev, optimisticMessage]);
+    const messageCopy = messageInput;
+    setMessageInput('');
     setSending(true);
+
     try {
-      await messageApi.send(selectedBusiness.id, selectedConversation.phone, messageInput);
-      setMessageInput('');
+      await messageApi.send(selectedBusiness.id, selectedConversation.phone, messageCopy);
       await loadMessages();
     } catch (error) {
       console.error('Error sending message:', error);
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setMessageInput(messageCopy);
     } finally {
       setSending(false);
     }
@@ -276,7 +292,7 @@ export default function AsesorPage() {
                         msg.direction === 'outbound'
                           ? 'bg-neon-blue text-white'
                           : 'bg-dark-card text-white'
-                      }`}
+                      } ${msg.metadata?.pending ? 'opacity-70' : ''}`}
                     >
                       {msg.mediaUrl && (
                         <div className="mb-2">
