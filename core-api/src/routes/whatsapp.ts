@@ -22,8 +22,25 @@ function getPublicWebhookUrl(path: string): string {
 
 router.use(authMiddleware);
 
-async function checkBusinessAccess(userId: string, businessId: string) {
+async function getUserWithRole(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, parentUserId: true }
+  });
+}
+
+async function checkBusinessAccess(userId: string, businessId: string, role?: string, parentUserId?: string | null) {
+  if (role === 'ASESOR' && parentUserId) {
+    return prisma.business.findFirst({ where: { id: businessId, userId: parentUserId } });
+  }
   return prisma.business.findFirst({ where: { id: businessId, userId } });
+}
+
+async function checkAdvisorContactAccess(userId: string, businessId: string, phone: string): Promise<boolean> {
+  const assignment = await prisma.contactAssignment.findFirst({
+    where: { userId, businessId, contactPhone: phone }
+  });
+  return !!assignment;
 }
 
 router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Response) => {
@@ -403,9 +420,22 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
   try {
     const { to, message, imageUrl, videoUrl, audioUrl, fileUrl, fileName, mimeType } = req.body;
     
-    const business = await checkBusinessAccess(req.userId!, req.params.businessId);
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, req.params.businessId, user.role, user.parentUserId);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (user.role === 'ASESOR') {
+      const cleanPhone = to.replace(/\D/g, '');
+      const hasAccess = await checkAdvisorContactAccess(req.userId!, req.params.businessId, cleanPhone);
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'You do not have permission to message this contact' });
+      }
     }
     
     const instance = await prisma.whatsAppInstance.findFirst({
