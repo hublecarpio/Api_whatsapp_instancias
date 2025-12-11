@@ -1415,6 +1415,11 @@ interface ReferralCode {
   id: string;
   code: string;
   description: string | null;
+  type: 'STANDARD' | 'ENTERPRISE';
+  grantTier: 'STANDARD' | 'PRO' | 'ENTERPRISE' | null;
+  grantDurationDays: number | null;
+  maxUses: number | null;
+  usageCount: number;
   isActive: boolean;
   expiresAt: string | null;
   createdAt: string;
@@ -1428,6 +1433,9 @@ function ReferralsTab({ token }: { token: string }) {
   const [newCode, setNewCode] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newExpiresAt, setNewExpiresAt] = useState('');
+  const [newType, setNewType] = useState<'STANDARD' | 'ENTERPRISE'>('STANDARD');
+  const [newGrantDurationDays, setNewGrantDurationDays] = useState('');
+  const [newMaxUses, setNewMaxUses] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -1457,6 +1465,12 @@ function ReferralsTab({ token }: { token: string }) {
     setCreating(true);
     setError('');
 
+    if (newType === 'ENTERPRISE' && !newGrantDurationDays) {
+      setError('Los codigos Enterprise requieren una duracion en dias');
+      setCreating(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/super-admin/referral-codes', {
         method: 'POST',
@@ -1467,7 +1481,11 @@ function ReferralsTab({ token }: { token: string }) {
         body: JSON.stringify({
           code: newCode,
           description: newDescription || null,
-          expiresAt: newExpiresAt || null
+          expiresAt: newExpiresAt || null,
+          type: newType,
+          grantTier: newType === 'ENTERPRISE' ? 'PRO' : null,
+          grantDurationDays: newType === 'ENTERPRISE' ? parseInt(newGrantDurationDays) : null,
+          maxUses: newMaxUses ? parseInt(newMaxUses) : null
         })
       });
 
@@ -1479,6 +1497,9 @@ function ReferralsTab({ token }: { token: string }) {
       setNewCode('');
       setNewDescription('');
       setNewExpiresAt('');
+      setNewType('STANDARD');
+      setNewGrantDurationDays('');
+      setNewMaxUses('');
       setShowCreateModal(false);
       fetchCodes();
     } catch (err: any) {
@@ -1537,6 +1558,7 @@ function ReferralsTab({ token }: { token: string }) {
 
   const totalRegistered = codes.reduce((sum, c) => sum + c.registeredUsers, 0);
   const activeCodes = codes.filter(c => c.isActive).length;
+  const enterpriseCodes = codes.filter(c => c.type === 'ENTERPRISE').length;
 
   if (loading) {
     return (
@@ -1563,7 +1585,7 @@ function ReferralsTab({ token }: { token: string }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="card text-center">
           <p className="text-3xl font-bold text-neon-blue">{codes.length}</p>
           <p className="text-gray-400 text-sm">Total Codigos</p>
@@ -1571,6 +1593,10 @@ function ReferralsTab({ token }: { token: string }) {
         <div className="card text-center">
           <p className="text-3xl font-bold text-accent-success">{activeCodes}</p>
           <p className="text-gray-400 text-sm">Codigos Activos</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-purple-400">{enterpriseCodes}</p>
+          <p className="text-gray-400 text-sm">Enterprise</p>
         </div>
         <div className="card text-center">
           <p className="text-3xl font-bold text-white">{totalRegistered}</p>
@@ -1586,8 +1612,9 @@ function ReferralsTab({ token }: { token: string }) {
             <thead>
               <tr className="border-b border-dark-border">
                 <th className="text-left py-3 text-gray-400 font-medium">Codigo</th>
+                <th className="text-left py-3 text-gray-400 font-medium">Tipo</th>
                 <th className="text-left py-3 text-gray-400 font-medium">Descripcion</th>
-                <th className="text-center py-3 text-gray-400 font-medium">Registros</th>
+                <th className="text-center py-3 text-gray-400 font-medium">Usos</th>
                 <th className="text-center py-3 text-gray-400 font-medium">Estado</th>
                 <th className="text-left py-3 text-gray-400 font-medium">Expiracion</th>
                 <th className="text-right py-3 text-gray-400 font-medium">Acciones</th>
@@ -1601,8 +1628,24 @@ function ReferralsTab({ token }: { token: string }) {
                       {code.code}
                     </span>
                   </td>
-                  <td className="py-3 text-gray-300">
-                    {code.description || <span className="text-gray-500">Sin descripcion</span>}
+                  <td className="py-3">
+                    {code.type === 'ENTERPRISE' ? (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium w-fit">
+                          ENTERPRISE
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          PRO x {code.grantDurationDays} dias
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
+                        STANDARD
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 text-gray-300 text-sm max-w-[200px] truncate">
+                    {code.description || <span className="text-gray-500">-</span>}
                   </td>
                   <td className="py-3 text-center">
                     <button 
@@ -1610,6 +1653,7 @@ function ReferralsTab({ token }: { token: string }) {
                       className="text-neon-blue hover:underline"
                     >
                       {code.registeredUsers}
+                      {code.maxUses && <span className="text-gray-500">/{code.maxUses}</span>}
                     </button>
                   </td>
                   <td className="py-3 text-center">
@@ -1627,7 +1671,7 @@ function ReferralsTab({ token }: { token: string }) {
                   <td className="py-3 text-gray-400 text-sm">
                     {code.expiresAt 
                       ? new Date(code.expiresAt).toLocaleDateString('es-PE')
-                      : 'Sin expiracion'}
+                      : '-'}
                   </td>
                   <td className="py-3 text-right">
                     <button
@@ -1646,7 +1690,7 @@ function ReferralsTab({ token }: { token: string }) {
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="card max-w-md w-full mx-4">
+          <div className="card max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-white mb-4">Crear Codigo de Referido</h3>
             <form onSubmit={handleCreate} className="space-y-4">
               {error && (
@@ -1654,6 +1698,38 @@ function ReferralsTab({ token }: { token: string }) {
                   {error}
                 </div>
               )}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Tipo de Codigo *</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewType('STANDARD')}
+                    className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                      newType === 'STANDARD'
+                        ? 'bg-gray-600 text-white'
+                        : 'bg-dark-bg text-gray-400 hover:bg-dark-hover'
+                    }`}
+                  >
+                    Standard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewType('ENTERPRISE')}
+                    className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                      newType === 'ENTERPRISE'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-dark-bg text-gray-400 hover:bg-dark-hover'
+                    }`}
+                  >
+                    Enterprise
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {newType === 'ENTERPRISE' 
+                    ? 'Activa PRO automaticamente al registrarse' 
+                    : 'Solo tracking de marketing'}
+                </p>
+              </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Codigo *</label>
                 <input
@@ -1664,7 +1740,6 @@ function ReferralsTab({ token }: { token: string }) {
                   placeholder="SIETEDIASGRATIS"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Solo letras y numeros, se convierte a mayusculas</p>
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Descripcion</label>
@@ -1673,9 +1748,38 @@ function ReferralsTab({ token }: { token: string }) {
                   value={newDescription}
                   onChange={e => setNewDescription(e.target.value)}
                   className="input w-full"
-                  placeholder="Promocion de lanzamiento"
+                  placeholder="Cliente enterprise - Acme Corp"
                 />
               </div>
+              {newType === 'ENTERPRISE' && (
+                <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4 space-y-4">
+                  <p className="text-purple-400 text-sm font-medium">Configuracion Enterprise</p>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Duracion PRO (dias) *</label>
+                    <input
+                      type="number"
+                      value={newGrantDurationDays}
+                      onChange={e => setNewGrantDurationDays(e.target.value)}
+                      className="input w-full"
+                      placeholder="30"
+                      min="1"
+                      required={newType === 'ENTERPRISE'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Limite de usos</label>
+                    <input
+                      type="number"
+                      value={newMaxUses}
+                      onChange={e => setNewMaxUses(e.target.value)}
+                      className="input w-full"
+                      placeholder="Ilimitado"
+                      min="1"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Dejar vacio para usos ilimitados</p>
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Fecha de expiracion</label>
                 <input
@@ -1691,6 +1795,9 @@ function ReferralsTab({ token }: { token: string }) {
                   onClick={() => {
                     setShowCreateModal(false);
                     setError('');
+                    setNewType('STANDARD');
+                    setNewGrantDurationDays('');
+                    setNewMaxUses('');
                   }}
                   className="btn btn-ghost flex-1"
                 >
@@ -1699,7 +1806,7 @@ function ReferralsTab({ token }: { token: string }) {
                 <button
                   type="submit"
                   disabled={creating || !newCode}
-                  className="btn btn-primary flex-1"
+                  className={`flex-1 ${newType === 'ENTERPRISE' ? 'btn bg-purple-600 hover:bg-purple-700 text-white' : 'btn btn-primary'}`}
                 >
                   {creating ? 'Creando...' : 'Crear'}
                 </button>

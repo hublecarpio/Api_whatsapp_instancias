@@ -27,18 +27,65 @@ model User {
   referralCode                String?
   createdAt                   DateTime            @default(now())
   businesses                  Business[]
+  subscriptions               Subscription[]
+}
+
+enum ReferralCodeType {
+  STANDARD
+  ENTERPRISE
+}
+
+enum SubscriptionTier {
+  STANDARD
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionSource {
+  STRIPE
+  ENTERPRISE
+  TRIAL
 }
 
 model ReferralCode {
-  id          String    @id @default(uuid())
-  code        String    @unique
-  description String?
-  isActive    Boolean   @default(true)
-  usageCount  Int       @default(0)
-  createdAt   DateTime  @default(now())
-  expiresAt   DateTime?
+  id                String            @id @default(uuid())
+  code              String            @unique
+  description       String?
+  type              ReferralCodeType  @default(STANDARD)
+  grantTier         SubscriptionTier?
+  grantDurationDays Int?
+  maxUses           Int?
+  isActive          Boolean           @default(true)
+  usageCount        Int               @default(0)
+  createdAt         DateTime          @default(now())
+  expiresAt         DateTime?
+
+  subscriptions     Subscription[]
 
   @@index([code])
+  @@index([type, isActive])
+}
+
+model Subscription {
+  id              String             @id @default(uuid())
+  userId          String
+  source          SubscriptionSource
+  tier            SubscriptionTier   @default(PRO)
+  status          SubscriptionStatus @default(ACTIVE)
+  startsAt        DateTime           @default(now())
+  endsAt          DateTime?
+  referralCodeId  String?
+  activatedBy     String?
+  notes           String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referralCode    ReferralCode?      @relation(fields: [referralCodeId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([endsAt, status])
+  @@index([source])
 }
 
 enum SystemEventType {

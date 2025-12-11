@@ -1055,7 +1055,7 @@ router.get('/referral-codes', superAdminMiddleware, async (req: SuperAdminReques
 
 router.post('/referral-codes', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
   try {
-    const { code, description, expiresAt } = req.body;
+    const { code, description, expiresAt, type, grantTier, grantDurationDays, maxUses } = req.body;
     
     if (!code) {
       return res.status(400).json({ error: 'Code is required' });
@@ -1071,13 +1071,23 @@ router.post('/referral-codes', superAdminMiddleware, async (req: SuperAdminReque
       return res.status(400).json({ error: 'Code already exists' });
     }
     
+    if (type === 'ENTERPRISE' && !grantDurationDays) {
+      return res.status(400).json({ error: 'Enterprise codes require grantDurationDays' });
+    }
+    
     const newCode = await prisma.referralCode.create({
       data: {
         code: upperCode,
         description: description || null,
-        expiresAt: expiresAt ? new Date(expiresAt) : null
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        type: type || 'STANDARD',
+        grantTier: type === 'ENTERPRISE' ? (grantTier || 'PRO') : null,
+        grantDurationDays: type === 'ENTERPRISE' ? grantDurationDays : null,
+        maxUses: maxUses || null
       }
     });
+    
+    console.log(`[Super Admin] Created ${type || 'STANDARD'} referral code: ${upperCode}`);
     
     res.json({ code: newCode });
   } catch (error: any) {
@@ -1089,14 +1099,18 @@ router.post('/referral-codes', superAdminMiddleware, async (req: SuperAdminReque
 router.put('/referral-codes/:id', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { description, isActive, expiresAt } = req.body;
+    const { description, isActive, expiresAt, type, grantTier, grantDurationDays, maxUses } = req.body;
     
     const code = await prisma.referralCode.update({
       where: { id },
       data: {
         description: description ?? undefined,
         isActive: isActive ?? undefined,
-        expiresAt: expiresAt !== undefined ? (expiresAt ? new Date(expiresAt) : null) : undefined
+        expiresAt: expiresAt !== undefined ? (expiresAt ? new Date(expiresAt) : null) : undefined,
+        type: type ?? undefined,
+        grantTier: grantTier ?? undefined,
+        grantDurationDays: grantDurationDays ?? undefined,
+        maxUses: maxUses ?? undefined
       }
     });
     
@@ -1133,7 +1147,13 @@ router.get('/referral-codes/:code/users', superAdminMiddleware, async (req: Supe
         name: true,
         email: true,
         subscriptionStatus: true,
-        createdAt: true
+        isPro: true,
+        createdAt: true,
+        subscriptions: {
+          where: { source: 'ENTERPRISE' },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -1142,6 +1162,190 @@ router.get('/referral-codes/:code/users', superAdminMiddleware, async (req: Supe
   } catch (error: any) {
     console.error('Get referral users error:', error);
     res.status(500).json({ error: 'Failed to get referral users' });
+  }
+});
+
+// ============ ENTERPRISE SUBSCRIPTIONS ============
+
+router.get('/subscriptions', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { source, status } = req.query;
+    
+    const where: any = {};
+    if (source) where.source = source;
+    if (status) where.status = status;
+    
+    const subscriptions = await prisma.subscription.findMany({
+      where,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, isPro: true }
+        },
+        referralCode: {
+          select: { code: true, description: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    const now = new Date();
+    const expiringSoon = subscriptions.filter(s => 
+      s.status === 'ACTIVE' && 
+      s.endsAt && 
+      s.endsAt.getTime() - now.getTime() < 7 * 24 * 60 * 60 * 1000
+    );
+    
+    res.json({
+      subscriptions,
+      summary: {
+        total: subscriptions.length,
+        active: subscriptions.filter(s => s.status === 'ACTIVE').length,
+        expiringSoon: expiringSoon.length,
+        bySource: subscriptions.reduce<Record<string, number>>((acc, s) => {
+          acc[s.source] = (acc[s.source] || 0) + 1;
+          return acc;
+        }, {})
+      }
+    });
+  } catch (error: any) {
+    console.error('List subscriptions error:', error);
+    res.status(500).json({ error: 'Failed to list subscriptions' });
+  }
+});
+
+router.post('/subscriptions', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { userId, tier, durationDays, notes } = req.body;
+    
+    if (!userId || !durationDays) {
+      return res.status(400).json({ error: 'userId and durationDays are required' });
+    }
+    
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const now = new Date();
+    const endsAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    
+    const [subscription] = await prisma.$transaction([
+      prisma.subscription.create({
+        data: {
+          userId,
+          source: 'ENTERPRISE',
+          tier: tier || 'PRO',
+          status: 'ACTIVE',
+          startsAt: now,
+          endsAt,
+          activatedBy: 'super_admin',
+          notes: notes || null
+        }
+      }),
+      prisma.user.update({
+        where: { id: userId },
+        data: { 
+          isPro: true,
+          subscriptionStatus: 'ACTIVE'
+        }
+      })
+    ]);
+    
+    console.log(`[Super Admin] Created enterprise subscription for ${user.email} (${durationDays} days)`);
+    
+    res.json({ subscription });
+  } catch (error: any) {
+    console.error('Create subscription error:', error);
+    res.status(500).json({ error: 'Failed to create subscription' });
+  }
+});
+
+router.patch('/subscriptions/:id/revoke', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const subscription = await prisma.subscription.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+    
+    if (!subscription) {
+      return res.status(404).json({ error: 'Subscription not found' });
+    }
+    
+    const activeSubscriptions = await prisma.subscription.count({
+      where: {
+        userId: subscription.userId,
+        status: 'ACTIVE',
+        id: { not: id }
+      }
+    });
+    
+    await prisma.$transaction([
+      prisma.subscription.update({
+        where: { id },
+        data: { status: 'CANCELED' }
+      }),
+      ...(activeSubscriptions === 0 ? [
+        prisma.user.update({
+          where: { id: subscription.userId },
+          data: { 
+            isPro: false,
+            subscriptionStatus: 'CANCELED'
+          }
+        })
+      ] : [])
+    ]);
+    
+    console.log(`[Super Admin] Revoked enterprise subscription for ${subscription.user.email}`);
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Revoke subscription error:', error);
+    res.status(500).json({ error: 'Failed to revoke subscription' });
+  }
+});
+
+router.patch('/subscriptions/:id/extend', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { additionalDays } = req.body;
+    
+    if (!additionalDays || additionalDays <= 0) {
+      return res.status(400).json({ error: 'additionalDays must be a positive number' });
+    }
+    
+    const subscription = await prisma.subscription.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+    
+    if (!subscription) {
+      return res.status(404).json({ error: 'Subscription not found' });
+    }
+    
+    const currentEnd = subscription.endsAt || new Date();
+    const newEndsAt = new Date(currentEnd.getTime() + additionalDays * 24 * 60 * 60 * 1000);
+    
+    const updated = await prisma.subscription.update({
+      where: { id },
+      data: { 
+        endsAt: newEndsAt,
+        status: 'ACTIVE'
+      }
+    });
+    
+    await prisma.user.update({
+      where: { id: subscription.userId },
+      data: { isPro: true, subscriptionStatus: 'ACTIVE' }
+    });
+    
+    console.log(`[Super Admin] Extended enterprise subscription for ${subscription.user.email} by ${additionalDays} days`);
+    
+    res.json({ subscription: updated });
+  } catch (error: any) {
+    console.error('Extend subscription error:', error);
+    res.status(500).json({ error: 'Failed to extend subscription' });
   }
 });
 

@@ -24,23 +24,33 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email already registered' });
     }
     
-    // Validate and track referral code if provided
     let validReferralCode: string | null = null;
+    let enterpriseCode: any = null;
+    
     if (referralCode) {
       const refCode = await prisma.referralCode.findUnique({
         where: { code: referralCode.toUpperCase() }
       });
       
       if (refCode && refCode.isActive) {
-        // Check if expired
         if (!refCode.expiresAt || refCode.expiresAt > new Date()) {
-          validReferralCode = refCode.code;
-          // Increment usage count
-          await prisma.referralCode.update({
-            where: { id: refCode.id },
-            data: { usageCount: { increment: 1 } }
-          });
-          console.log(`[REFERRAL] Valid code used: ${refCode.code}, new count: ${refCode.usageCount + 1}`);
+          if (refCode.maxUses && refCode.usageCount >= refCode.maxUses) {
+            console.log(`[REFERRAL] Code max uses reached: ${refCode.code}`);
+          } else {
+            validReferralCode = refCode.code;
+            
+            await prisma.referralCode.update({
+              where: { id: refCode.id },
+              data: { usageCount: { increment: 1 } }
+            });
+            
+            if (refCode.type === 'ENTERPRISE' && refCode.grantDurationDays) {
+              enterpriseCode = refCode;
+              console.log(`[REFERRAL] Enterprise code used: ${refCode.code} (${refCode.grantDurationDays} days, tier: ${refCode.grantTier})`);
+            } else {
+              console.log(`[REFERRAL] Valid code used: ${refCode.code}, new count: ${refCode.usageCount + 1}`);
+            }
+          }
         } else {
           console.log(`[REFERRAL] Expired code attempted: ${referralCode}`);
         }
@@ -55,6 +65,9 @@ router.post('/register', async (req: Request, res: Response) => {
     const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
     
     const result = await prisma.$transaction(async (tx) => {
+      const isPro = !!enterpriseCode;
+      const subscriptionStatus = enterpriseCode ? 'ACTIVE' : 'PENDING';
+      
       const user = await tx.user.create({
         data: { 
           name, 
@@ -64,9 +77,32 @@ router.post('/register', async (req: Request, res: Response) => {
           verificationToken: hashedToken,
           verificationTokenExpiresAt: expiresAt,
           lastVerificationSentAt: new Date(),
-          referralCode: validReferralCode
+          referralCode: validReferralCode,
+          isPro,
+          subscriptionStatus
         }
       });
+      
+      if (enterpriseCode) {
+        const now = new Date();
+        const subscriptionEndsAt = new Date(now.getTime() + enterpriseCode.grantDurationDays * 24 * 60 * 60 * 1000);
+        
+        await tx.subscription.create({
+          data: {
+            userId: user.id,
+            source: 'ENTERPRISE',
+            tier: enterpriseCode.grantTier || 'PRO',
+            status: 'ACTIVE',
+            startsAt: now,
+            endsAt: subscriptionEndsAt,
+            referralCodeId: enterpriseCode.id,
+            activatedBy: 'referral_code',
+            notes: `Auto-activated via enterprise code: ${enterpriseCode.code}`
+          }
+        });
+        
+        console.log(`[ENTERPRISE] User ${email} activated with PRO for ${enterpriseCode.grantDurationDays} days via code ${enterpriseCode.code}`);
+      }
       
       const business = await tx.business.create({
         data: {
@@ -79,7 +115,7 @@ router.post('/register', async (req: Request, res: Response) => {
       
       console.log(`Created starter business ${business.id} for user ${user.id}`);
       
-      return { user, business };
+      return { user, business, isPro };
     });
     
     await sendVerificationEmail(email, name, rawToken, APP_DOMAIN);
@@ -91,10 +127,13 @@ router.post('/register', async (req: Request, res: Response) => {
         id: result.user.id, 
         name: result.user.name, 
         email: result.user.email,
-        emailVerified: false
+        emailVerified: false,
+        isPro: result.isPro
       },
       token,
-      message: 'Registration successful. Please check your email to verify your account.'
+      message: result.isPro 
+        ? 'Registration successful! Your PRO subscription has been activated. Please check your email to verify your account.'
+        : 'Registration successful. Please check your email to verify your account.'
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -118,10 +157,17 @@ router.get('/check-referral/:code', async (req: Request, res: Response) => {
       return res.json({ valid: false, reason: 'expired' });
     }
     
+    if (refCode.maxUses && refCode.usageCount >= refCode.maxUses) {
+      return res.json({ valid: false, reason: 'max_uses_reached' });
+    }
+    
     res.json({ 
       valid: true, 
       code: refCode.code,
-      description: refCode.description 
+      description: refCode.description,
+      type: refCode.type,
+      grantsPro: refCode.type === 'ENTERPRISE',
+      grantDurationDays: refCode.grantDurationDays
     });
   } catch (error) {
     console.error('Check referral error:', error);
