@@ -186,6 +186,12 @@ model Business {
   appointmentConfig Json?
   businessContext   Json?
   injectionCode     String?
+  apiKeyHash        String?
+  apiKeyPrefix      String?
+  apiKeyCreatedAt   DateTime?
+  webhookUrl        String?
+  webhookEvents     String[]           @default([])
+  webhookSecret     String?
   createdAt         DateTime           @default(now())
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
