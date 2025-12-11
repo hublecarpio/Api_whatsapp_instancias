@@ -8,7 +8,7 @@ RUN npm ci
 
 COPY . .
 
-RUN npm run build
+RUN npm run build && mkdir -p /app/src/storage/sessions
 
 FROM node:20-alpine AS production
 
@@ -19,9 +19,9 @@ COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/storage ./src/storage
 
-RUN mkdir -p /app/src/storage/sessions && \
-    chown -R node:node /app
+RUN chown -R node:node /app
 
 ENV NODE_ENV=production
 ENV PORT=4080
