@@ -150,6 +150,7 @@ router.get('/users', superAdminMiddleware, async (req: SuperAdminRequest, res: R
           subscriptionStatus: true,
           trialEndAt: true,
           isPro: true,
+          paymentLinkEnabled: true,
           createdAt: true,
           _count: {
             select: { businesses: true }
@@ -295,6 +296,43 @@ router.patch('/users/:id/pro', superAdminMiddleware, async (req: SuperAdminReque
       return res.status(404).json({ error: 'User not found' });
     }
     res.status(500).json({ error: 'Failed to toggle Pro status' });
+  }
+});
+
+router.patch('/users/:id/payment-link', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const userId = req.params.id;
+    const { paymentLinkEnabled } = req.body;
+    
+    if (typeof paymentLinkEnabled !== 'boolean') {
+      return res.status(400).json({ error: 'paymentLinkEnabled must be a boolean' });
+    }
+    
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { paymentLinkEnabled },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isPro: true,
+        paymentLinkEnabled: true
+      }
+    });
+    
+    if (paymentLinkEnabled) {
+      console.log(`[Super Admin] Payment Link enabled for user: ${user.email}`);
+    } else {
+      console.log(`[Super Admin] Payment Link disabled for user: ${user.email}`);
+    }
+    
+    res.json({ success: true, user });
+  } catch (error: any) {
+    console.error('Toggle Payment Link error:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.status(500).json({ error: 'Failed to toggle Payment Link status' });
   }
 });
 

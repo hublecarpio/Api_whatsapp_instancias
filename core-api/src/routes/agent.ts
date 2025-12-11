@@ -716,7 +716,7 @@ async function processWithAgent(
       promptMaster: { include: { tools: { where: { enabled: true } } } },
       products: true,
       instances: { include: { metaCredential: true } },
-      user: { select: { isPro: true } }
+      user: { select: { isPro: true, paymentLinkEnabled: true } }
     }
   });
   
@@ -1218,12 +1218,12 @@ async function processWithAgent(
           }
         }
         
-        const isPro = business.user?.isPro || false;
-        console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}, isPro: ${isPro}`);
+        const canUsePaymentLink = business.user?.paymentLinkEnabled || false;
+        console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}, paymentLinkEnabled: ${canUsePaymentLink}`);
         
         let paymentResult: string;
         
-        if (!isPro) {
+        if (!canUsePaymentLink) {
           const product = await prisma.product.findUnique({
             where: { id: productId }
           });

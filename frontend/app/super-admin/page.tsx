@@ -322,6 +322,30 @@ function UsersTab({ token }: { token: string }) {
     }
   };
 
+  const handleTogglePaymentLink = async (userId: string, currentEnabled: boolean) => {
+    if (actionLoading) return;
+    setActionLoading(userId + '_pl');
+    
+    try {
+      const response = await fetch(`/api/super-admin/users/${userId}/payment-link`, {
+        method: 'PATCH',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ paymentLinkEnabled: !currentEnabled })
+      });
+      
+      if (response.ok) {
+        setUsers(users.map(u => u.id === userId ? { ...u, paymentLinkEnabled: !currentEnabled } : u));
+      }
+    } catch (err) {
+      console.error('Failed to toggle Payment Link:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleDeleteUser = async (userId: string, email: string) => {
     if (actionLoading) return;
     
@@ -363,6 +387,7 @@ function UsersTab({ token }: { token: string }) {
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Email</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Estado</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Pro</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-medium">Link Pago</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Negocios</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Registro</th>
             <th className="text-left py-3 px-4 text-gray-400 font-medium">Acciones</th>
@@ -393,6 +418,19 @@ function UsersTab({ token }: { token: string }) {
                   }`}
                 >
                   {actionLoading === user.id ? '...' : user.isPro ? 'PRO' : 'Standard'}
+                </button>
+              </td>
+              <td className="py-3 px-4">
+                <button
+                  onClick={() => handleTogglePaymentLink(user.id, user.paymentLinkEnabled)}
+                  disabled={actionLoading === user.id + '_pl'}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    user.paymentLinkEnabled 
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30' 
+                      : 'bg-gray-700/50 text-gray-400 border border-gray-600 hover:bg-gray-600/50'
+                  }`}
+                >
+                  {actionLoading === user.id + '_pl' ? '...' : user.paymentLinkEnabled ? 'Activo' : 'Voucher'}
                 </button>
               </td>
               <td className="py-3 px-4 text-gray-300">{user._count?.businesses || 0}</td>
