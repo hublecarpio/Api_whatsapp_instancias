@@ -1030,6 +1030,27 @@ export default function ChatPage() {
                   <option value="">Sin etapa</option>
                   {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
                 </select>
+                {getContactAdvisor(selectedPhone) ? (
+                  <span className="hidden sm:flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    {getContactAdvisor(selectedPhone)?.name}
+                  </span>
+                ) : advisors.length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAssignContact(selectedPhone, e.target.value);
+                      }
+                    }}
+                    className="hidden sm:block text-xs bg-dark-card border border-dark-border rounded px-2 py-1 text-gray-400"
+                  >
+                    <option value="">Asignar asesor...</option>
+                    {advisors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                )}
                 <button 
                   onClick={() => setShowContactPanel(!showContactPanel)}
                   className={`p-2 rounded-full transition-colors ${showContactPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`}
