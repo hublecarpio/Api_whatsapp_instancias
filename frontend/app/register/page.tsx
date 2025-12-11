@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
@@ -9,13 +9,22 @@ import Logo from '@/components/Logo';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setAuth } = useAuthStore();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
+
+  useEffect(() => {
+    const code = searchParams.get('code');
+    if (code) {
+      setReferralCode(code.toUpperCase());
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +32,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const response = await authApi.register({ name, email, password });
+      const response = await authApi.register({ name, email, password, referralCode: referralCode || undefined });
       setAuth(response.data.user, response.data.token);
       setRegistered(true);
     } catch (err: any) {
@@ -136,6 +145,19 @@ export default function RegisterPage() {
                 required
               />
               <p className="text-xs text-gray-500 mt-1">Minimo 6 caracteres</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Codigo de referido <span className="text-gray-500">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                className="input"
+                placeholder="SIETEDIASGRATIS"
+              />
             </div>
 
             <button

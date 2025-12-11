@@ -176,6 +176,7 @@ export default function SuperAdminPage() {
             { id: 'messages', label: 'Mensajes' },
             { id: 'billing', label: 'Facturacion' },
             { id: 'agentv2', label: 'Agent V2' },
+            { id: 'referrals', label: 'Referidos' },
             { id: 'system', label: 'Sistema' }
           ].map((tab) => (
             <button
@@ -203,6 +204,7 @@ export default function SuperAdminPage() {
         {activeTab === 'messages' && <MessagesTab token={token} />}
         {activeTab === 'billing' && <BillingTab token={token} />}
         {activeTab === 'agentv2' && <AgentV2Tab token={token} />}
+        {activeTab === 'referrals' && <ReferralsTab token={token} />}
         {activeTab === 'system' && <SystemTab token={token} />}
       </main>
     </div>
@@ -1402,6 +1404,360 @@ function AgentV2Tab({ token }: { token: string }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface ReferralCode {
+  id: string;
+  code: string;
+  description: string | null;
+  isActive: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+  registeredUsers: number;
+}
+
+function ReferralsTab({ token }: { token: string }) {
+  const [codes, setCodes] = useState<ReferralCode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCode, setNewCode] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newExpiresAt, setNewExpiresAt] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  useEffect(() => {
+    fetchCodes();
+  }, [token]);
+
+  const fetchCodes = async () => {
+    try {
+      const res = await fetch('/api/super-admin/referral-codes', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setCodes(data.codes || []);
+    } catch (err) {
+      console.error('Error fetching codes:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/super-admin/referral-codes', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          code: newCode,
+          description: newDescription || null,
+          expiresAt: newExpiresAt || null
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error al crear codigo');
+      }
+
+      setNewCode('');
+      setNewDescription('');
+      setNewExpiresAt('');
+      setShowCreateModal(false);
+      fetchCodes();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleToggleActive = async (id: string, isActive: boolean) => {
+    try {
+      await fetch(`/api/super-admin/referral-codes/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isActive: !isActive })
+      });
+      fetchCodes();
+    } catch (err) {
+      console.error('Error toggling code:', err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Eliminar este codigo de referido?')) return;
+    
+    try {
+      await fetch(`/api/super-admin/referral-codes/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      fetchCodes();
+    } catch (err) {
+      console.error('Error deleting code:', err);
+    }
+  };
+
+  const handleViewUsers = async (code: string) => {
+    setSelectedCode(code);
+    setLoadingUsers(true);
+    
+    try {
+      const res = await fetch(`/api/super-admin/referral-codes/${code}/users`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setUsers(data.users || []);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const totalRegistered = codes.reduce((sum, c) => sum + c.registeredUsers, 0);
+  const activeCodes = codes.filter(c => c.isActive).length;
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-bold text-white">Codigos de Referido</h2>
+          <p className="text-gray-400 text-sm mt-1">
+            Gestiona codigos para marketing y tracking de registros
+          </p>
+        </div>
+        <button 
+          onClick={() => setShowCreateModal(true)}
+          className="btn btn-primary"
+        >
+          + Crear Codigo
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-neon-blue">{codes.length}</p>
+          <p className="text-gray-400 text-sm">Total Codigos</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-accent-success">{activeCodes}</p>
+          <p className="text-gray-400 text-sm">Codigos Activos</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-3xl font-bold text-white">{totalRegistered}</p>
+          <p className="text-gray-400 text-sm">Usuarios Registrados</p>
+        </div>
+      </div>
+
+      <div className="card">
+        {codes.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No hay codigos de referido creados</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-dark-border">
+                <th className="text-left py-3 text-gray-400 font-medium">Codigo</th>
+                <th className="text-left py-3 text-gray-400 font-medium">Descripcion</th>
+                <th className="text-center py-3 text-gray-400 font-medium">Registros</th>
+                <th className="text-center py-3 text-gray-400 font-medium">Estado</th>
+                <th className="text-left py-3 text-gray-400 font-medium">Expiracion</th>
+                <th className="text-right py-3 text-gray-400 font-medium">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {codes.map(code => (
+                <tr key={code.id} className="border-b border-dark-border hover:bg-dark-hover">
+                  <td className="py-3">
+                    <span className="font-mono text-white bg-dark-bg px-2 py-1 rounded">
+                      {code.code}
+                    </span>
+                  </td>
+                  <td className="py-3 text-gray-300">
+                    {code.description || <span className="text-gray-500">Sin descripcion</span>}
+                  </td>
+                  <td className="py-3 text-center">
+                    <button 
+                      onClick={() => handleViewUsers(code.code)}
+                      className="text-neon-blue hover:underline"
+                    >
+                      {code.registeredUsers}
+                    </button>
+                  </td>
+                  <td className="py-3 text-center">
+                    <button
+                      onClick={() => handleToggleActive(code.id, code.isActive)}
+                      className={`text-xs px-2 py-1 rounded ${
+                        code.isActive 
+                          ? 'bg-accent-success/20 text-accent-success' 
+                          : 'bg-gray-500/20 text-gray-500'
+                      }`}
+                    >
+                      {code.isActive ? 'Activo' : 'Inactivo'}
+                    </button>
+                  </td>
+                  <td className="py-3 text-gray-400 text-sm">
+                    {code.expiresAt 
+                      ? new Date(code.expiresAt).toLocaleDateString('es-PE')
+                      : 'Sin expiracion'}
+                  </td>
+                  <td className="py-3 text-right">
+                    <button
+                      onClick={() => handleDelete(code.id)}
+                      className="text-accent-error hover:underline text-sm"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="card max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4">Crear Codigo de Referido</h3>
+            <form onSubmit={handleCreate} className="space-y-4">
+              {error && (
+                <div className="bg-accent-error/10 border border-accent-error/20 text-accent-error px-3 py-2 rounded text-sm">
+                  {error}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Codigo *</label>
+                <input
+                  type="text"
+                  value={newCode}
+                  onChange={e => setNewCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                  className="input w-full"
+                  placeholder="SIETEDIASGRATIS"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Solo letras y numeros, se convierte a mayusculas</p>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Descripcion</label>
+                <input
+                  type="text"
+                  value={newDescription}
+                  onChange={e => setNewDescription(e.target.value)}
+                  className="input w-full"
+                  placeholder="Promocion de lanzamiento"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Fecha de expiracion</label>
+                <input
+                  type="date"
+                  value={newExpiresAt}
+                  onChange={e => setNewExpiresAt(e.target.value)}
+                  className="input w-full"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setError('');
+                  }}
+                  className="btn btn-ghost flex-1"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating || !newCode}
+                  className="btn btn-primary flex-1"
+                >
+                  {creating ? 'Creando...' : 'Crear'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {selectedCode && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="card max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-white">
+                Usuarios con codigo: <span className="text-neon-blue">{selectedCode}</span>
+              </h3>
+              <button onClick={() => setSelectedCode(null)} className="text-gray-400 hover:text-white">
+                X
+              </button>
+            </div>
+            {loadingUsers ? (
+              <div className="flex justify-center py-8">
+                <div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : users.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No hay usuarios registrados con este codigo</p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-dark-border">
+                    <th className="text-left py-2 text-gray-400 font-medium text-sm">Nombre</th>
+                    <th className="text-left py-2 text-gray-400 font-medium text-sm">Email</th>
+                    <th className="text-left py-2 text-gray-400 font-medium text-sm">Suscripcion</th>
+                    <th className="text-left py-2 text-gray-400 font-medium text-sm">Registro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u: any) => (
+                    <tr key={u.id} className="border-b border-dark-border">
+                      <td className="py-2 text-white">{u.name}</td>
+                      <td className="py-2 text-gray-300">{u.email}</td>
+                      <td className="py-2">
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          u.subscriptionStatus === 'active' 
+                            ? 'bg-accent-success/20 text-accent-success'
+                            : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {u.subscriptionStatus}
+                        </span>
+                      </td>
+                      <td className="py-2 text-gray-400 text-sm">
+                        {new Date(u.createdAt).toLocaleDateString('es-PE')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

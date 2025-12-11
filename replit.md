@@ -45,6 +45,8 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Appointment Scheduling System**: Full CRUD for appointments with status tracking (PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW), double-booking prevention using comprehensive overlap detection, and automatic reminder scheduling. Includes `agendar_cita` and `consultar_disponibilidad` AI tools for natural language scheduling.
 *   **Business Availability Configuration**: Businesses can configure working hours per day of the week and block specific dates. The availability system validates all appointment requests against configured hours and existing bookings.
 *   **Delivery Tracking**: Orders now include DELIVERED status with delivery agent assignment and delivery timestamp tracking. Quick action buttons in the Orders UI enable easy status progression (Paid → Processing → Shipped → Delivered).
+*   **Agent Files Library (V1)**: Businesses can upload documents and images with metadata (triggerKeywords, triggerContext, order) that the AI uses to contextually send files during conversations. Files are stored in S3 and integrated via the "enviar_archivo" AI tool.
+*   **Referral Code System**: Marketing tracking via referral codes with unique URLs (e.g., `/SIETEDIASGRATIS`). Codes can have descriptions, expiration dates, and active status. Registration flow validates codes and tracks user source. Super Admin dashboard includes full CRUD for code management with usage statistics.
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.

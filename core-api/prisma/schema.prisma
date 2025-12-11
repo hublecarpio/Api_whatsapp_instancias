@@ -24,8 +24,21 @@ model User {
   subscriptionStatus          SubscriptionStatus  @default(PENDING)
   trialEndAt                  DateTime?
   isPro                       Boolean             @default(false)
+  referralCode                String?
   createdAt                   DateTime            @default(now())
   businesses                  Business[]
+}
+
+model ReferralCode {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  usageCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+
+  @@index([code])
 }
 
 enum SubscriptionStatus {

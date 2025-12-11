@@ -13,7 +13,7 @@ const RESEND_THROTTLE_MINUTES = 2;
 
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, referralCode } = req.body;
     
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
@@ -22,6 +22,31 @@ router.post('/register', async (req: Request, res: Response) => {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
+    }
+    
+    // Validate and track referral code if provided
+    let validReferralCode: string | null = null;
+    if (referralCode) {
+      const refCode = await prisma.referralCode.findUnique({
+        where: { code: referralCode.toUpperCase() }
+      });
+      
+      if (refCode && refCode.isActive) {
+        // Check if expired
+        if (!refCode.expiresAt || refCode.expiresAt > new Date()) {
+          validReferralCode = refCode.code;
+          // Increment usage count
+          await prisma.referralCode.update({
+            where: { id: refCode.id },
+            data: { usageCount: { increment: 1 } }
+          });
+          console.log(`[REFERRAL] Valid code used: ${refCode.code}, new count: ${refCode.usageCount + 1}`);
+        } else {
+          console.log(`[REFERRAL] Expired code attempted: ${referralCode}`);
+        }
+      } else {
+        console.log(`[REFERRAL] Invalid or inactive code attempted: ${referralCode}`);
+      }
     }
     
     const passwordHash = await bcrypt.hash(password, 10);
@@ -38,7 +63,8 @@ router.post('/register', async (req: Request, res: Response) => {
           emailVerified: false,
           verificationToken: hashedToken,
           verificationTokenExpiresAt: expiresAt,
-          lastVerificationSentAt: new Date()
+          lastVerificationSentAt: new Date(),
+          referralCode: validReferralCode
         }
       });
       
@@ -73,6 +99,33 @@ router.post('/register', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+router.get('/check-referral/:code', async (req: Request, res: Response) => {
+  try {
+    const { code } = req.params;
+    
+    const refCode = await prisma.referralCode.findUnique({
+      where: { code: code.toUpperCase() }
+    });
+    
+    if (!refCode || !refCode.isActive) {
+      return res.json({ valid: false });
+    }
+    
+    if (refCode.expiresAt && refCode.expiresAt < new Date()) {
+      return res.json({ valid: false, reason: 'expired' });
+    }
+    
+    res.json({ 
+      valid: true, 
+      code: refCode.code,
+      description: refCode.description 
+    });
+  } catch (error) {
+    console.error('Check referral error:', error);
+    res.json({ valid: false });
   }
 });
 

@@ -148,7 +148,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'skills' | 'prompts' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config'>('skills');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'skills' | 'prompts' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config'>('prompt');
   
   const [agentFiles, setAgentFiles] = useState<AgentFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
@@ -787,6 +787,14 @@ export default function PromptPage() {
       ) : (
         <div className="flex flex-wrap gap-2 mb-6">
           <button
+            onClick={() => setActiveV2Tab('prompt')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'prompt' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Prompt Maestro
+          </button>
+          <button
             onClick={() => setActiveV2Tab('skills')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               activeV2Tab === 'skills' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
@@ -845,6 +853,40 @@ export default function PromptPage() {
           >
             Configuracion
           </button>
+        </div>
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'prompt' && (
+        <div className="card">
+          <h2 className="text-lg font-semibold text-white mb-2">Prompt Maestro</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            El prompt base que define la personalidad y comportamiento de tu agente. 
+            V2 tambien usa este prompt como contexto principal.
+          </p>
+          
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="input font-mono text-sm resize-none"
+            rows={15}
+            placeholder="Escribe las instrucciones para tu agente IA..."
+          />
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+            <button
+              onClick={() => setPrompt(DEFAULT_PROMPT)}
+              className="btn btn-secondary w-full sm:w-auto"
+            >
+              Restaurar por defecto
+            </button>
+            <button
+              onClick={handleSavePrompt}
+              disabled={loading || !prompt}
+              className="btn btn-primary w-full sm:w-auto"
+            >
+              {loading ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
         </div>
       )}
 

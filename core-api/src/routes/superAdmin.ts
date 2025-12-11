@@ -1022,4 +1022,127 @@ router.get('/agent-v2-stats', superAdminMiddleware, async (req: SuperAdminReques
   }
 });
 
+// ============ REFERRAL CODES ============
+
+router.get('/referral-codes', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const codes = await prisma.referralCode.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    const usersWithCodes = await prisma.user.groupBy({
+      by: ['referralCode'],
+      where: { referralCode: { not: null } },
+      _count: true
+    });
+    
+    const usageMap = usersWithCodes.reduce<Record<string, number>>((acc, u) => {
+      if (u.referralCode) acc[u.referralCode] = u._count;
+      return acc;
+    }, {});
+    
+    const codesWithStats = codes.map(c => ({
+      ...c,
+      registeredUsers: usageMap[c.code] || 0
+    }));
+    
+    res.json({ codes: codesWithStats });
+  } catch (error: any) {
+    console.error('List referral codes error:', error);
+    res.status(500).json({ error: 'Failed to list referral codes' });
+  }
+});
+
+router.post('/referral-codes', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { code, description, expiresAt } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+    
+    const upperCode = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    
+    const existing = await prisma.referralCode.findUnique({
+      where: { code: upperCode }
+    });
+    
+    if (existing) {
+      return res.status(400).json({ error: 'Code already exists' });
+    }
+    
+    const newCode = await prisma.referralCode.create({
+      data: {
+        code: upperCode,
+        description: description || null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null
+      }
+    });
+    
+    res.json({ code: newCode });
+  } catch (error: any) {
+    console.error('Create referral code error:', error);
+    res.status(500).json({ error: 'Failed to create referral code' });
+  }
+});
+
+router.put('/referral-codes/:id', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { description, isActive, expiresAt } = req.body;
+    
+    const code = await prisma.referralCode.update({
+      where: { id },
+      data: {
+        description: description ?? undefined,
+        isActive: isActive ?? undefined,
+        expiresAt: expiresAt !== undefined ? (expiresAt ? new Date(expiresAt) : null) : undefined
+      }
+    });
+    
+    res.json({ code });
+  } catch (error: any) {
+    console.error('Update referral code error:', error);
+    res.status(500).json({ error: 'Failed to update referral code' });
+  }
+});
+
+router.delete('/referral-codes/:id', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    await prisma.referralCode.delete({
+      where: { id }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete referral code error:', error);
+    res.status(500).json({ error: 'Failed to delete referral code' });
+  }
+});
+
+router.get('/referral-codes/:code/users', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { code } = req.params;
+    
+    const users = await prisma.user.findMany({
+      where: { referralCode: code.toUpperCase() },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        subscriptionStatus: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json({ users });
+  } catch (error: any) {
+    console.error('Get referral users error:', error);
+    res.status(500).json({ error: 'Failed to get referral users' });
+  }
+});
+
 export default router;
