@@ -370,6 +370,134 @@ Solo incluye los campos solicitados.`;
       };
     }
   }
+
+  async validatePaymentVoucher(
+    imageUrl: string,
+    expectedData?: {
+      amount?: number;
+      currency?: string;
+      brandHints?: string[];
+    }
+  ): Promise<{
+    isValid: boolean;
+    isPaymentProof: boolean;
+    brand?: string;
+    amount?: number;
+    currency?: string;
+    operationCode?: string;
+    confidence: number;
+    reason: string;
+    error?: string;
+  }> {
+    if (!this.isConfigured()) {
+      return { 
+        isValid: false, 
+        isPaymentProof: false, 
+        confidence: 0, 
+        reason: '', 
+        error: 'Gemini API not configured' 
+      };
+    }
+
+    try {
+      console.log('[GEMINI] Validating payment voucher from:', imageUrl);
+      const { buffer, mimeType } = await this.downloadMedia(imageUrl);
+      const base64Data = buffer.toString('base64');
+
+      const brandHints = expectedData?.brandHints?.join(', ') || 
+        'BCP, BBVA, Interbank, Scotiabank, Yape, Plin, Nequi, Mercado Pago, PayPal, Zelle, Binance, Western Union';
+
+      let amountContext = '';
+      if (expectedData?.amount) {
+        amountContext = `El monto esperado es aproximadamente ${expectedData.currency || ''}${expectedData.amount}.`;
+      }
+
+      const prompt = `Analiza esta imagen y determina si es un comprobante de pago válido (voucher de transferencia bancaria, captura de pago móvil, recibo de transacción, etc).
+
+BANCOS/APPS COMUNES: ${brandHints}
+${amountContext}
+
+Responde SOLO en formato JSON con esta estructura exacta:
+{
+  "isPaymentProof": true/false,
+  "isValid": true/false,
+  "brand": "nombre del banco o app de pago detectado (o null)",
+  "amount": número del monto detectado (o null),
+  "currency": "código de moneda detectado: PEN, USD, etc (o null)",
+  "operationCode": "código de operación o referencia visible (o null)",
+  "confidence": 0.0-1.0,
+  "reason": "explicación breve"
+}
+
+REGLAS DE VALIDACIÓN:
+- isPaymentProof: true solo si la imagen muestra claramente una transferencia, pago o comprobante bancario
+- isValid: true si es un comprobante que parece legítimo (tiene marca visible, monto, fecha o código)
+- Si es una foto normal, selfie, producto, documento no relacionado → isPaymentProof: false
+- Si no puedes leer bien el monto o código, indica confidence bajo pero aún puede ser isValid si parece comprobante
+- Busca logos de bancos, códigos de operación, fechas, montos, nombres de destinatario`;
+
+      const response = await axios.post(
+        `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+        {
+          contents: [{
+            parts: [
+              {
+                inline_data: {
+                  mime_type: mimeType.split(';')[0],
+                  data: base64Data
+                }
+              },
+              { text: prompt }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 512
+          }
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 60000
+        }
+      );
+
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.log('[GEMINI] Voucher validation - invalid response format');
+        return { 
+          isValid: false, 
+          isPaymentProof: false, 
+          confidence: 0, 
+          reason: 'Could not parse response' 
+        };
+      }
+
+      const result = JSON.parse(jsonMatch[0]);
+      console.log('[GEMINI] Voucher validation result:', result);
+
+      return {
+        isValid: result.isValid ?? false,
+        isPaymentProof: result.isPaymentProof ?? false,
+        brand: result.brand || undefined,
+        amount: typeof result.amount === 'number' ? result.amount : undefined,
+        currency: result.currency || undefined,
+        operationCode: result.operationCode || undefined,
+        confidence: result.confidence ?? 0,
+        reason: result.reason || ''
+      };
+    } catch (error: any) {
+      console.error('[GEMINI] Voucher validation failed:', error.response?.data || error.message);
+      return {
+        isValid: false,
+        isPaymentProof: false,
+        confidence: 0,
+        reason: '',
+        error: error.response?.data?.error?.message || error.message
+      };
+    }
+  }
 }
 
 export const geminiService = new GeminiService();

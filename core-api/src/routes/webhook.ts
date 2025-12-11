@@ -164,18 +164,72 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                   status: 'AWAITING_VOUCHER',
                   voucherImageUrl: null
                 },
-                orderBy: { createdAt: 'desc' }
+                orderBy: { createdAt: 'desc' },
+                include: { items: true }
               });
               
               if (pendingVoucherOrder) {
-                await prisma.order.update({
-                  where: { id: pendingVoucherOrder.id },
-                  data: {
-                    voucherImageUrl: data.mediaUrl,
-                    voucherReceivedAt: new Date()
+                if (geminiService.isConfigured()) {
+                  console.log(`[WEBHOOK] Validating potential voucher for order ${pendingVoucherOrder.id}`);
+                  
+                  const voucherValidation = await geminiService.validatePaymentVoucher(
+                    data.mediaUrl,
+                    {
+                      amount: Number(pendingVoucherOrder.totalAmount),
+                      currency: pendingVoucherOrder.currencyCode || 'PEN'
+                    }
+                  );
+                  
+                  if (voucherValidation.isPaymentProof && voucherValidation.isValid) {
+                    await prisma.order.update({
+                      where: { id: pendingVoucherOrder.id },
+                      data: {
+                        voucherImageUrl: data.mediaUrl,
+                        voucherReceivedAt: new Date(),
+                        notes: JSON.stringify({
+                          voucherValidation: {
+                            brand: voucherValidation.brand,
+                            detectedAmount: voucherValidation.amount,
+                            currency: voucherValidation.currency,
+                            operationCode: voucherValidation.operationCode,
+                            confidence: voucherValidation.confidence,
+                            reason: voucherValidation.reason,
+                            validatedAt: new Date().toISOString()
+                          }
+                        })
+                      }
+                    });
+                    console.log(`[WEBHOOK] Valid voucher attached to order ${pendingVoucherOrder.id}: brand=${voucherValidation.brand}, amount=${voucherValidation.amount}, code=${voucherValidation.operationCode}`);
+                    
+                    await logTokenUsage({
+                      userId: business.userId,
+                      businessId,
+                      feature: 'voucher_validation',
+                      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+                      promptTokens: 258,
+                      completionTokens: 128,
+                      provider: 'gemini'
+                    });
+                  } else {
+                    console.log(`[WEBHOOK] Image rejected as voucher for order ${pendingVoucherOrder.id}: isPaymentProof=${voucherValidation.isPaymentProof}, isValid=${voucherValidation.isValid}, reason=${voucherValidation.reason}`);
                   }
-                });
-                console.log(`[WEBHOOK] Voucher image attached to order ${pendingVoucherOrder.id} from ${contactPhone}`);
+                } else {
+                  await prisma.order.update({
+                    where: { id: pendingVoucherOrder.id },
+                    data: {
+                      voucherImageUrl: data.mediaUrl,
+                      voucherReceivedAt: new Date(),
+                      notes: JSON.stringify({
+                        voucherValidation: {
+                          validated: false,
+                          reason: 'Gemini not configured - manual verification required',
+                          attachedAt: new Date().toISOString()
+                        }
+                      })
+                    }
+                  });
+                  console.log(`[WEBHOOK] Voucher image attached to order ${pendingVoucherOrder.id} (Gemini not configured - no validation)`);
+                }
               }
             }
           }
