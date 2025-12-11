@@ -48,9 +48,11 @@ export default function AsesorPage() {
   const [previewFile, setPreviewFile] = useState<{ file: File; url: string; type: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadFromStorage();
@@ -124,6 +126,15 @@ export default function AsesorPage() {
     const interval = setInterval(loadMessages, 5000);
     return () => clearInterval(interval);
   }, [selectedConversation, selectedBusiness]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const selectConversation = (conv: Conversation) => {
+    setSelectedConversation(conv);
+    setSidebarOpen(false);
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,11 +284,19 @@ export default function AsesorPage() {
 
   return (
     <div className="min-h-screen bg-dark-bg flex flex-col">
-      <header className="bg-dark-card border-b border-dark-border px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <header className="bg-dark-card border-b border-dark-border px-3 md:px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 md:gap-4">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="md:hidden p-2 -ml-1 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
           <Logo size="sm" />
-          <div className="h-6 w-px bg-dark-border"></div>
-          <span className="text-sm text-gray-400">Panel de Asesor</span>
+          <div className="hidden md:block h-6 w-px bg-dark-border"></div>
+          <span className="hidden md:block text-sm text-gray-400">Panel de Asesor</span>
           {businesses.length > 1 && (
             <select
               value={selectedBusiness?.id || ''}
@@ -287,7 +306,7 @@ export default function AsesorPage() {
                 setSelectedConversation(null);
                 setMessages([]);
               }}
-              className="input py-1 text-sm"
+              className="input py-1 text-sm max-w-[120px] md:max-w-none"
             >
               {businesses.map(b => (
                 <option key={b.id} value={b.id}>{b.name}</option>
@@ -295,21 +314,45 @@ export default function AsesorPage() {
             </select>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400">{user?.name}</span>
-          <button onClick={handleLogout} className="btn btn-secondary btn-sm">
+        <div className="flex items-center gap-2 md:gap-3">
+          <span className="hidden sm:block text-sm text-gray-400 truncate max-w-[100px]">{user?.name}</span>
+          <button onClick={handleLogout} className="btn btn-secondary btn-sm text-xs md:text-sm">
             Salir
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="w-80 bg-dark-card border-r border-dark-border flex flex-col">
-          <div className="p-4 border-b border-dark-border">
-            <h3 className="font-medium text-white">Conversaciones asignadas</h3>
-            <p className="text-xs text-gray-500 mt-1">
-              {conversations.length} contacto{conversations.length !== 1 ? 's' : ''}
-            </p>
+      <div className="flex-1 flex overflow-hidden relative">
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+        
+        <div className={`
+          fixed md:relative inset-y-0 left-0 z-50 md:z-auto
+          w-[85%] max-w-[320px] md:w-80 md:max-w-none
+          bg-dark-card border-r border-dark-border flex flex-col
+          transform transition-transform duration-300 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          md:transform-none
+        `}>
+          <div className="p-4 border-b border-dark-border flex items-center justify-between">
+            <div>
+              <h3 className="font-medium text-white">Conversaciones</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                {conversations.length} contacto{conversations.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="md:hidden p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto">
             {conversations.length === 0 ? (
@@ -320,8 +363,8 @@ export default function AsesorPage() {
               conversations.map(conv => (
                 <button
                   key={conv.phone}
-                  onClick={() => setSelectedConversation(conv)}
-                  className={`w-full text-left p-4 border-b border-dark-border hover:bg-dark-bg/50 transition-colors ${
+                  onClick={() => selectConversation(conv)}
+                  className={`w-full text-left p-4 border-b border-dark-border hover:bg-dark-bg/50 transition-colors active:bg-dark-bg/70 ${
                     selectedConversation?.phone === conv.phone ? 'bg-dark-bg/50' : ''
                   }`}
                 >
@@ -340,7 +383,7 @@ export default function AsesorPage() {
                       )}
                     </div>
                     {conv.unread > 0 && (
-                      <span className="bg-neon-blue text-white text-xs rounded-full px-2 py-0.5 ml-2">
+                      <span className="bg-neon-blue text-white text-xs rounded-full px-2 py-0.5 ml-2 flex-shrink-0">
                         {conv.unread}
                       </span>
                     )}
@@ -351,43 +394,65 @@ export default function AsesorPage() {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           {!selectedConversation ? (
-            <div className="flex-1 flex items-center justify-center text-gray-500">
-              Selecciona una conversacion para empezar
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-4">
+              <svg className="w-16 h-16 mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              <p className="text-center">Selecciona una conversacion</p>
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="md:hidden mt-4 btn btn-primary btn-sm"
+              >
+                Ver conversaciones
+              </button>
             </div>
           ) : (
             <>
-              <div className="bg-dark-card border-b border-dark-border px-4 py-3">
-                <p className="font-medium text-white">
-                  {selectedConversation.contactName || selectedConversation.phone}
-                </p>
-                {selectedConversation.contactName && (
-                  <p className="text-xs text-gray-500">{selectedConversation.phone}</p>
-                )}
+              <div className="bg-dark-card border-b border-dark-border px-3 md:px-4 py-3 flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setSelectedConversation(null);
+                    setSidebarOpen(true);
+                  }}
+                  className="md:hidden p-2 -ml-1 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-white truncate">
+                    {selectedConversation.contactName || selectedConversation.phone}
+                  </p>
+                  {selectedConversation.contactName && (
+                    <p className="text-xs text-gray-500 truncate">{selectedConversation.phone}</p>
+                  )}
+                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
                 {messages.map(msg => (
                   <div
                     key={msg.id}
                     className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[70%] rounded-lg px-3 py-2 ${
+                      className={`max-w-[85%] md:max-w-[70%] rounded-xl px-3 py-2 ${
                         msg.direction === 'outbound'
-                          ? 'bg-neon-blue text-white'
-                          : 'bg-dark-card text-white'
+                          ? 'bg-neon-blue text-white rounded-br-sm'
+                          : 'bg-dark-card text-white rounded-bl-sm'
                       } ${msg.metadata?.pending ? 'opacity-70' : ''}`}
                     >
                       {msg.mediaUrl && (
                         <div className="mb-2">
                           {msg.mediaType?.startsWith('image') ? (
-                            <img src={msg.mediaUrl} alt="Media" className="max-w-full rounded" />
+                            <img src={msg.mediaUrl} alt="Media" className="max-w-full rounded-lg" />
                           ) : msg.mediaType?.startsWith('audio') ? (
-                            <audio controls src={msg.mediaUrl} className="max-w-full" />
+                            <audio controls src={msg.mediaUrl} className="max-w-full w-full min-w-[200px]" />
                           ) : msg.mediaType?.startsWith('video') ? (
-                            <video controls src={msg.mediaUrl} className="max-w-full rounded" />
+                            <video controls src={msg.mediaUrl} className="max-w-full rounded-lg" />
                           ) : (
                             <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-neon-blue underline">
                               Ver archivo
@@ -402,36 +467,37 @@ export default function AsesorPage() {
                     </div>
                   </div>
                 ))}
+                <div ref={messagesEndRef} />
               </div>
 
-              <div className="bg-dark-card border-t border-dark-border">
+              <div className="bg-dark-card border-t border-dark-border safe-area-bottom">
                 {previewFile && (
-                  <div className="px-4 pt-3">
+                  <div className="px-3 md:px-4 pt-3">
                     <div className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg">
                       {previewFile.type === 'image' && (
-                        <img src={previewFile.url} alt="" className="h-16 w-16 object-cover rounded" />
+                        <img src={previewFile.url} alt="" className="h-14 w-14 md:h-16 md:w-16 object-cover rounded" />
                       )}
                       {previewFile.type === 'video' && (
-                        <video src={previewFile.url} className="h-16 w-16 object-cover rounded" />
+                        <video src={previewFile.url} className="h-14 w-14 md:h-16 md:w-16 object-cover rounded" />
                       )}
                       {previewFile.type === 'audio' && (
                         <div className="flex items-center gap-2 text-sm text-gray-400">
-                          <span>🎤</span>
+                          <span className="text-lg">🎤</span>
                           <span>Audio grabado</span>
                         </div>
                       )}
                       {previewFile.type === 'file' && (
                         <div className="flex items-center gap-2 text-sm text-gray-400">
-                          <span>📄</span>
-                          <span className="truncate max-w-[150px]">{previewFile.file.name}</span>
+                          <span className="text-lg">📄</span>
+                          <span className="truncate max-w-[120px] md:max-w-[150px]">{previewFile.file.name}</span>
                         </div>
                       )}
                       <button
                         type="button"
                         onClick={cancelPreview}
-                        className="ml-auto p-1 text-gray-400 hover:text-white"
+                        className="ml-auto p-2 text-gray-400 hover:text-white active:bg-dark-hover rounded-lg"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
@@ -439,7 +505,7 @@ export default function AsesorPage() {
                   </div>
                 )}
                 
-                <form onSubmit={handleSendMessage} className="p-4 flex items-center gap-2">
+                <form onSubmit={handleSendMessage} className="p-3 md:p-4 flex items-center gap-1 md:gap-2">
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -452,10 +518,10 @@ export default function AsesorPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isRecording || uploading}
-                    className="p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg transition-colors"
+                    className="p-3 text-gray-400 hover:text-white hover:bg-dark-hover active:bg-dark-hover rounded-xl transition-colors touch-manipulation"
                     title="Adjuntar archivo"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
                   </button>
@@ -464,10 +530,10 @@ export default function AsesorPage() {
                     <button
                       type="button"
                       onClick={handleStopRecording}
-                      className="p-2 text-red-500 bg-red-500/20 rounded-lg animate-pulse"
+                      className="p-3 text-red-500 bg-red-500/20 rounded-xl animate-pulse touch-manipulation"
                       title="Detener grabacion"
                     >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                         <rect x="6" y="6" width="12" height="12" rx="2" />
                       </svg>
                     </button>
@@ -476,10 +542,10 @@ export default function AsesorPage() {
                       type="button"
                       onClick={handleStartRecording}
                       disabled={!!previewFile || uploading}
-                      className="p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg transition-colors disabled:opacity-50"
+                      className="p-3 text-gray-400 hover:text-white hover:bg-dark-hover active:bg-dark-hover rounded-xl transition-colors disabled:opacity-50 touch-manipulation"
                       title="Grabar audio"
                     >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                       </svg>
                     </button>
@@ -489,19 +555,25 @@ export default function AsesorPage() {
                     type="text"
                     value={messageInput}
                     onChange={(e) => setMessageInput(e.target.value)}
-                    placeholder={isRecording ? 'Grabando...' : 'Escribe un mensaje...'}
+                    placeholder={isRecording ? 'Grabando...' : 'Mensaje...'}
                     disabled={isRecording}
-                    className="input flex-1"
+                    className="input flex-1 min-w-0 text-base"
                   />
                   
                   <button
                     type="submit"
                     disabled={sending || uploading || isRecording || (!messageInput.trim() && !previewFile)}
-                    className="btn btn-primary"
+                    className="btn btn-primary p-3 rounded-xl touch-manipulation"
                   >
                     {uploading ? (
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : sending ? '...' : 'Enviar'}
+                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : sending ? (
+                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
                   </button>
                 </form>
               </div>
