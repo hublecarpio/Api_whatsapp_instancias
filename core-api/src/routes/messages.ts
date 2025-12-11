@@ -6,8 +6,26 @@ const router = Router();
 
 router.use(authMiddleware);
 
-async function checkBusinessAccess(userId: string, businessId: string) {
+async function getUserWithRole(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, parentUserId: true }
+  });
+}
+
+async function checkBusinessAccess(userId: string, businessId: string, role?: string, parentUserId?: string | null) {
+  if (role === 'ASESOR' && parentUserId) {
+    return prisma.business.findFirst({ where: { id: businessId, userId: parentUserId } });
+  }
   return prisma.business.findFirst({ where: { id: businessId, userId } });
+}
+
+async function getAssignedContactPhones(userId: string, businessId: string) {
+  const assignments = await prisma.contactAssignment.findMany({
+    where: { userId, businessId },
+    select: { contactPhone: true }
+  });
+  return assignments.map(a => a.contactPhone);
 }
 
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -18,13 +36,25 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'business_id is required' });
     }
     
-    const business = await checkBusinessAccess(req.userId!, business_id as string);
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, business_id as string, user.role, user.parentUserId);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
     }
     
     const where: any = { businessId: business_id as string };
-    if (phone) {
+    
+    if (user.role === 'ASESOR') {
+      const assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
+      if (assignedPhones.length === 0) {
+        return res.json([]);
+      }
+      where.OR = assignedPhones.flatMap(p => [{ sender: p }, { recipient: p }]);
+    } else if (phone) {
       where.OR = [
         { sender: phone as string },
         { recipient: phone as string }
@@ -53,13 +83,31 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'business_id is required' });
     }
     
-    const business = await checkBusinessAccess(req.userId!, business_id as string);
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, business_id as string, user.role, user.parentUserId);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    let assignedPhones: string[] = [];
+    if (user.role === 'ASESOR') {
+      assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
+      if (assignedPhones.length === 0) {
+        return res.json([]);
+      }
+    }
+    
+    const whereClause: any = { businessId: business_id as string };
+    if (user.role === 'ASESOR' && assignedPhones.length > 0) {
+      whereClause.OR = assignedPhones.flatMap(p => [{ sender: p }, { recipient: p }]);
+    }
+    
     const messages = await prisma.messageLog.findMany({
-      where: { businessId: business_id as string },
+      where: whereClause,
       orderBy: { createdAt: 'desc' }
     });
     
@@ -119,9 +167,21 @@ router.get('/conversation/:phone', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'business_id is required' });
     }
     
-    const business = await checkBusinessAccess(req.userId!, business_id as string);
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, business_id as string, user.role, user.parentUserId);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (user.role === 'ASESOR') {
+      const assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
+      if (!assignedPhones.includes(phone)) {
+        return res.status(403).json({ error: 'Access denied to this conversation' });
+      }
     }
     
     const messages = await prisma.messageLog.findMany({
@@ -151,9 +211,21 @@ router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: R
       return res.status(400).json({ error: 'business_id is required' });
     }
     
-    const business = await checkBusinessAccess(req.userId!, business_id as string);
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, business_id as string, user.role, user.parentUserId);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (user.role === 'ASESOR') {
+      const assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
+      if (!assignedPhones.includes(phone)) {
+        return res.status(403).json({ error: 'Access denied to this conversation' });
+      }
     }
     
     const instance = await prisma.whatsAppInstance.findFirst({

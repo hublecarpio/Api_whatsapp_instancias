@@ -271,4 +271,81 @@ router.get('/assignments/:businessId', async (req: AuthRequest, res: Response) =
   }
 });
 
+router.get('/my-business', async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { role: true, parentUserId: true }
+    });
+    
+    if (!user || user.role !== 'ASESOR' || !user.parentUserId) {
+      return res.status(403).json({ error: 'Only advisors can access this endpoint' });
+    }
+    
+    const assignments = await prisma.contactAssignment.findMany({
+      where: { userId: req.userId },
+      select: { businessId: true }
+    });
+    
+    const businessIds = [...new Set(assignments.map(a => a.businessId))];
+    
+    if (businessIds.length === 0) {
+      return res.json([]);
+    }
+    
+    const businesses = await prisma.business.findMany({
+      where: { id: { in: businessIds } },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        businessObjective: true,
+        _count: {
+          select: {
+            contactAssignments: {
+              where: { userId: req.userId }
+            }
+          }
+        }
+      }
+    });
+    
+    res.json(businesses.map(b => ({
+      ...b,
+      assignedContactsCount: b._count.contactAssignments
+    })));
+  } catch (error: any) {
+    console.error('Get advisor business error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/my-contacts/:businessId', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { role: true, parentUserId: true }
+    });
+    
+    if (!user || user.role !== 'ASESOR') {
+      return res.status(403).json({ error: 'Only advisors can access this endpoint' });
+    }
+    
+    const assignments = await prisma.contactAssignment.findMany({
+      where: { 
+        userId: req.userId,
+        businessId 
+      },
+      select: { contactPhone: true, createdAt: true }
+    });
+    
+    res.json(assignments);
+  } catch (error: any) {
+    console.error('Get advisor contacts error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
