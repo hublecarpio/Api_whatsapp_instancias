@@ -25,6 +25,7 @@ model User {
   trialEndAt                  DateTime?
   isPro                       Boolean             @default(false)
   paymentLinkEnabled          Boolean             @default(false)
+  proBonusExpiresAt           DateTime?
   referralCode                String?
   createdAt                   DateTime            @default(now())
   businesses                  Business[]
