@@ -205,6 +205,27 @@ model AgentPrompt {
 
   business Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
   tools    AgentTool[]
+  files    AgentFile[]
+}
+
+model AgentFile {
+  id          String   @id @default(uuid())
+  promptId    String
+  name        String
+  description String?
+  fileUrl     String
+  fileType    String   @default("document")
+  triggerKeywords String?
+  triggerContext  String?
+  order       Int      @default(0)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prompt AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@index([promptId, enabled])
+  @@index([promptId, order])
 }
 
 model AgentTool {
