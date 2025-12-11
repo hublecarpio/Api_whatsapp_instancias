@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../services/prisma';
 import eventLogger from '../services/eventLogger';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const PUBLIC_API_KEY = process.env.PUBLIC_INJECT_API_KEY || 'efficore-public-key-2024';
 

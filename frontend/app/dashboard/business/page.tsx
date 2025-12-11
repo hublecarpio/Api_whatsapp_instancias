@@ -275,7 +275,7 @@ export default function BusinessPage() {
 
       {currentBusiness && (
         <>
-          {(currentBusiness as any).businessContext && (
+          {(currentBusiness as any)?.businessContext && Object.keys((currentBusiness as any).businessContext).length > 0 && (
             <div className="card mb-6 border-neon-blue/30">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-white">Contexto del Negocio</h2>
