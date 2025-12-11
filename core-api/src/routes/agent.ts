@@ -6,7 +6,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/billing.js';
 import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from '../services/openaiService.js';
 import { replacePromptVariables } from '../services/promptVariables.js';
-import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../services/agentV2Service.js';
+import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available, getAgentMemory, clearAgentMemory, getMemoryStats } from '../services/agentV2Service.js';
 import { MetaCloudService } from '../services/metaCloud.js';
 import { createProductPaymentLink } from '../services/stripePayments.js';
 import { searchProductsIntelligent } from '../services/productSearch.js';
@@ -1429,6 +1429,66 @@ router.get('/config', authMiddleware, requireActiveSubscription, async (req: Req
   } catch (error) {
     console.error('Get config error:', error);
     res.status(500).json({ error: 'Failed to get config' });
+  }
+});
+
+router.get('/memory/:businessId/:leadId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, leadId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const result = await getAgentMemory(businessId, leadId);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Get memory error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/memory/:businessId/:leadId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, leadId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const result = await clearAgentMemory(businessId, leadId);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Clear memory error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/memory/stats/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const result = await getMemoryStats(businessId);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Memory stats error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

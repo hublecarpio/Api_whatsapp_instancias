@@ -7,7 +7,7 @@ import logging
 
 from .config import get_settings
 from .schemas.business_profile import BusinessProfile, Product
-from .core.memory import get_memory, update_memory
+from .core.memory import get_memory, update_memory, clear_memory, get_memory_stats
 from .core.embeddings import get_embedding_service
 from .core.graph import get_agent_graph
 from .agents.refiner import get_refiner_agent
@@ -287,6 +287,55 @@ async def generate_response(request: GenerateRequest):
         )
 
 
+@app.delete("/memory/{business_id}/{lead_id}")
+async def delete_memory(business_id: str, lead_id: str):
+    """Clear agent memory for a specific lead. Conversation history in PostgreSQL is preserved."""
+    try:
+        success = clear_memory(lead_id, business_id)
+        if success:
+            return {
+                "success": True,
+                "message": f"Memory cleared for lead {lead_id}",
+                "note": "Conversation history is preserved in database"
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Memory not found or Redis unavailable"
+            }
+    except Exception as e:
+        logger.error(f"Error clearing memory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/memory/{business_id}/{lead_id}")
+async def get_lead_memory(business_id: str, lead_id: str):
+    """Get current agent memory for a specific lead."""
+    try:
+        memory = get_memory(lead_id, business_id)
+        return {
+            "success": True,
+            "memory": memory
+        }
+    except Exception as e:
+        logger.error(f"Error getting memory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/memory/stats/{business_id}")
+async def get_business_memory_stats(business_id: str):
+    """Get memory statistics for a business."""
+    try:
+        stats = get_memory_stats(business_id)
+        return {
+            "success": True,
+            "stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Error getting memory stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/")
 async def root():
     return {
@@ -296,7 +345,9 @@ async def root():
         "architecture": "Multi-Agent (Vendor → Tools → Observer → Refiner)",
         "endpoints": {
             "health": "/health",
-            "generate": "/generate (POST)"
+            "generate": "/generate (POST)",
+            "memory": "/memory/{business_id}/{lead_id} (GET/DELETE)",
+            "memory_stats": "/memory/stats/{business_id} (GET)"
         },
         "features": [
             "LangGraph State Machine",
@@ -304,7 +355,8 @@ async def root():
             "Semantic Product Search (Embeddings)",
             "5 Tools (search, payment, followup, media, crm)",
             "Observer Agent (error detection)",
-            "Refiner Agent (dynamic learning)"
+            "Refiner Agent (dynamic learning)",
+            "Memory Management (clear/view)"
         ]
     }
 

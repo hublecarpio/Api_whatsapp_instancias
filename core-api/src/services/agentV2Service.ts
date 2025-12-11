@@ -150,3 +150,74 @@ export function buildConversationHistory(
     content: m.message || ''
   }));
 }
+
+interface MemoryResponse {
+  success: boolean;
+  memory?: Record<string, any>;
+  message?: string;
+  note?: string;
+}
+
+interface MemoryStatsResponse {
+  success: boolean;
+  stats?: {
+    business_id: string;
+    active_memories: number;
+    keys: string[];
+  };
+}
+
+export async function getAgentMemory(
+  businessId: string,
+  leadId: string
+): Promise<MemoryResponse> {
+  try {
+    const response = await axios.get<MemoryResponse>(
+      `${AGENT_V2_URL}/memory/${businessId}/${leadId}`,
+      { timeout: 5000 }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error('Error getting agent memory:', error.message);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+export async function clearAgentMemory(
+  businessId: string,
+  leadId: string
+): Promise<MemoryResponse> {
+  try {
+    const response = await axios.delete<MemoryResponse>(
+      `${AGENT_V2_URL}/memory/${businessId}/${leadId}`,
+      { timeout: 5000 }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error('Error clearing agent memory:', error.message);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+export async function getMemoryStats(
+  businessId: string
+): Promise<MemoryStatsResponse> {
+  try {
+    const response = await axios.get<MemoryStatsResponse>(
+      `${AGENT_V2_URL}/memory/stats/${businessId}`,
+      { timeout: 5000 }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error('Error getting memory stats:', error.message);
+    return {
+      success: false
+    };
+  }
+}

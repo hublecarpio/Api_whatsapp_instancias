@@ -182,10 +182,17 @@ async def vendor_refine_node(state: GraphState) -> Dict[str, Any]:
 async def response_builder_node(state: GraphState) -> Dict[str, Any]:
     logger.info("Building final response")
     
+    retry_count = state.get("retry_count", 0)
+    iteration_count = state.get("iteration_count", 0)
+    
+    logger.info(f"Response builder: iteration={iteration_count}, retry={retry_count}")
+    
     vendor_action = state.get("vendor_action", {})
     
     if vendor_action.get("accion") == "respuesta":
-        return {"final_response": vendor_action.get("mensaje", "")}
+        response = vendor_action.get("mensaje", "")
+        logger.info(f"Final response built: {len(response)} chars")
+        return {"final_response": response}
     
     return {"final_response": vendor_action.get("mensaje", "No pude procesar tu solicitud.")}
 
@@ -223,8 +230,12 @@ async def retry_decision_node(state: GraphState) -> Dict[str, Any]:
     
     observer_output = state.get("observer_output")
     retry_count = state.get("retry_count", 0)
+    iteration_count = state.get("iteration_count", 0)
+    
+    logger.info(f"Retry decision: retry_count={retry_count}, iteration_count={iteration_count}")
     
     if not observer_output or retry_count >= MAX_RETRY_ATTEMPTS:
+        logger.info(f"No retry needed: observer_output={bool(observer_output)}, retry_count={retry_count}/{MAX_RETRY_ATTEMPTS}")
         return {"needs_retry": False}
     
     observer = ObserverOutput(**observer_output)
@@ -237,11 +248,13 @@ async def retry_decision_node(state: GraphState) -> Dict[str, Any]:
     
     if has_critical_failure and observer.fallas:
         feedback = f"CORRECCIÓN NECESARIA: {'; '.join(observer.fallas[:2])}"
-        logger.info(f"Triggering retry due to critical failures: {feedback}")
+        logger.info(f"Triggering retry #{retry_count + 1} due to critical failures: {feedback}")
         return {
             "needs_retry": True,
             "observer_feedback": feedback,
-            "retry_count": retry_count + 1
+            "retry_count": retry_count + 1,
+            "final_response": None,
+            "vendor_action": None
         }
     
     return {"needs_retry": False}

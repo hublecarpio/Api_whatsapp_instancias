@@ -137,3 +137,41 @@ def update_collected_data(lead_id: str, business_id: str, data: Dict[str, Any]) 
     memory = get_memory(lead_id, business_id)
     memory.setdefault("collected_data", {}).update(data)
     save_memory(lead_id, business_id, memory)
+
+
+def clear_memory(lead_id: str, business_id: str) -> bool:
+    """Clear agent memory for a specific lead while preserving conversation history in PostgreSQL."""
+    client = get_redis_client()
+    
+    if client is None:
+        logger.warning("Redis not available, memory not cleared")
+        return False
+    
+    try:
+        key = _memory_key(lead_id, business_id)
+        result = client.delete(key)
+        logger.info(f"Memory cleared for lead {lead_id}, business {business_id}: deleted={result}")
+        return result > 0
+    except Exception as e:
+        logger.error(f"Error clearing memory: {e}")
+        return False
+
+
+def get_memory_stats(business_id: str) -> Dict[str, Any]:
+    """Get memory statistics for a business."""
+    client = get_redis_client()
+    
+    if client is None:
+        return {"error": "Redis not available", "count": 0}
+    
+    try:
+        pattern = f"agent_v2:memory:{business_id}:*"
+        keys = list(client.scan_iter(match=pattern, count=100))
+        return {
+            "business_id": business_id,
+            "active_memories": len(keys),
+            "keys": [k.split(":")[-1] for k in keys[:20]]
+        }
+    except Exception as e:
+        logger.error(f"Error getting memory stats: {e}")
+        return {"error": str(e), "count": 0}
