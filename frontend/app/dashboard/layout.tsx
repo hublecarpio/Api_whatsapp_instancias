@@ -81,6 +81,11 @@ export default function DashboardLayout({
           
           if (userResponse.data) {
             setAuth(userResponse.data, storedToken);
+            
+            if (userResponse.data.role === 'ASESOR') {
+              router.push('/asesor');
+              return;
+            }
           }
         } catch (dataError: any) {
           console.error('Failed to fetch protected data:', dataError);

@@ -35,7 +35,7 @@ interface Message {
 
 export default function AsesorPage() {
   const router = useRouter();
-  const { user, token, logout } = useAuthStore();
+  const { user, token, logout, loadFromStorage } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
@@ -44,8 +44,16 @@ export default function AsesorPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageInput, setMessageInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    loadFromStorage();
+    setInitialized(true);
+  }, [loadFromStorage]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    
     if (!token) {
       router.push('/login');
       return;
@@ -57,7 +65,7 @@ export default function AsesorPage() {
     }
 
     loadBusinesses();
-  }, [token, user, router]);
+  }, [initialized, token, user, router]);
 
   const loadBusinesses = async () => {
     try {
