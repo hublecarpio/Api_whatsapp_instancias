@@ -54,17 +54,17 @@ router.post('/invite', async (req: AuthRequest, res: Response) => {
     
     const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/advisor-signup?token=${token}`;
     
-    await sendEmail({
-      to: email,
-      subject: `Invitacion para ser asesor en ${business.name}`,
-      html: `
+    await sendEmail(
+      email,
+      `Invitacion para ser asesor en ${business.name}`,
+      `
         <h2>Has sido invitado como asesor</h2>
         <p>Has sido invitado a unirte como asesor en <strong>${business.name}</strong>.</p>
         <p>Haz clic en el siguiente enlace para crear tu cuenta:</p>
         <p><a href="${inviteUrl}" style="background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">Aceptar Invitacion</a></p>
         <p>Este enlace expira en 7 dias.</p>
       `
-    });
+    );
     
     res.json({ message: 'Invitation sent successfully' });
   } catch (error: any) {
@@ -338,7 +338,7 @@ router.get('/my-contacts/:businessId', async (req: AuthRequest, res: Response) =
         userId: req.userId,
         businessId 
       },
-      select: { contactPhone: true, createdAt: true }
+      select: { contactPhone: true, assignedAt: true }
     });
     
     res.json(assignments);

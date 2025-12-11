@@ -1,0 +1,22 @@
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             12.0s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.548                                                                                                                                                                       
+0.548 > core-api@1.0.0 build                                                                                                                                                
+0.548 > tsc                                                                                                                                                                 
+0.548                                                                                                                                                                       
+11.86 src/routes/advisor.ts(5,10): error TS2305: Module '"../services/emailService.js"' has no exported member 'sendEmail'.                                                 
+11.86 src/routes/advisor.ts(341,37): error TS2353: Object literal may only specify known properties, and 'createdAt' does not exist in type 'ContactAssignmentSelect<Default
+Args>'.                                                                                                                                                                     
+------
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
+[+] Building 12.0s (10/14)                                                                                                                                   docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                   0.0s

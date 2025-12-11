@@ -49,6 +49,31 @@ export function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string
+): Promise<boolean> {
+  try {
+    const transport = getTransporter();
+    const fromEmail = process.env.SMTP_FROM_EMAIL;
+    const fromName = process.env.SMTP_FROM_NAME || 'EfficoreChat';
+    
+    const result = await transport.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to,
+      subject,
+      html
+    });
+    
+    console.log(`Email sent successfully to ${to}`, { messageId: result.messageId });
+    return true;
+  } catch (error: any) {
+    console.error('Failed to send email:', { to, error: error.message });
+    return false;
+  }
+}
+
 function getVerificationEmailHTML(name: string, verificationLink: string, appDomain: string): string {
   const logoUrl = `${appDomain}/icon-192.png`;
   
