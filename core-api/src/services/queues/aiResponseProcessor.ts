@@ -10,13 +10,23 @@ import OpenAI from 'openai';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const WORKER_CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '20', 10);
+const QUEUE_ADD_TIMEOUT = 5000;
 
 let aiResponseWorker: Worker<AIResponseJobData> | null = null;
+
+export function isAIWorkerRunning(): boolean {
+  return aiResponseWorker !== null && aiResponseWorker.isRunning();
+}
 
 export async function queueAIResponse(data: AIResponseJobData): Promise<string | null> {
   const queue = getAIResponseQueue();
   if (!queue) {
     console.log('[AI Queue] Queue not initialized, processing synchronously');
+    return null;
+  }
+  
+  if (!isAIWorkerRunning()) {
+    console.log('[AI Queue] Worker not running, processing synchronously');
     return null;
   }
   
@@ -28,13 +38,34 @@ export async function queueAIResponse(data: AIResponseJobData): Promise<string |
     low: 10
   };
   
-  await queue.add('process-ai-response', data, {
-    jobId,
-    priority: priorityMap[data.priority || 'normal']
-  });
-  
-  console.log(`[AI Queue] Job queued: ${jobId} (concurrency: ${WORKER_CONCURRENCY})`);
-  return jobId;
+  try {
+    const addPromise = queue.add('process-ai-response', data, {
+      jobId,
+      priority: priorityMap[data.priority || 'normal']
+    });
+    
+    let timeoutId: NodeJS.Timeout;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Queue add timeout')), QUEUE_ADD_TIMEOUT);
+    });
+    
+    try {
+      await Promise.race([addPromise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId!);
+    }
+    
+    const running = isAIWorkerRunning();
+    if (!running) {
+      console.warn(`[AI Queue] Worker stopped after queuing job ${jobId} - job will be processed when worker restarts`);
+    }
+    
+    console.log(`[AI Queue] Job queued: ${jobId} (concurrency: ${WORKER_CONCURRENCY}, workerRunning: ${running})`);
+    return jobId;
+  } catch (error: any) {
+    console.error(`[AI Queue] Failed to queue job, processing synchronously:`, error.message);
+    return null;
+  }
 }
 
 async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ response: string; tokensUsed?: number }> {
@@ -332,6 +363,10 @@ export function startAIResponseWorker(): Worker<AIResponseJobData> {
     console.error('[AI Worker] Worker error:', error.message);
   });
 
+  aiResponseWorker.on('closed', () => {
+    console.log('[AI Worker] Worker closed');
+  });
+
   console.log(`[AI Worker] Started with concurrency: ${WORKER_CONCURRENCY}`);
   return aiResponseWorker;
 }
@@ -350,10 +385,11 @@ export async function getAIQueueStats(): Promise<{
   completed: number;
   failed: number;
   concurrency: number;
+  workerRunning: boolean;
 }> {
   const queue = getAIResponseQueue();
   if (!queue) {
-    return { waiting: 0, active: 0, completed: 0, failed: 0, concurrency: WORKER_CONCURRENCY };
+    return { waiting: 0, active: 0, completed: 0, failed: 0, concurrency: WORKER_CONCURRENCY, workerRunning: false };
   }
   
   const [waiting, active, completed, failed] = await Promise.all([
@@ -363,5 +399,5 @@ export async function getAIQueueStats(): Promise<{
     queue.getFailedCount()
   ]);
   
-  return { waiting, active, completed, failed, concurrency: WORKER_CONCURRENCY };
+  return { waiting, active, completed, failed, concurrency: WORKER_CONCURRENCY, workerRunning: isAIWorkerRunning() };
 }

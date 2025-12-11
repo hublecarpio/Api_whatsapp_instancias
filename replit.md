@@ -24,7 +24,8 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Message Buffering**: Accumulates messages for a configurable duration before triggering AI responses.
 *   **Multimodal Response Handling**: Automatically detects and sends various media types and handles S3 shortcodes or full URLs.
 *   **Reminder/Follow-up System**: A background worker for inactivity detection and scheduling AI-generated follow-ups or manual reminders, respecting business timezones.
-*   **Redis + BullMQ Queue System**: Uses Redis and BullMQ for robust job processing, including reminders, message buffering, and WhatsApp message handling, with automatic fallback and retry logic.
+*   **Redis + BullMQ Queue System**: Uses Redis and BullMQ for robust job processing, including reminders, message buffering, WhatsApp message handling, and AI response processing, with automatic fallback and retry logic.
+*   **BullMQ AI Response Queue**: High-concurrency AI processing queue (configurable via `WORKER_CONCURRENCY`, default 20) that parallelizes OpenAI API calls. Supports OpenAI Tier 4 rate limits (10,000 req/min) by processing multiple AI requests simultaneously. Includes graceful fallback to synchronous processing when Redis is unavailable. Monitor via `/agent/queue-stats` endpoint.
 *   **Stripe Billing Integration**: Implements a 7-day free trial, weekly recurring payments via Stripe Checkout, webhook handling for payment events, and automatic account suspension.
 *   **Email Verification System**: Requires email verification for users to create WhatsApp instances, with server-side enforcement, a dedicated UI, and SMTP integration.
 *   **Robust Deployment**: Dockerized services with improved health checks, database wait logic, and environment variable support.
