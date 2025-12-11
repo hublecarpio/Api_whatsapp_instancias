@@ -135,7 +135,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'skills' | 'prompts' | 'memory' | 'rules' | 'knowledge' | 'config'>('skills');
+  const [activeV2Tab, setActiveV2Tab] = useState<'skills' | 'prompts' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config'>('skills');
 
   useEffect(() => {
     if (currentBusiness) {
@@ -662,14 +662,6 @@ export default function PromptPage() {
           >
             Configuracion
           </button>
-          <button
-            onClick={() => setActiveTab('tools')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'tools' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Tools ({tools.length})
-          </button>
         </div>
       ) : (
         <div className="flex flex-wrap gap-2 mb-6">
@@ -712,6 +704,14 @@ export default function PromptPage() {
             }`}
           >
             Conocimiento
+          </button>
+          <button
+            onClick={() => setActiveV2Tab('tools')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'tools' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Tools ({tools.length})
           </button>
           <button
             onClick={() => {
@@ -883,12 +883,12 @@ export default function PromptPage() {
         </div>
       )}
 
-      {agentVersion === 'v1' && activeTab === 'tools' && (
+      {agentVersion === 'v2' && activeV2Tab === 'tools' && (
         <div className="space-y-4">
           <div className="card">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-white">Tools Externos</h2>
+                <h2 className="text-lg font-semibold text-white">Tools Personalizados</h2>
                 <p className="text-sm text-gray-400">
                   Agrega endpoints externos que el agente puede usar para obtener informacion.
                 </p>
