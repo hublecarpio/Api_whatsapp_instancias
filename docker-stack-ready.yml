@@ -55,6 +55,9 @@ services:
       - OPENAI_MODEL=gpt-4o-mini
       - SUPER_ADMIN_USER=admin
       - SUPER_ADMIN_PASS=TU_SUPER_ADMIN_PASSWORD
+      - GEMINI_API_KEY=TU_GEMINI_API_KEY
+      - AGENT_V2_URL=http://agent-v2:5001
+      - INTERNAL_AGENT_SECRET=TU_INTERNAL_AGENT_SECRET_CAMBIA_ESTO
     networks:
       - whatsapp_internal
       - traefik_public
@@ -138,6 +141,39 @@ services:
         - "traefik.http.routers.whatsapp_frontend.priority=300"
         - "traefik.http.services.whatsapp_frontend.loadbalancer.server.port=4000"
         - "traefik.http.services.whatsapp_frontend.loadbalancer.passHostHeader=true"
+
+  agent-v2:
+    image: docker.io/iamhuble/whatsapp-saas-agent-v2:latest
+    environment:
+      - OPENAI_API_KEY=sk-TU_OPENAI_API_KEY
+      - OPENAI_MODEL=gpt-4o-mini
+      - DATABASE_URL=postgresql://USUARIO:PASSWORD@HOST_POSTGRES:5432/NOMBRE_DB
+      - REDIS_URL=redis://efficore_redis:6389
+      - CORE_API_URL=http://core-api:4001
+      - INTERNAL_AGENT_SECRET=TU_INTERNAL_AGENT_SECRET_CAMBIA_ESTO
+      - PORT=5001
+      - DEBUG=false
+    networks:
+      - whatsapp_internal
+    depends_on:
+      - efficore_redis
+      - core-api
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   whatsapp_sessions:

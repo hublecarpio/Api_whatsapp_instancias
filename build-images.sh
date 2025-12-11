@@ -43,6 +43,10 @@ docker build -t $REGISTRY/whatsapp-saas-frontend:$TAG \
   -f frontend/Dockerfile ./frontend
 
 echo ""
+echo "=== Building Agent V2 ==="
+docker build -t $REGISTRY/whatsapp-saas-agent-v2:$TAG -f agent-v2/Dockerfile ./agent-v2
+
+echo ""
 echo "=== All images built successfully ==="
 echo ""
 
@@ -51,6 +55,7 @@ if [ "$1" == "--push" ]; then
   docker push $REGISTRY/whatsapp-saas-wa:$TAG
   docker push $REGISTRY/whatsapp-saas-core:$TAG
   docker push $REGISTRY/whatsapp-saas-frontend:$TAG
+  docker push $REGISTRY/whatsapp-saas-agent-v2:$TAG
   echo "Images pushed successfully!"
 fi
 
@@ -59,3 +64,4 @@ echo "Images ready:"
 echo "  - $REGISTRY/whatsapp-saas-wa:$TAG"
 echo "  - $REGISTRY/whatsapp-saas-core:$TAG"
 echo "  - $REGISTRY/whatsapp-saas-frontend:$TAG"
+echo "  - $REGISTRY/whatsapp-saas-agent-v2:$TAG"

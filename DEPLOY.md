@@ -18,28 +18,42 @@
 │(Next.js)│          │  (Express)  │         │  (Baileys)  │
 └─────────┘          └──────┬──────┘         └──────┬──────┘
                             │                       │
-                            ▼                       ▼
-                     ┌────────────┐          ┌────────────┐
-                     │ PostgreSQL │          │  Sessions  │
-                     │   :5432    │          │  (Volume)  │
-                     │ (internal) │          └────────────┘
-                     └────────────┘
+                     ┌──────┴──────┐                ▼
+                     │             │          ┌────────────┐
+                     ▼             ▼          │  Sessions  │
+              ┌────────────┐ ┌────────────┐   │  (Volume)  │
+              │ PostgreSQL │ │  Agent V2  │   └────────────┘
+              │   :5432    │ │   :5001    │
+              │ (internal) │ │ (Python)   │
+              └────────────┘ └────────────┘
 ```
 
-### 4 Services Total
+### 5 Services Total
 
 | Service | Default Port | Configurable | Exposed | Description |
 |---------|-------------|--------------|---------|-------------|
 | **frontend** | 3000 | `FRONTEND_PORT` | Yes | Next.js UI - Put your domain here |
-| **core-api** | 3001 | `CORE_API_PORT` | Yes | Business logic, auth, AI |
+| **core-api** | 3001 | `CORE_API_PORT` | Yes | Business logic, auth, AI V1 |
 | **whatsapp-api** | 8080 | `WA_API_PORT` | Yes | Baileys multi-instance |
+| **agent-v2** | 5001 | `PORT` | No | Python/LangGraph Multi-Agent (optional) |
 | **postgres** | 5432 | No | No | Database (internal only) |
 
 ### Internal Communication
 
 - `frontend` → `core-api` via `http://core-api:${CORE_API_PORT}`
 - `core-api` → `whatsapp-api` via `http://whatsapp-api:${WA_API_PORT}`
+- `core-api` → `agent-v2` via `http://agent-v2:5001` (for V2 users)
 - `core-api` → `postgres` via `postgresql://...@postgres:5432/...`
+
+### Agent V2 (Optional - Pro Users)
+
+Agent V2 is an advanced multi-agent AI system with:
+- 3-brain architecture (Vendor → Observer → Refiner)
+- 5 executable tools (search, payment, followup, media, crm)
+- Persistent memory per lead (Redis)
+- Dynamic learning with rules
+
+If Agent V2 is not running, the system automatically falls back to Agent V1.
 
 ### For Your Domain
 
