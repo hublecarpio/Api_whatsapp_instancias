@@ -11,6 +11,18 @@ interface ConnectionEvent {
   timestamp: Date;
 }
 
+interface InstanceHistoryEvent {
+  id: string;
+  eventType: string;
+  previousProvider?: string;
+  newProvider?: string;
+  previousStatus?: string;
+  newStatus?: string;
+  phoneNumber?: string;
+  details?: string;
+  createdAt: string;
+}
+
 interface MetaFormData {
   name: string;
   accessToken: string;
@@ -60,6 +72,9 @@ export default function WhatsAppPage() {
   const [showMetaForm, setShowMetaForm] = useState(false);
   const [metaInfo, setMetaInfo] = useState<any>(null);
   const [webhookInfo, setWebhookInfo] = useState<{ url: string; token: string } | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyEvents, setHistoryEvents] = useState<InstanceHistoryEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   
   const [countryCode, setCountryCode] = useState('+52');
   const [phoneInput, setPhoneInput] = useState('');
@@ -367,6 +382,64 @@ export default function WhatsAppPage() {
     addEvent('success', 'Copiado al portapapeles');
   };
 
+  const fetchHistory = async () => {
+    if (!currentBusiness) return;
+    setHistoryLoading(true);
+    try {
+      const response = await waApi.history(currentBusiness.id, 20);
+      setHistoryEvents(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const formatEventType = (eventType: string) => {
+    const labels: Record<string, string> = {
+      CREATED: 'Instancia creada',
+      CONNECTED: 'Conectado',
+      DISCONNECTED: 'Desconectado',
+      PROVIDER_CHANGED: 'Proveedor cambiado',
+      DELETED: 'Eliminado',
+      RECONNECTED: 'Reconectado',
+      QR_GENERATED: 'QR generado',
+      SESSION_EXPIRED: 'Sesion expirada',
+      ERROR: 'Error'
+    };
+    return labels[eventType] || eventType;
+  };
+
+  const getHistoryEventIcon = (eventType: string) => {
+    const icons: Record<string, string> = {
+      CREATED: '✚',
+      CONNECTED: '✓',
+      DISCONNECTED: '✕',
+      PROVIDER_CHANGED: '↻',
+      DELETED: '🗑',
+      RECONNECTED: '↺',
+      QR_GENERATED: '◐',
+      SESSION_EXPIRED: '⏱',
+      ERROR: '⚠'
+    };
+    return icons[eventType] || '•';
+  };
+
+  const getHistoryEventColor = (eventType: string) => {
+    const colors: Record<string, string> = {
+      CREATED: 'text-neon-blue',
+      CONNECTED: 'text-accent-success',
+      DISCONNECTED: 'text-accent-error',
+      PROVIDER_CHANGED: 'text-accent-warning',
+      DELETED: 'text-gray-400',
+      RECONNECTED: 'text-neon-blue',
+      QR_GENERATED: 'text-gray-400',
+      SESSION_EXPIRED: 'text-accent-error',
+      ERROR: 'text-accent-error'
+    };
+    return colors[eventType] || 'text-gray-400';
+  };
+
   if (!currentBusiness) {
     return (
       <div className="card text-center py-8">
@@ -583,6 +656,59 @@ export default function WhatsAppPage() {
               <li>• <strong className="text-gray-300">QR no carga:</strong> Refrescar</li>
               <li>• <strong className="text-gray-300">QR expiro:</strong> Reiniciar</li>
             </ul>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                <span>📜</span> Historial
+              </h3>
+              <button
+                onClick={() => {
+                  if (!showHistory) fetchHistory();
+                  setShowHistory(!showHistory);
+                }}
+                className="text-xs text-neon-blue hover:text-cyan-400"
+              >
+                {showHistory ? 'Ocultar' : 'Ver historial'}
+              </button>
+            </div>
+            
+            {showHistory && (
+              <>
+                {historyLoading ? (
+                  <div className="flex justify-center py-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-neon-blue"></div>
+                  </div>
+                ) : historyEvents.length === 0 ? (
+                  <p className="text-xs text-gray-500 text-center py-4">Sin historial de cambios</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {historyEvents.map((event) => (
+                      <div key={event.id} className="flex items-start gap-2 text-xs border-b border-dark-hover pb-2 last:border-0">
+                        <span className={`${getHistoryEventColor(event.eventType)} flex-shrink-0 mt-0.5`}>
+                          {getHistoryEventIcon(event.eventType)}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-gray-300 font-medium">{formatEventType(event.eventType)}</p>
+                          {event.details && (
+                            <p className="text-gray-500 truncate">{event.details}</p>
+                          )}
+                          {event.previousProvider && event.newProvider && (
+                            <p className="text-gray-500">
+                              {event.previousProvider} → {event.newProvider}
+                            </p>
+                          )}
+                          <p className="text-gray-600">
+                            {new Date(event.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

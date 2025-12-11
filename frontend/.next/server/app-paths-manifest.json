@@ -2,8 +2,6 @@
   "/super-admin/page": "app/super-admin/page.js",
   "/page": "app/page.js",
   "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
-  "/dashboard/tags/page": "app/dashboard/tags/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
-  "/dashboard/business/page": "app/dashboard/business/page.js"
+  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js"
 }
