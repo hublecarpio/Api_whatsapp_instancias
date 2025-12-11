@@ -64,9 +64,14 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Contrasena
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Contrasena
+                </label>
+                <Link href="/forgot-password" className="text-xs text-neon-blue hover:text-neon-blue-light transition-colors">
+                  ¿Olvidaste tu contrasena?
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}

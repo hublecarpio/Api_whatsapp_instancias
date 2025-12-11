@@ -16,6 +16,9 @@ model User {
   verificationToken           String?
   verificationTokenExpiresAt  DateTime?
   lastVerificationSentAt      DateTime?
+  passwordResetToken          String?
+  passwordResetExpiresAt      DateTime?
+  lastPasswordResetSentAt     DateTime?
   stripeCustomerId            String?
   stripeSubscriptionId        String?
   subscriptionStatus          SubscriptionStatus  @default(PENDING)
