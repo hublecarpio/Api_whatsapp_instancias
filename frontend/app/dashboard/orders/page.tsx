@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useBusinessStore } from '@/store/business';
+import { useAuthStore } from '@/store/auth';
 import { ordersApi } from '@/lib/api';
 import ExtractionFieldsManager from '@/components/ExtractionFieldsManager';
 
@@ -99,6 +100,8 @@ const LINK_STATUS_COLORS: Record<string, string> = {
 
 export default function OrdersPage() {
   const { currentBusiness } = useBusinessStore();
+  const { user } = useAuthStore();
+  const isPro = user?.isPro ?? false;
   const [activeTab, setActiveTab] = useState<'orders' | 'links' | 'extraction'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([]);
@@ -237,9 +240,49 @@ export default function OrdersPage() {
   return (
     <div className="p-3 sm:p-6">
       <div className="mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">Pedidos y Enlaces</h1>
-        <p className="text-gray-400 text-sm mt-1">Gestiona pedidos y enlaces de pago</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-white">
+          {isPro ? 'Pedidos y Enlaces' : 'Pedidos y Vouchers'}
+        </h1>
+        <p className="text-gray-400 text-sm mt-1">
+          {isPro ? 'Gestiona pedidos y enlaces de pago' : 'Gestiona pedidos y confirma pagos con voucher'}
+        </p>
       </div>
+
+      {!isPro && (() => {
+        const awaitingVoucher = orders.filter(o => o.status === 'AWAITING_VOUCHER');
+        const withVoucher = awaitingVoucher.filter(o => o.voucherImageUrl);
+        return (
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-orange-400 text-sm font-medium">Esperando Voucher</span>
+              </div>
+              <p className="text-2xl font-bold text-white mt-1">{awaitingVoucher.length - withVoucher.length}</p>
+            </div>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-blue-400 text-sm font-medium">Voucher Recibido</span>
+              </div>
+              <p className="text-2xl font-bold text-white mt-1">{withVoucher.length}</p>
+            </div>
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-green-400 text-sm font-medium">Pagados</span>
+              </div>
+              <p className="text-2xl font-bold text-white mt-1">{orders.filter(o => o.status === 'PAID').length}</p>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4 sm:mb-6">
         <div className="flex bg-[#1e1e1e] rounded-lg p-1 border border-gray-700 overflow-x-auto">
@@ -253,16 +296,18 @@ export default function OrdersPage() {
           >
             Pedidos ({orders.length})
           </button>
-          <button
-            onClick={() => { setActiveTab('links'); setExpandedOrderId(null); setExpandedLinkId(null); }}
-            className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
-              activeTab === 'links'
-                ? 'bg-green-600 text-white'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Enlaces ({paymentLinks.length})
-          </button>
+          {isPro && (
+            <button
+              onClick={() => { setActiveTab('links'); setExpandedOrderId(null); setExpandedLinkId(null); }}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === 'links'
+                  ? 'bg-green-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Enlaces ({paymentLinks.length})
+            </button>
+          )}
           <button
             onClick={() => { setActiveTab('extraction'); setExpandedOrderId(null); setExpandedLinkId(null); }}
             className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
@@ -288,7 +333,7 @@ export default function OrdersPage() {
               ))}
             </select>
           )}
-          {activeTab === 'links' && (
+          {isPro && activeTab === 'links' && (
             <select
               value={linkStatusFilter}
               onChange={(e) => setLinkStatusFilter(e.target.value)}
