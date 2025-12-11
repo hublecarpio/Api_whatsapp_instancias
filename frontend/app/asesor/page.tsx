@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
-import { advisorApi, messageApi } from '@/lib/api';
+import { advisorApi, messageApi, mediaApi, waApi } from '@/lib/api';
 import Logo from '@/components/Logo';
 
 interface Business {
@@ -45,6 +45,12 @@ export default function AsesorPage() {
   const [messageInput, setMessageInput] = useState('');
   const [sending, setSending] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ file: File; url: string; type: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     loadFromStorage();
@@ -121,33 +127,113 @@ export default function AsesorPage() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim() || !selectedConversation || !selectedBusiness || sending) return;
+    if ((!messageInput.trim() && !previewFile) || !selectedConversation || !selectedBusiness || sending) return;
 
     const tempId = `temp-${Date.now()}`;
+    const messageCopy = messageInput;
+    const fileCopy = previewFile;
+
     const optimisticMessage: Message = {
       id: tempId,
       direction: 'outbound',
-      message: messageInput,
-      mediaUrl: null,
-      mediaType: null,
+      message: fileCopy ? null : messageCopy,
+      mediaUrl: fileCopy?.url || null,
+      mediaType: fileCopy?.type || null,
       createdAt: new Date().toISOString(),
       metadata: { pending: true }
     };
 
     setMessages(prev => [...prev, optimisticMessage]);
-    const messageCopy = messageInput;
     setMessageInput('');
     setSending(true);
 
     try {
-      await messageApi.send(selectedBusiness.id, selectedConversation.phone, messageCopy);
+      if (fileCopy) {
+        setUploading(true);
+        const uploadRes = await mediaApi.upload(selectedBusiness.id, fileCopy.file);
+        const { url, type, mimetype } = uploadRes.data;
+        
+        const sendData: any = { to: selectedConversation.phone };
+        if (type === 'image') {
+          sendData.imageUrl = url;
+          sendData.message = messageCopy || undefined;
+        } else if (type === 'video') {
+          sendData.videoUrl = url;
+          sendData.message = messageCopy || undefined;
+        } else if (type === 'audio') {
+          sendData.audioUrl = url;
+        } else {
+          sendData.fileUrl = url;
+          sendData.fileName = fileCopy.file.name;
+          sendData.mimeType = mimetype || fileCopy.file.type;
+        }
+        
+        await waApi.send(selectedBusiness.id, sendData);
+        setPreviewFile(null);
+        setUploading(false);
+      } else {
+        await messageApi.send(selectedBusiness.id, selectedConversation.phone, messageCopy);
+      }
       await loadMessages();
     } catch (error) {
       console.error('Error sending message:', error);
       setMessages(prev => prev.filter(m => m.id !== tempId));
       setMessageInput(messageCopy);
+      if (fileCopy) setPreviewFile(fileCopy);
     } finally {
       setSending(false);
+      setUploading(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const url = URL.createObjectURL(file);
+    let type = 'file';
+    if (file.type.startsWith('image/')) type = 'image';
+    else if (file.type.startsWith('video/')) type = 'video';
+    else if (file.type.startsWith('audio/')) type = 'audio';
+    
+    setPreviewFile({ file, url, type });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const cancelPreview = () => {
+    if (previewFile) {
+      URL.revokeObjectURL(previewFile.url);
+      setPreviewFile(null);
+    }
+  };
+
+  const handleStartRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      const audioChunks: Blob[] = [];
+      
+      mediaRecorder.ondataavailable = (event) => audioChunks.push(event.data);
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const file = new File([audioBlob], 'audio.webm', { type: 'audio/webm' });
+        setPreviewFile({ file, url: URL.createObjectURL(file), type: 'audio' });
+        stream.getTracks().forEach(track => track.stop());
+        setIsRecording(false);
+      };
+      
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
     }
   };
 
@@ -318,22 +404,107 @@ export default function AsesorPage() {
                 ))}
               </div>
 
-              <form onSubmit={handleSendMessage} className="bg-dark-card border-t border-dark-border p-4 flex gap-3">
-                <input
-                  type="text"
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  placeholder="Escribe un mensaje..."
-                  className="input flex-1"
-                />
-                <button
-                  type="submit"
-                  disabled={sending || !messageInput.trim()}
-                  className="btn btn-primary"
-                >
-                  {sending ? '...' : 'Enviar'}
-                </button>
-              </form>
+              <div className="bg-dark-card border-t border-dark-border">
+                {previewFile && (
+                  <div className="px-4 pt-3">
+                    <div className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg">
+                      {previewFile.type === 'image' && (
+                        <img src={previewFile.url} alt="" className="h-16 w-16 object-cover rounded" />
+                      )}
+                      {previewFile.type === 'video' && (
+                        <video src={previewFile.url} className="h-16 w-16 object-cover rounded" />
+                      )}
+                      {previewFile.type === 'audio' && (
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                          <span>🎤</span>
+                          <span>Audio grabado</span>
+                        </div>
+                      )}
+                      {previewFile.type === 'file' && (
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                          <span>📄</span>
+                          <span className="truncate max-w-[150px]">{previewFile.file.name}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={cancelPreview}
+                        className="ml-auto p-1 text-gray-400 hover:text-white"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                <form onSubmit={handleSendMessage} className="p-4 flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+                  />
+                  
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isRecording || uploading}
+                    className="p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg transition-colors"
+                    title="Adjuntar archivo"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  </button>
+                  
+                  {isRecording ? (
+                    <button
+                      type="button"
+                      onClick={handleStopRecording}
+                      className="p-2 text-red-500 bg-red-500/20 rounded-lg animate-pulse"
+                      title="Detener grabacion"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="6" width="12" height="12" rx="2" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleStartRecording}
+                      disabled={!!previewFile || uploading}
+                      className="p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg transition-colors disabled:opacity-50"
+                      title="Grabar audio"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                    </button>
+                  )}
+                  
+                  <input
+                    type="text"
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    placeholder={isRecording ? 'Grabando...' : 'Escribe un mensaje...'}
+                    disabled={isRecording}
+                    className="input flex-1"
+                  />
+                  
+                  <button
+                    type="submit"
+                    disabled={sending || uploading || isRecording || (!messageInput.trim() && !previewFile)}
+                    className="btn btn-primary"
+                  >
+                    {uploading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : sending ? '...' : 'Enviar'}
+                  </button>
+                </form>
+              </div>
             </>
           )}
         </div>
