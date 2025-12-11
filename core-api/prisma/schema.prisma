@@ -7,11 +7,18 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserRole {
+  ADMIN
+  ASESOR
+}
+
 model User {
   id                          String              @id @default(uuid())
   name                        String
   email                       String              @unique
   passwordHash                String
+  role                        UserRole            @default(ADMIN)
+  parentUserId                String?
   emailVerified               Boolean             @default(false)
   verificationToken           String?
   verificationTokenExpiresAt  DateTime?
@@ -30,6 +37,39 @@ model User {
   createdAt                   DateTime            @default(now())
   businesses                  Business[]
   subscriptions               Subscription[]
+  parentUser                  User?               @relation("UserAdvisors", fields: [parentUserId], references: [id])
+  advisors                    User[]              @relation("UserAdvisors")
+  advisorInvitations          AdvisorInvitation[] @relation("InvitedBy")
+  contactAssignments          ContactAssignment[]
+}
+
+model AdvisorInvitation {
+  id            String    @id @default(uuid())
+  email         String
+  token         String    @unique
+  invitedById   String
+  businessId    String
+  expiresAt     DateTime
+  acceptedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  
+  invitedBy     User      @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@unique([email, businessId])
+}
+
+model ContactAssignment {
+  id           String   @id @default(uuid())
+  businessId   String
+  contactPhone String
+  userId       String
+  assignedAt   DateTime @default(now())
+  
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([businessId, contactPhone])
 }
 
 enum ReferralCodeType {
@@ -205,6 +245,8 @@ model Business {
   reminders         Reminder[]
   appointments      Appointment[]
   availability      BusinessAvailability[]
+  advisorInvitations AdvisorInvitation[]
+  contactAssignments ContactAssignment[]
 }
 
 enum WhatsAppProvider {

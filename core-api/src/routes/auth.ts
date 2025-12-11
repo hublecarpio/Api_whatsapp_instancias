@@ -202,7 +202,9 @@ router.post('/login', async (req: Request, res: Response) => {
         email: user.email,
         emailVerified: user.emailVerified,
         isPro: user.isPro,
-        paymentLinkEnabled: user.paymentLinkEnabled
+        paymentLinkEnabled: user.paymentLinkEnabled,
+        role: user.role,
+        parentUserId: user.parentUserId
       },
       token
     });
@@ -320,7 +322,9 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         stripeCustomerId: true,
         isPro: true,
         paymentLinkEnabled: true,
-        proBonusExpiresAt: true
+        proBonusExpiresAt: true,
+        role: true,
+        parentUserId: true
       }
     });
     
@@ -337,7 +341,9 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       isPro: user.isPro || hasActiveBonus,
       paymentLinkEnabled: user.paymentLinkEnabled || hasActiveBonus,
       proBonusExpiresAt: user.proBonusExpiresAt,
-      hasActiveBonus
+      hasActiveBonus,
+      role: user.role,
+      parentUserId: user.parentUserId
     });
   } catch (error) {
     console.error('Get me error:', error);
@@ -582,6 +588,116 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
   } catch (error) {
     console.error('Apply referral error:', error);
     res.status(500).json({ error: 'Failed to apply referral code' });
+  }
+});
+
+router.get('/advisor-invitation/:token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+    
+    const invitation = await prisma.advisorInvitation.findUnique({
+      where: { token },
+      include: { 
+        business: { select: { name: true } },
+        invitedBy: { select: { name: true } }
+      }
+    });
+    
+    if (!invitation) {
+      return res.status(404).json({ error: 'Invalid invitation token' });
+    }
+    
+    if (invitation.acceptedAt) {
+      return res.status(400).json({ error: 'This invitation has already been used' });
+    }
+    
+    if (invitation.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'This invitation has expired' });
+    }
+    
+    res.json({
+      email: invitation.email,
+      businessName: invitation.business.name,
+      invitedByName: invitation.invitedBy.name
+    });
+  } catch (error) {
+    console.error('Get advisor invitation error:', error);
+    res.status(500).json({ error: 'Failed to get invitation' });
+  }
+});
+
+router.post('/advisor-signup', async (req: Request, res: Response) => {
+  try {
+    const { token, name, password } = req.body;
+    
+    if (!token || !name || !password) {
+      return res.status(400).json({ error: 'Token, name and password are required' });
+    }
+    
+    const invitation = await prisma.advisorInvitation.findUnique({
+      where: { token },
+      include: { business: true }
+    });
+    
+    if (!invitation) {
+      return res.status(404).json({ error: 'Invalid invitation token' });
+    }
+    
+    if (invitation.acceptedAt) {
+      return res.status(400).json({ error: 'This invitation has already been used' });
+    }
+    
+    if (invitation.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'This invitation has expired' });
+    }
+    
+    const existingUser = await prisma.user.findUnique({ 
+      where: { email: invitation.email } 
+    });
+    
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+    
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name,
+          email: invitation.email,
+          passwordHash,
+          role: 'ASESOR',
+          parentUserId: invitation.invitedById,
+          emailVerified: true,
+          subscriptionStatus: 'ACTIVE'
+        }
+      });
+      
+      await tx.advisorInvitation.update({
+        where: { id: invitation.id },
+        data: { acceptedAt: new Date() }
+      });
+      
+      return user;
+    });
+    
+    const authToken = generateToken(result.id);
+    
+    res.status(201).json({
+      user: {
+        id: result.id,
+        name: result.name,
+        email: result.email,
+        role: result.role,
+        parentUserId: result.parentUserId
+      },
+      token: authToken,
+      message: 'Account created successfully'
+    });
+  } catch (error) {
+    console.error('Advisor signup error:', error);
+    res.status(500).json({ error: 'Failed to create account' });
   }
 });
 
