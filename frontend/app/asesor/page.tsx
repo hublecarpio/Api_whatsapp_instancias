@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
-import { advisorApi, messageApi, mediaApi, waApi } from '@/lib/api';
+import { advisorApi, messageApi, mediaApi, waApi, tagsApi } from '@/lib/api';
 import Logo from '@/components/Logo';
 
 interface Business {
@@ -12,6 +12,18 @@ interface Business {
   description: string;
   businessObjective: string;
   assignedContactsCount: number;
+}
+
+interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  order: number;
+}
+
+interface TagAssignment {
+  phone: string;
+  tagId: string;
 }
 
 interface Conversation {
@@ -49,6 +61,11 @@ export default function AsesorPage() {
   const [uploading, setUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagAssignments, setTagAssignments] = useState<TagAssignment[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -92,6 +109,7 @@ export default function AsesorPage() {
   useEffect(() => {
     if (selectedBusiness) {
       loadConversations();
+      loadTags();
     }
   }, [selectedBusiness]);
 
@@ -102,6 +120,20 @@ export default function AsesorPage() {
       setConversations(res.data);
     } catch (error) {
       console.error('Error loading conversations:', error);
+    }
+  };
+
+  const loadTags = async () => {
+    if (!selectedBusiness) return;
+    try {
+      const [tagsRes, assignmentsRes] = await Promise.all([
+        tagsApi.list(selectedBusiness.id),
+        tagsApi.getAssignments(selectedBusiness.id)
+      ]);
+      setTags(tagsRes.data);
+      setTagAssignments(assignmentsRes.data);
+    } catch (error) {
+      console.error('Error loading tags:', error);
     }
   };
 
@@ -135,6 +167,28 @@ export default function AsesorPage() {
     setSelectedConversation(conv);
     setSidebarOpen(false);
   };
+
+  const getContactTag = useCallback((phone: string) => {
+    const assignment = tagAssignments.find(a => a.phone === phone);
+    if (!assignment) return null;
+    return tags.find(t => t.id === assignment.tagId) || null;
+  }, [tags, tagAssignments]);
+
+  const getConversationsByTag = useCallback((tagId: string | null) => {
+    const phones = tagId === null 
+      ? conversations.filter(c => !tagAssignments.some(a => a.phone === c.phone)).map(c => c.phone)
+      : tagAssignments.filter(a => a.tagId === tagId).map(a => a.phone);
+    return conversations.filter(c => phones.includes(c.phone));
+  }, [conversations, tagAssignments]);
+
+  const filteredConversations = conversations.filter(conv => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return conv.phone.includes(query) || 
+             (conv.contactName && conv.contactName.toLowerCase().includes(query));
+    }
+    return true;
+  });
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,9 +307,128 @@ export default function AsesorPage() {
     router.push('/login');
   };
 
+  const isImageUrl = (url: string) => /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url);
+  const isVideoUrl = (url: string) => /\.(mp4|mov|webm|avi)(\?.*)?$/i.test(url);
+  const isAudioUrl = (url: string) => /\.(ogg|mp3|wav|m4a|aac|opus|webm)(\?.*)?$/i.test(url);
+
+  const AudioPlayer = ({ src, isOutbound }: { src: string; isOutbound: boolean }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [duration, setDuration] = useState(0);
+    const [currentTime, setCurrentTime] = useState(0);
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const waveHeights = useRef([10, 14, 8, 16, 12, 10, 14, 8, 12, 16, 10, 14]);
+
+    const togglePlay = () => {
+      if (audioRef.current) {
+        if (isPlaying) {
+          audioRef.current.pause();
+        } else {
+          audioRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+      }
+    };
+
+    const formatDuration = (sec: number) => {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const progress = duration > 0 ? Math.floor((currentTime / duration) * 12) : 0;
+
+    return (
+      <div className="flex items-center gap-2 min-w-[160px]">
+        <audio 
+          ref={audioRef} 
+          src={src} 
+          preload="metadata"
+          onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration)}
+          onTimeUpdate={(e) => setCurrentTime((e.target as HTMLAudioElement).currentTime)}
+          onEnded={() => { setIsPlaying(false); setCurrentTime(0); }}
+          className="hidden"
+        />
+        <button 
+          onClick={togglePlay} 
+          className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${isOutbound ? 'bg-white/20 hover:bg-white/30' : 'bg-neon-blue/20 hover:bg-neon-blue/30'}`}
+        >
+          {isPlaying ? (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+          ) : (
+            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+          )}
+        </button>
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-end gap-[3px] h-4">
+            {waveHeights.current.map((h, i) => (
+              <div 
+                key={i} 
+                className={`w-[3px] rounded-sm transition-colors duration-150 ${
+                  i < progress 
+                    ? (isOutbound ? 'bg-white' : 'bg-neon-blue') 
+                    : (isOutbound ? 'bg-white/30' : 'bg-gray-600')
+                }`}
+                style={{ height: `${h}px` }}
+              />
+            ))}
+          </div>
+          <span className={`text-[10px] ${isOutbound ? 'text-white/60' : 'text-gray-400'}`}>
+            {formatDuration(currentTime > 0 ? currentTime : duration || 0)}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMedia = (mediaUrl: string, isOutbound: boolean, mediaType?: string) => {
+    const type = mediaType?.toLowerCase() || '';
+    const isAudio = type === 'audio' || type === 'ptt' || isAudioUrl(mediaUrl);
+    const isImage = type === 'image' || type === 'sticker' || isImageUrl(mediaUrl);
+    const isVideo = type === 'video' || isVideoUrl(mediaUrl);
+    
+    if (isImage) {
+      return (
+        <img 
+          src={mediaUrl} 
+          alt="" 
+          className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity" 
+          style={{ maxHeight: '200px', maxWidth: '220px' }} 
+          onClick={() => window.open(mediaUrl, '_blank')} 
+        />
+      );
+    }
+    if (isVideo) {
+      return (
+        <div className="relative rounded-lg overflow-hidden" style={{ maxWidth: '220px' }}>
+          <video 
+            src={mediaUrl} 
+            controls 
+            className="max-w-full" 
+            style={{ maxHeight: '180px' }} 
+          />
+        </div>
+      );
+    }
+    if (isAudio) {
+      return <AudioPlayer src={mediaUrl} isOutbound={isOutbound} />;
+    }
+    const fileName = mediaUrl.split('/').pop()?.split('?')[0] || 'archivo';
+    return (
+      <a 
+        href={mediaUrl} 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className={`inline-flex items-center gap-1.5 text-sm ${isOutbound ? 'text-white/90 hover:text-white' : 'text-neon-blue hover:text-neon-blue-light'}`}
+      >
+        <span>📄</span>
+        <span className="underline underline-offset-2">{fileName.length > 20 ? fileName.slice(0, 17) + '...' : fileName}</span>
+      </a>
+    );
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dark-bg">
+      <div className="h-screen flex items-center justify-center bg-dark-bg">
         <div className="animate-spin rounded-full h-10 w-10 border-2 border-neon-blue border-t-transparent"></div>
       </div>
     );
@@ -263,7 +436,7 @@ export default function AsesorPage() {
 
   if (businesses.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dark-bg p-4">
+      <div className="h-screen flex items-center justify-center bg-dark-bg p-4">
         <div className="max-w-md w-full card text-center py-10">
           <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -282,9 +455,11 @@ export default function AsesorPage() {
     );
   }
 
+  const showChatList = sidebarOpen || !selectedConversation;
+
   return (
-    <div className="min-h-screen bg-dark-bg flex flex-col">
-      <header className="bg-dark-card border-b border-dark-border px-3 md:px-4 py-3 flex items-center justify-between">
+    <div className="h-screen bg-dark-bg flex flex-col overflow-hidden">
+      <header className="flex-shrink-0 bg-dark-card border-b border-dark-border px-3 md:px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2 md:gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -333,68 +508,157 @@ export default function AsesorPage() {
         <div className={`
           fixed md:relative inset-y-0 left-0 z-50 md:z-auto
           w-[85%] max-w-[320px] md:w-80 md:max-w-none
-          bg-dark-card border-r border-dark-border flex flex-col
+          bg-dark-card border-r border-dark-border flex flex-col h-full
           transform transition-transform duration-300 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           md:transform-none
-        `}>
-          <div className="p-4 border-b border-dark-border flex items-center justify-between">
-            <div>
-              <h3 className="font-medium text-white">Conversaciones</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {conversations.length} contacto{conversations.length !== 1 ? 's' : ''}
-              </p>
+        `} style={{ top: 0 }}>
+          <div className="flex-shrink-0 p-3 border-b border-dark-border bg-dark-card">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-medium text-white">Chats</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 bg-dark-hover px-2 py-0.5 rounded-full">{filteredConversations.length}</span>
+                <button 
+                  onClick={() => setViewMode(viewMode === 'list' ? 'kanban' : 'list')} 
+                  className={`p-1.5 rounded-lg transition-colors ${viewMode === 'kanban' ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:bg-dark-hover'}`}
+                  title={viewMode === 'list' ? 'Ver etapas' : 'Ver lista'}
+                >
+                  {viewMode === 'list' ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="md:hidden p-1.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar..."
+                className="w-full pl-8 pr-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-blue"
+              />
+              <svg className="w-4 h-4 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            </div>
+            {viewMode === 'kanban' && tags.length > 0 && (
+              <div className="flex gap-1 overflow-x-auto pb-1 mt-2 hide-scrollbar">
+                <button 
+                  onClick={() => setSelectedTag(null)} 
+                  className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${selectedTag === null ? 'bg-white text-dark-bg' : 'bg-dark-hover text-gray-400 hover:bg-dark-border'}`}
+                >
+                  Sin etiqueta ({getConversationsByTag(null).length})
+                </button>
+                {tags.map(tag => (
+                  <button 
+                    key={tag.id} 
+                    onClick={() => setSelectedTag(tag.id)} 
+                    className="text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0" 
+                    style={{ backgroundColor: selectedTag === tag.id ? tag.color : `${tag.color}30`, color: selectedTag === tag.id ? 'white' : tag.color }}
+                  >
+                    {tag.name} ({getConversationsByTag(tag.id).length})
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto">
-            {conversations.length === 0 ? (
+            {filteredConversations.length === 0 ? (
               <div className="p-4 text-center text-gray-500 text-sm">
                 No tienes conversaciones asignadas
               </div>
-            ) : (
-              conversations.map(conv => (
-                <button
-                  key={conv.phone}
-                  onClick={() => selectConversation(conv)}
-                  className={`w-full text-left p-4 border-b border-dark-border hover:bg-dark-bg/50 transition-colors active:bg-dark-bg/70 ${
-                    selectedConversation?.phone === conv.phone ? 'bg-dark-bg/50' : ''
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-white truncate">
-                        {conv.contactName || conv.phone}
-                      </p>
-                      {conv.contactName && (
-                        <p className="text-xs text-gray-500">{conv.phone}</p>
-                      )}
-                      {conv.lastMessage && (
-                        <p className="text-sm text-gray-400 truncate mt-1">
-                          {conv.lastMessage}
-                        </p>
+            ) : viewMode === 'kanban' ? (
+              (selectedTag !== null ? getConversationsByTag(selectedTag) : getConversationsByTag(null)).map(conv => {
+                const tag = getContactTag(conv.phone);
+                return (
+                  <button
+                    key={conv.phone}
+                    onClick={() => selectConversation(conv)}
+                    className={`w-full text-left p-3 border-b border-dark-border hover:bg-dark-bg/50 transition-colors ${
+                      selectedConversation?.phone === conv.phone ? 'bg-dark-bg/50' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-white truncate text-sm">
+                            {conv.contactName || conv.phone}
+                          </p>
+                          {tag && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: `${tag.color}30`, color: tag.color }}>
+                              {tag.name}
+                            </span>
+                          )}
+                        </div>
+                        {conv.lastMessage && (
+                          <p className="text-xs text-gray-400 truncate mt-0.5">
+                            {conv.lastMessage}
+                          </p>
+                        )}
+                      </div>
+                      {conv.unread > 0 && (
+                        <span className="bg-neon-blue text-white text-xs rounded-full px-2 py-0.5 flex-shrink-0">
+                          {conv.unread}
+                        </span>
                       )}
                     </div>
-                    {conv.unread > 0 && (
-                      <span className="bg-neon-blue text-white text-xs rounded-full px-2 py-0.5 ml-2 flex-shrink-0">
-                        {conv.unread}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))
+                  </button>
+                );
+              })
+            ) : (
+              filteredConversations.map(conv => {
+                const tag = getContactTag(conv.phone);
+                return (
+                  <button
+                    key={conv.phone}
+                    onClick={() => selectConversation(conv)}
+                    className={`w-full text-left p-3 border-b border-dark-border hover:bg-dark-bg/50 transition-colors ${
+                      selectedConversation?.phone === conv.phone ? 'bg-dark-bg/50' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-white truncate text-sm">
+                            {conv.contactName || conv.phone}
+                          </p>
+                          {tag && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: `${tag.color}30`, color: tag.color }}>
+                              {tag.name}
+                            </span>
+                          )}
+                        </div>
+                        {conv.contactName && (
+                          <p className="text-[11px] text-gray-500">{conv.phone}</p>
+                        )}
+                        {conv.lastMessage && (
+                          <p className="text-xs text-gray-400 truncate mt-0.5">
+                            {conv.lastMessage}
+                          </p>
+                        )}
+                      </div>
+                      {conv.unread > 0 && (
+                        <span className="bg-neon-blue text-white text-xs rounded-full px-2 py-0.5 flex-shrink-0">
+                          {conv.unread}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
           {!selectedConversation ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-4">
               <svg className="w-16 h-16 mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -410,7 +674,7 @@ export default function AsesorPage() {
             </div>
           ) : (
             <>
-              <div className="bg-dark-card border-b border-dark-border px-3 md:px-4 py-3 flex items-center gap-3">
+              <div className="flex-shrink-0 bg-dark-card border-b border-dark-border px-3 md:px-4 py-3 flex items-center gap-3">
                 <button
                   onClick={() => {
                     setSelectedConversation(null);
@@ -423,16 +687,29 @@ export default function AsesorPage() {
                   </svg>
                 </button>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-white truncate">
-                    {selectedConversation.contactName || selectedConversation.phone}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-white truncate">
+                      {selectedConversation.contactName || selectedConversation.phone}
+                    </p>
+                    {getContactTag(selectedConversation.phone) && (
+                      <span 
+                        className="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" 
+                        style={{ 
+                          backgroundColor: `${getContactTag(selectedConversation.phone)!.color}30`, 
+                          color: getContactTag(selectedConversation.phone)!.color 
+                        }}
+                      >
+                        {getContactTag(selectedConversation.phone)!.name}
+                      </span>
+                    )}
+                  </div>
                   {selectedConversation.contactName && (
                     <p className="text-xs text-gray-500 truncate">{selectedConversation.phone}</p>
                   )}
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 bg-dark-bg">
                 {messages.map(msg => (
                   <div
                     key={msg.id}
@@ -447,21 +724,11 @@ export default function AsesorPage() {
                     >
                       {msg.mediaUrl && (
                         <div className="mb-2">
-                          {msg.mediaType?.startsWith('image') ? (
-                            <img src={msg.mediaUrl} alt="Media" className="max-w-full rounded-lg" />
-                          ) : msg.mediaType?.startsWith('audio') ? (
-                            <audio controls src={msg.mediaUrl} className="max-w-full w-full min-w-[200px]" />
-                          ) : msg.mediaType?.startsWith('video') ? (
-                            <video controls src={msg.mediaUrl} className="max-w-full rounded-lg" />
-                          ) : (
-                            <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-neon-blue underline">
-                              Ver archivo
-                            </a>
-                          )}
+                          {renderMedia(msg.mediaUrl, msg.direction === 'outbound', msg.mediaType || msg.metadata?.mediaType || msg.metadata?.type)}
                         </div>
                       )}
-                      {msg.message && <p className="text-sm whitespace-pre-wrap">{msg.message}</p>}
-                      <p className={`text-xs mt-1 ${msg.direction === 'outbound' ? 'text-blue-200' : 'text-gray-500'}`}>
+                      {msg.message && <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>}
+                      <p className={`text-[10px] mt-1 ${msg.direction === 'outbound' ? 'text-blue-200' : 'text-gray-500'}`}>
                         {new Date(msg.createdAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
@@ -470,15 +737,15 @@ export default function AsesorPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              <div className="bg-dark-card border-t border-dark-border safe-area-bottom">
+              <div className="flex-shrink-0 bg-dark-card border-t border-dark-border">
                 {previewFile && (
                   <div className="px-3 md:px-4 pt-3">
                     <div className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg">
                       {previewFile.type === 'image' && (
-                        <img src={previewFile.url} alt="" className="h-14 w-14 md:h-16 md:w-16 object-cover rounded" />
+                        <img src={previewFile.url} alt="" className="h-14 w-14 object-cover rounded" />
                       )}
                       {previewFile.type === 'video' && (
-                        <video src={previewFile.url} className="h-14 w-14 md:h-16 md:w-16 object-cover rounded" />
+                        <video src={previewFile.url} className="h-14 w-14 object-cover rounded" />
                       )}
                       {previewFile.type === 'audio' && (
                         <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -489,13 +756,13 @@ export default function AsesorPage() {
                       {previewFile.type === 'file' && (
                         <div className="flex items-center gap-2 text-sm text-gray-400">
                           <span className="text-lg">📄</span>
-                          <span className="truncate max-w-[120px] md:max-w-[150px]">{previewFile.file.name}</span>
+                          <span className="truncate max-w-[120px]">{previewFile.file.name}</span>
                         </div>
                       )}
                       <button
                         type="button"
                         onClick={cancelPreview}
-                        className="ml-auto p-2 text-gray-400 hover:text-white active:bg-dark-hover rounded-lg"
+                        className="ml-auto p-2 text-gray-400 hover:text-white rounded-lg"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -518,10 +785,10 @@ export default function AsesorPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isRecording || uploading}
-                    className="p-3 text-gray-400 hover:text-white hover:bg-dark-hover active:bg-dark-hover rounded-xl transition-colors touch-manipulation"
+                    className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-xl transition-colors touch-manipulation"
                     title="Adjuntar archivo"
                   >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
                   </button>
@@ -530,10 +797,10 @@ export default function AsesorPage() {
                     <button
                       type="button"
                       onClick={handleStopRecording}
-                      className="p-3 text-red-500 bg-red-500/20 rounded-xl animate-pulse touch-manipulation"
+                      className="p-2.5 text-red-500 bg-red-500/20 rounded-xl animate-pulse touch-manipulation"
                       title="Detener grabacion"
                     >
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                         <rect x="6" y="6" width="12" height="12" rx="2" />
                       </svg>
                     </button>
@@ -542,10 +809,10 @@ export default function AsesorPage() {
                       type="button"
                       onClick={handleStartRecording}
                       disabled={!!previewFile || uploading}
-                      className="p-3 text-gray-400 hover:text-white hover:bg-dark-hover active:bg-dark-hover rounded-xl transition-colors disabled:opacity-50 touch-manipulation"
+                      className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-xl transition-colors disabled:opacity-50 touch-manipulation"
                       title="Grabar audio"
                     >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                       </svg>
                     </button>
@@ -557,20 +824,18 @@ export default function AsesorPage() {
                     onChange={(e) => setMessageInput(e.target.value)}
                     placeholder={isRecording ? 'Grabando...' : 'Mensaje...'}
                     disabled={isRecording}
-                    className="input flex-1 min-w-0 text-base"
+                    className="flex-1 min-w-0 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-blue"
                   />
                   
                   <button
                     type="submit"
-                    disabled={sending || uploading || isRecording || (!messageInput.trim() && !previewFile)}
-                    className="btn btn-primary p-3 rounded-xl touch-manipulation"
+                    disabled={sending || isRecording || (!messageInput.trim() && !previewFile)}
+                    className="p-2.5 bg-neon-blue text-white rounded-xl hover:bg-neon-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                   >
                     {uploading ? (
-                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : sending ? (
-                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                       </svg>
                     )}
