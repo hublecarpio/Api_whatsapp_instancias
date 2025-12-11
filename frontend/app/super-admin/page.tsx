@@ -152,29 +152,29 @@ export default function SuperAdminPage() {
 
   return (
     <div className="min-h-screen bg-dark-bg">
-      <header className="bg-dark-surface border-b border-dark-border px-6 py-4">
+      <header className="bg-dark-surface border-b border-dark-border px-3 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Logo size="sm" />
-            <h1 className="text-xl font-bold text-white">Super Admin</h1>
+            <h1 className="text-base sm:text-xl font-bold text-white">Super Admin</h1>
           </div>
-          <button onClick={handleLogout} className="btn btn-ghost text-sm">
-            Cerrar sesion
+          <button onClick={handleLogout} className="btn btn-ghost text-xs sm:text-sm px-2 sm:px-4">
+            Salir
           </button>
         </div>
       </header>
 
-      <nav className="bg-dark-surface border-b border-dark-border px-6">
-        <div className="flex gap-1 -mb-px overflow-x-auto">
+      <nav className="bg-dark-surface border-b border-dark-border px-2 sm:px-6">
+        <div className="flex gap-0.5 sm:gap-1 -mb-px overflow-x-auto scrollbar-hide">
           {[
-            { id: 'command', label: 'Centro de Comando', icon: '⚡' },
-            { id: 'devconsole', label: 'Dev Console', icon: '🔧' },
+            { id: 'command', label: 'Comando', icon: '⚡' },
+            { id: 'devconsole', label: 'Console', icon: '🔧' },
             { id: 'users', label: 'Usuarios', icon: '' },
             { id: 'businesses', label: 'Negocios', icon: '' },
             { id: 'whatsapp', label: 'WhatsApp', icon: '' },
             { id: 'analytics', label: 'Ventas', icon: '' },
-            { id: 'billing', label: 'Facturacion', icon: '' },
-            { id: 'tokens', label: 'Tokens IA', icon: '' },
+            { id: 'billing', label: 'Billing', icon: '' },
+            { id: 'tokens', label: 'Tokens', icon: '' },
             { id: 'agentv2', label: 'Agent V2', icon: '' },
             { id: 'referrals', label: 'Referidos', icon: '' },
             { id: 'system', label: 'Sistema', icon: '' }
@@ -182,20 +182,20 @@ export default function SuperAdminPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-neon-blue text-neon-blue'
                   : 'border-transparent text-gray-400 hover:text-white'
               }`}
             >
-              {tab.icon && <span className="mr-1">{tab.icon}</span>}
+              {tab.icon && <span className="mr-0.5 sm:mr-1">{tab.icon}</span>}
               {tab.label}
             </button>
           ))}
         </div>
       </nav>
 
-      <main className="p-6">
+      <main className="p-3 sm:p-6">
         {activeTab === 'command' && <CommandCenterTab token={token} />}
         {activeTab === 'devconsole' && <DevConsoleTab token={token} />}
         {activeTab === 'overview' && overview && <OverviewTab data={overview} />}
@@ -1819,92 +1819,94 @@ function CommandCenterTab({ token }: { token: string }) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Centro de Comando</h2>
-          <p className="text-gray-400 text-sm">Vista unificada del estado del sistema</p>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+        <div className="text-center sm:text-left">
+          <h2 className="text-xl sm:text-2xl font-bold text-white">Centro de Comando</h2>
+          <p className="text-gray-400 text-xs sm:text-sm">Vista unificada del sistema</p>
         </div>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-4">
+          <label className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-400">
             <input
               type="checkbox"
               checked={autoRefresh}
               onChange={e => setAutoRefresh(e.target.checked)}
-              className="rounded"
+              className="rounded w-3 h-3 sm:w-4 sm:h-4"
             />
-            Auto-refresh (10s)
+            Auto (10s)
           </label>
-          <button onClick={fetchData} className="btn btn-ghost text-sm">
+          <button onClick={fetchData} className="btn btn-ghost text-xs sm:text-sm px-2 sm:px-4">
             Actualizar
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
-        <div className="card flex items-center gap-3">
-          <div className={`w-4 h-4 rounded-full ${healthColors[data.health.status as keyof typeof healthColors] || 'bg-gray-500'}`} />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
+        <div className="card flex items-center justify-center gap-2 sm:gap-3 col-span-2 sm:col-span-1">
+          <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${healthColors[data.health.status as keyof typeof healthColors] || 'bg-gray-500'}`} />
           <div>
-            <p className="text-xl font-bold text-white capitalize">{data.health.status}</p>
-            <p className="text-xs text-gray-400">Estado del Sistema</p>
+            <p className="text-base sm:text-xl font-bold text-white capitalize">{data.health.status}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400">Estado</p>
           </div>
         </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-neon-blue">{data.users.active}</p>
-          <p className="text-xs text-gray-400">Usuarios Activos</p>
+        <div className="card text-center p-2 sm:p-4">
+          <p className="text-xl sm:text-3xl font-bold text-neon-blue">{data.users.active}</p>
+          <p className="text-[10px] sm:text-xs text-gray-400">Usuarios</p>
           {data.users.newToday > 0 && (
-            <p className="text-xs text-accent-success">+{data.users.newToday} hoy</p>
+            <p className="text-[10px] sm:text-xs text-accent-success">+{data.users.newToday}</p>
           )}
         </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-accent-success">{data.whatsapp.connectedInstances}</p>
-          <p className="text-xs text-gray-400">WhatsApp Conectados</p>
+        <div className="card text-center p-2 sm:p-4">
+          <p className="text-xl sm:text-3xl font-bold text-accent-success">{data.whatsapp.connectedInstances}</p>
+          <p className="text-[10px] sm:text-xs text-gray-400">WhatsApp</p>
         </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-white">{data.activity.messagesToday}</p>
-          <p className="text-xs text-gray-400">Mensajes Hoy</p>
+        <div className="card text-center p-2 sm:p-4">
+          <p className="text-xl sm:text-3xl font-bold text-white">{data.activity.messagesToday}</p>
+          <p className="text-[10px] sm:text-xs text-gray-400">Mensajes</p>
         </div>
-        <div className="card text-center">
-          <p className="text-3xl font-bold text-accent-warning">{data.health.errors24h}</p>
-          <p className="text-xs text-gray-400">Errores 24h</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-4">
-        <div className="card bg-gradient-to-br from-neon-blue/10 to-transparent border-neon-blue/30">
-          <p className="text-sm text-gray-400">Pedidos Hoy</p>
-          <p className="text-2xl font-bold text-white">{data.activity.ordersToday}</p>
-        </div>
-        <div className="card bg-gradient-to-br from-accent-success/10 to-transparent border-accent-success/30">
-          <p className="text-sm text-gray-400">Revenue Hoy</p>
-          <p className="text-2xl font-bold text-accent-success">S/. {data.activity.revenueToday.toFixed(2)}</p>
-        </div>
-        <div className="card bg-gradient-to-br from-purple-500/10 to-transparent border-purple-500/30">
-          <p className="text-sm text-gray-400">Costo IA Hoy</p>
-          <p className="text-2xl font-bold text-purple-400">${data.activity.tokenCostToday.toFixed(4)}</p>
-        </div>
-        <div className="card bg-gradient-to-br from-accent-warning/10 to-transparent border-accent-warning/30">
-          <p className="text-sm text-gray-400">Recordatorios Pendientes</p>
-          <p className="text-2xl font-bold text-accent-warning">{data.pending.reminders}</p>
+        <div className="card text-center p-2 sm:p-4">
+          <p className="text-xl sm:text-3xl font-bold text-accent-warning">{data.health.errors24h}</p>
+          <p className="text-[10px] sm:text-xs text-gray-400">Errores</p>
         </div>
       </div>
 
-      <div className="card">
-        <h3 className="text-lg font-semibold text-white mb-4">Actividad Reciente</h3>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+        <div className="card bg-gradient-to-br from-neon-blue/10 to-transparent border-neon-blue/30 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-400">Pedidos</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{data.activity.ordersToday}</p>
+        </div>
+        <div className="card bg-gradient-to-br from-accent-success/10 to-transparent border-accent-success/30 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-400">Revenue</p>
+          <p className="text-lg sm:text-2xl font-bold text-accent-success">S/. {data.activity.revenueToday.toFixed(0)}</p>
+        </div>
+        <div className="card bg-gradient-to-br from-purple-500/10 to-transparent border-purple-500/30 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-400">Costo IA</p>
+          <p className="text-lg sm:text-2xl font-bold text-purple-400">${data.activity.tokenCostToday.toFixed(2)}</p>
+        </div>
+        <div className="card bg-gradient-to-br from-accent-warning/10 to-transparent border-accent-warning/30 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-400">Reminders</p>
+          <p className="text-lg sm:text-2xl font-bold text-accent-warning">{data.pending.reminders}</p>
+        </div>
+      </div>
+
+      <div className="card p-3 sm:p-4">
+        <h3 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Actividad Reciente</h3>
         {data.recentActivity.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">No hay actividad reciente</p>
+          <p className="text-gray-500 text-center py-4 text-sm">No hay actividad reciente</p>
         ) : (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-1 sm:space-y-2 max-h-64 sm:max-h-96 overflow-y-auto">
             {data.recentActivity.map((event: any) => (
-              <div key={event.id} className="flex items-center gap-3 py-2 border-b border-dark-border">
-                <span className={`w-2 h-2 rounded-full ${
+              <div key={event.id} className="flex items-start sm:items-center gap-2 sm:gap-3 py-1.5 sm:py-2 border-b border-dark-border">
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 sm:mt-0 ${
                   event.severity === 'ERROR' || event.severity === 'CRITICAL' ? 'bg-accent-error' :
                   event.severity === 'WARNING' ? 'bg-accent-warning' : 'bg-accent-success'
                 }`} />
-                <span className="text-xs text-gray-500 w-20">{event.source}</span>
-                <span className="text-sm text-gray-300 flex-1">{event.message}</span>
-                <span className="text-xs text-gray-500">
-                  {new Date(event.createdAt).toLocaleTimeString('es-PE')}
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs sm:text-sm text-gray-300 block truncate">{event.message}</span>
+                  <span className="text-[10px] sm:text-xs text-gray-500">{event.source}</span>
+                </div>
+                <span className="text-[10px] sm:text-xs text-gray-500 flex-shrink-0">
+                  {new Date(event.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             ))}
@@ -1995,65 +1997,65 @@ function DevConsoleTab({ token }: { token: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+        <div className="text-center sm:text-left">
+          <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center justify-center sm:justify-start gap-2">
             Dev Console
-            <span className="text-sm font-normal text-gray-400 bg-dark-surface px-2 py-1 rounded">
-              {events.length} eventos
+            <span className="text-xs sm:text-sm font-normal text-gray-400 bg-dark-surface px-2 py-0.5 sm:py-1 rounded">
+              {events.length}
             </span>
           </h2>
-          <p className="text-gray-400 text-sm">Logs y eventos del sistema en tiempo real</p>
+          <p className="text-gray-400 text-xs sm:text-sm">Logs en tiempo real</p>
         </div>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-4">
+          <label className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-400">
             <input
               type="checkbox"
               checked={autoRefresh}
               onChange={e => setAutoRefresh(e.target.checked)}
-              className="rounded"
+              className="rounded w-3 h-3 sm:w-4 sm:h-4"
             />
             Auto (5s)
           </label>
-          <button onClick={fetchEvents} className="btn btn-ghost text-sm">
+          <button onClick={fetchEvents} className="btn btn-ghost text-xs sm:text-sm px-2 sm:px-4">
             Actualizar
           </button>
         </div>
       </div>
 
       {stats && (
-        <div className="grid grid-cols-5 gap-3">
-          <div className="card py-3 text-center">
-            <p className="text-2xl font-bold text-neon-blue">{stats.counts?.today || 0}</p>
-            <p className="text-xs text-gray-400">Eventos Hoy</p>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
+          <div className="card py-2 sm:py-3 text-center">
+            <p className="text-lg sm:text-2xl font-bold text-neon-blue">{stats.counts?.today || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400">Hoy</p>
           </div>
-          <div className="card py-3 text-center">
-            <p className="text-2xl font-bold text-white">{stats.counts?.lastHour || 0}</p>
-            <p className="text-xs text-gray-400">Ultima Hora</p>
+          <div className="card py-2 sm:py-3 text-center">
+            <p className="text-lg sm:text-2xl font-bold text-white">{stats.counts?.lastHour || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400">1h</p>
           </div>
-          <div className="card py-3 text-center">
-            <p className="text-2xl font-bold text-accent-error">{stats.counts?.errors24h || 0}</p>
-            <p className="text-xs text-gray-400">Errores 24h</p>
+          <div className="card py-2 sm:py-3 text-center">
+            <p className="text-lg sm:text-2xl font-bold text-accent-error">{stats.counts?.errors24h || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400">Errores</p>
           </div>
-          <div className="card py-3 text-center">
-            <p className="text-2xl font-bold text-accent-success">{stats.bySeverity?.INFO || 0}</p>
-            <p className="text-xs text-gray-400">Info</p>
+          <div className="card py-2 sm:py-3 text-center hidden sm:block">
+            <p className="text-lg sm:text-2xl font-bold text-accent-success">{stats.bySeverity?.INFO || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400">Info</p>
           </div>
-          <div className="card py-3 text-center">
-            <p className="text-2xl font-bold text-accent-warning">{stats.bySeverity?.WARNING || 0}</p>
-            <p className="text-xs text-gray-400">Warnings</p>
+          <div className="card py-2 sm:py-3 text-center hidden sm:block">
+            <p className="text-lg sm:text-2xl font-bold text-accent-warning">{stats.bySeverity?.WARNING || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-400">Warn</p>
           </div>
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-2 sm:gap-3">
         <select
           value={severityFilter}
           onChange={e => setSeverityFilter(e.target.value)}
-          className="input w-40"
+          className="input text-xs sm:text-sm flex-1 min-w-[120px] sm:flex-none sm:w-40"
         >
-          <option value="">Todas las severidades</option>
+          <option value="">Severidad</option>
           <option value="DEBUG">DEBUG</option>
           <option value="INFO">INFO</option>
           <option value="WARNING">WARNING</option>
@@ -2063,42 +2065,44 @@ function DevConsoleTab({ token }: { token: string }) {
         <select
           value={sourceFilter}
           onChange={e => setSourceFilter(e.target.value)}
-          className="input w-48"
+          className="input text-xs sm:text-sm flex-1 min-w-[120px] sm:flex-none sm:w-48"
         >
-          <option value="">Todas las fuentes</option>
+          <option value="">Fuente</option>
           {sources.map(s => (
             <option key={s.source} value={s.source}>{s.source} ({s.count})</option>
           ))}
         </select>
         <button 
           onClick={() => { setSeverityFilter(''); setSourceFilter(''); }}
-          className="btn btn-ghost text-sm"
+          className="btn btn-ghost text-xs sm:text-sm px-2 sm:px-4"
         >
-          Limpiar filtros
+          Limpiar
         </button>
       </div>
 
       <div className="card p-0 overflow-hidden">
-        <div className="bg-dark-bg font-mono text-sm max-h-[600px] overflow-y-auto">
+        <div className="bg-dark-bg font-mono text-xs sm:text-sm max-h-[400px] sm:max-h-[600px] overflow-y-auto">
           {events.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No hay eventos con estos filtros</p>
+            <p className="text-gray-500 text-center py-8 text-sm">No hay eventos</p>
           ) : (
             events.map(event => (
               <div 
                 key={event.id}
                 onClick={() => setSelectedEvent(event)}
-                className="flex items-start gap-2 px-3 py-2 border-b border-dark-border hover:bg-dark-hover cursor-pointer"
+                className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-b border-dark-border hover:bg-dark-hover cursor-pointer"
               >
-                <span className="text-gray-600 text-xs w-20 flex-shrink-0">
-                  {new Date(event.createdAt).toLocaleTimeString('es-PE')}
-                </span>
-                <span className={`text-xs px-1.5 py-0.5 rounded w-16 text-center flex-shrink-0 ${severityColors[event.severity] || ''}`}>
-                  {event.severity}
-                </span>
-                <span className="text-purple-400 text-xs w-24 flex-shrink-0 truncate">
-                  {event.source}
-                </span>
-                <span className="text-gray-300 flex-1 truncate">{event.message}</span>
+                <div className="flex items-center gap-2 sm:contents">
+                  <span className="text-gray-600 text-[10px] sm:text-xs sm:w-20 flex-shrink-0">
+                    {new Date(event.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className={`text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded sm:w-16 text-center flex-shrink-0 ${severityColors[event.severity] || ''}`}>
+                    {event.severity}
+                  </span>
+                  <span className="text-purple-400 text-[10px] sm:text-xs sm:w-24 flex-shrink-0 truncate">
+                    {event.source}
+                  </span>
+                </div>
+                <span className="text-gray-300 text-xs sm:text-sm flex-1 truncate">{event.message}</span>
               </div>
             ))
           )}
@@ -2106,15 +2110,15 @@ function DevConsoleTab({ token }: { token: string }) {
       </div>
 
       {selectedEvent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="card max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-white">Detalle del Evento</h3>
-              <button onClick={() => setSelectedEvent(null)} className="text-gray-400 hover:text-white">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3">
+          <div className="card w-full max-w-2xl max-h-[90vh] overflow-auto">
+            <div className="flex justify-between items-center mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-lg font-semibold text-white">Detalle del Evento</h3>
+              <button onClick={() => setSelectedEvent(null)} className="text-gray-400 hover:text-white text-xl px-2">
                 X
               </button>
             </div>
-            <div className="space-y-3 text-sm">
+            <div className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-gray-500">Tipo</p>
