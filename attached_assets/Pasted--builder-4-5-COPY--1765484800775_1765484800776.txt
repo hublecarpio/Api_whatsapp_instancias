@@ -1,0 +1,45 @@
+ => [builder 4/5] COPY . .                                                                                                                                             2.4s 
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             32.3s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+1.388                                                                                                                                                                       
+1.388 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+1.388 > next build                                                                                                                                                          
+1.388                                                                                                                                                                       
+2.590 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2.590 This information is used to shape Next.js' roadmap and prioritize features.
+2.591 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2.591 https://nextjs.org/telemetry
+2.591 
+2.699   ▲ Next.js 14.2.16
+2.699 
+2.799    Creating an optimized production build ...
+24.18  ✓ Compiled successfully
+24.18    Linting and checking validity of types ...
+32.14 Failed to compile.
+32.14 
+32.14 ./app/super-admin/page.tsx:2196:26
+32.14 Type error: Property 'tokenCostTotal' does not exist on type '{ messagesToday: number; ordersToday: number; tokenCostToday: number; }'. Did you mean 'tokenCostToday'?
+32.14 
+32.14   2194 |           <p className="text-xs sm:text-sm text-gray-400">Costo IA (Hoy)</p>
+32.14   2195 |           <p className="text-lg sm:text-2xl font-bold text-purple-400">${(data.activity.tokenCostToday || 0).toFixed(2)}</p>
+32.14 > 2196 |           {data.activity.tokenCostTotal > 0 && (
+32.14        |                          ^
+32.14   2197 |             <p className="text-[10px] text-gray-500">Total: ${(data.activity.tokenCostTotal || 0).toFixed(2)}</p>
+32.14   2198 |           )}
+32.14   2199 |         </div>
+32.20 npm notice
+32.20 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+32.20 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+32.20 npm notice To update run: npm install -g npm@11.7.0
+32.20 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
