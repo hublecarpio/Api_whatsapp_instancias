@@ -40,6 +40,7 @@ The platform employs a microservices-like architecture consisting of a **Fronten
 *   **Intelligent Product Search**: Implements fuzzy matching using Levenshtein distance for product search with typo tolerance.
 *   **Provider-Separated Token Usage Tracking**: Tracks token usage by provider (OpenAI/Gemini) and feature, displayed in the super admin dashboard.
 *   **Pro-Tier Payment Links**: Restricts Stripe payment link generation to Pro users, while non-Pro users require manual order confirmation.
+*   **Voucher-Based Payment Confirmation (V1)**: For non-Pro users, orders are created with AWAITING_VOUCHER status. When clients send payment proof images via WhatsApp, the system auto-attaches them to pending orders. Operators can view vouchers in the dashboard and confirm payments with a single click.
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
