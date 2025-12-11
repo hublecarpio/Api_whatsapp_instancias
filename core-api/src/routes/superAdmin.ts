@@ -1361,13 +1361,16 @@ router.get('/events', superAdminMiddleware, async (req: SuperAdminRequest, res: 
       source,
       businessId,
       userId,
-      since
+      since,
+      excludeDebug
     } = req.query;
 
     const where: any = {};
 
     if (severity) {
       where.severity = severity;
+    } else if (excludeDebug === 'true') {
+      where.severity = { not: 'DEBUG' };
     }
     if (eventType) {
       where.eventType = eventType;
@@ -1390,12 +1393,22 @@ router.get('/events', superAdminMiddleware, async (req: SuperAdminRequest, res: 
         where,
         orderBy: { createdAt: 'desc' },
         take: parseInt(limit as string),
-        skip: parseInt(offset as string)
+        skip: parseInt(offset as string),
+        include: {
+          business: { select: { id: true, name: true } }
+        }
       }),
       prisma.systemEvent.count({ where })
     ]);
 
-    res.json({ events, total });
+    res.json({ 
+      events: events.map(e => ({
+        ...e,
+        businessName: e.business?.name || null,
+        business: undefined
+      })), 
+      total 
+    });
   } catch (error: any) {
     console.error('Get events error:', error);
     res.status(500).json({ error: 'Failed to get events' });

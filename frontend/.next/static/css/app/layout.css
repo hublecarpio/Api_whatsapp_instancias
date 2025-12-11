@@ -2940,6 +2940,10 @@ input, textarea, select {
     display: block;
   }
 
+  .sm\:inline {
+    display: inline;
+  }
+
   .sm\:flex {
     display: flex;
   }
@@ -3042,6 +3046,14 @@ input, textarea, select {
 
   .sm\:w-auto {
     width: auto;
+  }
+
+  .sm\:w-36 {
+    width: 9rem;
+  }
+
+  .sm\:w-28 {
+    width: 7rem;
   }
 
   .sm\:flex-none {

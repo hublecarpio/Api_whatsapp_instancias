@@ -604,15 +604,15 @@ function BillingTab({ token }: { token: string }) {
   }, [token]);
 
   if (loading) return <div className="text-gray-400">Cargando facturacion...</div>;
-  if (!data) return <div className="text-gray-400">No hay datos disponibles</div>;
+  if (!data || !data.summary) return <div className="text-gray-400">No hay datos disponibles</div>;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Suscriptores" value={data.summary.total} />
-        <StatCard title="Activos" value={data.summary.byStatus?.ACTIVE || 0} color="green" />
-        <StatCard title="En Trial" value={data.summary.byStatus?.TRIAL || 0} color="neon" />
-        <StatCard title="Trial por Vencer" value={data.summary.trialEndingSoon} color="yellow" />
+        <StatCard title="Total Suscriptores" value={data.summary?.total || 0} />
+        <StatCard title="Activos" value={data.summary?.byStatus?.ACTIVE || 0} color="green" />
+        <StatCard title="En Trial" value={data.summary?.byStatus?.TRIAL || 0} color="neon" />
+        <StatCard title="Trial por Vencer" value={data.summary?.trialEndingSoon || 0} color="yellow" />
       </div>
 
       <div className="card overflow-x-auto">
@@ -2047,6 +2047,7 @@ interface SystemEvent {
   message: string;
   details?: any;
   businessId?: string;
+  businessName?: string;
   userId?: string;
   createdAt: string;
 }
@@ -2057,15 +2058,35 @@ function DevConsoleTab({ token }: { token: string }) {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>('');
   const [sourceFilter, setSourceFilter] = useState<string>('');
+  const [businessFilter, setBusinessFilter] = useState<string>('');
+  const [showDebug, setShowDebug] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [sources, setSources] = useState<{source: string; count: number}[]>([]);
+  const [businesses, setBusinesses] = useState<{id: string; name: string}[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<SystemEvent | null>(null);
+
+  const fetchBusinesses = async () => {
+    try {
+      const res = await fetch('/api/super-admin/businesses', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setBusinesses(data.businesses?.map((b: any) => ({ id: b.id, name: b.name })) || []);
+    } catch (err) {
+      console.error('Error fetching businesses:', err);
+    }
+  };
 
   const fetchEvents = async () => {
     try {
-      const params = new URLSearchParams({ limit: '100' });
-      if (severityFilter) params.append('severity', severityFilter);
+      const params = new URLSearchParams({ limit: '200' });
+      if (severityFilter) {
+        params.append('severity', severityFilter);
+      } else if (!showDebug) {
+        params.append('excludeDebug', 'true');
+      }
       if (sourceFilter) params.append('source', sourceFilter);
+      if (businessFilter) params.append('businessId', businessFilter);
       
       const [eventsRes, statsRes, sourcesRes] = await Promise.all([
         fetch(`/api/super-admin/events?${params}`, {
@@ -2094,13 +2115,17 @@ function DevConsoleTab({ token }: { token: string }) {
   };
 
   useEffect(() => {
+    fetchBusinesses();
+  }, [token]);
+
+  useEffect(() => {
     fetchEvents();
     let interval: NodeJS.Timeout;
     if (autoRefresh) {
       interval = setInterval(fetchEvents, 5000);
     }
     return () => clearInterval(interval);
-  }, [token, autoRefresh, severityFilter, sourceFilter]);
+  }, [token, autoRefresh, severityFilter, sourceFilter, businessFilter, showDebug]);
 
   const severityColors: Record<string, string> = {
     DEBUG: 'text-gray-500 bg-gray-500/10',
@@ -2171,11 +2196,11 @@ function DevConsoleTab({ token }: { token: string }) {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 sm:gap-3">
+      <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
         <select
           value={severityFilter}
           onChange={e => setSeverityFilter(e.target.value)}
-          className="input text-xs sm:text-sm flex-1 min-w-[120px] sm:flex-none sm:w-40"
+          className="input text-xs sm:text-sm flex-1 min-w-[100px] sm:flex-none sm:w-36"
         >
           <option value="">Severidad</option>
           <option value="DEBUG">DEBUG</option>
@@ -2187,15 +2212,34 @@ function DevConsoleTab({ token }: { token: string }) {
         <select
           value={sourceFilter}
           onChange={e => setSourceFilter(e.target.value)}
-          className="input text-xs sm:text-sm flex-1 min-w-[120px] sm:flex-none sm:w-48"
+          className="input text-xs sm:text-sm flex-1 min-w-[100px] sm:flex-none sm:w-40"
         >
           <option value="">Fuente</option>
           {sources.map(s => (
             <option key={s.source} value={s.source}>{s.source} ({s.count})</option>
           ))}
         </select>
+        <select
+          value={businessFilter}
+          onChange={e => setBusinessFilter(e.target.value)}
+          className="input text-xs sm:text-sm flex-1 min-w-[100px] sm:flex-none sm:w-48"
+        >
+          <option value="">Todos los negocios</option>
+          {businesses.map(b => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showDebug}
+            onChange={e => setShowDebug(e.target.checked)}
+            className="rounded w-3 h-3"
+          />
+          DEBUG
+        </label>
         <button 
-          onClick={() => { setSeverityFilter(''); setSourceFilter(''); }}
+          onClick={() => { setSeverityFilter(''); setSourceFilter(''); setBusinessFilter(''); }}
           className="btn btn-ghost text-xs sm:text-sm px-2 sm:px-4"
         >
           Limpiar
@@ -2223,6 +2267,11 @@ function DevConsoleTab({ token }: { token: string }) {
                   <span className="text-purple-400 text-[10px] sm:text-xs sm:w-24 flex-shrink-0 truncate">
                     {event.source}
                   </span>
+                  {event.businessName && (
+                    <span className="text-neon-blue text-[10px] sm:text-xs sm:w-28 flex-shrink-0 truncate hidden sm:inline">
+                      {event.businessName}
+                    </span>
+                  )}
                 </div>
                 <span className="text-gray-300 text-xs sm:text-sm flex-1 truncate">{event.message}</span>
               </div>
@@ -2267,8 +2316,9 @@ function DevConsoleTab({ token }: { token: string }) {
               </div>
               {selectedEvent.businessId && (
                 <div>
-                  <p className="text-gray-500">Business ID</p>
-                  <p className="text-gray-300 font-mono text-xs">{selectedEvent.businessId}</p>
+                  <p className="text-gray-500">Negocio</p>
+                  <p className="text-neon-blue">{selectedEvent.businessName || 'Sin nombre'}</p>
+                  <p className="text-gray-400 font-mono text-xs">{selectedEvent.businessId}</p>
                 </div>
               )}
               {selectedEvent.userId && (
