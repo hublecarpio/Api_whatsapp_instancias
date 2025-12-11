@@ -120,6 +120,10 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             where: { businessId }
           });
           
+          // Generate backendId dynamically if null (fallback for old data)
+          const resolvedBackendId = instance?.instanceBackendId || `biz_${businessId.substring(0, 8)}`;
+          console.log(`[WEBHOOK] Instance for business ${businessId}: id=${instance?.id}, backendId=${resolvedBackendId}, provider=${instance?.provider || 'BAILEYS'}`);
+          
           const contactPhone = data.phoneNumber || data.sender?.replace('@s.whatsapp.net', '') || data.from;
           const contactJid = data.from;
           const isFromMe = data.isFromMe || false;
@@ -191,6 +195,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             
             if (messageForAgent) {
               try {
+                console.log(`[WEBHOOK] Calling agent/think with backendId: ${resolvedBackendId}`);
                 await axios.post(`${CORE_API_URL}/agent/think`, {
                   business_id: businessId,
                   user_message: messageForAgent,
@@ -198,7 +203,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                   phoneNumber: contactPhone,
                   contactName,
                   instanceId: instance?.id,
-                  instanceBackendId: instance?.instanceBackendId
+                  instanceBackendId: resolvedBackendId
                 }, {
                   headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
                 });

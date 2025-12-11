@@ -583,6 +583,7 @@ async function processWithAgent(
     let instance = business.instances?.[0];
     let backendId = instanceBackendIdParam || instance?.instanceBackendId;
     
+    // Fallback: generate backendId dynamically if still null
     if (!backendId && instanceId) {
       const foundInstance = business.instances?.find((i: any) => i.id === instanceId);
       if (foundInstance) {
@@ -599,11 +600,13 @@ async function processWithAgent(
       }
     }
     
+    // Ultimate fallback: generate from businessId
     if (!backendId) {
-      console.error(`[Agent V2] No backendId found for instance ${instanceId || 'default'}, cannot send message`);
+      backendId = `biz_${businessId.substring(0, 8)}`;
+      console.log(`[Agent V2] Generated fallback backendId: ${backendId}`);
     }
     
-    console.log(`[Agent V2] Using backendId: ${backendId} (from param: ${!!instanceBackendIdParam})`);
+    console.log(`[Agent V2] Using backendId: ${backendId} (from param: ${!!instanceBackendIdParam}, fallback: ${!instanceBackendIdParam && !instance?.instanceBackendId})`);
     
     try {
       const v2Available = await isAgentV2Available();
