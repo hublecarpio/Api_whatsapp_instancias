@@ -3,7 +3,7 @@ import { ReminderJobData, QUEUE_NAMES, getReminderQueue, getQueueConnection } fr
 import prisma from '../prisma.js';
 import axios from 'axios';
 import { MetaCloudService } from '../metaCloud.js';
-import { isOpenAIConfigured, getOpenAIClient, getModelForAgent, logTokenUsage } from '../openaiService.js';
+import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage } from '../openaiService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -167,44 +167,39 @@ async function generateFollowUpMessage(
   
   const pressureDesc = pressureDescriptions[Math.min(pressureLevel - 1, 4)];
   
-  const openai = getOpenAIClient();
   const modelConfig = await getModelForAgent('v1', business.openaiModel);
-  const modelToUse = modelConfig.model;
   
-  const response = await openai.chat.completions.create({
-    model: modelToUse,
-    messages: [
-      {
-        role: 'system',
-        content: `Eres un asistente de ventas de ${business.name}. 
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: `Eres un asistente de ventas de ${business.name}. 
 Genera un mensaje de seguimiento corto (1-2 oraciones) para un cliente que no ha respondido.
 Este es el intento #${attemptNumber} de contacto.
 El tono debe ser: ${pressureDesc}.
 El mensaje debe continuar naturalmente la conversacion anterior.
 NO uses saludos largos. NO uses emojis. Maximo 50 palabras.`
-      },
-      {
-        role: 'user',
-        content: `Conversacion reciente:\n${conversationContext || 'Sin mensajes previos'}\n\nGenera el mensaje de seguimiento:`
-      }
-    ],
-    max_tokens: 150,
-    temperature: 0.7
-  });
+    },
+    {
+      role: 'user',
+      content: `Conversacion reciente:\n${conversationContext || 'Sin mensajes previos'}\n\nGenera el mensaje de seguimiento:`
+    }
+  ];
   
-  if (response.usage) {
-    await logTokenUsage({
+  const result = await callOpenAI({
+    model: modelConfig.model,
+    messages,
+    reasoningEffort: modelConfig.reasoningEffort,
+    maxTokens: 150,
+    temperature: 0.7,
+    maxHistoryTokens: 1000,
+    context: {
       businessId,
       userId: business.userId,
-      feature: 'follow_up',
-      model: modelToUse,
-      promptTokens: response.usage.prompt_tokens,
-      completionTokens: response.usage.completion_tokens,
-      totalTokens: response.usage.total_tokens
-    });
-  }
+      feature: 'follow_up'
+    }
+  });
   
-  return response.choices[0]?.message?.content || 'Hola! Tienes alguna pregunta?';
+  return result.content || 'Hola! Tienes alguna pregunta?';
 }
 
 async function isWithinAllowedHours(config: any): Promise<boolean> {

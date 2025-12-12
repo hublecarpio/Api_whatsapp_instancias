@@ -190,6 +190,163 @@ export async function logTokenUsage(data: TokenUsageData): Promise<void> {
   }
 }
 
+function isGPT5Model(model: string): boolean {
+  return model.startsWith('gpt-5') || model.startsWith('o1') || model.startsWith('o3');
+}
+
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface CallOpenAIOptions {
+  model: string;
+  messages: ChatMessage[];
+  reasoningEffort?: ReasoningEffort;
+  maxTokens?: number;
+  temperature?: number;
+  maxHistoryTokens?: number;
+  context: {
+    businessId: string;
+    userId?: string;
+    feature: string;
+  };
+}
+
+export interface CallOpenAIResult {
+  content: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  model: string;
+  reasoningUsed: boolean;
+}
+
+function optimizeMessages(
+  messages: ChatMessage[],
+  maxHistoryTokens: number
+): ChatMessage[] {
+  if (messages.length === 0) return messages;
+  
+  const systemMessages = messages.filter(m => m.role === 'system');
+  const conversationMessages = messages.filter(m => m.role !== 'system');
+  
+  const systemTokens = systemMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+  const availableForHistory = Math.max(maxHistoryTokens - systemTokens, 500);
+  
+  const optimizedConversation: ChatMessage[] = [];
+  let usedTokens = 0;
+  
+  for (let i = conversationMessages.length - 1; i >= 0; i--) {
+    const msg = conversationMessages[i];
+    const msgTokens = estimateTokens(msg.content);
+    
+    if (usedTokens + msgTokens <= availableForHistory) {
+      optimizedConversation.unshift(msg);
+      usedTokens += msgTokens;
+    } else {
+      break;
+    }
+  }
+  
+  return [...systemMessages, ...optimizedConversation];
+}
+
+export async function callOpenAI(options: CallOpenAIOptions): Promise<CallOpenAIResult> {
+  const client = getOpenAIClient();
+  const { model, reasoningEffort = 'none', maxTokens = 1000, temperature = 0.7, context } = options;
+  
+  const maxHistoryTokens = options.maxHistoryTokens || 3000;
+  const optimizedMessages = optimizeMessages(options.messages, maxHistoryTokens);
+  
+  const useResponsesAPI = isGPT5Model(model);
+  const includeReasoning = useResponsesAPI && reasoningEffort !== 'none';
+  
+  let content = '';
+  let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
+  
+  if (useResponsesAPI) {
+    const responseParams: any = {
+      model,
+      input: optimizedMessages.map(m => ({
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content
+      })),
+      max_output_tokens: maxTokens
+    };
+    
+    if (includeReasoning) {
+      const reasoningMap: Record<ReasoningEffort, string> = {
+        'none': 'low',
+        'low': 'low',
+        'medium': 'medium',
+        'high': 'high',
+        'xhigh': 'high'
+      };
+      responseParams.reasoning = { effort: reasoningMap[reasoningEffort] as 'low' | 'medium' | 'high' };
+    }
+    
+    const response = await client.responses.create(responseParams);
+    
+    const outputItem = response.output?.find((item: any) => item.type === 'message');
+    if (outputItem && 'content' in outputItem) {
+      const textContent = (outputItem as any).content?.find((c: any) => c.type === 'output_text');
+      content = textContent?.text || '';
+    }
+    
+    if (response.usage) {
+      usage = {
+        promptTokens: response.usage.input_tokens || 0,
+        completionTokens: response.usage.output_tokens || 0,
+        totalTokens: (response.usage.input_tokens || 0) + (response.usage.output_tokens || 0)
+      };
+    }
+  } else {
+    const completion = await client.chat.completions.create({
+      model,
+      messages: optimizedMessages,
+      max_tokens: maxTokens,
+      temperature,
+      stream: false
+    });
+    
+    content = completion.choices[0]?.message?.content || '';
+    
+    if (completion.usage) {
+      usage = {
+        promptTokens: completion.usage.prompt_tokens,
+        completionTokens: completion.usage.completion_tokens,
+        totalTokens: completion.usage.total_tokens
+      };
+    }
+  }
+  
+  if (usage) {
+    await logTokenUsage({
+      businessId: context.businessId,
+      userId: context.userId,
+      feature: context.feature,
+      model,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens
+    });
+  }
+  
+  return {
+    content,
+    usage,
+    model,
+    reasoningUsed: includeReasoning
+  };
+}
+
 export async function createChatCompletion(
   params: Omit<OpenAI.Chat.ChatCompletionCreateParams, 'stream'>,
   context: { businessId: string; userId?: string; feature: string }

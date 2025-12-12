@@ -1,12 +1,11 @@
 import { Worker, Job } from 'bullmq';
 import { AIResponseJobData, QUEUE_NAMES, getQueueConnection, getAIResponseQueue } from './index.js';
 import prisma from '../prisma.js';
-import { isOpenAIConfigured, getOpenAIClient, logTokenUsage, getModelForAgent } from '../openaiService.js';
+import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage, logTokenUsage } from '../openaiService.js';
 import { replacePromptVariables } from '../promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../agentV2Service.js';
 import { searchProductsIntelligent } from '../productSearch.js';
 import axios from 'axios';
-import OpenAI from 'openai';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const WORKER_CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '40', 10);
@@ -239,7 +238,6 @@ async function processWithAgentV1Worker(
     throw new Error('OpenAI API key not configured');
   }
   
-  const openai = getOpenAIClient();
   const promptConfig = business.promptMaster;
   const historyLimit = promptConfig?.historyLimit || 10;
   const tools = promptConfig?.tools || [];
@@ -298,7 +296,7 @@ async function processWithAgentV1Worker(
   const combinedUserMessage = messages.join('\n');
   conversationHistory.push({ role: 'user', content: combinedUserMessage });
   
-  const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+  const chatMessages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory.map(msg => ({
       role: msg.role as 'user' | 'assistant',
@@ -307,28 +305,23 @@ async function processWithAgentV1Worker(
   ];
   
   const modelConfig = await getModelForAgent('v1', business.openaiModel);
-  const model = modelConfig.model;
-  const completion = await openai.chat.completions.create({
-    model,
-    messages: openaiMessages,
-    max_tokens: 1000,
-    temperature: 0.7
-  });
   
-  const aiResponse = completion.choices[0]?.message?.content || '';
-  const tokensUsed = completion.usage?.total_tokens;
-  
-  if (completion.usage) {
-    logTokenUsage({
+  const result = await callOpenAI({
+    model: modelConfig.model,
+    messages: chatMessages,
+    reasoningEffort: modelConfig.reasoningEffort,
+    maxTokens: 1000,
+    temperature: 0.7,
+    maxHistoryTokens: 3000,
+    context: {
       businessId: business.id,
       userId: business.userId,
-      feature: 'agent_v1_worker',
-      model,
-      promptTokens: completion.usage.prompt_tokens,
-      completionTokens: completion.usage.completion_tokens,
-      totalTokens: completion.usage.total_tokens
-    }).catch(err => console.error('[AI Worker] Token logging failed:', err.message));
-  }
+      feature: 'agent_v1_worker'
+    }
+  });
+  
+  const aiResponse = result.content;
+  const tokensUsed = result.usage?.totalTokens;
   
   if (instanceBackendId && aiResponse) {
     await sendWhatsAppResponse(instanceBackendId, phone, aiResponse, business);
