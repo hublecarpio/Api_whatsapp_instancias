@@ -56,6 +56,44 @@ async function processWithAgentQueued(
   return await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId, providerMessageId, provider);
 }
 
+async function processWithAgentQueuedWithIds(
+  businessId: string,
+  messages: string[],
+  phone: string,
+  contactPhone: string,
+  contactName: string,
+  instanceId?: string,
+  instanceBackendId?: string,
+  providerMessageIds?: string[],
+  provider?: string
+): Promise<{ response: string; tokensUsed?: number; queued?: boolean }> {
+  const queue = getAIResponseQueue();
+  
+  if (USE_AI_QUEUE && queue) {
+    const jobId = await queueAIResponse({
+      businessId,
+      contactPhone,
+      contactName,
+      messages,
+      phone,
+      instanceId,
+      instanceBackendId,
+      priority: 'normal',
+      providerMessageIds,
+      provider
+    });
+    
+    if (jobId) {
+      console.log(`[Agent] Message queued for parallel processing with ${providerMessageIds?.length || 0} message IDs: ${jobId}`);
+      return { response: '', queued: true };
+    }
+  }
+  
+  // Fallback - use first message ID for single processing
+  const firstMessageId = providerMessageIds?.[0];
+  return await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId, firstMessageId, provider);
+}
+
 interface InternalRequest extends Request {
   isInternal?: boolean;
   userId?: string;
@@ -144,7 +182,9 @@ async function processExpiredBuffersLegacy() {
       
       try {
         console.log(`[BUFFER-WORKER] Processing expired buffer for ${bufferKey}`);
-        const messages = buffer.messages as string[];
+        const bufferData = buffer.messages as any;
+        const messages = bufferData?.texts || (Array.isArray(bufferData) ? bufferData : []);
+        const storedMessageIds = bufferData?.providerMessageIds || [];
         
         const business = await prisma.business.findUnique({
           where: { id: buffer.businessId }
@@ -160,25 +200,14 @@ async function processExpiredBuffersLegacy() {
           continue;
         }
         
-        // Get the last inbound message to retrieve providerMessageId
-        const lastInboundMessage = await prisma.messageLog.findFirst({
-          where: {
-            businessId: buffer.businessId,
-            sender: buffer.contactPhone,
-            direction: 'inbound'
-          },
-          orderBy: { createdAt: 'desc' }
-        });
-        
-        const providerMessageId = lastInboundMessage?.providerMessageId || undefined;
         const provider = instance?.provider || undefined;
         
-        console.log(`[BUFFER-WORKER] Found providerMessageId=${providerMessageId || 'none'}, provider=${provider || 'unknown'} for ${bufferKey}`);
+        console.log(`[BUFFER-WORKER] Found ${storedMessageIds.length} stored message IDs, provider=${provider || 'unknown'} for ${bufferKey}`);
         
         const contactJid = `${buffer.contactPhone}@s.whatsapp.net`;
         const resolvedBackendId = instance?.instanceBackendId || `biz_${buffer.businessId.substring(0, 8)}`;
         
-        await processWithAgentQueued(
+        await processWithAgentQueuedWithIds(
           buffer.businessId,
           messages,
           contactJid,
@@ -186,7 +215,7 @@ async function processExpiredBuffersLegacy() {
           '',
           instance?.id,
           resolvedBackendId,
-          providerMessageId,
+          storedMessageIds,
           provider
         );
         
@@ -1907,22 +1936,28 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
         ? [...(existingBuffer.messages as string[]), user_message]
         : [user_message];
       
+      // Accumulate all providerMessageIds for marking as read later
+      const existingMessageIds = (existingBuffer?.messages as any)?.providerMessageIds || [];
+      const currentProviderMessageIds = providerMessageId 
+        ? [...existingMessageIds, providerMessageId]
+        : existingMessageIds;
+      
       await prisma.messageBuffer.upsert({
         where: { businessId_contactPhone: { businessId: business_id, contactPhone } },
         create: {
           businessId: business_id,
           contactPhone,
-          messages: currentMessages,
+          messages: { texts: currentMessages, providerMessageIds: currentProviderMessageIds },
           expiresAt: new Date(Date.now() + bufferSeconds * 1000)
         },
         update: {
-          messages: currentMessages,
+          messages: { texts: currentMessages, providerMessageIds: currentProviderMessageIds },
           expiresAt: new Date(Date.now() + bufferSeconds * 1000)
         }
       });
       
-      // Capture the latest providerMessageId and provider for this buffer
-      const capturedProviderMessageId = providerMessageId;
+      // Capture all providerMessageIds and provider for this buffer
+      const capturedProviderMessageIds = currentProviderMessageIds;
       const capturedProvider = provider;
       
       const timeout = setTimeout(async () => {
@@ -1932,7 +1967,9 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
           });
           
           if (buffer) {
-            const messages = buffer.messages as string[];
+            const bufferData = buffer.messages as any;
+            const messages = bufferData?.texts || (Array.isArray(bufferData) ? bufferData : []);
+            const messageIds = bufferData?.providerMessageIds || [];
             
             await prisma.messageBuffer.delete({
               where: { id: buffer.id }
@@ -1940,7 +1977,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
             
             activeBuffers.delete(bufferKey);
             
-            await processWithAgentQueued(
+            await processWithAgentQueuedWithIds(
               business_id,
               messages,
               phone,
@@ -1948,7 +1985,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
               contactName,
               instanceId,
               instanceBackendId,
-              capturedProviderMessageId,
+              messageIds,
               capturedProvider
             );
           }

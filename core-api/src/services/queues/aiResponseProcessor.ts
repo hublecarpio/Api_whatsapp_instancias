@@ -77,9 +77,12 @@ export async function queueAIResponse(data: AIResponseJobData): Promise<string |
 }
 
 async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ response: string; tokensUsed?: number }> {
-  const { businessId, contactPhone, contactName, messages, phone, instanceId, instanceBackendId, bufferId, providerMessageId, provider } = job.data;
+  const { businessId, contactPhone, contactName, messages, phone, instanceId, instanceBackendId, bufferId, providerMessageId, providerMessageIds, provider } = job.data;
   
-  console.log(`[AI Worker] Processing job ${job.id} for business ${businessId}, contact ${contactPhone}, provider=${provider || 'unknown'}, providerMessageId=${providerMessageId || 'none'}`);
+  // Support both single ID (legacy) and multiple IDs (buffered messages)
+  const allMessageIds = providerMessageIds?.length ? providerMessageIds : (providerMessageId ? [providerMessageId] : []);
+  
+  console.log(`[AI Worker] Processing job ${job.id} for business ${businessId}, contact ${contactPhone}, provider=${provider || 'unknown'}, messageIds=${allMessageIds.length}`);
   
   if (bufferId) {
     await prisma.messageBuffer.update({
@@ -115,8 +118,8 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
   
   const targetInstanceId = instanceId || business.instances?.[0]?.id;
   
-  // Mark message as read BEFORE processing (shows blue checkmarks after buffer expires)
-  if (provider === 'META_CLOUD' && providerMessageId && targetInstanceId) {
+  // Mark ALL messages as read BEFORE processing (shows blue checkmarks after buffer expires)
+  if (provider === 'META_CLOUD' && allMessageIds.length > 0 && targetInstanceId) {
     try {
       const targetInstance = business.instances?.find((i: any) => i.id === targetInstanceId);
       if (targetInstance?.metaCredential) {
@@ -125,11 +128,18 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
           accessToken: targetInstance.metaCredential.accessToken,
           businessId: targetInstance.metaCredential.businessId
         });
-        await metaClient.markMessageAsRead(providerMessageId);
-        console.log(`[AI Worker] Meta Cloud: Marked message ${providerMessageId} as read for instance ${targetInstanceId}`);
+        // Mark all buffered messages as read
+        for (const msgId of allMessageIds) {
+          try {
+            await metaClient.markMessageAsRead(msgId);
+          } catch (e) {
+            // Continue marking other messages even if one fails
+          }
+        }
+        console.log(`[AI Worker] Meta Cloud: Marked ${allMessageIds.length} message(s) as read for instance ${targetInstanceId}`);
       }
     } catch (markErr: any) {
-      console.error(`[AI Worker] Failed to mark Meta message as read:`, markErr.message);
+      console.error(`[AI Worker] Failed to mark Meta messages as read:`, markErr.message);
     }
   } else if (provider === 'BAILEYS' && phone) {
     // Baileys marks entire chat as read via WA API

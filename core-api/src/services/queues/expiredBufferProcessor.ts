@@ -58,7 +58,9 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
       
       try {
         console.log(`[ExpiredBuffer] Processing expired buffer for ${bufferKey}`);
-        const messages = buffer.messages as string[];
+        const bufferData = buffer.messages as any;
+        const messages = bufferData?.texts || (Array.isArray(bufferData) ? bufferData : []);
+        const storedMessageIds = bufferData?.providerMessageIds || [];
         
         const business = await prisma.business.findUnique({
           where: { id: buffer.businessId }
@@ -100,7 +102,9 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
             instanceId: instance.id,
             instanceBackendId: instance.instanceBackendId || undefined,
             priority: 'normal',
-            bufferId: buffer.id
+            bufferId: buffer.id,
+            providerMessageIds: storedMessageIds,
+            provider: instance.provider
           });
           queued = !!job;
         }

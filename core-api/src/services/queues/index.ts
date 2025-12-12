@@ -83,6 +83,7 @@ export interface AIResponseJobData {
   priority?: 'high' | 'normal' | 'low';
   bufferId?: string;
   providerMessageId?: string;
+  providerMessageIds?: string[];
   provider?: string;
 }
 
