@@ -1887,6 +1887,9 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(75 85 99 / var(--tw-bg-opacity, 1));
 }
+.bg-gray-600\/20 {
+  background-color: rgb(75 85 99 / 0.2);
+}
 .bg-gray-700 {
   --tw-bg-opacity: 1;
   background-color: rgb(55 65 81 / var(--tw-bg-opacity, 1));
@@ -2284,6 +2287,10 @@ video {
 }
 .text-accent-warning\/70 {
   color: rgb(245 158 11 / 0.7);
+}
+.text-amber-400 {
+  --tw-text-opacity: 1;
+  color: rgb(251 191 36 / var(--tw-text-opacity, 1));
 }
 .text-amber-500 {
   --tw-text-opacity: 1;

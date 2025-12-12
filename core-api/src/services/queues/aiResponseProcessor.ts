@@ -1,7 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { AIResponseJobData, QUEUE_NAMES, getQueueConnection, getAIResponseQueue } from './index.js';
 import prisma from '../prisma.js';
-import { isOpenAIConfigured, getOpenAIClient, logTokenUsage, getDefaultModel } from '../openaiService.js';
+import { isOpenAIConfigured, getOpenAIClient, logTokenUsage, getModelForAgent } from '../openaiService.js';
 import { replacePromptVariables } from '../promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../agentV2Service.js';
 import { searchProductsIntelligent } from '../productSearch.js';
@@ -306,7 +306,8 @@ async function processWithAgentV1Worker(
     }))
   ];
   
-  const model = getDefaultModel();
+  const modelConfig = await getModelForAgent('v1', business.openaiModel);
+  const model = modelConfig.model;
   const completion = await openai.chat.completions.create({
     model,
     messages: openaiMessages,

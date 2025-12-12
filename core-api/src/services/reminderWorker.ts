@@ -1,7 +1,7 @@
 import prisma from './prisma.js';
 import axios from 'axios';
 import { MetaCloudService } from './metaCloud.js';
-import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from './openaiService.js';
+import { isOpenAIConfigured, getOpenAIClient, getModelForAgent, logTokenUsage } from './openaiService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -204,7 +204,8 @@ async function generateFollowUpMessage(
   const pressureDesc = pressureDescriptions[Math.min(pressureLevel - 1, 4)];
   
   const openai = getOpenAIClient();
-  const modelToUse = getDefaultModel();
+  const modelConfig = await getModelForAgent('v1', business.openaiModel);
+  const modelToUse = modelConfig.model;
   
   const response = await openai.chat.completions.create({
     model: modelToUse,

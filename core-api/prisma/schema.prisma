@@ -868,3 +868,24 @@ model BusinessAvailability {
   @@index([businessId, dayOfWeek])
   @@index([businessId, blockDate])
 }
+
+enum ReasoningEffort {
+  none
+  low
+  medium
+  high
+  xhigh
+}
+
+model PlatformSettings {
+  id                    String          @id @default("default")
+  defaultModelV1        String          @default("gpt-4.1-mini")
+  defaultModelV2        String          @default("gpt-5")
+  defaultReasoningV1    ReasoningEffort @default(none)
+  defaultReasoningV2    ReasoningEffort @default(medium)
+  availableModels       String[]        @default(["gpt-4.1-mini", "gpt-4.1", "gpt-4.1-nano", "gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.2"])
+  maxTokensPerRequest   Int             @default(4096)
+  enableGPT5Features    Boolean         @default(true)
+  updatedAt             DateTime        @updatedAt
+  updatedBy             String?
+}

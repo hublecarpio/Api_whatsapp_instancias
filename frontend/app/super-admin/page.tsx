@@ -844,6 +844,11 @@ function BillingTab({ token }: { token: string }) {
 function SystemTab({ token }: { token: string }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [aiSettings, setAiSettings] = useState<any>(null);
+  const [aiLoading, setAiLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [aiModels, setAiModels] = useState<any[]>([]);
+  const [reasoningEfforts, setReasoningEfforts] = useState<string[]>([]);
 
   useEffect(() => {
     fetch('/api/super-admin/system-health', {
@@ -853,7 +858,42 @@ function SystemTab({ token }: { token: string }) {
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    fetch('/api/super-admin/platform-settings', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setAiSettings(data.settings);
+        setAiModels(data.availableModels || []);
+        setReasoningEfforts(data.reasoningEfforts || []);
+      })
+      .catch(() => {})
+      .finally(() => setAiLoading(false));
   }, [token]);
+
+  const handleAiSettingChange = async (key: string, value: any) => {
+    setSaving(true);
+    try {
+      const response = await fetch('/api/super-admin/platform-settings', {
+        method: 'PATCH',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ [key]: value })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAiSettings(data.settings);
+      }
+    } catch (err) {
+      console.error('Failed to update AI settings:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) return <div className="text-gray-400">Cargando estado del sistema...</div>;
   if (!data) return <div className="text-gray-400">No hay datos disponibles</div>;
@@ -862,6 +902,14 @@ function SystemTab({ token }: { token: string }) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
+  };
+
+  const modelTierColors: Record<string, string> = {
+    budget: 'bg-gray-500/20 text-gray-400',
+    standard: 'bg-blue-500/20 text-blue-400',
+    premium: 'bg-purple-500/20 text-purple-400',
+    flagship: 'bg-amber-500/20 text-amber-400',
+    enterprise: 'bg-red-500/20 text-red-400'
   };
 
   return (
@@ -890,6 +938,155 @@ function SystemTab({ token }: { token: string }) {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white">Configuracion de Modelos AI</h3>
+          {saving && <span className="text-xs text-neon-blue">Guardando...</span>}
+        </div>
+        
+        {aiLoading ? (
+          <div className="text-gray-400">Cargando configuracion AI...</div>
+        ) : aiSettings ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Modelo por defecto - Agent V1 (Node.js)
+                </label>
+                <select
+                  value={aiSettings.defaultModelV1}
+                  onChange={(e) => handleAiSettingChange('defaultModelV1', e.target.value)}
+                  className="input w-full"
+                  disabled={saving}
+                >
+                  {aiModels.map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} ({model.tier})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Usado para respuestas AI en conversaciones de WhatsApp
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Modelo por defecto - Agent V2 (Python/LangGraph)
+                </label>
+                <select
+                  value={aiSettings.defaultModelV2}
+                  onChange={(e) => handleAiSettingChange('defaultModelV2', e.target.value)}
+                  className="input w-full"
+                  disabled={saving}
+                >
+                  {aiModels.map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} ({model.tier})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Usado para el agente multi-cerebro avanzado
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Razonamiento - Agent V1
+                </label>
+                <select
+                  value={aiSettings.defaultReasoningV1}
+                  onChange={(e) => handleAiSettingChange('defaultReasoningV1', e.target.value)}
+                  className="input w-full"
+                  disabled={saving}
+                >
+                  {reasoningEfforts.map(effort => (
+                    <option key={effort} value={effort}>
+                      {effort === 'none' ? 'Ninguno (mas rapido)' :
+                       effort === 'low' ? 'Bajo' :
+                       effort === 'medium' ? 'Medio' :
+                       effort === 'high' ? 'Alto' :
+                       'Extra Alto (GPT-5.2)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Razonamiento - Agent V2
+                </label>
+                <select
+                  value={aiSettings.defaultReasoningV2}
+                  onChange={(e) => handleAiSettingChange('defaultReasoningV2', e.target.value)}
+                  className="input w-full"
+                  disabled={saving}
+                >
+                  {reasoningEfforts.map(effort => (
+                    <option key={effort} value={effort}>
+                      {effort === 'none' ? 'Ninguno (mas rapido)' :
+                       effort === 'low' ? 'Bajo' :
+                       effort === 'medium' ? 'Medio' :
+                       effort === 'high' ? 'Alto' :
+                       'Extra Alto (GPT-5.2)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Max Tokens por Request
+                </label>
+                <input
+                  type="number"
+                  value={aiSettings.maxTokensPerRequest}
+                  onChange={(e) => handleAiSettingChange('maxTokensPerRequest', parseInt(e.target.value))}
+                  className="input w-full"
+                  min={256}
+                  max={128000}
+                  disabled={saving}
+                />
+              </div>
+
+              <div className="flex items-center gap-4 pt-6">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={aiSettings.enableGPT5Features}
+                    onChange={(e) => handleAiSettingChange('enableGPT5Features', e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-600 bg-dark-card text-neon-blue focus:ring-neon-blue"
+                    disabled={saving}
+                  />
+                  <span className="text-gray-300">Habilitar funciones GPT-5</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-dark-border">
+              <h4 className="text-sm font-medium text-gray-400 mb-3">Modelos Disponibles</h4>
+              <div className="flex flex-wrap gap-2">
+                {aiModels.map(model => (
+                  <span 
+                    key={model.id} 
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium ${modelTierColors[model.tier] || 'bg-gray-600/20 text-gray-400'}`}
+                  >
+                    {model.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-gray-400">No se pudo cargar la configuracion AI</div>
+        )}
       </div>
     </div>
   );

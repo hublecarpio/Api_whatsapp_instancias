@@ -1637,4 +1637,111 @@ router.get('/command-center', superAdminMiddleware, async (req: SuperAdminReques
   }
 });
 
+import { 
+  getPlatformSettings, 
+  updatePlatformSettings, 
+  AVAILABLE_MODELS, 
+  REASONING_EFFORTS 
+} from '../services/openaiService.js';
+
+router.get('/platform-settings', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const settings = await getPlatformSettings();
+    
+    res.json({
+      settings,
+      availableModels: AVAILABLE_MODELS,
+      reasoningEfforts: REASONING_EFFORTS
+    });
+  } catch (error: any) {
+    console.error('Platform settings error:', error);
+    res.status(500).json({ error: 'Failed to get platform settings' });
+  }
+});
+
+router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { 
+      defaultModelV1, 
+      defaultModelV2, 
+      defaultReasoningV1, 
+      defaultReasoningV2, 
+      availableModels,
+      maxTokensPerRequest,
+      enableGPT5Features 
+    } = req.body;
+
+    const updates: any = {};
+    
+    if (defaultModelV1 !== undefined) {
+      if (!AVAILABLE_MODELS.find(m => m.id === defaultModelV1)) {
+        return res.status(400).json({ error: `Invalid model: ${defaultModelV1}` });
+      }
+      updates.defaultModelV1 = defaultModelV1;
+    }
+    
+    if (defaultModelV2 !== undefined) {
+      if (!AVAILABLE_MODELS.find(m => m.id === defaultModelV2)) {
+        return res.status(400).json({ error: `Invalid model: ${defaultModelV2}` });
+      }
+      updates.defaultModelV2 = defaultModelV2;
+    }
+    
+    if (defaultReasoningV1 !== undefined) {
+      if (!REASONING_EFFORTS.includes(defaultReasoningV1)) {
+        return res.status(400).json({ error: `Invalid reasoning effort: ${defaultReasoningV1}` });
+      }
+      updates.defaultReasoningV1 = defaultReasoningV1;
+    }
+    
+    if (defaultReasoningV2 !== undefined) {
+      if (!REASONING_EFFORTS.includes(defaultReasoningV2)) {
+        return res.status(400).json({ error: `Invalid reasoning effort: ${defaultReasoningV2}` });
+      }
+      updates.defaultReasoningV2 = defaultReasoningV2;
+    }
+    
+    if (availableModels !== undefined) {
+      if (!Array.isArray(availableModels)) {
+        return res.status(400).json({ error: 'availableModels must be an array' });
+      }
+      updates.availableModels = availableModels;
+    }
+    
+    if (maxTokensPerRequest !== undefined) {
+      if (typeof maxTokensPerRequest !== 'number' || maxTokensPerRequest < 256 || maxTokensPerRequest > 128000) {
+        return res.status(400).json({ error: 'maxTokensPerRequest must be between 256 and 128000' });
+      }
+      updates.maxTokensPerRequest = maxTokensPerRequest;
+    }
+    
+    if (enableGPT5Features !== undefined) {
+      if (typeof enableGPT5Features !== 'boolean') {
+        return res.status(400).json({ error: 'enableGPT5Features must be a boolean' });
+      }
+      updates.enableGPT5Features = enableGPT5Features;
+    }
+    
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid updates provided' });
+    }
+    
+    updates.updatedBy = 'super_admin';
+    
+    const settings = await updatePlatformSettings(updates);
+    
+    console.log(`[Super Admin] Platform settings updated:`, updates);
+    
+    res.json({ 
+      success: true, 
+      settings,
+      availableModels: AVAILABLE_MODELS,
+      reasoningEfforts: REASONING_EFFORTS
+    });
+  } catch (error: any) {
+    console.error('Update platform settings error:', error);
+    res.status(500).json({ error: 'Failed to update platform settings' });
+  }
+});
+
 export default router;
