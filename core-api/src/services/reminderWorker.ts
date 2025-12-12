@@ -19,7 +19,8 @@ function cleanMarkdownForWhatsApp(text: string): string {
 }
 
 async function getActiveInstance(businessId: string) {
-  const instance = await prisma.whatsAppInstance.findFirst({
+  // First try: active and connected
+  const connectedInstance = await prisma.whatsAppInstance.findFirst({
     where: { 
       businessId,
       isActive: true,
@@ -29,9 +30,10 @@ async function getActiveInstance(businessId: string) {
     orderBy: { lastConnection: 'desc' }
   });
   
-  if (instance) return instance;
+  if (connectedInstance) return connectedInstance;
   
-  return prisma.whatsAppInstance.findFirst({
+  // Second try: just active
+  const activeInstance = await prisma.whatsAppInstance.findFirst({
     where: { 
       businessId,
       isActive: true
@@ -39,6 +41,49 @@ async function getActiveInstance(businessId: string) {
     include: { metaCredential: true },
     orderBy: { lastConnection: 'desc' }
   });
+  
+  if (activeInstance) return activeInstance;
+  
+  // Third try: any instance for this business (regardless of isActive/status)
+  const anyInstance = await prisma.whatsAppInstance.findFirst({
+    where: { businessId },
+    include: { metaCredential: true },
+    orderBy: { lastConnection: 'desc' }
+  });
+  
+  if (anyInstance) {
+    console.log(`[REMINDER] Found instance ${anyInstance.id} for business ${businessId} (isActive=${anyInstance.isActive}, status=${anyInstance.status})`);
+    return anyInstance;
+  }
+  
+  // Final fallback: query WhatsApp API directly for Baileys instances
+  try {
+    const response = await axios.get(`${WA_API_URL}/instances`, { timeout: 5000 });
+    const instances = response.data?.instances || response.data || [];
+    
+    // Find instance that matches this business (by backendId pattern)
+    const businessPrefix = `biz_${businessId.substring(0, 8)}`;
+    const waInstance = instances.find((inst: any) => 
+      inst.id?.startsWith(businessPrefix) || inst.businessId === businessId
+    );
+    
+    if (waInstance && waInstance.status === 'connected') {
+      console.log(`[REMINDER] Found Baileys instance from WA API: ${waInstance.id} for business ${businessId}`);
+      return {
+        id: waInstance.id,
+        businessId,
+        provider: 'BAILEYS',
+        instanceBackendId: waInstance.id,
+        status: waInstance.status,
+        isActive: true,
+        metaCredential: null
+      };
+    }
+  } catch (err: any) {
+    console.log(`[REMINDER] Could not query WhatsApp API for instances: ${err.message}`);
+  }
+  
+  return null;
 }
 
 async function checkWindowStatus(businessId: string, contactPhone: string): Promise<{
