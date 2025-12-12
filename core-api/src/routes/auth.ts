@@ -334,10 +334,20 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     
     const hasActiveBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
     
+    let effectiveStatus = user.subscriptionStatus;
+    if (hasActiveBonus && user.subscriptionStatus === 'PENDING') {
+      await prisma.user.update({
+        where: { id: req.userId },
+        data: { subscriptionStatus: 'ACTIVE' }
+      });
+      effectiveStatus = 'ACTIVE';
+      console.log(`[AUTO-FIX] User ${user.email} had active bonus but PENDING status, corrected to ACTIVE`);
+    }
+    
     res.json({
       ...user,
-      subscriptionStatus: user.subscriptionStatus.toLowerCase(),
-      needsSubscription: user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED',
+      subscriptionStatus: effectiveStatus.toLowerCase(),
+      needsSubscription: effectiveStatus === 'PENDING' || effectiveStatus === 'CANCELED',
       isPro: user.isPro || hasActiveBonus,
       paymentLinkEnabled: user.paymentLinkEnabled || hasActiveBonus,
       proBonusExpiresAt: user.proBonusExpiresAt,
@@ -569,7 +579,8 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
         data: {
           proBonusExpiresAt,
           isPro: true,
-          paymentLinkEnabled: true
+          paymentLinkEnabled: true,
+          subscriptionStatus: 'ACTIVE'
         }
       }),
       prisma.referralCode.update({
@@ -578,7 +589,7 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
       })
     ]);
     
-    console.log(`User ${user.id} applied referral code ${refCode.code}, Pro bonus expires at ${proBonusExpiresAt}`);
+    console.log(`[ENTERPRISE] User ${user.id} applied referral code ${refCode.code}, subscriptionStatus set to ACTIVE, Pro bonus expires at ${proBonusExpiresAt}`);
     
     res.json({ 
       success: true, 
