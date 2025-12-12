@@ -66,7 +66,10 @@ export default function AsesorPage() {
   const [tagAssignments, setTagAssignments] = useState<TagAssignment[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [assigningTag, setAssigningTag] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const tagDropdownRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -126,14 +129,22 @@ export default function AsesorPage() {
   const loadTags = async () => {
     if (!selectedBusiness) return;
     try {
-      const [tagsRes, assignmentsRes] = await Promise.all([
-        tagsApi.list(selectedBusiness.id),
-        tagsApi.getAssignments(selectedBusiness.id)
-      ]);
-      setTags(tagsRes.data);
-      setTagAssignments(assignmentsRes.data);
+      const tagsRes = await tagsApi.list(selectedBusiness.id);
+      setTags(tagsRes.data || []);
     } catch (error) {
       console.error('Error loading tags:', error);
+      setTags([]);
+    }
+    try {
+      const assignmentsRes = await tagsApi.getAssignments(selectedBusiness.id);
+      const mappedAssignments = (assignmentsRes.data || []).map((a: any) => ({
+        phone: a.contactPhone || a.phone,
+        tagId: a.tagId
+      }));
+      setTagAssignments(mappedAssignments);
+    } catch (error) {
+      console.error('Error loading tag assignments:', error);
+      setTagAssignments([]);
     }
   };
 
@@ -162,6 +173,53 @@ export default function AsesorPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tagDropdownRef.current && !tagDropdownRef.current.contains(event.target as Node)) {
+        setShowTagDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleTagAssign = async (tagId: string | null) => {
+    if (!selectedBusiness || !selectedConversation) return;
+    setAssigningTag(true);
+    const previousAssignments = [...tagAssignments];
+    
+    if (tagId === null) {
+      setTagAssignments(prev => prev.filter(a => a.phone !== selectedConversation.phone));
+    } else {
+      setTagAssignments(prev => {
+        const filtered = prev.filter(a => a.phone !== selectedConversation.phone);
+        return [...filtered, { phone: selectedConversation.phone, tagId }];
+      });
+    }
+    setShowTagDropdown(false);
+    
+    try {
+      if (tagId === null) {
+        await tagsApi.unassign({ 
+          business_id: selectedBusiness.id, 
+          contact_phone: selectedConversation.phone 
+        });
+      } else {
+        await tagsApi.assign({ 
+          business_id: selectedBusiness.id, 
+          contact_phone: selectedConversation.phone, 
+          tag_id: tagId,
+          source: 'advisor_panel'
+        });
+      }
+    } catch (error) {
+      console.error('Error assigning tag:', error);
+      setTagAssignments(previousAssignments);
+    } finally {
+      setAssigningTag(false);
+    }
+  };
 
   const selectConversation = (conv: Conversation) => {
     setSelectedConversation(conv);
@@ -687,24 +745,68 @@ export default function AsesorPage() {
                   </svg>
                 </button>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-white truncate">
-                      {selectedConversation.contactName || selectedConversation.phone}
-                    </p>
-                    {getContactTag(selectedConversation.phone) && (
-                      <span 
-                        className="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" 
-                        style={{ 
-                          backgroundColor: `${getContactTag(selectedConversation.phone)!.color}30`, 
-                          color: getContactTag(selectedConversation.phone)!.color 
-                        }}
-                      >
-                        {getContactTag(selectedConversation.phone)!.name}
-                      </span>
-                    )}
-                  </div>
+                  <p className="font-medium text-white truncate">
+                    {selectedConversation.contactName || selectedConversation.phone}
+                  </p>
                   {selectedConversation.contactName && (
                     <p className="text-xs text-gray-500 truncate">{selectedConversation.phone}</p>
+                  )}
+                </div>
+                <div className="relative" ref={tagDropdownRef}>
+                  <button
+                    onClick={() => setShowTagDropdown(!showTagDropdown)}
+                    disabled={assigningTag}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors ${
+                      getContactTag(selectedConversation.phone) 
+                        ? 'hover:opacity-80' 
+                        : 'bg-dark-hover text-gray-400 hover:bg-dark-border hover:text-white'
+                    } ${assigningTag ? 'opacity-50' : ''}`}
+                    style={getContactTag(selectedConversation.phone) ? {
+                      backgroundColor: `${getContactTag(selectedConversation.phone)!.color}30`,
+                      color: getContactTag(selectedConversation.phone)!.color
+                    } : undefined}
+                  >
+                    {assigningTag ? (
+                      <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                      </svg>
+                    )}
+                    <span>{getContactTag(selectedConversation.phone)?.name || 'Etiqueta'}</span>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {showTagDropdown && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-dark-card border border-dark-border rounded-lg shadow-xl z-50 py-1 max-h-64 overflow-y-auto">
+                      <button
+                        onClick={() => handleTagAssign(null)}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-dark-hover transition-colors flex items-center gap-2 ${
+                          !getContactTag(selectedConversation.phone) ? 'text-white bg-dark-hover' : 'text-gray-400'
+                        }`}
+                      >
+                        <span className="w-3 h-3 rounded-full bg-gray-600"></span>
+                        Sin etiqueta
+                      </button>
+                      {tags.map(tag => (
+                        <button
+                          key={tag.id}
+                          onClick={() => handleTagAssign(tag.id)}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-dark-hover transition-colors flex items-center gap-2 ${
+                            getContactTag(selectedConversation.phone)?.id === tag.id ? 'bg-dark-hover' : ''
+                          }`}
+                        >
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: tag.color }}></span>
+                          <span className="truncate" style={{ color: tag.color }}>{tag.name}</span>
+                          {getContactTag(selectedConversation.phone)?.id === tag.id && (
+                            <svg className="w-4 h-4 ml-auto text-neon-blue flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>

@@ -5,6 +5,20 @@ import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } f
 
 const router = Router();
 
+async function getUserWithRole(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, parentUserId: true }
+  });
+}
+
+async function checkBusinessAccess(userId: string, businessId: string, role?: string, parentUserId?: string | null) {
+  if (role === 'ASESOR' && parentUserId) {
+    return prisma.business.findFirst({ where: { id: businessId, userId: parentUserId } });
+  }
+  return prisma.business.findFirst({ where: { id: businessId, userId } });
+}
+
 const DEFAULT_TAGS = [
   { name: 'Nuevo', color: '#22C55E', description: 'Cliente que acaba de contactar por primera vez', order: 0 },
   { name: 'Interesado', color: '#3B82F6', description: 'Cliente que mostró interés en productos o servicios', order: 1 },
@@ -23,10 +37,13 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const business = await prisma.business.findFirst({
-      where: { id: business_id as string, userId: req.userId }
-    });
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
 
+    const business = await checkBusinessAccess(req.userId!, business_id as string, user.role, user.parentUserId);
     if (!business) {
       res.status(404).json({ error: 'Business not found' });
       return;
@@ -273,10 +290,13 @@ router.post('/assign', authMiddleware, async (req: AuthRequest, res: Response): 
       return;
     }
 
-    const business = await prisma.business.findFirst({
-      where: { id: business_id, userId: req.userId }
-    });
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
 
+    const business = await checkBusinessAccess(req.userId!, business_id, user.role, user.parentUserId);
     if (!business) {
       res.status(404).json({ error: 'Business not found' });
       return;
@@ -357,10 +377,13 @@ router.delete('/assign', authMiddleware, async (req: AuthRequest, res: Response)
       return;
     }
 
-    const business = await prisma.business.findFirst({
-      where: { id: business_id, userId: req.userId }
-    });
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
 
+    const business = await checkBusinessAccess(req.userId!, business_id, user.role, user.parentUserId);
     if (!business) {
       res.status(404).json({ error: 'Business not found' });
       return;
@@ -403,10 +426,13 @@ router.get('/assignments', authMiddleware, async (req: AuthRequest, res: Respons
       return;
     }
 
-    const business = await prisma.business.findFirst({
-      where: { id: business_id as string, userId: req.userId }
-    });
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
 
+    const business = await checkBusinessAccess(req.userId!, business_id as string, user.role, user.parentUserId);
     if (!business) {
       res.status(404).json({ error: 'Business not found' });
       return;
