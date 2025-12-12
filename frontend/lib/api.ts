@@ -126,6 +126,7 @@ export const waApi = {
   qr: (businessId: string) => api.get(`/wa/${businessId}/qr`),
   send: (businessId: string, data: any) => api.post(`/wa/${businessId}/send`, data),
   restart: (businessId: string) => api.post(`/wa/${businessId}/restart`),
+  reset: (businessId: string) => api.post(`/wa/${businessId}/reset`),
   delete: (businessId: string) => api.delete(`/wa/${businessId}`),
   history: (businessId: string, limit?: number) => 
     api.get(`/wa/${businessId}/history${limit ? `?limit=${limit}` : ''}`),

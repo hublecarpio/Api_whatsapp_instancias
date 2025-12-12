@@ -1366,6 +1366,47 @@ export class WhatsAppInstance {
     }
   }
 
+  async resetSession(): Promise<void> {
+    this.logger.info('Resetting session to connect new WhatsApp number...');
+    
+    this.stopWatchdog();
+    this.isClosing = true;
+    
+    if (this.socket) {
+      try {
+        this.socket.ev.removeAllListeners('connection.update');
+        this.socket.ev.removeAllListeners('messages.upsert');
+        this.socket.ev.removeAllListeners('creds.update');
+        this.socket.ev.removeAllListeners('messages.update');
+        this.socket.ev.removeAllListeners('message-receipt.update');
+        
+        try {
+          await this.socket.logout();
+        } catch (logoutError: any) {
+          this.logger.debug({ error: logoutError.message }, 'Logout attempt during reset');
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 200));
+        this.socket.end(undefined);
+      } catch (error: any) {
+        this.logger.warn({ error: error.message }, 'Error closing socket during reset');
+      }
+      this.socket = null;
+    }
+    
+    this.status = 'disconnected';
+    this.qrCode = null;
+    this.reconnectAttempts = 0;
+    this.lidMappings.clear();
+    
+    await this.clearSession();
+    
+    this.isClosing = false;
+    
+    this.logger.info('Session reset complete, reconnecting for new QR...');
+    await this.connect();
+  }
+
   getMetadata() {
     return {
       id: this.id,

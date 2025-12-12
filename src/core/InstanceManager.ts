@@ -187,6 +187,20 @@ export class InstanceManager {
     return instance;
   }
 
+  static async resetInstance(id: string): Promise<WhatsAppInstance | undefined> {
+    const instance = this.instances.get(id);
+    
+    if (!instance) {
+      return undefined;
+    }
+
+    logger.info({ instanceId: id }, 'Resetting instance session for new WhatsApp number');
+
+    await instance.resetSession();
+
+    return instance;
+  }
+
   static listInstances(): InstanceMetadata[] {
     return Array.from(this.instances.values()).map(instance => instance.getMetadata());
   }

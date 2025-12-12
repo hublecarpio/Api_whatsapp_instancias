@@ -296,6 +296,27 @@ export default function WhatsAppPage() {
     }
   };
 
+  const handleReset = async () => {
+    if (!currentBusiness) return;
+    if (!confirm('Cambiar numero de WhatsApp? Se desconectara el numero actual y deberas escanear el QR con el nuevo telefono.')) return;
+    
+    setActionLoading('reset');
+    setError('');
+    addEvent('action', 'Cambiando numero...');
+    
+    try {
+      await waApi.reset(currentBusiness.id);
+      addEvent('success', 'Sesion reseteada. Escanea el QR con tu nuevo numero.');
+      await fetchStatus();
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error || 'Error al cambiar numero';
+      setError(errorMsg);
+      addEvent('error', errorMsg);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleDelete = async () => {
     if (!currentBusiness) return;
     if (!confirm('Eliminar conexion de WhatsApp? Tendras que configurar de nuevo.')) return;
@@ -579,9 +600,14 @@ export default function WhatsAppPage() {
                 
                 <div className="flex flex-wrap gap-2">
                   {provider !== 'META_CLOUD' && (
-                    <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm">
-                      {actionLoading === 'restart' ? '...' : 'Reiniciar'}
-                    </button>
+                    <>
+                      <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm">
+                        {actionLoading === 'restart' ? '...' : 'Reiniciar'}
+                      </button>
+                      <button onClick={handleReset} disabled={actionLoading !== null} className="btn btn-warning btn-sm">
+                        {actionLoading === 'reset' ? '...' : 'Cambiar numero'}
+                      </button>
+                    </>
                   )}
                   <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm">
                     {actionLoading === 'delete' ? '...' : 'Eliminar'}

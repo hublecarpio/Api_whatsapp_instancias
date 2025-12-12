@@ -565,6 +565,54 @@ router.post('/:businessId/restart', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/:businessId/reset', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { businessId: req.params.businessId }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'No WhatsApp instance for this business' });
+    }
+    
+    const waResponse = await axios.post(
+      `${WA_API_URL}/instances/${instance.instanceBackendId}/reset`
+    );
+    
+    const previousStatus = instance.status;
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: { status: 'pending_qr', qr: null, phoneNumber: null }
+    });
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId: req.params.businessId,
+      eventType: 'DISCONNECTED',
+      previousStatus,
+      newStatus: 'pending_qr',
+      phoneNumber: instance.phoneNumber,
+      backendId: instance.instanceBackendId,
+      details: 'Session reset to connect different WhatsApp number'
+    });
+    
+    console.log(`Instance ${instance.instanceBackendId} session reset for new WhatsApp number`);
+    res.json({ 
+      success: true, 
+      message: 'Session reset successfully. Scan QR to connect new WhatsApp number.',
+      ...waResponse.data 
+    });
+  } catch (error: any) {
+    console.error('Reset instance error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to reset instance session' });
+  }
+});
+
 router.delete('/:businessId', async (req: AuthRequest, res: Response) => {
   try {
     const business = await checkBusinessAccess(req.userId!, req.params.businessId);

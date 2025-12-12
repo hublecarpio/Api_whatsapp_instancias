@@ -604,6 +604,35 @@ router.post('/instances/:id/restart', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/instances/:id/reset', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const instance = await InstanceManager.resetInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        status: instance.status,
+        message: 'Session reset successfully. Scan new QR to connect different WhatsApp number.'
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to reset instance session');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 router.delete('/instances/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
