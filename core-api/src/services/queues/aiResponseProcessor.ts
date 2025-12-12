@@ -6,7 +6,7 @@ import { replacePromptVariables } from '../promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../agentV2Service.js';
 import { searchProductsIntelligent } from '../productSearch.js';
 import { parseAgentOutputToWhatsAppEvents, calculateTypingDelay, WhatsAppEvent } from '../agentOutputParser.js';
-import { MetaCloudAPI } from '../metaCloud.js';
+import { MetaCloudService } from '../metaCloud.js';
 import { scheduleFollowUp } from '../followUpService.js';
 import axios from 'axios';
 
@@ -120,10 +120,10 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     try {
       const targetInstance = business.instances?.find((i: any) => i.id === targetInstanceId);
       if (targetInstance?.metaCredential) {
-        const metaClient = new MetaCloudAPI({
+        const metaClient = new MetaCloudService({
           phoneNumberId: targetInstance.metaCredential.phoneNumberId,
           accessToken: targetInstance.metaCredential.accessToken,
-          businessAccountId: targetInstance.metaCredential.businessAccountId
+          businessId: targetInstance.metaCredential.businessId
         });
         await metaClient.markMessageAsRead(providerMessageId);
         console.log(`[AI Worker] Meta Cloud: Marked message ${providerMessageId} as read for instance ${targetInstanceId}`);

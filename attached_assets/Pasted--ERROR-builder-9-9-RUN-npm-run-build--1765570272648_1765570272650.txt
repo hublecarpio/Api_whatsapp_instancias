@@ -1,0 +1,20 @@
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             11.4s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.422                                                                                                                                                                       
+0.422 > core-api@1.0.0 build                                                                                                                                                
+0.422 > tsc                                                                                                                                                                 
+0.422                                                                                                                                                                       
+11.27 src/services/queues/aiResponseProcessor.ts(9,10): error TS2305: Module '"../metaCloud.js"' has no exported member 'MetaCloudAPI'.                                     
+11.27 src/services/queues/aiResponseProcessor.ts(126,60): error TS2339: Property 'businessAccountId' does not exist on type '{ id: string; createdAt: Date; businessId: stri
+ng; updatedAt: Date; instanceId: string; phoneNumberId: string; accessToken: string; appId: string; appSecret: string; webhookVerifyToken: string; }'.                      
+------
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
