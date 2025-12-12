@@ -27,6 +27,7 @@ import contactsRoutes from './routes/contacts.js';
 import agentFilesRoutes from './routes/agentFiles.js';
 import publicRoutes from './routes/public.js';
 import advisorRoutes from './routes/advisor.js';
+import broadcastsRoutes from './routes/broadcasts.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
 
@@ -106,6 +107,7 @@ app.use('/contacts', contactsRoutes);
 app.use('/agent/files', agentFilesRoutes);
 app.use('/public', publicRoutes);
 app.use('/advisor', advisorRoutes);
+app.use('/broadcasts', broadcastsRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

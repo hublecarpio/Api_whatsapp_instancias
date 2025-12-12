@@ -916,3 +916,81 @@ model PlatformSettings {
   updatedAt             DateTime        @updatedAt
   updatedBy             String?
 }
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum BroadcastMessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  TEMPLATE
+}
+
+model BroadcastCampaign {
+  id              String               @id @default(uuid())
+  businessId      String
+  name            String
+  status          BroadcastStatus      @default(DRAFT)
+  messageType     BroadcastMessageType @default(TEXT)
+  content         String?
+  mediaUrl        String?
+  mediaCaption    String?
+  fileName        String?
+  templateId      String?
+  templateParams  Json?
+  contactIds      String[]             @default([])
+  contactFilters  Json?
+  delayMinSeconds Int                  @default(3)
+  delayMaxSeconds Int                  @default(10)
+  scheduledAt     DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  totalContacts   Int                  @default(0)
+  sentCount       Int                  @default(0)
+  failedCount     Int                  @default(0)
+  createdBy       String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  logs BroadcastLog[]
+
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
+  @@index([status, scheduledAt])
+}
+
+enum BroadcastLogStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model BroadcastLog {
+  id           String              @id @default(uuid())
+  campaignId   String
+  contactPhone String
+  contactName  String?
+  status       BroadcastLogStatus  @default(PENDING)
+  usedTemplate Boolean             @default(false)
+  sentAt       DateTime?
+  error        String?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+
+  campaign BroadcastCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, status])
+  @@index([campaignId, createdAt])
+}
