@@ -10,7 +10,7 @@ router.use(authMiddleware);
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
-    const { search, page = '1', limit = '50', businessId } = req.query;
+    const { search, page = '1', limit = '50', businessId, archived, tag } = req.query;
 
     if (!businessId) {
       return res.status(400).json({ error: 'businessId es requerido' });
@@ -28,66 +28,69 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    const whereClause: any = { businessId: business.id };
+    const whereClause: any = { 
+      businessId: business.id
+    };
+    
+    if (archived === 'true') {
+      whereClause.isArchived = true;
+    } else if (archived === 'false') {
+      whereClause.isArchived = false;
+    }
+    
     if (search) {
       whereClause.OR = [
-        { contactPhone: { contains: search as string } },
-        { contactName: { contains: search as string, mode: 'insensitive' } }
+        { phone: { contains: search as string } },
+        { name: { contains: search as string, mode: 'insensitive' } },
+        { email: { contains: search as string, mode: 'insensitive' } }
       ];
     }
 
-    const contactSettings = await prisma.contactSettings.findMany({
+    if (tag) {
+      whereClause.tags = { has: tag as string };
+    }
+
+    const contacts = await prisma.contact.findMany({
       where: whereClause,
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { lastMessageAt: 'desc' },
       skip,
       take: limitNum
     });
 
-    const phoneNumbers = contactSettings.map((c: any) => c.contactPhone);
+    const phoneNumbers = contacts.map((c: any) => c.phone);
     
-    const [extractedData, orders, messages] = await Promise.all([
+    const [extractedData, orders] = await Promise.all([
       prisma.contactExtractedData.findMany({
         where: { businessId: business.id, contactPhone: { in: phoneNumbers } }
       }),
       prisma.order.findMany({
         where: { businessId: business.id, contactPhone: { in: phoneNumbers } },
         select: { id: true, contactPhone: true, status: true, totalAmount: true, createdAt: true }
-      }),
-      prisma.$queryRaw`
-        SELECT "contactPhone", COUNT(*)::int as count, MAX("createdAt") as "lastMessageAt"
-        FROM "Message"
-        WHERE "businessId" = ${business.id} AND "contactPhone" = ANY(${phoneNumbers})
-        GROUP BY "contactPhone"
-      ` as Promise<any[]>
+      })
     ]);
 
-    const instances = await prisma.whatsAppInstance.findMany({
-      where: { businessId: business.id },
-      select: { id: true, name: true, provider: true }
-    });
-    const instanceMap = new Map(instances.map((i: any) => [i.id, i]));
-
-    const contacts = contactSettings.map((contact: any) => {
-      const contactOrders = orders.filter((o: any) => o.contactPhone === contact.contactPhone);
-      const contactExtracted = extractedData.filter((e: any) => e.contactPhone === contact.contactPhone);
-      const msgStats = messages.find((m: any) => m.contactPhone === contact.contactPhone);
-      const instance = contact.instanceId ? instanceMap.get(contact.instanceId) : null;
+    const enrichedContacts = contacts.map((contact: any) => {
+      const contactOrders = orders.filter((o: any) => o.contactPhone === contact.phone);
+      const contactExtracted = extractedData.filter((e: any) => e.contactPhone === contact.phone);
 
       return {
         id: contact.id,
-        phone: contact.contactPhone,
-        name: contact.contactName,
-        botDisabled: contact.botDisabled,
+        phone: contact.phone,
+        name: contact.name,
+        email: contact.email,
+        tags: contact.tags,
         notes: contact.notes,
-        archivedAt: contact.archivedAt,
+        source: contact.source,
+        botDisabled: contact.botDisabled,
+        isArchived: contact.isArchived,
+        firstMessageAt: contact.firstMessageAt,
+        lastMessageAt: contact.lastMessageAt,
+        messageCount: contact.messageCount,
         createdAt: contact.createdAt,
         updatedAt: contact.updatedAt,
-        instance: instance ? { id: instance.id, name: instance.name, provider: instance.provider } : null,
         stats: {
           ordersCount: contactOrders.length,
-          totalSpent: contactOrders.reduce((sum: number, o: any) => sum + o.totalAmount, 0),
-          messagesCount: msgStats?.count || 0,
-          lastMessageAt: msgStats?.lastMessageAt || null
+          totalSpent: contactOrders.reduce((sum: number, o: any) => sum + o.totalAmount, 0)
         },
         extractedData: contactExtracted.reduce((acc: any, e: any) => {
           acc[e.fieldKey] = e.fieldValue;
@@ -96,10 +99,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       };
     });
 
-    const total = await prisma.contactSettings.count({ where: whereClause });
+    const total = await prisma.contact.count({ where: whereClause });
 
     res.json({
-      contacts,
+      contacts: enrichedContacts,
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -109,6 +112,46 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error('[CONTACTS] Error listing contacts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/tags', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { businessId } = req.query;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const contacts = await prisma.contact.findMany({
+      where: { businessId: business.id },
+      select: { tags: true }
+    });
+
+    const tagCounts: Record<string, number> = {};
+    contacts.forEach((c: any) => {
+      c.tags.forEach((tag: string) => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+    });
+
+    const tags = Object.entries(tagCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    res.json({ tags });
+  } catch (error: any) {
+    console.error('[CONTACTS] Error getting tags:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -130,12 +173,12 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    const contactSettings = await prisma.contactSettings.findMany({
-      where: { businessId: business.id },
-      orderBy: { createdAt: 'desc' }
+    const contacts = await prisma.contact.findMany({
+      where: { businessId: business.id, isArchived: false },
+      orderBy: { lastMessageAt: 'desc' }
     });
 
-    const phoneNumbers = contactSettings.map((c: any) => c.contactPhone);
+    const phoneNumbers = contacts.map((c: any) => c.phone);
 
     const [extractedData, orders] = await Promise.all([
       prisma.contactExtractedData.findMany({
@@ -149,11 +192,11 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
 
     const allFields = [...new Set(extractedData.map((e: any) => e.fieldKey))];
 
-    const headers = ['Telefono', 'Nombre', 'Total Pedidos', 'Total Gastado', 'Bot Desactivado', 'Notas', 'Creado', 'Actualizado', ...allFields];
+    const headers = ['Telefono', 'Nombre', 'Email', 'Tags', 'Mensajes', 'Total Pedidos', 'Total Gastado', 'Bot Desactivado', 'Notas', 'Primer Mensaje', 'Ultimo Mensaje', ...allFields];
     
-    const rows = contactSettings.map((contact: any) => {
-      const contactOrders = orders.filter((o: any) => o.contactPhone === contact.contactPhone);
-      const contactExtracted = extractedData.filter((e: any) => e.contactPhone === contact.contactPhone);
+    const rows = contacts.map((contact: any) => {
+      const contactOrders = orders.filter((o: any) => o.contactPhone === contact.phone);
+      const contactExtracted = extractedData.filter((e: any) => e.contactPhone === contact.phone);
       
       const extractedValues = allFields.map((field: string) => {
         const data = contactExtracted.find((e: any) => e.fieldKey === field);
@@ -161,14 +204,17 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
       });
 
       return [
-        contact.contactPhone,
-        contact.contactName || '',
+        contact.phone,
+        contact.name || '',
+        contact.email || '',
+        (contact.tags || []).join('; '),
+        contact.messageCount.toString(),
         contactOrders.length.toString(),
         contactOrders.reduce((sum: number, o: any) => sum + o.totalAmount, 0).toFixed(2),
         contact.botDisabled ? 'Si' : 'No',
         (contact.notes || '').replace(/"/g, '""'),
-        new Date(contact.createdAt).toISOString(),
-        new Date(contact.updatedAt).toISOString(),
+        new Date(contact.firstMessageAt).toISOString(),
+        new Date(contact.lastMessageAt).toISOString(),
         ...extractedValues.map((v: string) => (v || '').replace(/"/g, '""'))
       ];
     });
@@ -205,15 +251,15 @@ router.get('/:phone', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    const contact = await prisma.contactSettings.findFirst({
-      where: { businessId: business.id, contactPhone: phone }
+    const contact = await prisma.contact.findUnique({
+      where: { businessId_phone: { businessId: business.id, phone } }
     });
 
     if (!contact) {
       return res.status(404).json({ error: 'Contacto no encontrado' });
     }
 
-    const [extractedData, orders, appointments, messages, instances] = await Promise.all([
+    const [extractedData, orders, appointments, messages] = await Promise.all([
       prisma.contactExtractedData.findMany({
         where: { businessId: business.id, contactPhone: phone }
       }),
@@ -226,21 +272,18 @@ router.get('/:phone', async (req: AuthRequest, res: Response) => {
         where: { businessId: business.id, contactPhone: phone },
         orderBy: { scheduledAt: 'desc' }
       }),
-      prisma.$queryRaw`
-        SELECT * FROM "Message"
-        WHERE "businessId" = ${business.id} AND "contactPhone" = ${phone}
-        ORDER BY "createdAt" DESC
-        LIMIT 100
-      ` as Promise<any[]>,
-      prisma.whatsAppInstance.findMany({
-        where: { businessId: business.id },
-        select: { id: true, name: true, provider: true }
+      prisma.messageLog.findMany({
+        where: { 
+          businessId: business.id,
+          OR: [
+            { sender: phone },
+            { recipient: phone }
+          ]
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100
       })
     ]);
-
-    const instanceMap = new Map(instances.map((i: any) => [i.id, i]));
-    const instancesUsed = [...new Set(messages.map((m: any) => m.instanceId).filter(Boolean))];
-    const usedInstances = instancesUsed.map((id: string) => instanceMap.get(id)).filter(Boolean);
 
     const timeline = [
       ...orders.map((o: any) => ({
@@ -260,11 +303,18 @@ router.get('/:phone', async (req: AuthRequest, res: Response) => {
 
     res.json({
       id: contact.id,
-      phone: contact.contactPhone,
-      name: contact.contactName,
-      botDisabled: contact.botDisabled,
+      phone: contact.phone,
+      name: contact.name,
+      email: contact.email,
+      tags: contact.tags,
       notes: contact.notes,
-      archivedAt: contact.archivedAt,
+      source: contact.source,
+      botDisabled: contact.botDisabled,
+      isArchived: contact.isArchived,
+      firstMessageAt: contact.firstMessageAt,
+      lastMessageAt: contact.lastMessageAt,
+      messageCount: contact.messageCount,
+      metadata: contact.metadata,
       createdAt: contact.createdAt,
       updatedAt: contact.updatedAt,
       extractedData: extractedData.reduce((acc: any, e: any) => {
@@ -274,7 +324,6 @@ router.get('/:phone', async (req: AuthRequest, res: Response) => {
       orders,
       appointments,
       messages: messages.slice(0, 50),
-      instancesUsed: usedInstances,
       timeline
     });
   } catch (error: any) {
@@ -287,7 +336,7 @@ router.put('/:phone', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     const { phone } = req.params;
-    const { contactName, notes, botDisabled, businessId } = req.body;
+    const { name, email, notes, botDisabled, tags, isArchived, businessId } = req.body;
 
     if (!businessId) {
       return res.status(400).json({ error: 'businessId es requerido' });
@@ -301,35 +350,172 @@ router.put('/:phone', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    const existing = await prisma.contactSettings.findFirst({
-      where: { businessId: business.id, contactPhone: phone }
+    const existing = await prisma.contact.findUnique({
+      where: { businessId_phone: { businessId: business.id, phone } }
     });
 
-    let contact;
-    if (existing) {
-      contact = await prisma.contactSettings.update({
-        where: { id: existing.id },
-        data: {
-          ...(contactName !== undefined && { contactName }),
-          ...(notes !== undefined && { notes }),
-          ...(botDisabled !== undefined && { botDisabled })
-        }
-      });
-    } else {
-      contact = await prisma.contactSettings.create({
-        data: {
-          businessId: business.id,
-          contactPhone: phone,
-          contactName,
-          notes,
-          botDisabled: botDisabled || false
-        }
-      });
+    if (!existing) {
+      return res.status(404).json({ error: 'Contacto no encontrado' });
     }
+
+    const contact = await prisma.contact.update({
+      where: { id: existing.id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(email !== undefined && { email }),
+        ...(notes !== undefined && { notes }),
+        ...(botDisabled !== undefined && { botDisabled }),
+        ...(tags !== undefined && { tags }),
+        ...(isArchived !== undefined && { isArchived })
+      }
+    });
 
     res.json(contact);
   } catch (error: any) {
     console.error('[CONTACTS] Error updating contact:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/:phone/tags', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { phone } = req.params;
+    const { tag, businessId } = req.body;
+
+    if (!businessId || !tag) {
+      return res.status(400).json({ error: 'businessId y tag son requeridos' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const existing = await prisma.contact.findUnique({
+      where: { businessId_phone: { businessId: business.id, phone } }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Contacto no encontrado' });
+    }
+
+    const currentTags = existing.tags || [];
+    if (!currentTags.includes(tag)) {
+      currentTags.push(tag);
+    }
+
+    const contact = await prisma.contact.update({
+      where: { id: existing.id },
+      data: { tags: currentTags }
+    });
+
+    res.json(contact);
+  } catch (error: any) {
+    console.error('[CONTACTS] Error adding tag:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/:phone/tags/:tag', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { phone, tag } = req.params;
+    const { businessId } = req.query;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const existing = await prisma.contact.findUnique({
+      where: { businessId_phone: { businessId: business.id, phone } }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Contacto no encontrado' });
+    }
+
+    const currentTags = (existing.tags || []).filter((t: string) => t !== tag);
+
+    const contact = await prisma.contact.update({
+      where: { id: existing.id },
+      data: { tags: currentTags }
+    });
+
+    res.json(contact);
+  } catch (error: any) {
+    console.error('[CONTACTS] Error removing tag:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/:phone/archive', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { phone } = req.params;
+    const { businessId } = req.body;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const contact = await prisma.contact.update({
+      where: { businessId_phone: { businessId: business.id, phone } },
+      data: { isArchived: true }
+    });
+
+    res.json(contact);
+  } catch (error: any) {
+    console.error('[CONTACTS] Error archiving contact:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/:phone/unarchive', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { phone } = req.params;
+    const { businessId } = req.body;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const contact = await prisma.contact.update({
+      where: { businessId_phone: { businessId: business.id, phone } },
+      data: { isArchived: false }
+    });
+
+    res.json(contact);
+  } catch (error: any) {
+    console.error('[CONTACTS] Error unarchiving contact:', error);
     res.status(500).json({ error: error.message });
   }
 });
