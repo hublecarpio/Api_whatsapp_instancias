@@ -190,19 +190,42 @@ async function processExpiredBuffersLegacy() {
           where: { id: buffer.businessId }
         });
         
-        const instance = await prisma.whatsAppInstance.findFirst({
-          where: { businessId: buffer.businessId },
-          include: { metaCredential: true }
-        });
-        
         if (!business || !business.botEnabled) {
           await prisma.messageBuffer.delete({ where: { id: buffer.id } });
           continue;
         }
         
+        let instance = null;
+        
+        if (buffer.instanceId) {
+          instance = await prisma.whatsAppInstance.findUnique({
+            where: { id: buffer.instanceId },
+            include: { metaCredential: true }
+          });
+          console.log(`[BUFFER-WORKER] Using stored instanceId ${buffer.instanceId} for ${bufferKey}`);
+        }
+        
+        if (!instance) {
+          instance = await prisma.whatsAppInstance.findFirst({
+            where: { businessId: buffer.businessId, status: 'connected' },
+            include: { metaCredential: true }
+          });
+          if (instance) {
+            console.log(`[BUFFER-WORKER] Fallback to connected instance ${instance.id} for ${bufferKey}`);
+          }
+        }
+        
+        if (!instance) {
+          instance = await prisma.whatsAppInstance.findFirst({
+            where: { businessId: buffer.businessId },
+            include: { metaCredential: true }
+          });
+          console.log(`[BUFFER-WORKER] Fallback to any instance for ${bufferKey}`);
+        }
+        
         const provider = instance?.provider || undefined;
         
-        console.log(`[BUFFER-WORKER] Found ${storedMessageIds.length} stored message IDs, provider=${provider || 'unknown'} for ${bufferKey}`);
+        console.log(`[BUFFER-WORKER] Found ${storedMessageIds.length} stored message IDs, provider=${provider || 'unknown'}, instanceId=${instance?.id || 'none'} for ${bufferKey}`);
         
         const contactJid = `${buffer.contactPhone}@s.whatsapp.net`;
         const resolvedBackendId = instance?.instanceBackendId || `biz_${buffer.businessId.substring(0, 8)}`;
@@ -1947,11 +1970,13 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
         create: {
           businessId: business_id,
           contactPhone,
+          instanceId: instanceId || null,
           messages: { texts: currentMessages, providerMessageIds: currentProviderMessageIds },
           expiresAt: new Date(Date.now() + bufferSeconds * 1000)
         },
         update: {
           messages: { texts: currentMessages, providerMessageIds: currentProviderMessageIds },
+          instanceId: instanceId || undefined,
           expiresAt: new Date(Date.now() + bufferSeconds * 1000)
         }
       });

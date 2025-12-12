@@ -470,6 +470,7 @@ model MessageBuffer {
   id              String    @id @default(uuid())
   businessId      String
   contactPhone    String
+  instanceId      String?
   messages        Json
   createdAt       DateTime  @default(now())
   expiresAt       DateTime
