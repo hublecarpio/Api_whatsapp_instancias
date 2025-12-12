@@ -12,88 +12,13 @@ import { createProductPaymentLink } from '../services/stripePayments.js';
 import { searchProductsIntelligent } from '../services/productSearch.js';
 import { queueAIResponse, getAIQueueStats } from '../services/queues/aiResponseProcessor.js';
 import { getAIResponseQueue } from '../services/queues/index.js';
+import { scheduleFollowUp } from '../services/followUpService.js';
 
 const router = Router();
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
 const USE_AI_QUEUE = process.env.USE_AI_QUEUE !== 'false';
-
-// Schedule a follow-up reminder after agent responds
-async function scheduleFollowUp(businessId: string, contactPhone: string): Promise<void> {
-  try {
-    const config = await prisma.followUpConfig.findUnique({
-      where: { businessId }
-    });
-    
-    if (!config || !config.enabled) {
-      return;
-    }
-    
-    // Cancel any existing pending reminders first
-    await prisma.reminder.updateMany({
-      where: {
-        businessId,
-        contactPhone,
-        status: 'pending'
-      },
-      data: {
-        status: 'cancelled_rescheduled'
-      }
-    });
-    
-    // Get today's attempt count
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const todayAttempts = await prisma.reminder.count({
-      where: {
-        businessId,
-        contactPhone,
-        status: 'executed',
-        executedAt: { gte: today }
-      }
-    });
-    
-    // Get max attempts from config
-    const maxAttempts = Array.isArray(config.followUpSteps) 
-      ? (config.followUpSteps as any[]).length 
-      : config.maxDailyAttempts;
-    
-    if (todayAttempts >= maxAttempts) {
-      return;
-    }
-    
-    // Get delay for next attempt
-    let delayMinutes = config.firstDelayMinutes;
-    if (Array.isArray(config.followUpSteps) && config.followUpSteps[todayAttempts]) {
-      const step = (config.followUpSteps as any[])[todayAttempts];
-      if (step && typeof step.delayMinutes === 'number') {
-        delayMinutes = step.delayMinutes;
-      }
-    } else {
-      if (todayAttempts === 1) delayMinutes = config.secondDelayMinutes;
-      else if (todayAttempts >= 2) delayMinutes = config.thirdDelayMinutes;
-    }
-    
-    const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
-    
-    await prisma.reminder.create({
-      data: {
-        businessId,
-        contactPhone,
-        scheduledAt,
-        type: 'auto',
-        attemptNumber: todayAttempts + 1,
-        configId: config.id
-      }
-    });
-    
-    console.log(`[FOLLOW-UP] Scheduled follow-up for ${contactPhone} in ${delayMinutes} minutes (attempt ${todayAttempts + 1})`);
-  } catch (err) {
-    console.error('[FOLLOW-UP] Failed to schedule follow-up:', err);
-  }
-}
 
 async function processWithAgentQueued(
   businessId: string,

@@ -2,6 +2,7 @@ import prisma from './prisma.js';
 import axios from 'axios';
 import { geminiService } from './gemini.js';
 import { assignNextRoundRobinAdvisor } from '../routes/advisor.js';
+import { cancelPendingFollowUps } from './followUpService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
@@ -142,23 +143,7 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
   }
 
   // Cancel any pending follow-up reminders when user sends a message
-  try {
-    const cancelledReminders = await prisma.reminder.updateMany({
-      where: {
-        businessId,
-        contactPhone: cleanPhone,
-        status: 'pending'
-      },
-      data: {
-        status: 'cancelled_user_replied'
-      }
-    });
-    if (cancelledReminders.count > 0) {
-      console.log(`[FOLLOW-UP] Cancelled ${cancelledReminders.count} pending reminder(s) for ${cleanPhone} - user replied`);
-    }
-  } catch (err) {
-    console.error('[FOLLOW-UP] Failed to cancel pending reminders:', err);
-  }
+  await cancelPendingFollowUps(businessId, cleanPhone);
 
   if (!business.botEnabled) {
     console.log('Bot disabled for business:', businessId);

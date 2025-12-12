@@ -7,6 +7,7 @@ import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, is
 import { searchProductsIntelligent } from '../productSearch.js';
 import { parseAgentOutputToWhatsAppEvents, calculateTypingDelay, WhatsAppEvent } from '../agentOutputParser.js';
 import { MetaCloudAPI } from '../metaCloud.js';
+import { scheduleFollowUp } from '../followUpService.js';
 import axios from 'axios';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
@@ -482,6 +483,9 @@ async function sendWhatsAppResponse(
         }
       }
     });
+    
+    // Schedule follow-up after sending response
+    await scheduleFollowUp(business.id, cleanPhone);
     
     console.log(`[AI Worker] Response sent and logged to ${cleanPhone}`);
   } catch (error: any) {

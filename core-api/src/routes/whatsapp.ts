@@ -5,6 +5,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireEmailVerified } from '../middleware/billing.js';
 import { MetaCloudService } from '../services/metaCloud.js';
 import { recordInstanceEvent, getInstanceHistory, cleanupOrphanedInstance, validateAndCleanInstances } from '../services/instanceHistory.js';
+import { scheduleFollowUp } from '../services/followUpService.js';
 
 const router = Router();
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:5000';
@@ -506,9 +507,12 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
         recipient: cleanTo,
         message: message || null,
         mediaUrl: imageUrl || videoUrl || audioUrl || fileUrl || null,
-        metadata: { provider: instance.provider }
+        metadata: { provider: instance.provider, source: 'manual_panel' }
       }
     });
+    
+    // Schedule follow-up after manual message
+    await scheduleFollowUp(req.params.businessId, cleanTo);
     
     res.json(response);
   } catch (error: any) {
