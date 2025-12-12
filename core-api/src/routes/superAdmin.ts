@@ -220,7 +220,7 @@ router.delete('/users/:id', superAdminMiddleware, async (req: SuperAdminRequest,
     
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { businesses: true }
+      include: { businesses: { include: { instances: true } } }
     });
     
     if (!user) {
@@ -228,35 +228,99 @@ router.delete('/users/:id', superAdminMiddleware, async (req: SuperAdminRequest,
     }
     
     const businessIds = user.businesses.map(b => b.id);
+    const instanceIds = user.businesses.flatMap(b => b.instances.map(i => i.id));
+    
+    console.log(`[Super Admin] Starting COMPLETE deletion for user: ${user.email}`);
+    console.log(`[Super Admin] Businesses: ${businessIds.length}, Instances: ${instanceIds.length}`);
     
     await prisma.$transaction(async (tx) => {
+      // 1. Token usage (no cascade)
       await tx.tokenUsage.deleteMany({ where: { userId } });
       await tx.tokenUsage.deleteMany({ where: { businessId: { in: businessIds } } });
       
+      // 2. System events (no cascade - logs)
+      await tx.systemEvent.deleteMany({ where: { userId } });
+      await tx.systemEvent.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.systemEvent.deleteMany({ where: { instanceId: { in: instanceIds } } });
+      
+      // 3. Contacts and related data
       await tx.contactExtractedData.deleteMany({ where: { businessId: { in: businessIds } } });
       await tx.extractionField.deleteMany({ where: { businessId: { in: businessIds } } });
-      await tx.paymentLinkRequest.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.contact.deleteMany({ where: { businessId: { in: businessIds } } });
       await tx.contactSettings.deleteMany({ where: { businessId: { in: businessIds } } });
-      await tx.messageBuffer.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.contactAssignment.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      // 4. Tags and assignments
       await tx.tagHistory.deleteMany({ where: { businessId: { in: businessIds } } });
       await tx.tagAssignment.deleteMany({ where: { businessId: { in: businessIds } } });
       
-      await tx.learnedRule.deleteMany({ where: { businessId: { in: businessIds } } });
-      await tx.leadMemory.deleteMany({ where: { businessId: { in: businessIds } } });
-      await tx.agentV2Config.deleteMany({ where: { businessId: { in: businessIds } } });
+      // 5. Messages and buffers
+      await tx.messageBuffer.deleteMany({ where: { businessId: { in: businessIds } } });
       
+      // 6. Orders and payments
       await tx.orderItem.deleteMany({ 
         where: { order: { businessId: { in: businessIds } } } 
       });
       await tx.order.deleteMany({ where: { businessId: { in: businessIds } } });
       await tx.paymentSession.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.paymentLinkRequest.deleteMany({ where: { businessId: { in: businessIds } } });
       
+      // 7. Appointments
+      await tx.appointment.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      // 8. Reminders
+      await tx.reminder.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      // 9. Agent V2 data
+      await tx.learnedRule.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.leadMemory.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.agentV2Config.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      // 10. Tool logs (needs to be before AgentTool deletion via cascade)
+      const promptIds = await tx.agentPrompt.findMany({
+        where: { businessId: { in: businessIds } },
+        select: { id: true }
+      });
+      const promptIdList = promptIds.map(p => p.id);
+      if (promptIdList.length > 0) {
+        const toolIds = await tx.agentTool.findMany({
+          where: { promptId: { in: promptIdList } },
+          select: { id: true }
+        });
+        const toolIdList = toolIds.map(t => t.id);
+        if (toolIdList.length > 0) {
+          await tx.toolLog.deleteMany({ where: { toolId: { in: toolIdList } } });
+        }
+      }
+      
+      // 11. WhatsApp instance history (no cascade - logs)
+      await tx.whatsAppInstanceHistory.deleteMany({ where: { businessId: { in: businessIds } } });
+      await tx.whatsAppInstanceHistory.deleteMany({ where: { instanceId: { in: instanceIds } } });
+      
+      // 12. Subscriptions (has cascade but let's be explicit)
+      await tx.subscription.deleteMany({ where: { userId } });
+      
+      // 13. Advisor invitations
+      await tx.advisorInvitation.deleteMany({ where: { invitedById: userId } });
+      await tx.advisorInvitation.deleteMany({ where: { businessId: { in: businessIds } } });
+      
+      // 14. Finally delete the user (cascades to Business, WhatsAppInstance, etc.)
       await tx.user.delete({ where: { id: userId } });
+    }, {
+      timeout: 60000 // 60 second timeout for large deletions
     });
     
-    console.log(`[Super Admin] User deleted: ${user.email} (${user.businesses.length} businesses removed)`);
+    console.log(`[Super Admin] COMPLETE deletion finished for user: ${user.email}`);
+    console.log(`[Super Admin] Deleted: ${user.businesses.length} businesses, ${instanceIds.length} instances`);
     
-    res.json({ success: true, message: 'User deleted successfully' });
+    res.json({ 
+      success: true, 
+      message: 'User deleted completely',
+      deleted: {
+        businesses: businessIds.length,
+        instances: instanceIds.length
+      }
+    });
   } catch (error: any) {
     console.error('Delete user error:', error);
     res.status(500).json({ error: 'Failed to delete user', details: error.message });
