@@ -541,6 +541,8 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
     const userId = req.userId;
     const { businessId } = req.body;
 
+    console.log(`[CONTACTS REFRESH] Starting refresh for businessId=${businessId}, userId=${userId}`);
+
     if (!businessId) {
       return res.status(400).json({ error: 'businessId es requerido' });
     }
@@ -550,8 +552,11 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
     });
 
     if (!business) {
+      console.log(`[CONTACTS REFRESH] Business not found for id=${businessId}, userId=${userId}`);
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
+
+    console.log(`[CONTACTS REFRESH] Found business: ${business.name} (${business.id})`);
 
     const messages = await prisma.messageLog.findMany({
       where: { businessId: business.id },
@@ -563,6 +568,8 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
         metadata: true
       }
     });
+
+    console.log(`[CONTACTS REFRESH] Found ${messages.length} messages in MessageLog for business ${business.id}`);
 
     const phoneStats: Record<string, {
       firstMessageAt: Date;
