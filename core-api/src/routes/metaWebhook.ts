@@ -147,12 +147,6 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
         filename: msg.filename,
         location: msg.location
       });
-
-      try {
-        await metaService.markMessageAsRead(msg.messageId);
-      } catch (error) {
-        console.error('Failed to mark message as read:', error);
-      }
     }
   } catch (error: any) {
     console.error('Meta webhook processing error:', error);

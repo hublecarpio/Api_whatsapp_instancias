@@ -656,19 +656,87 @@ async function processWithAgentV2(
   const instance = business.instances?.[0];
   const backendId = instanceBackendId || instance?.instanceBackendId;
   
-  if (backendId && aiResponse) {
+  if (aiResponse && instance) {
     try {
-      // Mark messages as read before responding
-      try {
-        await axios.post(`${WA_API_URL}/instances/${backendId}/markAsRead`, {
-          from: phone
-        });
-      } catch (readError: any) {
-        console.log('Could not mark messages as read:', readError.message);
-      }
+      let sentMedia: any[] = [];
       
-      // Send the message
-      const { sentMedia } = await sendMessageInParts(backendId, phone, aiResponse, splitMessages);
+      if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
+        // Meta Cloud API
+        const metaService = new MetaCloudService({
+          accessToken: instance.metaCredential.accessToken,
+          phoneNumberId: instance.metaCredential.phoneNumberId,
+          businessId: instance.metaCredential.businessId
+        });
+        
+        // Mark message as read AFTER buffer expires (before responding)
+        try {
+          const lastInboundMessage = await prisma.messageLog.findFirst({
+            where: {
+              businessId: business.id,
+              sender: contactPhone,
+              direction: 'inbound'
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { providerMessageId: true }
+          });
+          
+          if (lastInboundMessage?.providerMessageId) {
+            await metaService.markMessageAsRead(lastInboundMessage.providerMessageId);
+            console.log('[Agent V2] Meta Cloud message marked as read:', lastInboundMessage.providerMessageId);
+          }
+        } catch (readError: any) {
+          console.log('Could not mark Meta message as read:', readError.message);
+        }
+        
+        // Send the message via Meta Cloud
+        const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
+        const finalText = cleanMarkdownForWhatsApp(cleanedText);
+        
+        if (finalText) {
+          if (splitMessages) {
+            const parts = smartSplitMessage(finalText);
+            for (let i = 0; i < parts.length; i++) {
+              if (i > 0) {
+                const delay = calculateTypingDelay(parts[i]);
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
+              await metaService.sendMessage({ to: contactPhone, text: parts[i] });
+            }
+          } else {
+            await metaService.sendMessage({ to: contactPhone, text: finalText });
+          }
+        }
+        
+        for (const media of mediaItems) {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            if (media.type === 'image') {
+              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'image' });
+            } else if (media.type === 'video') {
+              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'video' });
+            } else if (media.type === 'file') {
+              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'document', filename: media.fileName });
+            }
+            sentMedia.push(media);
+          } catch (mediaError: any) {
+            console.error(`[Agent V2] Failed to send media via Meta Cloud: ${media.url}`, mediaError.message);
+          }
+        }
+      } else if (backendId) {
+        // Baileys API
+        // Mark messages as read before responding
+        try {
+          await axios.post(`${WA_API_URL}/instances/${backendId}/markAsRead`, {
+            from: phone
+          });
+        } catch (readError: any) {
+          console.log('Could not mark messages as read:', readError.message);
+        }
+        
+        // Send the message
+        const result = await sendMessageInParts(backendId, phone, aiResponse, splitMessages);
+        sentMedia = result.sentMedia;
+      }
       
       // Log the outbound message
       await prisma.messageLog.create({
@@ -683,6 +751,7 @@ async function processWithAgentV2(
             contactPhone,
             contactName: contactName || '',
             agentVersion: 'v2',
+            provider: instance.provider,
             splitMessages,
             sentMedia: sentMedia.length > 0 ? sentMedia.map((m: any) => ({ type: m.type, url: m.url })) : undefined
           }
@@ -1651,6 +1720,26 @@ async function processWithAgent(
           phoneNumberId: instance.metaCredential.phoneNumberId,
           businessId: instance.metaCredential.businessId
         });
+        
+        // Mark message as read AFTER buffer expires (before responding)
+        try {
+          const lastInboundMessage = await prisma.messageLog.findFirst({
+            where: {
+              businessId,
+              sender: contactPhone,
+              direction: 'inbound'
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { providerMessageId: true }
+          });
+          
+          if (lastInboundMessage?.providerMessageId) {
+            await metaService.markMessageAsRead(lastInboundMessage.providerMessageId);
+            console.log('[META CLOUD] Message marked as read:', lastInboundMessage.providerMessageId);
+          }
+        } catch (readError: any) {
+          console.log('Could not mark Meta message as read:', readError.message);
+        }
         
         const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
         const finalText = cleanMarkdownForWhatsApp(cleanedText);
