@@ -110,18 +110,7 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     return { response: '' };
   }
   
-  let backendId = instanceBackendId;
-  if (!backendId && instanceId) {
-    const instance = await prisma.whatsAppInstance.findUnique({
-      where: { id: instanceId }
-    });
-    if (instance?.instanceBackendId) {
-      backendId = instance.instanceBackendId;
-    }
-  }
-  if (!backendId) {
-    backendId = `biz_${businessId.substring(0, 8)}`;
-  }
+  const targetInstanceId = instanceId || business.instances?.[0]?.id;
   
   let result: { response: string; tokensUsed?: number };
   
@@ -129,16 +118,16 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     try {
       const v2Available = await isAgentV2Available();
       if (v2Available) {
-        result = await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, backendId);
+        result = await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
       } else {
-        result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
+        result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
       }
     } catch (v2Error: any) {
       console.error('[AI Worker] Agent V2 error, falling back to V1:', v2Error.message);
-      result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
+      result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
     }
   } else {
-    result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
+    result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
   }
   
   if (bufferId) {
@@ -155,7 +144,7 @@ async function processWithAgentV2Worker(
   contactPhone: string,
   contactName: string,
   phone: string,
-  instanceBackendId: string
+  instanceId: string | undefined
 ): Promise<{ response: string; tokensUsed?: number }> {
   const historyLimit = business.promptMaster?.historyLimit || 10;
   
@@ -219,8 +208,8 @@ async function processWithAgentV2Worker(
   
   const aiResponse = result.response || '';
   
-  if (instanceBackendId && aiResponse) {
-    await sendWhatsAppResponse(instanceBackendId, phone, aiResponse, business);
+  if (instanceId && aiResponse) {
+    await sendWhatsAppResponse(instanceId, phone, aiResponse, business);
   }
   
   return { response: aiResponse, tokensUsed: result.tokens_used };
@@ -232,7 +221,7 @@ async function processWithAgentV1Worker(
   contactPhone: string,
   contactName: string,
   phone: string,
-  instanceBackendId: string
+  instanceId: string | undefined
 ): Promise<{ response: string; tokensUsed?: number }> {
   if (!isOpenAIConfigured()) {
     throw new Error('OpenAI API key not configured');
@@ -323,24 +312,29 @@ async function processWithAgentV1Worker(
   const aiResponse = result.content;
   const tokensUsed = result.usage?.totalTokens;
   
-  if (instanceBackendId && aiResponse) {
-    await sendWhatsAppResponse(instanceBackendId, phone, aiResponse, business);
+  if (instanceId && aiResponse) {
+    await sendWhatsAppResponse(instanceId, phone, aiResponse, business);
   }
   
   return { response: aiResponse, tokensUsed };
 }
 
 async function sendWhatsAppResponse(
-  instanceBackendId: string,
+  instanceId: string,
   phone: string,
   message: string,
   business: any
 ): Promise<void> {
   try {
-    const instance = business.instances?.find((i: any) => i.instanceBackendId === instanceBackendId);
+    const instance = business.instances?.find((i: any) => i.id === instanceId);
     const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
     
-    if (instance?.provider === 'META_CLOUD' && instance?.metaCredential) {
+    if (!instance) {
+      console.error(`[AI Worker] Instance ${instanceId} not found in business instances`);
+      return;
+    }
+    
+    if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
       console.log(`[AI Worker] Sending via Meta Cloud API to ${cleanPhone}`);
       const { MetaCloudService } = await import('../metaCloud.js');
       const metaService = new MetaCloudService({
@@ -353,24 +347,28 @@ async function sendWhatsAppResponse(
         text: message
       });
       console.log(`[AI Worker] Meta Cloud message sent successfully to ${cleanPhone}`);
-    } else {
-      await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
+    } else if (instance.instanceBackendId) {
+      await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendMessage`, {
         to: phone,
         message
       }, { timeout: 30000 });
+      console.log(`[AI Worker] Baileys message sent to ${cleanPhone}`);
+    } else {
+      console.error(`[AI Worker] No valid send method for instance ${instanceId}`);
+      return;
     }
     
     await prisma.messageLog.create({
       data: {
         businessId: business.id,
-        instanceId: instance?.id || null,
+        instanceId: instance.id,
         direction: 'outbound',
-        sender: instance?.phoneNumber || 'bot',
+        sender: instance.phoneNumber || 'bot',
         recipient: cleanPhone,
         message: message,
         metadata: { 
           source: 'ai_worker',
-          provider: instance?.provider || 'BAILEYS',
+          provider: instance.provider || 'BAILEYS',
           agentVersion: business.agentVersion || 'v1'
         }
       }
@@ -503,7 +501,7 @@ export async function getAIQueueStats(): Promise<{
 }
 
 export async function processAIResponseDirect(data: AIResponseJobData): Promise<{ response: string; tokensUsed?: number }> {
-  const { businessId, contactPhone, contactName, messages, phone, instanceId, instanceBackendId } = data;
+  const { businessId, contactPhone, contactName, messages, phone, instanceId } = data;
   
   console.log(`[AI Direct] Processing for business ${businessId}, contact ${contactPhone}`);
   
@@ -526,29 +524,18 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
     return { response: '' };
   }
   
-  let backendId = instanceBackendId;
-  if (!backendId && instanceId) {
-    const instance = await prisma.whatsAppInstance.findUnique({
-      where: { id: instanceId }
-    });
-    if (instance?.instanceBackendId) {
-      backendId = instance.instanceBackendId;
-    }
-  }
-  if (!backendId) {
-    backendId = `biz_${businessId.substring(0, 8)}`;
-  }
+  const targetInstanceId = instanceId || business.instances?.[0]?.id;
   
   if (business.agentVersion === 'v2') {
     try {
       const v2Available = await isAgentV2Available();
       if (v2Available) {
-        return await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, backendId);
+        return await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
       }
     } catch (v2Error: any) {
       console.error('[AI Direct] Agent V2 error, falling back to V1:', v2Error.message);
     }
   }
   
-  return await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, backendId);
+  return await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
 }
