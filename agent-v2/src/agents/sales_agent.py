@@ -5,9 +5,12 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from datetime import datetime
 import pytz
+import logging
 
-from ..config import get_settings
+from ..config import get_settings, get_v2_model
 from ..models.schemas import BusinessContext, Product
+
+logger = logging.getLogger(__name__)
 
 
 class AgentState(TypedDict):
@@ -94,9 +97,11 @@ def get_current_time_formatted(timezone: str) -> str:
 class SalesAgent:
     def __init__(self):
         self.settings = get_settings()
+        platform_model = get_v2_model()
+        logger.info(f"SalesAgent using model: {platform_model}")
         self.llm = ChatOpenAI(
             api_key=self.settings.openai_api_key,
-            model=self.settings.openai_model,
+            model=platform_model,
             temperature=0.7
         )
         self.graph = self._build_graph()

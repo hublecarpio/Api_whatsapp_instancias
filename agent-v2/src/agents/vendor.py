@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 import pytz
 
-from ..config import get_settings
+from ..config import get_settings, get_v2_model
 from ..schemas.business_profile import BusinessProfile
 from ..schemas.vendor_state import VendorState, AgentAction, ActionType
 
@@ -156,16 +156,34 @@ RECUERDA: Tu respuesta debe ser ÚNICAMENTE el JSON estructurado, nada más.
 class VendorAgent:
     def __init__(self):
         self.settings = get_settings()
-        self.llm = ChatOpenAI(
-            api_key=self.settings.openai_api_key,
-            model=self.settings.vendor_model,
-            temperature=0.7
-        )
+        self._current_model: str = ""
+        self._init_llms()
+    
+    def _init_llms(self):
+        """Initialize LLMs with current platform model config."""
+        platform_model = get_v2_model()
+        
+        if platform_model != self._current_model:
+            logger.info(f"VendorAgent model changed: {self._current_model} -> {platform_model}")
+            self._current_model = platform_model
+            
+            self.llm = ChatOpenAI(
+                api_key=self.settings.openai_api_key,
+                model=platform_model,
+                temperature=0.7
+            )
+        
         self.refine_llm = ChatOpenAI(
             api_key=self.settings.openai_api_key,
             model=self.settings.refine_model,
             temperature=0.5
         )
+    
+    def _ensure_model_current(self):
+        """Check if model config changed and refresh if needed."""
+        platform_model = get_v2_model()
+        if platform_model != self._current_model:
+            self._init_llms()
     
     async def process(
         self,
@@ -179,6 +197,8 @@ class VendorAgent:
         knowledge_context: Optional[str] = None,
         observer_feedback: Optional[str] = None
     ) -> tuple[AgentAction, int]:
+        self._ensure_model_current()
+        
         current_time = get_current_time_formatted(business_profile.timezone)
         
         system_prompt = build_vendor_system_prompt(

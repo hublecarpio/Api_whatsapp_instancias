@@ -1744,4 +1744,33 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
   }
 });
 
+router.get('/internal/model-config', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    const expectedSecret = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
+    
+    if (internalSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const settings = await getPlatformSettings();
+    
+    res.json({
+      v1: {
+        model: settings.defaultModelV1,
+        reasoningEffort: settings.defaultReasoningV1
+      },
+      v2: {
+        model: settings.defaultModelV2,
+        reasoningEffort: settings.defaultReasoningV2
+      },
+      maxTokensPerRequest: settings.maxTokensPerRequest,
+      enableGPT5Features: settings.enableGPT5Features
+    });
+  } catch (error: any) {
+    console.error('Internal model config error:', error);
+    res.status(500).json({ error: 'Failed to get model config' });
+  }
+});
+
 export default router;
