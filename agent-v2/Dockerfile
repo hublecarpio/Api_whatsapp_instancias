@@ -21,4 +21,4 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5001/health || exit 1
 
-CMD gunicorn src.main:app -w ${WORKERS} -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:5001 --timeout 120 --graceful-timeout 30
+CMD ["sh", "-c", "gunicorn src.main:app -w ${WORKERS} -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:5001 --timeout 120 --graceful-timeout 30"]
