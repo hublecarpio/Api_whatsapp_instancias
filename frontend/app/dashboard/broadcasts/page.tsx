@@ -8,6 +8,8 @@ interface Contact {
   id: string;
   phone: string;
   name: string | null;
+  email?: string | null;
+  extractedData?: Record<string, string | null>;
 }
 
 interface MetaTemplate {
@@ -102,6 +104,66 @@ export default function BroadcastsPage() {
   const [availableVariables, setAvailableVariables] = useState<AvailableVariable[]>([]);
 
   const isMetaCloud = instance?.provider === 'META_CLOUD';
+
+  const commonVariables = (() => {
+    if (contactSource !== 'crm' || selectedContacts.length === 0) {
+      return availableVariables;
+    }
+    
+    const selectedContactsData = contacts.filter(c => selectedContacts.includes(c.phone));
+    if (selectedContactsData.length === 0) return [];
+    
+    const allKeysPerContact = selectedContactsData.map(c => {
+      const keys = new Set<string>();
+      if (c.name) keys.add('nombre');
+      keys.add('telefono');
+      if (c.email) keys.add('email');
+      if (c.extractedData) {
+        Object.entries(c.extractedData).forEach(([key, value]) => {
+          if (value) keys.add(key);
+        });
+      }
+      return keys;
+    });
+    
+    if (allKeysPerContact.length === 0) return [];
+    
+    const commonKeys = Array.from(allKeysPerContact[0]).filter(key =>
+      allKeysPerContact.every(keys => keys.has(key))
+    );
+    
+    return commonKeys.map(key => ({
+      key,
+      description: `Campo ${key}`,
+      example: `{{${key}}}`
+    }));
+  })();
+
+  const getMessageVariables = (text: string): string[] => {
+    const regex = /\{\{(\w+)\}\}/g;
+    const vars: string[] = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      if (!vars.includes(match[1])) vars.push(match[1]);
+    }
+    return vars;
+  };
+
+  const usedVariables = getMessageVariables(formData.content);
+  
+  const contactsMissingVariables = (() => {
+    if (contactSource !== 'crm' || usedVariables.length === 0) return [];
+    
+    const selectedContactsData = contacts.filter(c => selectedContacts.includes(c.phone));
+    return selectedContactsData.filter(contact => {
+      return usedVariables.some(varName => {
+        if (varName === 'nombre') return !contact.name;
+        if (varName === 'telefono') return false;
+        if (varName === 'email') return !contact.email;
+        return !contact.extractedData?.[varName];
+      });
+    });
+  })();
 
   const [creating, setCreating] = useState(false);
 
@@ -840,11 +902,13 @@ export default function BroadcastsPage() {
 
                 {contactSource === 'crm' && (
                   <div className="space-y-3">
-                    {availableVariables.length > 0 && (
+                    {commonVariables.length > 0 && (
                       <div className="p-3 bg-neon-blue/10 border border-neon-blue/30 rounded-lg">
-                        <p className="text-sm font-medium text-neon-blue mb-2">Variables disponibles para personalizar:</p>
+                        <p className="text-sm font-medium text-neon-blue mb-2">
+                          Variables comunes {selectedContacts.length > 0 ? `(${selectedContacts.length} contactos seleccionados)` : ''}:
+                        </p>
                         <div className="flex flex-wrap gap-2">
-                          {availableVariables.map(v => (
+                          {commonVariables.map(v => (
                             <span 
                               key={v.key} 
                               className="text-xs bg-dark-surface px-2 py-1 rounded text-gray-300 cursor-pointer hover:bg-dark-hover"
@@ -860,9 +924,43 @@ export default function BroadcastsPage() {
                             </span>
                           ))}
                         </div>
-                        <p className="text-xs text-gray-500 mt-2">Click en una variable para agregarla al mensaje</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {selectedContacts.length > 0 
+                            ? 'Solo variables que todos los contactos seleccionados tienen' 
+                            : 'Click en una variable para agregarla al mensaje'}
+                        </p>
                       </div>
                     )}
+                    
+                    {contactsMissingVariables.length > 0 && (
+                      <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                        <p className="text-sm font-medium text-yellow-400 mb-1">
+                          {contactsMissingVariables.length} contacto(s) no tienen los datos requeridos
+                        </p>
+                        <p className="text-xs text-gray-400 mb-2">
+                          Variables usadas: {usedVariables.map(v => `{{${v}}}`).join(', ')}
+                        </p>
+                        <div className="text-xs text-gray-500 max-h-20 overflow-y-auto">
+                          {contactsMissingVariables.slice(0, 5).map(c => (
+                            <div key={c.phone}>{c.name || c.phone}</div>
+                          ))}
+                          {contactsMissingVariables.length > 5 && (
+                            <div>...y {contactsMissingVariables.length - 5} mas</div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const missingPhones = contactsMissingVariables.map(c => c.phone);
+                            setSelectedContacts(prev => prev.filter(p => !missingPhones.includes(p)));
+                          }}
+                          className="mt-2 text-xs text-yellow-400 hover:text-yellow-300 underline"
+                        >
+                          Quitar contactos sin datos
+                        </button>
+                      </div>
+                    )}
+                    
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm text-gray-400">Seleccionar de tu lista de contactos</span>
                       <button

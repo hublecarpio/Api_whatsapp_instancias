@@ -471,6 +471,31 @@ export async function createBroadcastCampaign(params: {
         }, {} as Record<string, string | null>)
       };
     }
+    
+    const textToCheck = [params.content, params.mediaCaption].filter(Boolean).join(' ');
+    const variableRegex = /\{\{(\w+)\}\}/g;
+    const requiredVariables: string[] = [];
+    let match;
+    while ((match = variableRegex.exec(textToCheck)) !== null) {
+      if (!requiredVariables.includes(match[1])) requiredVariables.push(match[1]);
+    }
+    
+    if (requiredVariables.length > 0) {
+      const contactsMissingVars: string[] = [];
+      for (const contact of allContacts) {
+        const namedVars = phoneToNamedVars[contact.phone] || {};
+        for (const varName of requiredVariables) {
+          if (!namedVars[varName]) {
+            contactsMissingVars.push(contact.phone);
+            break;
+          }
+        }
+      }
+      
+      if (contactsMissingVars.length > 0) {
+        throw new Error(`${contactsMissingVars.length} contacto(s) no tienen los datos requeridos: ${requiredVariables.join(', ')}. Elimina estos contactos o usa solo variables que todos tengan.`);
+      }
+    }
   }
 
   const campaign = await prisma.broadcastCampaign.create({

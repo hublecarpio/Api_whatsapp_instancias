@@ -1,6 +1,5 @@
 {
-  "/page": "app/page.js",
-  "/login/page": "app/login/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/contacts/page": "app/dashboard/contacts/page.js"
+  "/dashboard/templates/page": "app/dashboard/templates/page.js",
+  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
+  "/dashboard/broadcasts/page": "app/dashboard/broadcasts/page.js"
 }
