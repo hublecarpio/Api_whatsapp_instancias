@@ -202,9 +202,7 @@ router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
         userId: req.userId
       },
       include: {
-        user: {
-          select: { isPro: true }
-        }
+        user: { select: { paymentLinkEnabled: true } }
       }
     });
 
@@ -212,9 +210,9 @@ router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
       return res.status(403).json({ error: 'No tienes acceso a este negocio' });
     }
 
-    const isPro = business.user?.isPro || false;
+    const canUsePaymentLink = business.user?.paymentLinkEnabled ?? false;
 
-    if (!isPro) {
+    if (!canUsePaymentLink) {
       const products = await prisma.product.findMany({
         where: { id: { in: items.map((i: any) => i.productId) } }
       });
@@ -665,6 +663,10 @@ router.post('/:orderId/confirm-payment', authMiddleware, async (req: any, res) =
 
     if (order.status !== 'AWAITING_VOUCHER') {
       return res.status(400).json({ error: 'Solo se pueden confirmar pedidos en estado AWAITING_VOUCHER' });
+    }
+
+    if (!order.voucherImageUrl) {
+      return res.status(400).json({ error: 'No se ha recibido comprobante de pago para este pedido' });
     }
 
     const updatedOrder = await prisma.order.update({

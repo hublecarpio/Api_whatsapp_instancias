@@ -22,6 +22,7 @@ interface BusinessContext {
   custom_prompt?: string;
   tools_enabled: boolean;
   tools_config: any[];
+  payment_link_enabled: boolean;
 }
 
 interface Message {
@@ -137,6 +138,8 @@ export function buildBusinessContext(
   
   const enabledTools = (tools || []).filter(t => t.enabled);
   
+  const paymentLinkEnabled = business.user?.paymentLinkEnabled ?? false;
+  
   return {
     business_id: business.id,
     business_name: business.name,
@@ -145,7 +148,8 @@ export function buildBusinessContext(
     policies,
     custom_prompt: customPrompt,
     tools_enabled: enabledTools.length > 0,
-    tools_config: enabledTools
+    tools_config: enabledTools,
+    payment_link_enabled: paymentLinkEnabled
   };
 }
 
