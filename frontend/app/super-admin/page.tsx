@@ -322,11 +322,11 @@ function UsersTab({ token }: { token: string }) {
     }
   };
 
-  const handleTogglePaymentLink = async (userId: string, currentEnabled: boolean) => {
+  const handleTogglePaymentLink = async (userId: string, currentEnabled: boolean | undefined) => {
     if (actionLoading) return;
     setActionLoading(userId + '_pl');
     
-    const newValue = !currentEnabled;
+    const newValue = !(currentEnabled === true);
     
     try {
       const response = await fetch(`/api/super-admin/users/${userId}/payment-link`, {
@@ -340,14 +340,16 @@ function UsersTab({ token }: { token: string }) {
       
       if (response.ok) {
         const data = await response.json();
-        const updatedValue = data.user?.paymentLinkEnabled ?? newValue;
+        const updatedValue = data.user?.paymentLinkEnabled === true;
         setUsers(prev => prev.map(u => u.id === userId ? { ...u, paymentLinkEnabled: updatedValue } : u));
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.error('Failed to toggle Payment Link:', errorData);
+        alert('Error al cambiar modo de pago');
       }
     } catch (err) {
       console.error('Failed to toggle Payment Link:', err);
+      alert('Error de conexion');
     } finally {
       setActionLoading(null);
     }
