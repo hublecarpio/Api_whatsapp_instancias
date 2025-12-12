@@ -110,6 +110,31 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     }
   });
 
+  const now = new Date();
+  try {
+    await prisma.contact.upsert({
+      where: {
+        businessId_phone: { businessId, phone: cleanPhone }
+      },
+      create: {
+        businessId,
+        phone: cleanPhone,
+        name: pushName || null,
+        source: provider,
+        firstMessageAt: now,
+        lastMessageAt: now,
+        messageCount: 1
+      },
+      update: {
+        name: pushName || undefined,
+        lastMessageAt: now,
+        messageCount: { increment: 1 }
+      }
+    });
+  } catch (err) {
+    console.error('[CONTACT] Failed to upsert contact:', err);
+  }
+
   try {
     await assignNextRoundRobinAdvisor(businessId, cleanPhone);
   } catch (err) {
@@ -121,14 +146,13 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     return true;
   }
 
-  const contactSettings = await prisma.contactSettings.findFirst({
+  const contact = await prisma.contact.findUnique({
     where: {
-      businessId,
-      contactPhone: cleanPhone
+      businessId_phone: { businessId, phone: cleanPhone }
     }
   });
 
-  if (contactSettings?.botDisabled) {
+  if (contact?.botDisabled) {
     console.log('Bot disabled for contact:', cleanPhone, 'in business:', businessId);
     return true;
   }
