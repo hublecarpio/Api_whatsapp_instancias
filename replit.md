@@ -22,7 +22,7 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **AI Agent Tools**: Enables AI agents to call external POST endpoints with dynamic parameter interpolation.
 *   **Message Buffering**: Accumulates messages before triggering AI responses.
 *   **Multimodal Response Handling**: Automatically detects and sends various media types.
-*   **Reminder/Follow-up System**: Background worker for inactivity detection and scheduling AI-generated follow-ups, respecting business timezones.
+*   **Reminder/Follow-up System**: Event-driven architecture via `followUpService.ts` that schedules follow-ups immediately after agent/human sends message and cancels them when user replies. The `reminderWorker` processes scheduled reminders, respecting business timezones and daily limits.
 *   **Redis + BullMQ Queue System**: Robust job processing for reminders, message buffering, WhatsApp messages, and AI responses with retry logic. Features a high-concurrency BullMQ AI Response Queue for parallel OpenAI API calls.
 *   **Stripe Billing Integration**: Implements a 7-day free trial, recurring payments, webhook handling, and account suspension.
 *   **Email Verification System**: Requires email verification for WhatsApp instance creation, with server-side enforcement and SMTP integration.
