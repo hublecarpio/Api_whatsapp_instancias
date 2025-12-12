@@ -63,6 +63,12 @@ interface CSVContact {
   variables: string[];
 }
 
+interface AvailableVariable {
+  key: string;
+  description: string;
+  example: string;
+}
+
 export default function BroadcastsPage() {
   const { currentBusiness } = useBusinessStore();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -93,6 +99,7 @@ export default function BroadcastsPage() {
   const [csvText, setCsvText] = useState('');
   const [csvContacts, setCsvContacts] = useState<CSVContact[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [availableVariables, setAvailableVariables] = useState<AvailableVariable[]>([]);
 
   const isMetaCloud = instance?.provider === 'META_CLOUD';
 
@@ -129,6 +136,18 @@ export default function BroadcastsPage() {
       setContacts(response.data.contacts || []);
     } catch (error) {
       console.error('Error loading contacts:', error);
+    }
+  };
+
+  const loadAvailableVariables = async () => {
+    if (!currentBusiness?.id) return;
+    try {
+      const response = await axios.get(`${API_URL}/broadcasts/${currentBusiness.id}/available-variables`, {
+        headers: getAuthHeader()
+      });
+      setAvailableVariables(response.data.variables || []);
+    } catch (error) {
+      console.error('Error loading available variables:', error);
     }
   };
 
@@ -285,7 +304,8 @@ export default function BroadcastsPage() {
         templateId: formData.templateId || undefined,
         contactsWithVariables: finalContacts,
         delayMinSeconds: formData.delayMinSeconds,
-        delayMaxSeconds: formData.delayMaxSeconds
+        delayMaxSeconds: formData.delayMaxSeconds,
+        useCrmMetadata: contactSource === 'crm'
       }, { headers: getAuthHeader() });
 
       alert(`Campana creada con ${response.data.totalContacts} contactos`);
@@ -406,6 +426,7 @@ export default function BroadcastsPage() {
       loadCampaigns();
       loadContacts();
       loadInstanceAndTemplates();
+      loadAvailableVariables();
     }
   }, [currentBusiness?.id]);
 
@@ -818,7 +839,30 @@ export default function BroadcastsPage() {
                 </div>
 
                 {contactSource === 'crm' && (
-                  <div>
+                  <div className="space-y-3">
+                    {availableVariables.length > 0 && (
+                      <div className="p-3 bg-neon-blue/10 border border-neon-blue/30 rounded-lg">
+                        <p className="text-sm font-medium text-neon-blue mb-2">Variables disponibles para personalizar:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {availableVariables.map(v => (
+                            <span 
+                              key={v.key} 
+                              className="text-xs bg-dark-surface px-2 py-1 rounded text-gray-300 cursor-pointer hover:bg-dark-hover"
+                              onClick={() => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  content: prev.content + v.example
+                                }));
+                              }}
+                              title={v.description}
+                            >
+                              {v.example}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">Click en una variable para agregarla al mensaje</p>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm text-gray-400">Seleccionar de tu lista de contactos</span>
                       <button

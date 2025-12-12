@@ -35,6 +35,16 @@ function interpolateVariables(text: string | null, variables: string[]): string 
   return result;
 }
 
+function interpolateNamedVariables(text: string | null, namedVars: Record<string, string | null>): string | null {
+  if (!text) return text;
+  let result = text;
+  for (const [key, value] of Object.entries(namedVars)) {
+    const placeholder = `{{${key}}}`;
+    result = result.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value || '');
+  }
+  return result;
+}
+
 export async function isWithin24HourWindow(businessId: string, contactPhone: string): Promise<boolean> {
   const cleanPhone = contactPhone.replace(/\D/g, '');
   
@@ -68,12 +78,18 @@ export async function sendBroadcastMessage(
     fileName: string | null;
     templateId: string | null;
     templateParams: any;
-  }
+  },
+  namedVariables?: Record<string, string | null>
 ): Promise<{ success: boolean; usedTemplate: boolean; error?: string }> {
   const cleanPhone = contactPhone.replace(/\D/g, '');
 
-  const interpolatedContent = interpolateVariables(campaign.content, variables);
-  const interpolatedCaption = interpolateVariables(campaign.mediaCaption, variables);
+  let interpolatedContent = interpolateVariables(campaign.content, variables);
+  let interpolatedCaption = interpolateVariables(campaign.mediaCaption, variables);
+  
+  if (namedVariables && Object.keys(namedVariables).length > 0) {
+    interpolatedContent = interpolateNamedVariables(interpolatedContent, namedVariables);
+    interpolatedCaption = interpolateNamedVariables(interpolatedCaption, namedVariables);
+  }
   
   const interpolatedCampaign = {
     ...campaign,
@@ -310,8 +326,9 @@ export async function runBroadcastCampaign(campaignId: string): Promise<Broadcas
       data: { status: 'SENDING' }
     });
 
-    const logMetadata = log.metadata as { variables?: string[] } | null;
+    const logMetadata = log.metadata as { variables?: string[]; namedVariables?: Record<string, string | null> } | null;
     const variables = logMetadata?.variables || [];
+    const namedVariables = logMetadata?.namedVariables || {};
 
     const result = await sendBroadcastMessage(
       campaignId,
@@ -319,7 +336,8 @@ export async function runBroadcastCampaign(campaignId: string): Promise<Broadcas
       log.contactPhone,
       log.contactName,
       variables,
-      campaign
+      campaign,
+      namedVariables
     );
 
     if (result.success) {
@@ -380,6 +398,7 @@ export async function createBroadcastCampaign(params: {
   delayMinSeconds?: number;
   delayMaxSeconds?: number;
   createdBy?: string;
+  useCrmMetadata?: boolean;
 }): Promise<{ campaignId: string; totalContacts: number }> {
   const phoneToVars: Record<string, string[]> = {};
   const allPhones: string[] = [];
@@ -430,6 +449,30 @@ export async function createBroadcastCampaign(params: {
     }
   });
 
+  let phoneToNamedVars: Record<string, Record<string, string | null>> = {};
+  
+  if (params.useCrmMetadata) {
+    const extractedData = await prisma.contactExtractedData.findMany({
+      where: {
+        businessId: params.businessId,
+        contactPhone: { in: allPhones }
+      }
+    });
+    
+    for (const contact of allContacts) {
+      const contactExtracted = extractedData.filter((e: any) => e.contactPhone === contact.phone);
+      phoneToNamedVars[contact.phone] = {
+        nombre: contact.name,
+        email: contact.email,
+        telefono: contact.phone,
+        ...contactExtracted.reduce((acc: any, e: any) => {
+          acc[e.fieldKey] = e.fieldValue;
+          return acc;
+        }, {} as Record<string, string | null>)
+      };
+    }
+  }
+
   const campaign = await prisma.broadcastCampaign.create({
     data: {
       businessId: params.businessId,
@@ -455,7 +498,10 @@ export async function createBroadcastCampaign(params: {
     contactPhone: contact.phone,
     contactName: contact.name,
     status: 'PENDING' as BroadcastLogStatus,
-    metadata: { variables: phoneToVars[contact.phone] || [] }
+    metadata: { 
+      variables: phoneToVars[contact.phone] || [],
+      namedVariables: phoneToNamedVars[contact.phone] || {}
+    }
   }));
 
   await prisma.broadcastLog.createMany({ data: logs });

@@ -20,16 +20,17 @@ interface Contact {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  instance: { id: string; name: string; provider: string } | null;
-  stats: ContactStats;
-  extractedData: Record<string, string | null>;
+  instance?: { id: string; name: string; provider: string } | null;
+  stats?: ContactStats;
+  extractedData?: Record<string, string | null>;
 }
 
 interface ContactDetail extends Contact {
-  orders: any[];
-  messages: any[];
-  instancesUsed: { id: string; name: string; provider: string }[];
-  timeline: { type: string; id: string; date: string; data: any }[];
+  orders?: any[];
+  appointments?: any[];
+  instancesUsed?: { id: string; name: string; provider: string }[];
+  timeline?: { type: string; id: string; date: string; data: any }[];
+  metadata?: Record<string, any>;
 }
 
 export default function ContactsPage() {
@@ -219,14 +220,14 @@ export default function ContactsPage() {
                     </div>
                     <div className="text-right">
                       <div className="flex items-center gap-2 text-xs">
-                        {contact.stats.ordersCount > 0 && (
+                        {(contact.stats?.ordersCount || 0) > 0 && (
                           <span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded">
-                            {contact.stats.ordersCount} pedidos
+                            {contact.stats?.ordersCount} pedidos
                           </span>
                         )}
-                        {contact.stats.messagesCount > 0 && (
+                        {(contact.stats?.messagesCount || 0) > 0 && (
                           <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
-                            {contact.stats.messagesCount} msgs
+                            {contact.stats?.messagesCount} msgs
                           </span>
                         )}
                       </div>
@@ -236,7 +237,7 @@ export default function ContactsPage() {
                     </div>
                   </div>
                   
-                  {Object.keys(contact.extractedData).length > 0 && (
+                  {contact.extractedData && Object.keys(contact.extractedData).length > 0 && (
                     <div className="mt-3 pt-3 border-t border-dark-border flex flex-wrap gap-2">
                       {Object.entries(contact.extractedData).slice(0, 3).map(([key, value]) => (
                         <span key={key} className="text-xs bg-dark-surface px-2 py-1 rounded text-gray-400">
@@ -298,23 +299,23 @@ export default function ContactsPage() {
                   <p className="text-gray-500 text-xs uppercase mb-2">Estadisticas</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="bg-dark-surface rounded p-2 text-center">
-                      <p className="text-xl font-bold text-white">{selectedContact.stats.ordersCount}</p>
+                      <p className="text-xl font-bold text-white">{selectedContact.stats?.ordersCount || 0}</p>
                       <p className="text-xs text-gray-400">Pedidos</p>
                     </div>
                     <div className="bg-dark-surface rounded p-2 text-center">
                       <p className="text-xl font-bold text-green-400">
-                        S/.{selectedContact.stats.totalSpent.toFixed(0)}
+                        S/.{(selectedContact.stats?.totalSpent || 0).toFixed(0)}
                       </p>
                       <p className="text-xs text-gray-400">Total gastado</p>
                     </div>
                     <div className="bg-dark-surface rounded p-2 text-center col-span-2">
-                      <p className="text-xl font-bold text-blue-400">{selectedContact.stats.messagesCount}</p>
+                      <p className="text-xl font-bold text-blue-400">{selectedContact.stats?.messagesCount || 0}</p>
                       <p className="text-xs text-gray-400">Mensajes</p>
                     </div>
                   </div>
                 </div>
 
-                {selectedContact.instancesUsed.length > 0 && (
+                {selectedContact.instancesUsed && selectedContact.instancesUsed.length > 0 && (
                   <div>
                     <p className="text-gray-500 text-xs uppercase mb-2">Instancias usadas</p>
                     <div className="space-y-1">
@@ -329,7 +330,7 @@ export default function ContactsPage() {
                   </div>
                 )}
 
-                {Object.keys(selectedContact.extractedData).length > 0 && (
+                {selectedContact.extractedData && Object.keys(selectedContact.extractedData).length > 0 && (
                   <div>
                     <p className="text-gray-500 text-xs uppercase mb-2">Datos extraidos por IA</p>
                     <div className="space-y-1">
@@ -343,26 +344,28 @@ export default function ContactsPage() {
                   </div>
                 )}
 
-                <div>
-                  <p className="text-gray-500 text-xs uppercase mb-2">Timeline</p>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {selectedContact.timeline.slice(0, 10).map((event, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-sm">
-                        <span className="text-lg">
-                          {event.type === 'order' ? '🛒' : event.type === 'appointment' ? '📅' : '✨'}
-                        </span>
-                        <div>
-                          <p className="text-white">
-                            {event.type === 'order' && `Pedido ${event.data.status}`}
-                            {event.type === 'appointment' && `Cita ${event.data.status}`}
-                            {event.type === 'created' && 'Contacto creado'}
-                          </p>
-                          <p className="text-gray-500 text-xs">{formatDate(event.date)}</p>
+                {selectedContact.timeline && selectedContact.timeline.length > 0 && (
+                  <div>
+                    <p className="text-gray-500 text-xs uppercase mb-2">Timeline</p>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {selectedContact.timeline.slice(0, 10).map((event, idx) => (
+                        <div key={idx} className="flex items-start gap-2 text-sm">
+                          <span className="text-lg">
+                            {event.type === 'order' ? '🛒' : event.type === 'appointment' ? '📅' : '✨'}
+                          </span>
+                          <div>
+                            <p className="text-white">
+                              {event.type === 'order' && `Pedido ${event.data?.status || ''}`}
+                              {event.type === 'appointment' && `Cita ${event.data?.status || ''}`}
+                              {event.type === 'created' && 'Contacto creado'}
+                            </p>
+                            <p className="text-gray-500 text-xs">{formatDate(event.date)}</p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="pt-4 border-t border-dark-border">
                   <p className="text-gray-500 text-xs">

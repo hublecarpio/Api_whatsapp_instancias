@@ -34,6 +34,43 @@ router.get('/:businessId', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/:businessId/available-variables', async (req: AuthRequest, res: Response) => {
+  try {
+    const hasAccess = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const extractedDataFields = await prisma.contactExtractedData.findMany({
+      where: { businessId: req.params.businessId },
+      select: { fieldKey: true },
+      distinct: ['fieldKey']
+    });
+
+    const fieldKeys = extractedDataFields.map((f: any) => f.fieldKey);
+    
+    const baseVariables = [
+      { key: 'nombre', description: 'Nombre del contacto', example: '{{nombre}}' },
+      { key: 'email', description: 'Email del contacto', example: '{{email}}' },
+      { key: 'telefono', description: 'Telefono del contacto', example: '{{telefono}}' }
+    ];
+    
+    const extractedVariables = fieldKeys.map((key: string) => ({
+      key,
+      description: `Campo extraido: ${key}`,
+      example: `{{${key}}}`
+    }));
+
+    res.json({
+      variables: [...baseVariables, ...extractedVariables],
+      usage: 'Usa {{nombre_variable}} en tu mensaje para personalizar cada envio'
+    });
+  } catch (error: any) {
+    console.error('Get available variables error:', error.message);
+    res.status(500).json({ error: 'Failed to get available variables' });
+  }
+});
+
 router.get('/:businessId/:campaignId', async (req: AuthRequest, res: Response) => {
   try {
     const hasAccess = await checkBusinessAccess(req.userId!, req.params.businessId);
@@ -97,7 +134,8 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
       contactPhones,
       contactsWithVariables,
       delayMinSeconds,
-      delayMaxSeconds
+      delayMaxSeconds,
+      useCrmMetadata
     } = req.body;
 
     if (!name) {
@@ -135,7 +173,8 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
       contactsWithVariables: finalContactsWithVars,
       delayMinSeconds: delayMinSeconds || 3,
       delayMaxSeconds: delayMaxSeconds || 10,
-      createdBy: req.userId
+      createdBy: req.userId,
+      useCrmMetadata: useCrmMetadata === true
     });
 
     res.status(201).json(result);

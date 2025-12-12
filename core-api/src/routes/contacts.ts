@@ -259,40 +259,45 @@ router.get('/:phone', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Contacto no encontrado' });
     }
 
-    const [extractedData, orders, appointments, messages] = await Promise.all([
+    const [extractedData, orders, appointments, messageCount] = await Promise.all([
       prisma.contactExtractedData.findMany({
         where: { businessId: business.id, contactPhone: phone }
       }),
       prisma.order.findMany({
         where: { businessId: business.id, contactPhone: phone },
         include: { items: true },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        take: 20
       }),
       prisma.appointment.findMany({
         where: { businessId: business.id, contactPhone: phone },
-        orderBy: { scheduledAt: 'desc' }
+        orderBy: { scheduledAt: 'desc' },
+        take: 20
       }),
-      prisma.messageLog.findMany({
+      prisma.messageLog.count({
         where: { 
           businessId: business.id,
           OR: [
             { sender: phone },
             { recipient: phone }
           ]
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 100
+        }
       })
     ]);
 
+    const instancesUsed = await prisma.whatsAppInstance.findMany({
+      where: { businessId: business.id },
+      select: { id: true, name: true, provider: true }
+    });
+
     const timeline = [
-      ...orders.map((o: any) => ({
+      ...orders.slice(0, 10).map((o: any) => ({
         type: 'order' as const,
         id: o.id,
         date: o.createdAt,
         data: { status: o.status, amount: o.totalAmount }
       })),
-      ...appointments.map((a: any) => ({
+      ...appointments.slice(0, 10).map((a: any) => ({
         type: 'appointment' as const,
         id: a.id,
         date: a.createdAt,
@@ -300,6 +305,13 @@ router.get('/:phone', async (req: AuthRequest, res: Response) => {
       })),
       { type: 'created' as const, id: contact.id, date: contact.createdAt, data: {} }
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const stats = {
+      ordersCount: orders.length,
+      totalSpent: orders.reduce((sum: number, o: any) => sum + (o.totalAmount || 0), 0),
+      messagesCount: messageCount,
+      lastMessageAt: contact.lastMessageAt?.toISOString() || null
+    };
 
     res.json({
       id: contact.id,
@@ -317,14 +329,15 @@ router.get('/:phone', async (req: AuthRequest, res: Response) => {
       metadata: contact.metadata,
       createdAt: contact.createdAt,
       updatedAt: contact.updatedAt,
+      stats,
+      instancesUsed,
       extractedData: extractedData.reduce((acc: any, e: any) => {
         acc[e.fieldKey] = e.fieldValue;
         return acc;
       }, {} as Record<string, string | null>),
-      orders,
-      appointments,
-      messages: messages.slice(0, 50),
-      timeline
+      orders: orders.slice(0, 10),
+      appointments: appointments.slice(0, 10),
+      timeline: timeline.slice(0, 15)
     });
   } catch (error: any) {
     console.error('[CONTACTS] Error getting contact:', error);
