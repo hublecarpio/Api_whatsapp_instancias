@@ -16,7 +16,9 @@ interface ParseOptions {
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 const DOCUMENT_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'xml', 'json', 'zip', 'rar'];
 const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'webm', '3gp'];
-const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'opus', 'm4a', 'aac'];
+// Meta Cloud soporta: aac, amr, mp3, m4a, ogg (solo OPUS)
+// WAV NO está soportado - se omite
+const AUDIO_EXTENSIONS = ['mp3', 'ogg', 'opus', 'm4a', 'aac', 'amr'];
 
 function getExtension(url: string): string {
   try {
@@ -69,11 +71,11 @@ function getMimeType(ext: string): string {
     webm: 'video/webm',
     '3gp': 'video/3gpp',
     mp3: 'audio/mpeg',
-    wav: 'audio/wav',
-    ogg: 'audio/ogg',
-    opus: 'audio/opus',
+    ogg: 'audio/ogg; codecs=opus',  // Meta requiere OPUS codec
+    opus: 'audio/ogg; codecs=opus',
     m4a: 'audio/mp4',
-    aac: 'audio/aac'
+    aac: 'audio/aac',
+    amr: 'audio/amr'
   };
   return mimeMap[ext] || 'application/octet-stream';
 }

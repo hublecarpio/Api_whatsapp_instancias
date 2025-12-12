@@ -221,13 +221,28 @@ export class MetaCloudService {
       const { buffer, mimeType } = await this.downloadFromUrl(audioUrl);
       console.log(`[META] Audio downloaded: ${buffer.length} bytes, type: ${mimeType}`);
       
-      const actualMimeType = mimeType.includes('mpeg') || mimeType.includes('mp3') 
-        ? 'audio/mpeg' 
-        : mimeType.includes('ogg') 
-          ? 'audio/ogg' 
-          : 'audio/mpeg';
+      // Meta Cloud soporta: audio/aac, audio/amr, audio/mpeg, audio/mp4, audio/ogg (OPUS)
+      // Para notas de voz nativas, OGG con OPUS es ideal
+      let actualMimeType = 'audio/mpeg'; // default a MP3
+      let extension = 'mp3';
       
-      const extension = actualMimeType === 'audio/mpeg' ? 'mp3' : 'ogg';
+      if (mimeType.includes('ogg') || mimeType.includes('opus')) {
+        actualMimeType = 'audio/ogg; codecs=opus';
+        extension = 'ogg';
+      } else if (mimeType.includes('mpeg') || mimeType.includes('mp3')) {
+        actualMimeType = 'audio/mpeg';
+        extension = 'mp3';
+      } else if (mimeType.includes('aac')) {
+        actualMimeType = 'audio/aac';
+        extension = 'aac';
+      } else if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+        actualMimeType = 'audio/mp4';
+        extension = 'm4a';
+      } else if (mimeType.includes('amr')) {
+        actualMimeType = 'audio/amr';
+        extension = 'amr';
+      }
+      
       const mediaId = await this.uploadMedia(buffer, actualMimeType, `voice.${extension}`);
       console.log('[META] Audio uploaded to Meta, media_id:', mediaId);
       
@@ -243,7 +258,7 @@ export class MetaCloudService {
         { headers: this.headers }
       );
 
-      console.log('[META] Audio message sent successfully');
+      console.log('[META] Audio message sent successfully as voice note');
       return response.data;
     } catch (uploadError: any) {
       console.error('[META] Audio upload/send failed:', uploadError.response?.data || uploadError.message);
