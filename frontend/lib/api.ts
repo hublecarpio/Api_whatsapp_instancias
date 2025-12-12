@@ -98,6 +98,7 @@ export const toolsApi = {
     headers?: Record<string, string>;
     bodyTemplate?: any;
     parameters?: Array<{ name: string; type: string; description: string; required?: boolean }>;
+    dynamicVariables?: Array<{ name: string; description: string; formatExample?: string }>;
   }) => api.post('/agent/tools', data),
   update: (id: string, data: any) => api.put(`/agent/tools/${id}`, data),
   delete: (id: string) => api.delete(`/agent/tools/${id}`),
