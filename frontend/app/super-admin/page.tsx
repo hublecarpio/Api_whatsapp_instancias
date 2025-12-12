@@ -326,6 +326,8 @@ function UsersTab({ token }: { token: string }) {
     if (actionLoading) return;
     setActionLoading(userId + '_pl');
     
+    const newValue = !currentEnabled;
+    
     try {
       const response = await fetch(`/api/super-admin/users/${userId}/payment-link`, {
         method: 'PATCH',
@@ -333,11 +335,16 @@ function UsersTab({ token }: { token: string }) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ paymentLinkEnabled: !currentEnabled })
+        body: JSON.stringify({ paymentLinkEnabled: newValue })
       });
       
       if (response.ok) {
-        setUsers(users.map(u => u.id === userId ? { ...u, paymentLinkEnabled: !currentEnabled } : u));
+        const data = await response.json();
+        const updatedValue = data.user?.paymentLinkEnabled ?? newValue;
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, paymentLinkEnabled: updatedValue } : u));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to toggle Payment Link:', errorData);
       }
     } catch (err) {
       console.error('Failed to toggle Payment Link:', err);
