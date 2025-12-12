@@ -417,6 +417,7 @@ model AgentTool {
   headers     Json?
   bodyTemplate Json?
   parameters  Json?
+  dynamicVariables Json?
   enabled     Boolean @default(true)
 
   prompt AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)

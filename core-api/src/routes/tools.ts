@@ -37,7 +37,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id, name, description, url, method, headers, bodyTemplate, parameters } = req.body;
+    const { business_id, name, description, url, method, headers, bodyTemplate, parameters, dynamicVariables } = req.body;
     
     if (!business_id || !name || !description || !url) {
       return res.status(400).json({ error: 'business_id, name, description, and url are required' });
@@ -70,7 +70,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         method: method || 'POST',
         headers: headers || null,
         bodyTemplate: bodyTemplate || null,
-        parameters: parameters || null
+        parameters: parameters || null,
+        dynamicVariables: dynamicVariables || null
       }
     });
     
@@ -83,7 +84,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, url, method, headers, bodyTemplate, parameters, enabled } = req.body;
+    const { name, description, url, method, headers, bodyTemplate, parameters, dynamicVariables, enabled } = req.body;
     
     const existing = await prisma.agentTool.findUnique({
       where: { id: req.params.id },
@@ -104,6 +105,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         headers: headers !== undefined ? headers : existing.headers,
         bodyTemplate: bodyTemplate !== undefined ? bodyTemplate : existing.bodyTemplate,
         parameters: parameters !== undefined ? parameters : existing.parameters,
+        dynamicVariables: dynamicVariables !== undefined ? dynamicVariables : existing.dynamicVariables,
         enabled: enabled !== undefined ? enabled : existing.enabled
       }
     });
