@@ -47,6 +47,7 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Business Availability Configuration**: Allows businesses to configure working hours and block dates.
 *   **Delivery Tracking**: Orders include `DELIVERED` status, delivery agent assignment, and quick action buttons.
 *   **Agent Files Library (V1)**: Businesses can upload documents and images with metadata for contextual AI use via the "enviar_archivo" AI tool.
+*   **Contact CRM System**: Dedicated Contact table with automatic creation on first message, tags, notes, email, message counts, first/last message timestamps, archive functionality, and full CRUD API. Supports filtering by tags and archived status.
 *   **Referral Code System**: Marketing tracking via unique referral URLs, with CRUD for codes and usage statistics.
 *   **Advisor/Agent System**: Role-based access control for team members with invitation workflow and contact assignment.
 *   **Round-Robin Lead Auto-Assignment**: Automatic lead distribution among selected advisors, configurable via the Team panel.
