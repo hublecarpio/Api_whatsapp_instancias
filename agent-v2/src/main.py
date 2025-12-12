@@ -85,6 +85,7 @@ class HealthResponse(BaseModel):
     version: str = "2.0.0"
     model: str
     features: List[str] = Field(default_factory=list)
+    dependencies: Dict[str, Any] = Field(default_factory=dict)
 
 
 @asynccontextmanager
@@ -93,12 +94,25 @@ async def lifespan(app: FastAPI):
     logger.info(f"Agent V2 Advanced starting on port {settings.port}")
     logger.info(f"Using model: {settings.openai_model}")
     
+    validation = settings.validate_required()
+    if validation["issues"]:
+        for issue in validation["issues"]:
+            logger.error(f"CONFIG ERROR: {issue}")
+    
+    if validation["warnings"]:
+        for warning in validation["warnings"]:
+            logger.warning(f"CONFIG WARNING: {warning}")
+    
+    logger.info(f"Config: OPENAI_API_KEY={'set' if settings.openai_api_key else 'NOT SET'}")
+    logger.info(f"Config: REDIS_URL={'set' if settings.redis_url else 'NOT SET'}")
+    logger.info(f"Config: CORE_API_URL={settings.core_api_url}")
+    
     if settings.openai_api_key:
         get_agent_graph()
         logger.info("Multi-agent graph initialized")
         logger.info("Features: Memory, Embeddings, Tools, Observer, Refiner")
     else:
-        logger.warning("OPENAI_API_KEY not set - agent will not work")
+        logger.error("OPENAI_API_KEY not set - agent will NOT work!")
     
     yield
     
@@ -124,8 +138,36 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     settings = get_settings()
+    validation = settings.validate_required()
+    
+    redis_ok = False
+    try:
+        from .core.memory import get_redis_client
+        client = get_redis_client()
+        if client:
+            client.ping()
+            redis_ok = True
+    except Exception:
+        pass
+    
+    core_api_ok = False
+    try:
+        import httpx
+        with httpx.Client(timeout=2.0) as client:
+            resp = client.get(f"{settings.core_api_url}/health")
+            core_api_ok = resp.status_code == 200
+    except Exception:
+        pass
+    
+    if not settings.openai_api_key:
+        status = "unhealthy"
+    elif not redis_ok or not core_api_ok:
+        status = "degraded"
+    else:
+        status = "healthy"
+    
     return HealthResponse(
-        status="healthy",
+        status=status,
         version="2.0.0",
         model=settings.openai_model,
         features=[
@@ -137,7 +179,14 @@ async def health_check():
             "observer",
             "refiner",
             "dynamic-learning"
-        ]
+        ],
+        dependencies={
+            "openai_api_key": bool(settings.openai_api_key),
+            "redis": redis_ok,
+            "core_api": core_api_ok,
+            "issues": validation["issues"],
+            "warnings": validation["warnings"]
+        }
     )
 
 
@@ -146,6 +195,7 @@ async def generate_response(request: GenerateRequest):
     settings = get_settings()
     
     if not settings.openai_api_key:
+        logger.error("Generate called but OPENAI_API_KEY is not set!")
         raise HTTPException(
             status_code=500, 
             detail="OpenAI API key not configured"
@@ -154,6 +204,8 @@ async def generate_response(request: GenerateRequest):
     try:
         business_id = request.business_context.business_id
         lead_id = request.sender_phone
+        
+        logger.info(f"[GENERATE] Processing request for business={business_id}, lead={lead_id}")
         
         lead_memory = get_memory(lead_id, business_id)
         
@@ -265,6 +317,8 @@ async def generate_response(request: GenerateRequest):
             tool_name = vendor_action.get("nombre_tool")
             tool_input = vendor_action.get("input_tool")
         
+        logger.info(f"[GENERATE] Success: type={response_type}, tokens={tokens_used}, response_len={len(final_response or '')}")
+        
         return GenerateResponse(
             success=True,
             type=response_type,
@@ -279,7 +333,7 @@ async def generate_response(request: GenerateRequest):
         )
         
     except Exception as e:
-        logger.error(f"Error generating response: {e}", exc_info=True)
+        logger.error(f"[GENERATE] Error for business={request.business_context.business_id}: {e}", exc_info=True)
         return GenerateResponse(
             success=False,
             type="message",

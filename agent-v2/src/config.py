@@ -4,6 +4,7 @@ from typing import Optional, Literal
 import httpx
 import time
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,32 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
+    
+    def validate_required(self) -> dict:
+        """Validate required settings and return status."""
+        issues = []
+        warnings = []
+        
+        if not self.openai_api_key:
+            issues.append("OPENAI_API_KEY is required but not set")
+        
+        if not self.redis_url:
+            warnings.append("REDIS_URL not set - memory will not persist")
+        
+        if self.core_api_url == "http://localhost:3001":
+            warnings.append("CORE_API_URL using default localhost - may not work in Docker")
+        
+        return {
+            "valid": len(issues) == 0,
+            "issues": issues,
+            "warnings": warnings,
+            "config": {
+                "openai_key_set": bool(self.openai_api_key),
+                "redis_url_set": bool(self.redis_url),
+                "core_api_url": self.core_api_url,
+                "port": self.port
+            }
+        }
 
 
 @lru_cache()
