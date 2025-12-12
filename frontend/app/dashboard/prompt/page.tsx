@@ -13,6 +13,12 @@ interface ToolParameter {
   required: boolean;
 }
 
+interface DynamicVariable {
+  name: string;
+  description: string;
+  formatExample: string;
+}
+
 interface Tool {
   id: string;
   name: string;
@@ -22,6 +28,7 @@ interface Tool {
   headers: Record<string, string> | null;
   bodyTemplate: any;
   parameters: ToolParameter[] | null;
+  dynamicVariables: DynamicVariable[] | null;
   enabled: boolean;
 }
 
@@ -123,7 +130,8 @@ export default function PromptPage() {
     method: 'POST',
     headers: '',
     bodyTemplate: '',
-    parameters: [] as ToolParameter[]
+    parameters: [] as ToolParameter[],
+    dynamicVariables: [] as DynamicVariable[]
   });
   const [testResult, setTestResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools' | 'files'>('prompt');
@@ -649,11 +657,12 @@ export default function PromptPage() {
         method: newTool.method,
         headers: headers || undefined,
         bodyTemplate: bodyTemplate || undefined,
-        parameters: newTool.parameters.length > 0 ? newTool.parameters : undefined
+        parameters: newTool.parameters.length > 0 ? newTool.parameters : undefined,
+        dynamicVariables: newTool.dynamicVariables.length > 0 ? newTool.dynamicVariables : undefined
       });
       
       setShowToolForm(false);
-      setNewTool({ name: '', description: '', url: '', method: 'POST', headers: '', bodyTemplate: '', parameters: [] });
+      setNewTool({ name: '', description: '', url: '', method: 'POST', headers: '', bodyTemplate: '', parameters: [], dynamicVariables: [] });
       loadData();
       setSuccess('Tool creado correctamente');
     } catch (err: any) {
@@ -693,7 +702,8 @@ export default function PromptPage() {
       method: tool.method,
       headers: tool.headers ? JSON.stringify(tool.headers) : '',
       bodyTemplate: tool.bodyTemplate ? JSON.stringify(tool.bodyTemplate, null, 2) : '',
-      parameters: tool.parameters || []
+      parameters: tool.parameters || [],
+      dynamicVariables: tool.dynamicVariables || []
     });
     setShowToolForm(true);
   };
@@ -735,12 +745,13 @@ export default function PromptPage() {
         method: newTool.method,
         headers: headers || undefined,
         bodyTemplate: bodyTemplate || undefined,
-        parameters: newTool.parameters.length > 0 ? newTool.parameters : null
+        parameters: newTool.parameters.length > 0 ? newTool.parameters : null,
+        dynamicVariables: newTool.dynamicVariables.length > 0 ? newTool.dynamicVariables : null
       });
       
       setShowToolForm(false);
       setEditingTool(null);
-      setNewTool({ name: '', description: '', url: '', method: 'POST', headers: '', bodyTemplate: '', parameters: [] });
+      setNewTool({ name: '', description: '', url: '', method: 'POST', headers: '', bodyTemplate: '', parameters: [], dynamicVariables: [] });
       loadData();
       setSuccess('Tool actualizado correctamente');
     } catch (err: any) {
@@ -753,7 +764,7 @@ export default function PromptPage() {
   const handleCancelToolForm = () => {
     setShowToolForm(false);
     setEditingTool(null);
-    setNewTool({ name: '', description: '', url: '', method: 'POST', headers: '', bodyTemplate: '', parameters: [] });
+    setNewTool({ name: '', description: '', url: '', method: 'POST', headers: '', bodyTemplate: '', parameters: [], dynamicVariables: [] });
   };
 
   const handleViewLogs = async (tool: Tool) => {
@@ -1672,6 +1683,86 @@ export default function PromptPage() {
                   )}
                 </div>
 
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Variables Dinamicas (AI)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setNewTool({
+                        ...newTool,
+                        dynamicVariables: [...newTool.dynamicVariables, { name: '', description: '', formatExample: '' }]
+                      })}
+                      className="text-sm text-purple-400 hover:text-purple-300"
+                    >
+                      + Agregar Variable
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Define variables que el AI extraera de la conversacion. Usa {"{{nombre}}"} en la URL o Body.
+                  </p>
+                  
+                  {newTool.dynamicVariables.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-2">Sin variables dinamicas</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {newTool.dynamicVariables.map((v, index) => (
+                        <div key={index} className="bg-dark-hover p-3 rounded space-y-2">
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="text"
+                              value={v.name}
+                              onChange={(e) => {
+                                const vars = [...newTool.dynamicVariables];
+                                vars[index].name = e.target.value.replace(/[^a-zA-Z0-9_]/g, '');
+                                setNewTool({ ...newTool, dynamicVariables: vars });
+                              }}
+                              className="input flex-1"
+                              placeholder="nombre_variable"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const vars = newTool.dynamicVariables.filter((_, i) => i !== index);
+                                setNewTool({ ...newTool, dynamicVariables: vars });
+                              }}
+                              className="text-accent-error hover:text-red-400"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={v.description}
+                            onChange={(e) => {
+                              const vars = [...newTool.dynamicVariables];
+                              vars[index].description = e.target.value;
+                              setNewTool({ ...newTool, dynamicVariables: vars });
+                            }}
+                            className="input w-full"
+                            placeholder="Descripcion para que el AI sepa que extraer"
+                          />
+                          <input
+                            type="text"
+                            value={v.formatExample}
+                            onChange={(e) => {
+                              const vars = [...newTool.dynamicVariables];
+                              vars[index].formatExample = e.target.value;
+                              setNewTool({ ...newTool, dynamicVariables: vars });
+                            }}
+                            className="input w-full font-mono text-sm"
+                            placeholder="Formato ejemplo: 2025-01-15 o 2025-01-15T10:30:00Z"
+                          />
+                          <p className="text-xs text-purple-400">
+                            Usa: {"{{" + (v.name || 'variable') + "}}"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex gap-2 mt-4">
                   <button
                     onClick={handleCancelToolForm}
@@ -1720,6 +1811,15 @@ export default function PromptPage() {
                             {tool.parameters.map((p, i) => (
                               <span key={i} className="text-xs bg-neon-blue/20 text-neon-blue px-2 py-0.5 rounded">
                                 {p.name}{p.required ? '*' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {tool.dynamicVariables && tool.dynamicVariables.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {tool.dynamicVariables.map((v, i) => (
+                              <span key={i} className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded" title={v.description + (v.formatExample ? ` (ej: ${v.formatExample})` : '')}>
+                                {"{{" + v.name + "}}"}
                               </span>
                             ))}
                           </div>
