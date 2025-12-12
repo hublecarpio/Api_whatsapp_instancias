@@ -5,6 +5,7 @@ import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage, logToken
 import { replacePromptVariables } from '../promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../agentV2Service.js';
 import { searchProductsIntelligent } from '../productSearch.js';
+import { parseAgentOutputToWhatsAppEvents, calculateTypingDelay, WhatsAppEvent } from '../agentOutputParser.js';
 import axios from 'axios';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
@@ -334,6 +335,11 @@ async function sendWhatsAppResponse(
       return;
     }
     
+    const events = parseAgentOutputToWhatsAppEvents(message);
+    console.log(`[AI Worker] Parsed ${events.length} events for ${cleanPhone}:`, events.map(e => e.type));
+    
+    const sentMedia: Array<{ type: string; url?: string }> = [];
+    
     if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
       console.log(`[AI Worker] Sending via Meta Cloud API to ${cleanPhone}`);
       const { MetaCloudService } = await import('../metaCloud.js');
@@ -342,17 +348,89 @@ async function sendWhatsAppResponse(
         phoneNumberId: instance.metaCredential.phoneNumberId,
         businessId: instance.metaCredential.businessId
       });
-      await metaService.sendMessage({
-        to: cleanPhone,
-        text: message
-      });
-      console.log(`[AI Worker] Meta Cloud message sent successfully to ${cleanPhone}`);
+      
+      for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        
+        if (i > 0) {
+          const delay = event.type === 'text' ? calculateTypingDelay(event.text || '') : 500;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        try {
+          if (event.type === 'text' && event.text) {
+            await metaService.sendTextMessage(cleanPhone, event.text);
+          } else if (event.type === 'image' && event.url) {
+            await metaService.sendImageMessage(cleanPhone, event.url, event.caption);
+            sentMedia.push({ type: 'image', url: event.url });
+          } else if (event.type === 'video' && event.url) {
+            await metaService.sendVideoMessage(cleanPhone, event.url, event.caption);
+            sentMedia.push({ type: 'video', url: event.url });
+          } else if (event.type === 'audio' && event.url) {
+            await metaService.sendAudioMessage(cleanPhone, event.url);
+            sentMedia.push({ type: 'audio', url: event.url });
+          } else if (event.type === 'document' && event.url) {
+            await metaService.sendDocumentMessage(cleanPhone, event.url, event.filename, event.caption);
+            sentMedia.push({ type: 'document', url: event.url });
+          }
+        } catch (eventError: any) {
+          console.error(`[AI Worker] Failed to send ${event.type} event:`, eventError.message);
+        }
+      }
+      
+      console.log(`[AI Worker] Meta Cloud: sent ${events.length} events to ${cleanPhone}`);
     } else if (instance.instanceBackendId) {
-      await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendMessage`, {
-        to: phone,
-        message
-      }, { timeout: 30000 });
-      console.log(`[AI Worker] Baileys message sent to ${cleanPhone}`);
+      const backendId = instance.instanceBackendId;
+      
+      for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        
+        if (i > 0) {
+          const delay = event.type === 'text' ? calculateTypingDelay(event.text || '') : 500;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        try {
+          if (event.type === 'text' && event.text) {
+            await axios.post(`${WA_API_URL}/instances/${backendId}/sendMessage`, {
+              to: phone,
+              message: event.text
+            }, { timeout: 30000 });
+          } else if (event.type === 'image' && event.url) {
+            await axios.post(`${WA_API_URL}/instances/${backendId}/sendImage`, {
+              to: phone,
+              url: event.url,
+              caption: event.caption
+            }, { timeout: 30000 });
+            sentMedia.push({ type: 'image', url: event.url });
+          } else if (event.type === 'video' && event.url) {
+            await axios.post(`${WA_API_URL}/instances/${backendId}/sendVideo`, {
+              to: phone,
+              url: event.url,
+              caption: event.caption
+            }, { timeout: 30000 });
+            sentMedia.push({ type: 'video', url: event.url });
+          } else if (event.type === 'audio' && event.url) {
+            await axios.post(`${WA_API_URL}/instances/${backendId}/sendAudio`, {
+              to: phone,
+              url: event.url
+            }, { timeout: 30000 });
+            sentMedia.push({ type: 'audio', url: event.url });
+          } else if (event.type === 'document' && event.url) {
+            await axios.post(`${WA_API_URL}/instances/${backendId}/sendFile`, {
+              to: phone,
+              url: event.url,
+              caption: event.caption,
+              filename: event.filename
+            }, { timeout: 30000 });
+            sentMedia.push({ type: 'document', url: event.url });
+          }
+        } catch (eventError: any) {
+          console.error(`[AI Worker] Failed to send ${event.type} event via Baileys:`, eventError.message);
+        }
+      }
+      
+      console.log(`[AI Worker] Baileys: sent ${events.length} events to ${cleanPhone}`);
     } else {
       console.error(`[AI Worker] No valid send method for instance ${instanceId}`);
       return;
@@ -369,7 +447,9 @@ async function sendWhatsAppResponse(
         metadata: { 
           source: 'ai_worker',
           provider: instance.provider || 'BAILEYS',
-          agentVersion: business.agentVersion || 'v1'
+          agentVersion: business.agentVersion || 'v1',
+          eventCount: events.length,
+          sentMedia: sentMedia.length > 0 ? sentMedia : undefined
         }
       }
     });
