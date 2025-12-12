@@ -82,6 +82,8 @@ export interface AIResponseJobData {
   instanceBackendId?: string;
   priority?: 'high' | 'normal' | 'low';
   bufferId?: string;
+  providerMessageId?: string;
+  provider?: string;
 }
 
 let reminderQueue: Queue<ReminderJobData> | null = null;

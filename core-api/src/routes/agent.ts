@@ -26,7 +26,9 @@ async function processWithAgentQueued(
   contactPhone: string,
   contactName: string,
   instanceId?: string,
-  instanceBackendId?: string
+  instanceBackendId?: string,
+  providerMessageId?: string,
+  provider?: string
 ): Promise<{ response: string; tokensUsed?: number; queued?: boolean }> {
   const queue = getAIResponseQueue();
   
@@ -39,7 +41,9 @@ async function processWithAgentQueued(
       phone,
       instanceId,
       instanceBackendId,
-      priority: 'normal'
+      priority: 'normal',
+      providerMessageId,
+      provider
     });
     
     if (jobId) {
@@ -48,7 +52,7 @@ async function processWithAgentQueued(
     }
   }
   
-  return await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId);
+  return await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId, providerMessageId, provider);
 }
 
 interface InternalRequest extends Request {
@@ -146,13 +150,29 @@ async function processExpiredBuffersLegacy() {
         });
         
         const instance = await prisma.whatsAppInstance.findFirst({
-          where: { businessId: buffer.businessId }
+          where: { businessId: buffer.businessId },
+          include: { metaCredential: true }
         });
         
         if (!business || !business.botEnabled) {
           await prisma.messageBuffer.delete({ where: { id: buffer.id } });
           continue;
         }
+        
+        // Get the last inbound message to retrieve providerMessageId
+        const lastInboundMessage = await prisma.messageLog.findFirst({
+          where: {
+            businessId: buffer.businessId,
+            sender: buffer.contactPhone,
+            direction: 'inbound'
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+        
+        const providerMessageId = lastInboundMessage?.providerMessageId || undefined;
+        const provider = instance?.provider || undefined;
+        
+        console.log(`[BUFFER-WORKER] Found providerMessageId=${providerMessageId || 'none'}, provider=${provider || 'unknown'} for ${bufferKey}`);
         
         const contactJid = `${buffer.contactPhone}@s.whatsapp.net`;
         const resolvedBackendId = instance?.instanceBackendId || `biz_${buffer.businessId.substring(0, 8)}`;
@@ -164,7 +184,9 @@ async function processExpiredBuffersLegacy() {
           buffer.contactPhone,
           '',
           instance?.id,
-          resolvedBackendId
+          resolvedBackendId,
+          providerMessageId,
+          provider
         );
         
         await prisma.messageBuffer.delete({ where: { id: buffer.id } });
@@ -586,7 +608,8 @@ async function processWithAgentV2(
   contactPhone: string,
   contactName: string,
   phone: string,
-  instanceBackendId?: string
+  instanceBackendId?: string,
+  providerMessageId?: string
 ): Promise<{ response: string; tokensUsed?: number }> {
   const historyLimit = business.promptMaster?.historyLimit || 10;
   const splitMessages = business.promptMaster?.splitMessages ?? true;
@@ -670,24 +693,28 @@ async function processWithAgentV2(
         
         // Mark message as read AFTER buffer expires (before responding)
         try {
-          console.log('[Agent V2] Looking for last inbound message from:', contactPhone, 'in business:', business.id);
-          const lastInboundMessage = await prisma.messageLog.findFirst({
-            where: {
-              businessId: business.id,
-              sender: contactPhone,
-              direction: 'inbound'
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { providerMessageId: true, sender: true, createdAt: true }
-          });
+          // Use the providerMessageId passed directly, or fallback to DB lookup
+          let messageIdToMark = providerMessageId;
           
-          console.log('[Agent V2] Found message:', lastInboundMessage);
+          if (!messageIdToMark) {
+            console.log('[Agent V2] No providerMessageId passed, looking up in DB for:', contactPhone);
+            const lastInboundMessage = await prisma.messageLog.findFirst({
+              where: {
+                businessId: business.id,
+                sender: contactPhone,
+                direction: 'inbound'
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { providerMessageId: true }
+            });
+            messageIdToMark = lastInboundMessage?.providerMessageId || undefined;
+          }
           
-          if (lastInboundMessage?.providerMessageId) {
-            await metaService.markMessageAsRead(lastInboundMessage.providerMessageId);
-            console.log('[Agent V2] Meta Cloud message marked as read:', lastInboundMessage.providerMessageId);
+          if (messageIdToMark) {
+            await metaService.markMessageAsRead(messageIdToMark);
+            console.log('[Agent V2] Meta Cloud message marked as read:', messageIdToMark);
           } else {
-            console.log('[Agent V2] No providerMessageId found for message');
+            console.log('[Agent V2] No providerMessageId available to mark as read');
           }
         } catch (readError: any) {
           console.log('Could not mark Meta message as read:', readError.message);
@@ -782,7 +809,9 @@ async function processWithAgent(
   contactPhone: string,
   contactName: string,
   instanceId?: string,
-  instanceBackendIdParam?: string
+  instanceBackendIdParam?: string,
+  providerMessageId?: string,
+  provider?: string
 ): Promise<{ response: string; tokensUsed?: number }> {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
@@ -837,7 +866,7 @@ async function processWithAgent(
       if (!v2Available) {
         console.log('[Agent V2] Service unavailable, falling back to V1');
       } else {
-        return await processWithAgentV2(business, messages, contactPhone, contactName, phone, backendId || undefined);
+        return await processWithAgentV2(business, messages, contactPhone, contactName, phone, backendId || undefined, providerMessageId);
       }
     } catch (v2Error: any) {
       console.error('[Agent V2] Error, falling back to V1:', v2Error.message);
@@ -1728,24 +1757,28 @@ async function processWithAgent(
         
         // Mark message as read AFTER buffer expires (before responding)
         try {
-          console.log('[META CLOUD] Looking for last inbound message from:', contactPhone, 'in business:', businessId);
-          const lastInboundMessage = await prisma.messageLog.findFirst({
-            where: {
-              businessId,
-              sender: contactPhone,
-              direction: 'inbound'
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { providerMessageId: true, sender: true, createdAt: true }
-          });
+          // Use the providerMessageId passed directly, or fallback to DB lookup
+          let messageIdToMark = providerMessageId;
           
-          console.log('[META CLOUD] Found message:', lastInboundMessage);
+          if (!messageIdToMark) {
+            console.log('[META CLOUD] No providerMessageId passed, looking up in DB for:', contactPhone);
+            const lastInboundMessage = await prisma.messageLog.findFirst({
+              where: {
+                businessId,
+                sender: contactPhone,
+                direction: 'inbound'
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { providerMessageId: true }
+            });
+            messageIdToMark = lastInboundMessage?.providerMessageId || undefined;
+          }
           
-          if (lastInboundMessage?.providerMessageId) {
-            await metaService.markMessageAsRead(lastInboundMessage.providerMessageId);
-            console.log('[META CLOUD] Message marked as read:', lastInboundMessage.providerMessageId);
+          if (messageIdToMark) {
+            await metaService.markMessageAsRead(messageIdToMark);
+            console.log('[META CLOUD] Message marked as read:', messageIdToMark);
           } else {
-            console.log('[META CLOUD] No providerMessageId found for message');
+            console.log('[META CLOUD] No providerMessageId available to mark as read');
           }
         } catch (readError: any) {
           console.log('Could not mark Meta message as read:', readError.message);
@@ -1825,7 +1858,7 @@ async function processWithAgent(
 
 router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Response) => {
   try {
-    const { business_id, user_message, phone, phoneNumber, contactName, instanceId, instanceBackendId } = req.body;
+    const { business_id, user_message, phone, phoneNumber, contactName, instanceId, instanceBackendId, providerMessageId, provider } = req.body;
     
     if (!business_id || !user_message || !phone) {
       return res.status(400).json({ error: 'business_id, user_message and phone are required' });
@@ -1881,6 +1914,10 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
         }
       });
       
+      // Capture the latest providerMessageId and provider for this buffer
+      const capturedProviderMessageId = providerMessageId;
+      const capturedProvider = provider;
+      
       const timeout = setTimeout(async () => {
         try {
           const buffer = await prisma.messageBuffer.findUnique({
@@ -1903,7 +1940,9 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
               contactPhone,
               contactName,
               instanceId,
-              instanceBackendId
+              instanceBackendId,
+              capturedProviderMessageId,
+              capturedProvider
             );
           }
         } catch (error) {
@@ -1928,7 +1967,9 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       contactPhone,
       contactName,
       instanceId,
-      instanceBackendId
+      instanceBackendId,
+      providerMessageId,
+      provider
     );
     
     if (result.queued) {

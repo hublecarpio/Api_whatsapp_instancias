@@ -6,6 +6,7 @@ import { replacePromptVariables } from '../promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../agentV2Service.js';
 import { searchProductsIntelligent } from '../productSearch.js';
 import { parseAgentOutputToWhatsAppEvents, calculateTypingDelay, WhatsAppEvent } from '../agentOutputParser.js';
+import { MetaCloudAPI } from '../metaCloud.js';
 import axios from 'axios';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
@@ -75,9 +76,9 @@ export async function queueAIResponse(data: AIResponseJobData): Promise<string |
 }
 
 async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ response: string; tokensUsed?: number }> {
-  const { businessId, contactPhone, contactName, messages, phone, instanceId, instanceBackendId, bufferId } = job.data;
+  const { businessId, contactPhone, contactName, messages, phone, instanceId, instanceBackendId, bufferId, providerMessageId, provider } = job.data;
   
-  console.log(`[AI Worker] Processing job ${job.id} for business ${businessId}, contact ${contactPhone}`);
+  console.log(`[AI Worker] Processing job ${job.id} for business ${businessId}, contact ${contactPhone}, provider=${provider || 'unknown'}, providerMessageId=${providerMessageId || 'none'}`);
   
   if (bufferId) {
     await prisma.messageBuffer.update({
@@ -112,6 +113,34 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
   }
   
   const targetInstanceId = instanceId || business.instances?.[0]?.id;
+  
+  // Mark message as read BEFORE processing (shows blue checkmarks after buffer expires)
+  if (provider === 'META_CLOUD' && providerMessageId && targetInstanceId) {
+    try {
+      const targetInstance = business.instances?.find((i: any) => i.id === targetInstanceId);
+      if (targetInstance?.metaCredential) {
+        const metaClient = new MetaCloudAPI({
+          phoneNumberId: targetInstance.metaCredential.phoneNumberId,
+          accessToken: targetInstance.metaCredential.accessToken,
+          businessAccountId: targetInstance.metaCredential.businessAccountId
+        });
+        await metaClient.markMessageAsRead(providerMessageId);
+        console.log(`[AI Worker] Meta Cloud: Marked message ${providerMessageId} as read for instance ${targetInstanceId}`);
+      }
+    } catch (markErr: any) {
+      console.error(`[AI Worker] Failed to mark Meta message as read:`, markErr.message);
+    }
+  } else if (provider === 'BAILEYS' && phone) {
+    // Baileys marks entire chat as read via WA API
+    try {
+      await axios.post(`${WA_API_URL}/instance/${instanceBackendId || targetInstanceId}/markAsRead`, {
+        phone: contactPhone
+      }).catch(() => {});
+      console.log(`[AI Worker] Baileys: Marked chat as read for ${contactPhone}`);
+    } catch (markErr: any) {
+      console.error(`[AI Worker] Failed to mark Baileys chat as read:`, markErr.message);
+    }
+  }
   
   let result: { response: string; tokensUsed?: number };
   
