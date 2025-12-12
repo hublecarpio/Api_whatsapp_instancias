@@ -181,6 +181,7 @@ async function processWithAgentV2Worker(
     headers: t.headers,
     bodyTemplate: t.bodyTemplate,
     parameters: t.parameters,
+    dynamicVariables: t.dynamicVariables,
     enabled: t.enabled ?? true
   }));
   

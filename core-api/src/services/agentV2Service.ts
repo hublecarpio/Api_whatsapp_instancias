@@ -88,6 +88,12 @@ export async function generateWithAgentV2(
   }
 }
 
+interface DynamicVariable {
+  name: string;
+  description: string;
+  formatExample?: string;
+}
+
 interface ToolConfig {
   name: string;
   description: string;
@@ -96,6 +102,7 @@ interface ToolConfig {
   headers?: Record<string, string>;
   bodyTemplate?: any;
   parameters?: any[];
+  dynamicVariables?: DynamicVariable[];
   enabled: boolean;
 }
 

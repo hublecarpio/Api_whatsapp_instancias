@@ -612,6 +612,7 @@ async function processWithAgentV2(
     headers: t.headers,
     bodyTemplate: t.bodyTemplate,
     parameters: t.parameters,
+    dynamicVariables: t.dynamicVariables,
     enabled: t.enabled ?? true
   }));
   
@@ -939,6 +940,7 @@ async function processWithAgent(
   
   const openaiTools: OpenAI.Chat.ChatCompletionTool[] = tools.map(tool => {
     const toolParams = (tool.parameters as any[]) || [];
+    const dynamicVars = (tool.dynamicVariables as any[]) || [];
     const properties: Record<string, any> = {};
     const required: string[] = [];
     
@@ -952,10 +954,22 @@ async function processWithAgent(
           required.push(param.name);
         }
       });
-    } else {
+    } else if (dynamicVars.length === 0) {
       properties['query'] = { type: 'string', description: 'The query or data to send to the external service' };
       required.push('query');
     }
+    
+    dynamicVars.forEach((v: any) => {
+      let desc = v.description || `Variable ${v.name}`;
+      if (v.formatExample) {
+        desc += ` (formato: ${v.formatExample})`;
+      }
+      properties[v.name] = {
+        type: 'string',
+        description: desc
+      };
+      required.push(v.name);
+    });
     
     return {
       type: 'function' as const,
