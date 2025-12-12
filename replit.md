@@ -40,8 +40,8 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Customizable Contact Data Extraction**: Allows AI to define and extract custom fields from conversations.
 *   **Intelligent Product Search**: Implements fuzzy matching for product search with typo tolerance.
 *   **Provider-Separated Token Usage Tracking**: Tracks token usage by provider and feature.
-*   **Pro-Tier Payment Links**: Restricts Stripe payment link generation to Pro users.
-*   **Voucher-Based Payment Confirmation (V1)**: For non-Pro users, allows order confirmation via client-sent payment proof images.
+*   **Payment Mode Control**: Uses `paymentLinkEnabled` on User model (controlled by Super Admin toggle) to determine payment flow. When enabled, creates Stripe payment links; when disabled, creates voucher-based orders requiring payment proof images.
+*   **Voucher-Based Payment Confirmation**: For users without payment links enabled, orders are created in AWAITING_VOUCHER status. Payment confirmation requires voucher image to be attached before status can change to PAID.
 *   **Dual Business Objectives (SALES/APPOINTMENTS)**: Businesses can toggle between e-commerce (SALES) and service (APPOINTMENTS) modes, dynamically adjusting UI and AI agent tools.
 *   **Appointment Scheduling System**: Full CRUD for appointments, status tracking, double-booking prevention, and automatic reminders. Includes `agendar_cita` and `consultar_disponibilidad` AI tools.
 *   **Business Availability Configuration**: Allows businesses to configure working hours and block dates.
