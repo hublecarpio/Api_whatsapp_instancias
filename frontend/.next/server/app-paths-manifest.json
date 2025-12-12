@@ -1,5 +1,6 @@
 {
   "/dashboard/templates/page": "app/dashboard/templates/page.js",
   "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
-  "/dashboard/broadcasts/page": "app/dashboard/broadcasts/page.js"
+  "/dashboard/broadcasts/page": "app/dashboard/broadcasts/page.js",
+  "/dashboard/contacts/page": "app/dashboard/contacts/page.js"
 }
