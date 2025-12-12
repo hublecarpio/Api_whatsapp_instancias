@@ -233,6 +233,139 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// IMPORTANT: This route MUST be before any /:phone routes to avoid parameter matching issues
+router.post('/refresh', async (req: AuthRequest, res: Response) => {
+  console.log('[CONTACTS REFRESH] Endpoint hit - request received');
+  try {
+    const userId = req.userId;
+    const { businessId } = req.body;
+
+    console.log(`[CONTACTS REFRESH] Starting refresh for businessId=${businessId}, userId=${userId}`);
+
+    if (!businessId) {
+      console.log('[CONTACTS REFRESH] Error: businessId not provided');
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      console.log(`[CONTACTS REFRESH] Business not found for id=${businessId}, userId=${userId}`);
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    console.log(`[CONTACTS REFRESH] Found business: ${business.name} (${business.id})`);
+
+    const messages = await prisma.messageLog.findMany({
+      where: { businessId: business.id },
+      select: {
+        sender: true,
+        recipient: true,
+        direction: true,
+        createdAt: true,
+        metadata: true
+      }
+    });
+
+    console.log(`[CONTACTS REFRESH] Found ${messages.length} messages in MessageLog for business ${business.id}`);
+
+    const phoneStats: Record<string, {
+      firstMessageAt: Date;
+      lastMessageAt: Date;
+      messageCount: number;
+      name: string | null;
+    }> = {};
+
+    for (const msg of messages) {
+      const phone = msg.direction === 'inbound' ? msg.sender : msg.recipient;
+      if (!phone || phone === business.id) continue;
+
+      const cleanPhone = phone.replace('@s.whatsapp.net', '').replace('@c.us', '');
+
+      if (!phoneStats[cleanPhone]) {
+        phoneStats[cleanPhone] = {
+          firstMessageAt: msg.createdAt,
+          lastMessageAt: msg.createdAt,
+          messageCount: 0,
+          name: null
+        };
+      }
+
+      phoneStats[cleanPhone].messageCount++;
+      if (msg.createdAt < phoneStats[cleanPhone].firstMessageAt) {
+        phoneStats[cleanPhone].firstMessageAt = msg.createdAt;
+      }
+      if (msg.createdAt > phoneStats[cleanPhone].lastMessageAt) {
+        phoneStats[cleanPhone].lastMessageAt = msg.createdAt;
+      }
+
+      if (msg.direction === 'inbound' && msg.metadata) {
+        const meta = msg.metadata as any;
+        if (meta.pushName && !phoneStats[cleanPhone].name) {
+          phoneStats[cleanPhone].name = meta.pushName;
+        }
+      }
+    }
+
+    let created = 0;
+    let updated = 0;
+
+    for (const [phone, stats] of Object.entries(phoneStats)) {
+      const existing = await prisma.contact.findUnique({
+        where: { businessId_phone: { businessId: business.id, phone } }
+      });
+
+      if (existing) {
+        const updates: any = {};
+        if (!existing.firstMessageAt || stats.firstMessageAt < existing.firstMessageAt) {
+          updates.firstMessageAt = stats.firstMessageAt;
+        }
+        if (!existing.lastMessageAt || stats.lastMessageAt > existing.lastMessageAt) {
+          updates.lastMessageAt = stats.lastMessageAt;
+        }
+        if (stats.messageCount > (existing.messageCount || 0)) {
+          updates.messageCount = stats.messageCount;
+        }
+        if (!existing.name && stats.name) {
+          updates.name = stats.name;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await prisma.contact.update({
+            where: { id: existing.id },
+            data: updates
+          });
+          updated++;
+        }
+      } else {
+        await prisma.contact.create({
+          data: {
+            businessId: business.id,
+            phone,
+            name: stats.name,
+            firstMessageAt: stats.firstMessageAt,
+            lastMessageAt: stats.lastMessageAt,
+            messageCount: stats.messageCount,
+            source: 'SYNC',
+            tags: [],
+            isArchived: false,
+            botDisabled: false
+          }
+        });
+        created++;
+      }
+    }
+
+    console.log(`[CONTACTS REFRESH] Completed for business ${business.id}: created=${created}, updated=${updated}`);
+    res.json({ success: true, created, updated, total: Object.keys(phoneStats).length });
+  } catch (error: any) {
+    console.error('[CONTACTS REFRESH] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/:phone', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
@@ -532,136 +665,6 @@ router.post('/:phone/archive', async (req: AuthRequest, res: Response) => {
     res.json(contact);
   } catch (error: any) {
     console.error('[CONTACTS] Error archiving contact:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.post('/refresh', async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId;
-    const { businessId } = req.body;
-
-    console.log(`[CONTACTS REFRESH] Starting refresh for businessId=${businessId}, userId=${userId}`);
-
-    if (!businessId) {
-      return res.status(400).json({ error: 'businessId es requerido' });
-    }
-
-    const business = await prisma.business.findFirst({
-      where: { id: businessId as string, userId }
-    });
-
-    if (!business) {
-      console.log(`[CONTACTS REFRESH] Business not found for id=${businessId}, userId=${userId}`);
-      return res.status(404).json({ error: 'Negocio no encontrado' });
-    }
-
-    console.log(`[CONTACTS REFRESH] Found business: ${business.name} (${business.id})`);
-
-    const messages = await prisma.messageLog.findMany({
-      where: { businessId: business.id },
-      select: {
-        sender: true,
-        recipient: true,
-        direction: true,
-        createdAt: true,
-        metadata: true
-      }
-    });
-
-    console.log(`[CONTACTS REFRESH] Found ${messages.length} messages in MessageLog for business ${business.id}`);
-
-    const phoneStats: Record<string, {
-      firstMessageAt: Date;
-      lastMessageAt: Date;
-      messageCount: number;
-      name: string | null;
-    }> = {};
-
-    for (const msg of messages) {
-      const phone = msg.direction === 'inbound' ? msg.sender : msg.recipient;
-      if (!phone || phone === business.id) continue;
-
-      const cleanPhone = phone.replace('@s.whatsapp.net', '').replace('@c.us', '');
-
-      if (!phoneStats[cleanPhone]) {
-        phoneStats[cleanPhone] = {
-          firstMessageAt: msg.createdAt,
-          lastMessageAt: msg.createdAt,
-          messageCount: 0,
-          name: null
-        };
-      }
-
-      phoneStats[cleanPhone].messageCount++;
-      if (msg.createdAt < phoneStats[cleanPhone].firstMessageAt) {
-        phoneStats[cleanPhone].firstMessageAt = msg.createdAt;
-      }
-      if (msg.createdAt > phoneStats[cleanPhone].lastMessageAt) {
-        phoneStats[cleanPhone].lastMessageAt = msg.createdAt;
-      }
-
-      if (msg.direction === 'inbound' && msg.metadata) {
-        const meta = msg.metadata as any;
-        if (meta.pushName && !phoneStats[cleanPhone].name) {
-          phoneStats[cleanPhone].name = meta.pushName;
-        }
-      }
-    }
-
-    let created = 0;
-    let updated = 0;
-
-    for (const [phone, stats] of Object.entries(phoneStats)) {
-      const existing = await prisma.contact.findUnique({
-        where: { businessId_phone: { businessId: business.id, phone } }
-      });
-
-      if (existing) {
-        const updates: any = {};
-        if (!existing.firstMessageAt || stats.firstMessageAt < existing.firstMessageAt) {
-          updates.firstMessageAt = stats.firstMessageAt;
-        }
-        if (!existing.lastMessageAt || stats.lastMessageAt > existing.lastMessageAt) {
-          updates.lastMessageAt = stats.lastMessageAt;
-        }
-        if (stats.messageCount > (existing.messageCount || 0)) {
-          updates.messageCount = stats.messageCount;
-        }
-        if (!existing.name && stats.name) {
-          updates.name = stats.name;
-        }
-
-        if (Object.keys(updates).length > 0) {
-          await prisma.contact.update({
-            where: { id: existing.id },
-            data: updates
-          });
-          updated++;
-        }
-      } else {
-        await prisma.contact.create({
-          data: {
-            businessId: business.id,
-            phone,
-            name: stats.name,
-            firstMessageAt: stats.firstMessageAt,
-            lastMessageAt: stats.lastMessageAt,
-            messageCount: stats.messageCount,
-            source: 'SYNC',
-            tags: [],
-            isArchived: false,
-            botDisabled: false
-          }
-        });
-        created++;
-      }
-    }
-
-    console.log(`[CONTACTS] Refresh completed for business ${business.id}: created=${created}, updated=${updated}`);
-    res.json({ success: true, created, updated, total: Object.keys(phoneStats).length });
-  } catch (error: any) {
-    console.error('[CONTACTS] Error refreshing contacts:', error);
     res.status(500).json({ error: error.message });
   }
 });
