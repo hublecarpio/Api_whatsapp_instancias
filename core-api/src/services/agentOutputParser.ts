@@ -232,7 +232,8 @@ export function parseAgentOutputToWhatsAppEvents(raw: string, options: ParseOpti
 
   if (!raw || typeof raw !== 'string') return [];
 
-  const text = raw.replace(/\r\n/g, '\n').trim();
+  // Replace ** with * to avoid double asterisks in WhatsApp formatting
+  const text = raw.replace(/\*\*/g, '*').replace(/\r\n/g, '\n').trim();
   const urlRegex = /(https?:\/\/[^\s)]+)(?=\s|$)/g;
 
   interface Token { type: 'text' | 'url'; value: string }
