@@ -1,0 +1,46 @@
+ => [builder 4/5] COPY . .                                                                                                                                             2.0s 
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             36.8s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+1.067                                                                                                                                                                       
+1.067 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+1.067 > next build                                                                                                                                                          
+1.067                                                                                                                                                                       
+2.006 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2.007 This information is used to shape Next.js' roadmap and prioritize features.
+2.007 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2.007 https://nextjs.org/telemetry
+2.007 
+2.112   ▲ Next.js 14.2.16
+2.112 
+2.240    Creating an optimized production build ...
+27.88  ✓ Compiled successfully
+27.88    Linting and checking validity of types ...
+36.60 Failed to compile.
+36.60 
+36.60 ./app/dashboard/prompt/page.tsx:661:9
+36.60 Type error: Object literal may only specify known properties, and 'dynamicVariables' does not exist in type '{ business_id: string; name: string; description: string; url: string; method?: string | undefined; headers?: Record<string, string> | undefined; bodyTemplate?: any; parameters?: { ...; }[] | undefined; }'.
+36.60 
+36.60   659 |         bodyTemplate: bodyTemplate || undefined,
+36.60   660 |         parameters: newTool.parameters.length > 0 ? newTool.parameters : undefined,
+36.60 > 661 |         dynamicVariables: newTool.dynamicVariables.length > 0 ? newTool.dynamicVariables : undefined
+36.60       |         ^
+36.60   662 |       });
+36.60   663 |       
+36.60   664 |       setShowToolForm(false);
+36.67 npm notice
+36.67 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+36.67 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+36.67 npm notice To update run: npm install -g npm@11.7.0
+36.67 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+[+] Building 52.5s (25/25) FINISHED                                                                                                                          docker:default
