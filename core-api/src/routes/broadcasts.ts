@@ -95,6 +95,7 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
       templateId,
       templateParams,
       contactPhones,
+      contactsWithVariables,
       delayMinSeconds,
       delayMaxSeconds
     } = req.body;
@@ -103,7 +104,10 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Campaign name is required' });
     }
 
-    if (!contactPhones || !Array.isArray(contactPhones) || contactPhones.length === 0) {
+    const hasContacts = (contactPhones && Array.isArray(contactPhones) && contactPhones.length > 0) ||
+                        (contactsWithVariables && Array.isArray(contactsWithVariables) && contactsWithVariables.length > 0);
+    
+    if (!hasContacts) {
       return res.status(400).json({ error: 'At least one contact is required' });
     }
 
@@ -115,6 +119,9 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Media URL is required for media messages' });
     }
 
+    const finalContactsWithVars = contactsWithVariables || 
+      (contactPhones ? contactPhones.map((phone: string) => ({ phone, variables: [] })) : []);
+
     const result = await broadcastService.createBroadcastCampaign({
       businessId: req.params.businessId,
       name,
@@ -125,7 +132,7 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
       fileName,
       templateId,
       templateParams,
-      contactPhones,
+      contactsWithVariables: finalContactsWithVars,
       delayMinSeconds: delayMinSeconds || 3,
       delayMaxSeconds: delayMaxSeconds || 10,
       createdBy: req.userId

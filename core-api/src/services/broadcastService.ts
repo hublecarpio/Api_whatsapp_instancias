@@ -25,6 +25,16 @@ function getRandomDelay(minSeconds: number, maxSeconds: number): number {
   return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
 }
 
+function interpolateVariables(text: string | null, variables: string[]): string | null {
+  if (!text) return text;
+  let result = text;
+  for (let i = 0; i < variables.length; i++) {
+    const placeholder = `{{${i + 1}}}`;
+    result = result.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), variables[i] || '');
+  }
+  return result;
+}
+
 export async function isWithin24HourWindow(businessId: string, contactPhone: string): Promise<boolean> {
   const cleanPhone = contactPhone.replace(/\D/g, '');
   
@@ -48,6 +58,7 @@ export async function sendBroadcastMessage(
   logId: string,
   contactPhone: string,
   contactName: string | null,
+  variables: string[],
   campaign: {
     businessId: string;
     messageType: BroadcastMessageType;
@@ -60,6 +71,15 @@ export async function sendBroadcastMessage(
   }
 ): Promise<{ success: boolean; usedTemplate: boolean; error?: string }> {
   const cleanPhone = contactPhone.replace(/\D/g, '');
+
+  const interpolatedContent = interpolateVariables(campaign.content, variables);
+  const interpolatedCaption = interpolateVariables(campaign.mediaCaption, variables);
+  
+  const interpolatedCampaign = {
+    ...campaign,
+    content: interpolatedContent,
+    mediaCaption: interpolatedCaption
+  };
 
   try {
     const instance = await prisma.whatsAppInstance.findFirst({
@@ -97,19 +117,32 @@ export async function sendBroadcastMessage(
           return { success: false, usedTemplate: true, error: 'Template not found' };
         }
 
+        let templateComponents = campaign.templateParams || [];
+        if (variables.length > 0) {
+          const bodyComponent = { type: 'body', parameters: variables.map(v => ({ type: 'text', text: v })) };
+          const hasBody = templateComponents.some((c: any) => c.type === 'body');
+          if (hasBody) {
+            templateComponents = templateComponents.map((c: any) => 
+              c.type === 'body' ? bodyComponent : c
+            );
+          } else {
+            templateComponents = [...templateComponents, bodyComponent];
+          }
+        }
+
         await metaService.sendTemplate({
           to: cleanPhone,
           templateName: template.name,
           language: template.language,
-          components: campaign.templateParams || []
+          components: templateComponents
         });
       } else if (!within24h && !campaign.templateId) {
         return { success: false, usedTemplate: false, error: 'Outside 24h window and no template configured' };
       } else {
-        await sendMetaCloudMessage(metaService, cleanPhone, campaign);
+        await sendMetaCloudMessage(metaService, cleanPhone, interpolatedCampaign);
       }
     } else {
-      await sendBaileysMessage(instance.instanceBackendId!, cleanPhone, campaign);
+      await sendBaileysMessage(instance.instanceBackendId!, cleanPhone, interpolatedCampaign);
     }
 
     await prisma.broadcastLog.update({
@@ -277,11 +310,15 @@ export async function runBroadcastCampaign(campaignId: string): Promise<Broadcas
       data: { status: 'SENDING' }
     });
 
+    const logMetadata = log.metadata as { variables?: string[] } | null;
+    const variables = logMetadata?.variables || [];
+
     const result = await sendBroadcastMessage(
       campaignId,
       log.id,
       log.contactPhone,
       log.contactName,
+      variables,
       campaign
     );
 
@@ -324,6 +361,11 @@ export async function runBroadcastCampaign(campaignId: string): Promise<Broadcas
   return { success: true, sentCount, failedCount, skippedCount };
 }
 
+interface ContactWithVariables {
+  phone: string;
+  variables: string[];
+}
+
 export async function createBroadcastCampaign(params: {
   businessId: string;
   name: string;
@@ -334,15 +376,57 @@ export async function createBroadcastCampaign(params: {
   fileName?: string;
   templateId?: string;
   templateParams?: any;
-  contactPhones: string[];
+  contactsWithVariables: ContactWithVariables[];
   delayMinSeconds?: number;
   delayMaxSeconds?: number;
   createdBy?: string;
 }): Promise<{ campaignId: string; totalContacts: number }> {
-  const contacts = await prisma.contact.findMany({
+  const phoneToVars: Record<string, string[]> = {};
+  const allPhones: string[] = [];
+  const seenPhones = new Set<string>();
+  
+  for (const c of params.contactsWithVariables) {
+    const normalizedPhone = c.phone.replace(/\D/g, '');
+    if (normalizedPhone.length < 10 || seenPhones.has(normalizedPhone)) {
+      continue;
+    }
+    seenPhones.add(normalizedPhone);
+    phoneToVars[normalizedPhone] = c.variables;
+    allPhones.push(normalizedPhone);
+  }
+  
+  if (allPhones.length === 0) {
+    throw new Error('No valid phone numbers provided');
+  }
+
+  const existingContacts = await prisma.contact.findMany({
     where: {
       businessId: params.businessId,
-      phone: { in: params.contactPhones.map(p => p.replace(/\D/g, '')) }
+      phone: { in: allPhones }
+    }
+  });
+  
+  const existingPhones = new Set(existingContacts.map(c => c.phone));
+  
+  const now = new Date();
+  const newContactsData = allPhones
+    .filter(phone => !existingPhones.has(phone))
+    .map(phone => ({
+      businessId: params.businessId,
+      phone,
+      name: phoneToVars[phone]?.[0] || null,
+      firstMessageAt: now,
+      lastMessageAt: now
+    }));
+  
+  if (newContactsData.length > 0) {
+    await prisma.contact.createMany({ data: newContactsData, skipDuplicates: true });
+  }
+
+  const allContacts = await prisma.contact.findMany({
+    where: {
+      businessId: params.businessId,
+      phone: { in: allPhones }
     }
   });
 
@@ -358,24 +442,25 @@ export async function createBroadcastCampaign(params: {
       fileName: params.fileName,
       templateId: params.templateId,
       templateParams: params.templateParams,
-      contactIds: contacts.map(c => c.id),
+      contactIds: allContacts.map(c => c.id),
       delayMinSeconds: params.delayMinSeconds || 3,
       delayMaxSeconds: params.delayMaxSeconds || 10,
-      totalContacts: contacts.length,
+      totalContacts: allContacts.length,
       createdBy: params.createdBy
     }
   });
 
-  const logs = contacts.map(contact => ({
+  const logs = allContacts.map(contact => ({
     campaignId: campaign.id,
     contactPhone: contact.phone,
     contactName: contact.name,
-    status: 'PENDING' as BroadcastLogStatus
+    status: 'PENDING' as BroadcastLogStatus,
+    metadata: { variables: phoneToVars[contact.phone] || [] }
   }));
 
   await prisma.broadcastLog.createMany({ data: logs });
 
-  return { campaignId: campaign.id, totalContacts: contacts.length };
+  return { campaignId: campaign.id, totalContacts: allContacts.length };
 }
 
 export async function pauseBroadcastCampaign(campaignId: string): Promise<void> {

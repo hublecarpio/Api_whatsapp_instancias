@@ -58,6 +58,11 @@ interface Campaign {
 
 type MessageType = 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
 
+interface CSVContact {
+  phone: string;
+  variables: string[];
+}
+
 export default function BroadcastsPage() {
   const { currentBusiness } = useBusinessStore();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -72,17 +77,22 @@ export default function BroadcastsPage() {
 
   const [formData, setFormData] = useState({
     name: '',
-    messageType: 'TEXT' as MessageType,
     content: '',
+    includeMedia: false,
+    mediaFile: null as File | null,
     mediaUrl: '',
-    mediaCaption: '',
-    fileName: '',
+    mediaType: 'IMAGE' as 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT',
     templateId: '',
-    selectedContacts: [] as string[],
     delayMinSeconds: 3,
     delayMaxSeconds: 10,
-    selectAll: false
   });
+
+  const [contactSource, setContactSource] = useState<'crm' | 'csv'>('crm');
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
+  const [csvText, setCsvText] = useState('');
+  const [csvContacts, setCsvContacts] = useState<CSVContact[]>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const isMetaCloud = instance?.provider === 'META_CLOUD';
 
@@ -172,36 +182,108 @@ export default function BroadcastsPage() {
     }
   };
 
+  const parseCSV = (text: string): CSVContact[] => {
+    const lines = text.trim().split('\n').filter(l => l.trim());
+    const result: CSVContact[] = [];
+    const seenPhones = new Set<string>();
+    
+    for (const line of lines) {
+      const parts = line.split(',').map(p => p.trim());
+      if (parts.length > 0 && parts[0]) {
+        const phone = parts[0].replace(/\D/g, '');
+        if (phone.length >= 10 && !seenPhones.has(phone)) {
+          seenPhones.add(phone);
+          result.push({
+            phone,
+            variables: parts.slice(1)
+          });
+        }
+      }
+    }
+    return result;
+  };
+
+  const handleCSVChange = (text: string) => {
+    setCsvText(text);
+    setCsvContacts(parseCSV(text));
+  };
+
+  const handleCSVFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    handleCSVChange(text);
+  };
+
+  const handleMediaFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentBusiness?.id) return;
+
+    setFormData(prev => ({ ...prev, mediaFile: file, mediaUrl: '' }));
+    setUploadingMedia(true);
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('businessId', currentBusiness.id);
+
+      const response = await axios.post(`${API_URL}/media/upload`, fd, {
+        headers: {
+          ...getAuthHeader(),
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setFormData(prev => ({ ...prev, mediaUrl: response.data.url }));
+    } catch (error: any) {
+      console.error('Error uploading media:', error);
+      alert('Error subiendo archivo: ' + (error.response?.data?.error || error.message));
+      setFormData(prev => ({ ...prev, mediaFile: null }));
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
   const createCampaign = async () => {
     if (!currentBusiness?.id) return;
     if (!formData.name.trim()) {
       alert('El nombre de la campana es requerido');
       return;
     }
-    if (formData.selectedContacts.length === 0) {
+
+    const finalContacts = contactSource === 'crm' 
+      ? selectedContacts.map(phone => ({ phone, variables: [] as string[] }))
+      : csvContacts;
+
+    if (finalContacts.length === 0) {
       alert('Selecciona al menos un contacto');
       return;
     }
-    if (formData.messageType === 'TEXT' && !formData.content.trim()) {
-      alert('El contenido del mensaje es requerido');
+
+    if (!formData.content.trim() && !formData.includeMedia) {
+      alert('Debes incluir un mensaje o un archivo');
       return;
     }
-    if (['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT'].includes(formData.messageType) && !formData.mediaUrl.trim()) {
-      alert('La URL del medio es requerida');
+
+    if (formData.includeMedia && !formData.mediaUrl) {
+      alert('Sube un archivo primero');
       return;
     }
 
     try {
       setCreating(true);
+
+      const messageType = formData.includeMedia ? formData.mediaType : 'TEXT';
+      const mediaCaption = formData.includeMedia && formData.content.trim() ? formData.content : undefined;
+
       const response = await axios.post(`${API_URL}/broadcasts/${currentBusiness.id}`, {
         name: formData.name,
-        messageType: formData.messageType,
-        content: formData.content || undefined,
-        mediaUrl: formData.mediaUrl || undefined,
-        mediaCaption: formData.mediaCaption || undefined,
-        fileName: formData.fileName || undefined,
+        messageType,
+        content: formData.includeMedia ? undefined : formData.content || undefined,
+        mediaUrl: formData.includeMedia ? formData.mediaUrl : undefined,
+        mediaCaption,
         templateId: formData.templateId || undefined,
-        contactPhones: formData.selectedContacts,
+        contactsWithVariables: finalContacts,
         delayMinSeconds: formData.delayMinSeconds,
         delayMaxSeconds: formData.delayMaxSeconds
       }, { headers: getAuthHeader() });
@@ -210,17 +292,20 @@ export default function BroadcastsPage() {
       setShowNewCampaign(false);
       setFormData({
         name: '',
-        messageType: 'TEXT',
         content: '',
+        includeMedia: false,
+        mediaFile: null,
         mediaUrl: '',
-        mediaCaption: '',
-        fileName: '',
+        mediaType: 'IMAGE',
         templateId: '',
-        selectedContacts: [],
         delayMinSeconds: 3,
         delayMaxSeconds: 10,
-        selectAll: false
       });
+      setContactSource('crm');
+      setSelectedContacts([]);
+      setSelectAll(false);
+      setCsvText('');
+      setCsvContacts([]);
       loadCampaigns();
     } catch (error: any) {
       console.error('Error creating campaign:', error);
@@ -296,24 +381,23 @@ export default function BroadcastsPage() {
     }
   };
 
-  const toggleContactSelection = (phone: string) => {
-    setFormData(prev => ({
-      ...prev,
-      selectedContacts: prev.selectedContacts.includes(phone)
-        ? prev.selectedContacts.filter(p => p !== phone)
-        : [...prev.selectedContacts, phone]
-    }));
-  };
 
   const toggleSelectAll = () => {
-    if (formData.selectAll) {
-      setFormData(prev => ({ ...prev, selectedContacts: [], selectAll: false }));
+    if (selectAll) {
+      setSelectedContacts([]);
+      setSelectAll(false);
     } else {
-      setFormData(prev => ({ 
-        ...prev, 
-        selectedContacts: contacts.map(c => c.phone),
-        selectAll: true
-      }));
+      setSelectedContacts(contacts.map(c => c.phone));
+      setSelectAll(true);
+    }
+  };
+
+  const toggleContact = (phone: string) => {
+    if (selectedContacts.includes(phone)) {
+      setSelectedContacts(prev => prev.filter(p => p !== phone));
+      setSelectAll(false);
+    } else {
+      setSelectedContacts(prev => [...prev, phone]);
     }
   };
 
@@ -581,71 +665,73 @@ export default function BroadcastsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Mensaje</label>
-                <select
-                  value={formData.messageType}
-                  onChange={e => setFormData(prev => ({ ...prev, messageType: e.target.value as MessageType }))}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mensaje de Texto</label>
+                <textarea
+                  value={formData.content}
+                  onChange={e => setFormData(prev => ({ ...prev, content: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2"
-                >
-                  <option value="TEXT">Texto</option>
-                  <option value="IMAGE">Imagen</option>
-                  <option value="VIDEO">Video</option>
-                  <option value="AUDIO">Audio</option>
-                  <option value="DOCUMENT">Documento</option>
-                </select>
+                  rows={4}
+                  placeholder="Escribe tu mensaje aqui... Usa {{1}}, {{2}} para variables del CSV"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Usa variables como {'{{1}}'}, {'{{2}}'} que seran reemplazadas con datos del CSV
+                </p>
               </div>
 
-              {formData.messageType === 'TEXT' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Mensaje</label>
-                  <textarea
-                    value={formData.content}
-                    onChange={e => setFormData(prev => ({ ...prev, content: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2"
-                    rows={4}
-                    placeholder="Escribe tu mensaje aqui..."
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.includeMedia}
+                    onChange={e => setFormData(prev => ({ ...prev, includeMedia: e.target.checked }))}
+                    className="w-4 h-4"
                   />
-                </div>
-              )}
+                  <span className="text-sm font-medium text-gray-700">Incluir archivo (imagen, video, audio o documento)</span>
+                </label>
 
-              {['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT'].includes(formData.messageType) && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">URL del Medio</label>
-                    <input
-                      type="url"
-                      value={formData.mediaUrl}
-                      onChange={e => setFormData(prev => ({ ...prev, mediaUrl: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2"
-                      placeholder="https://ejemplo.com/archivo.jpg"
-                    />
+                {formData.includeMedia && (
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Archivo</label>
+                      <select
+                        value={formData.mediaType}
+                        onChange={e => setFormData(prev => ({ ...prev, mediaType: e.target.value as 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' }))}
+                        className="w-full border rounded-lg px-3 py-2"
+                      >
+                        <option value="IMAGE">Imagen</option>
+                        <option value="VIDEO">Video</option>
+                        <option value="AUDIO">Audio</option>
+                        <option value="DOCUMENT">Documento</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Subir Archivo</label>
+                      <input
+                        type="file"
+                        onChange={handleMediaFileChange}
+                        accept={
+                          formData.mediaType === 'IMAGE' ? 'image/*' :
+                          formData.mediaType === 'VIDEO' ? 'video/*' :
+                          formData.mediaType === 'AUDIO' ? 'audio/*' :
+                          '*'
+                        }
+                        className="w-full border rounded-lg px-3 py-2"
+                        disabled={uploadingMedia}
+                      />
+                      {uploadingMedia && (
+                        <p className="text-sm text-blue-600 mt-1">Subiendo archivo...</p>
+                      )}
+                      {formData.mediaUrl && (
+                        <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm">
+                          <p className="text-green-700 font-medium">Archivo subido correctamente</p>
+                          <p className="text-green-600 text-xs break-all">{formData.mediaUrl}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {formData.messageType !== 'AUDIO' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Caption (opcional)</label>
-                      <input
-                        type="text"
-                        value={formData.mediaCaption}
-                        onChange={e => setFormData(prev => ({ ...prev, mediaCaption: e.target.value }))}
-                        className="w-full border rounded-lg px-3 py-2"
-                        placeholder="Descripcion del medio"
-                      />
-                    </div>
-                  )}
-                  {formData.messageType === 'DOCUMENT' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Archivo</label>
-                      <input
-                        type="text"
-                        value={formData.fileName}
-                        onChange={e => setFormData(prev => ({ ...prev, fileName: e.target.value }))}
-                        className="w-full border rounded-lg px-3 py-2"
-                        placeholder="documento.pdf"
-                      />
-                    </div>
-                  )}
-                </>
-              )}
+                )}
+              </div>
 
               {isMetaCloud && templates.length > 0 && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -666,7 +752,6 @@ export default function BroadcastsPage() {
                   </select>
                   <p className="text-xs text-blue-600 mt-2">
                     Los contactos que no hayan escrito en 24h recibiran esta plantilla en lugar del mensaje normal.
-                    Si no seleccionas plantilla, esos contactos seran omitidos.
                   </p>
                 </div>
               )}
@@ -707,40 +792,110 @@ export default function BroadcastsPage() {
                 Cada mensaje se enviara con un delay aleatorio entre {formData.delayMinSeconds} y {formData.delayMaxSeconds} segundos
               </p>
 
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Seleccionar Contactos</label>
-                  <button
-                    onClick={toggleSelectAll}
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    {formData.selectAll ? 'Deseleccionar todos' : 'Seleccionar todos'}
-                  </button>
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Origen de Contactos</label>
+                <div className="flex gap-4 mb-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="contactSource"
+                      checked={contactSource === 'crm'}
+                      onChange={() => setContactSource('crm')}
+                    />
+                    <span className="text-sm">Contactos CRM</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="contactSource"
+                      checked={contactSource === 'csv'}
+                      onChange={() => setContactSource('csv')}
+                    />
+                    <span className="text-sm">Importar CSV</span>
+                  </label>
                 </div>
-                <div className="border rounded-lg max-h-48 overflow-y-auto">
-                  {contacts.length === 0 ? (
-                    <p className="p-3 text-gray-500 text-sm">No hay contactos</p>
-                  ) : (
-                    contacts.map(contact => (
-                      <label
-                        key={contact.id}
-                        className="flex items-center p-2 hover:bg-gray-50 cursor-pointer"
+
+                {contactSource === 'crm' && (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm text-gray-600">Seleccionar de tu lista de contactos</span>
+                      <button
+                        type="button"
+                        onClick={toggleSelectAll}
+                        className="text-sm text-blue-600 hover:text-blue-800"
                       >
-                        <input
-                          type="checkbox"
-                          checked={formData.selectedContacts.includes(contact.phone)}
-                          onChange={() => toggleContactSelection(contact.phone)}
-                          className="mr-3"
-                        />
-                        <span className="text-sm">
-                          {contact.name || contact.phone}
-                          {contact.name && <span className="text-gray-400 ml-1">({contact.phone})</span>}
-                        </span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                <p className="text-sm text-gray-500 mt-1">{formData.selectedContacts.length} contactos seleccionados</p>
+                        {selectAll ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                      </button>
+                    </div>
+                    <div className="border rounded-lg max-h-48 overflow-y-auto">
+                      {contacts.length === 0 ? (
+                        <p className="p-3 text-gray-500 text-sm">No hay contactos</p>
+                      ) : (
+                        contacts.map(contact => (
+                          <label
+                            key={contact.id}
+                            className="flex items-center p-2 hover:bg-gray-50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedContacts.includes(contact.phone)}
+                              onChange={() => toggleContact(contact.phone)}
+                              className="mr-3"
+                            />
+                            <span className="text-sm">
+                              {contact.name || contact.phone}
+                              {contact.name && <span className="text-gray-400 ml-1">({contact.phone})</span>}
+                            </span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">{selectedContacts.length} contactos seleccionados</p>
+                  </div>
+                )}
+
+                {contactSource === 'csv' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">Subir archivo CSV</label>
+                      <input
+                        type="file"
+                        accept=".csv,.txt"
+                        onChange={handleCSVFileUpload}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">O pegar contenido CSV</label>
+                      <textarea
+                        value={csvText}
+                        onChange={e => handleCSVChange(e.target.value)}
+                        className="w-full border rounded-lg px-3 py-2 font-mono text-sm"
+                        rows={5}
+                        placeholder={"phone,nombre,variable2\n5491155551234,Juan,VIP\n5491155555678,Maria,Regular"}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Formato: telefono,variable1,variable2,... (la primera columna es el telefono)
+                    </p>
+                    {csvContacts.length > 0 && (
+                      <div className="p-2 bg-green-50 border border-green-200 rounded">
+                        <p className="text-sm text-green-700">
+                          {csvContacts.length} contactos importados
+                          {csvContacts[0]?.variables.length > 0 && (
+                            <span> con {csvContacts[0].variables.length} variable(s)</span>
+                          )}
+                        </p>
+                        <div className="text-xs text-green-600 mt-1 max-h-20 overflow-y-auto">
+                          {csvContacts.slice(0, 5).map((c, i) => (
+                            <div key={i}>{c.phone} {c.variables.length > 0 && `- ${c.variables.join(', ')}`}</div>
+                          ))}
+                          {csvContacts.length > 5 && <div>...y {csvContacts.length - 5} mas</div>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
