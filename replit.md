@@ -29,7 +29,8 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Robust Deployment**: Dockerized services with improved health checks and environment variable support.
 *   **Super Admin Panel**: Centralized administration with Command Center (dashboard), DevConsole (event log viewer), user/business management, WhatsApp instance control, token usage tracking, billing, and referral code management.
 *   **System Event Logging**: Centralized `eventLogger` service tracks all platform events with severity levels and metadata.
-*   **Centralized OpenAI API Management**: Uses a single platform-wide OpenAI API key, allows model selection, and logs token usage.
+*   **Centralized OpenAI API Management**: Uses a single platform-wide OpenAI API key, allows model selection, and logs token usage. Features a unified `callOpenAI()` wrapper that automatically routes GPT-5+ models to the Responses API with optional reasoning effort, while GPT-4 and earlier use Chat Completions API. Includes token optimization via conversation history truncation.
+*   **Dynamic AI Model Configuration**: Super Admin can configure default AI models for Agent V1 and V2 via PlatformSettings, with support for GPT-5/5.2/5.2-Pro and configurable reasoning effort (low/medium/high). Businesses can override with custom model selection.
 *   **Per-Contact Bot Control**: Provides global and per-contact bot control with UI toggles.
 *   **Dynamic Prompt Variables**: Supports dynamic variables like `{{now}}` with configurable timezones for OpenAI prompts.
 *   **Agent V2 - Multi-Agent AI System (Python/LangGraph)**: Advanced Python microservice with a 3-brain architecture (Vendor → Observer → Refiner), 5 executable tools, Redis-backed memory, OpenAI embeddings for semantic product search, and dynamic learning.
