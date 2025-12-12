@@ -59,7 +59,8 @@ async function getActiveInstance(businessId: string) {
   // Final fallback: query WhatsApp API directly for Baileys instances
   try {
     const response = await axios.get(`${WA_API_URL}/instances`, { timeout: 5000 });
-    const instances = response.data?.instances || response.data || [];
+    const rawData = response.data?.instances || response.data;
+    const instances = Array.isArray(rawData) ? rawData : [];
     
     // Find instance that matches this business (by backendId pattern)
     const businessPrefix = `biz_${businessId.substring(0, 8)}`;
