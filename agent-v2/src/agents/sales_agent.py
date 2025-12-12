@@ -97,14 +97,29 @@ def get_current_time_formatted(timezone: str) -> str:
 class SalesAgent:
     def __init__(self):
         self.settings = get_settings()
-        platform_model = get_v2_model()
-        logger.info(f"SalesAgent using model: {platform_model}")
-        self.llm = ChatOpenAI(
-            api_key=self.settings.openai_api_key,
-            model=platform_model,
-            temperature=0.7
-        )
+        self._current_model: str = ""
+        self._init_llm()
         self.graph = self._build_graph()
+    
+    def _init_llm(self):
+        """Initialize LLM with current platform model config."""
+        platform_model = get_v2_model()
+        
+        if platform_model != self._current_model:
+            logger.info(f"SalesAgent model changed: {self._current_model} -> {platform_model}")
+            self._current_model = platform_model
+            
+            self.llm = ChatOpenAI(
+                api_key=self.settings.openai_api_key,
+                model=platform_model,
+                temperature=0.7
+            )
+    
+    def _ensure_model_current(self):
+        """Check if model config changed and refresh if needed."""
+        platform_model = get_v2_model()
+        if platform_model != self._current_model:
+            self._init_llm()
     
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow."""
@@ -148,6 +163,7 @@ class SalesAgent:
         sender_name: str | None = None
     ) -> Dict[str, Any]:
         """Generate a response for the given conversation."""
+        self._ensure_model_current()
         
         messages = []
         for msg in conversation_history:
@@ -178,7 +194,7 @@ class SalesAgent:
         return {
             "response": result["response"],
             "tokens_used": result["tokens_used"],
-            "model": self.settings.openai_model
+            "model": self._current_model
         }
 
 
