@@ -45,6 +45,23 @@ interface Message {
   metadata: any;
 }
 
+interface Order {
+  id: string;
+  status: string;
+  total: number;
+  createdAt: string;
+  items: { name: string; quantity: number; price: number }[];
+  voucherImageUrl?: string;
+}
+
+interface Appointment {
+  id: string;
+  status: string;
+  scheduledAt: string;
+  service?: string;
+  notes?: string;
+}
+
 export default function AsesorPage() {
   const router = useRouter();
   const { user, token, logout, loadFromStorage } = useAuthStore();
@@ -68,6 +85,10 @@ export default function AsesorPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [assigningTag, setAssigningTag] = useState(false);
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [contactOrders, setContactOrders] = useState<Order[]>([]);
+  const [contactAppointments, setContactAppointments] = useState<Appointment[]>([]);
+  const [loadingContactInfo, setLoadingContactInfo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -151,8 +172,28 @@ export default function AsesorPage() {
   useEffect(() => {
     if (selectedConversation && selectedBusiness) {
       loadMessages();
+      loadContactInfo();
+    } else {
+      setContactOrders([]);
+      setContactAppointments([]);
     }
   }, [selectedConversation, selectedBusiness]);
+
+  const loadContactInfo = async () => {
+    if (!selectedConversation || !selectedBusiness) return;
+    setLoadingContactInfo(true);
+    try {
+      const res = await advisorApi.getContactInfo(selectedBusiness.id, selectedConversation.phone);
+      setContactOrders(res.data.orders || []);
+      setContactAppointments(res.data.appointments || []);
+    } catch (error) {
+      console.error('Error loading contact info:', error);
+      setContactOrders([]);
+      setContactAppointments([]);
+    } finally {
+      setLoadingContactInfo(false);
+    }
+  };
 
   const loadMessages = async () => {
     if (!selectedConversation || !selectedBusiness) return;
@@ -731,7 +772,7 @@ export default function AsesorPage() {
               </button>
             </div>
           ) : (
-            <>
+            <div className="flex-1 flex flex-col overflow-hidden">
               <div className="flex-shrink-0 bg-dark-card border-b border-dark-border px-3 md:px-4 py-3 flex items-center gap-3">
                 <button
                   onClick={() => {
@@ -809,142 +850,298 @@ export default function AsesorPage() {
                     </div>
                   )}
                 </div>
+                <button
+                  onClick={() => setShowInfoPanel(!showInfoPanel)}
+                  className={`p-2 rounded-lg transition-colors ${showInfoPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:bg-dark-hover hover:text-white'}`}
+                  title="Ver info del contacto"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 bg-dark-bg">
-                {messages.map(msg => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[85%] md:max-w-[70%] rounded-xl px-3 py-2 ${
-                        msg.direction === 'outbound'
-                          ? 'bg-neon-blue text-white rounded-br-sm'
-                          : 'bg-dark-card text-white rounded-bl-sm'
-                      } ${msg.metadata?.pending ? 'opacity-70' : ''}`}
-                    >
-                      {msg.mediaUrl && (
-                        <div className="mb-2">
-                          {renderMedia(msg.mediaUrl, msg.direction === 'outbound', msg.mediaType || msg.metadata?.mediaType || msg.metadata?.type)}
+              {showInfoPanel && (
+                <div className="md:hidden bg-dark-card border-b border-dark-border max-h-48 overflow-y-auto">
+                  <div className="p-3 space-y-3">
+                    <div>
+                      <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        Citas ({contactAppointments.length})
+                      </h4>
+                      {contactAppointments.length === 0 ? (
+                        <p className="text-xs text-gray-500">Sin citas</p>
+                      ) : (
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {contactAppointments.slice(0, 3).map(apt => (
+                            <div key={apt.id} className="flex-shrink-0 text-xs bg-dark-surface rounded px-2 py-1">
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${apt.status === 'CONFIRMED' ? 'bg-green-500' : apt.status === 'PENDING' ? 'bg-yellow-500' : 'bg-gray-500'}`}></span>
+                              {new Date(apt.scheduledAt).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                            </div>
+                          ))}
                         </div>
                       )}
-                      {msg.message && <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>}
-                      <p className={`text-[10px] mt-1 ${msg.direction === 'outbound' ? 'text-blue-200' : 'text-gray-500'}`}>
-                        {new Date(msg.createdAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                        Pedidos ({contactOrders.length})
+                      </h4>
+                      {contactOrders.length === 0 ? (
+                        <p className="text-xs text-gray-500">Sin pedidos</p>
+                      ) : (
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {contactOrders.slice(0, 3).map(order => (
+                            <div key={order.id} className="flex-shrink-0 text-xs bg-dark-surface rounded px-2 py-1">
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${order.status === 'PAID' ? 'bg-green-500' : order.status === 'PENDING' ? 'bg-yellow-500' : 'bg-gray-500'}`}></span>
+                              ${order.total?.toFixed(2) || '0.00'}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
+                </div>
+              )}
 
-              <div className="flex-shrink-0 bg-dark-card border-t border-dark-border">
-                {previewFile && (
-                  <div className="px-3 md:px-4 pt-3">
-                    <div className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg">
-                      {previewFile.type === 'image' && (
-                        <img src={previewFile.url} alt="" className="h-14 w-14 object-cover rounded" />
-                      )}
-                      {previewFile.type === 'video' && (
-                        <video src={previewFile.url} className="h-14 w-14 object-cover rounded" />
-                      )}
-                      {previewFile.type === 'audio' && (
-                        <div className="flex items-center gap-2 text-sm text-gray-400">
-                          <span className="text-lg">🎤</span>
-                          <span>Audio grabado</span>
+              <div className="flex-1 flex overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 bg-dark-bg">
+                    {messages.map(msg => (
+                      <div
+                        key={msg.id}
+                        className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-[85%] md:max-w-[70%] rounded-xl px-3 py-2 ${
+                            msg.direction === 'outbound'
+                              ? 'bg-neon-blue text-white rounded-br-sm'
+                              : 'bg-dark-card text-white rounded-bl-sm'
+                          } ${msg.metadata?.pending ? 'opacity-70' : ''}`}
+                        >
+                          {msg.mediaUrl && (
+                            <div className="mb-2">
+                              {renderMedia(msg.mediaUrl, msg.direction === 'outbound', msg.mediaType || msg.metadata?.mediaType || msg.metadata?.type)}
+                            </div>
+                          )}
+                          {msg.message && <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>}
+                          <p className={`text-[10px] mt-1 ${msg.direction === 'outbound' ? 'text-blue-200' : 'text-gray-500'}`}>
+                            {new Date(msg.createdAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
                         </div>
-                      )}
-                      {previewFile.type === 'file' && (
-                        <div className="flex items-center gap-2 text-sm text-gray-400">
-                          <span className="text-lg">📄</span>
-                          <span className="truncate max-w-[120px]">{previewFile.file.name}</span>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  <div className="flex-shrink-0 bg-dark-card border-t border-dark-border">
+                    {previewFile && (
+                      <div className="px-3 md:px-4 pt-3">
+                        <div className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg">
+                          {previewFile.type === 'image' && (
+                            <img src={previewFile.url} alt="" className="h-14 w-14 object-cover rounded" />
+                          )}
+                          {previewFile.type === 'video' && (
+                            <video src={previewFile.url} className="h-14 w-14 object-cover rounded" />
+                          )}
+                          {previewFile.type === 'audio' && (
+                            <div className="flex items-center gap-2 text-sm text-gray-400">
+                              <span className="text-lg">🎤</span>
+                              <span>Audio grabado</span>
+                            </div>
+                          )}
+                          {previewFile.type === 'file' && (
+                            <div className="flex items-center gap-2 text-sm text-gray-400">
+                              <span className="text-lg">📄</span>
+                              <span className="truncate max-w-[120px]">{previewFile.file.name}</span>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={cancelPreview}
+                            className="ml-auto p-2 text-gray-400 hover:text-white rounded-lg"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
                         </div>
-                      )}
+                      </div>
+                    )}
+                    
+                    <form onSubmit={handleSendMessage} className="p-3 md:p-4 flex items-center gap-1 md:gap-2">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+                      />
+                      
                       <button
                         type="button"
-                        onClick={cancelPreview}
-                        className="ml-auto p-2 text-gray-400 hover:text-white rounded-lg"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isRecording || uploading}
+                        className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-xl transition-colors touch-manipulation"
+                        title="Adjuntar archivo"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                         </svg>
                       </button>
+                      
+                      {isRecording ? (
+                        <button
+                          type="button"
+                          onClick={handleStopRecording}
+                          className="p-2.5 text-red-500 bg-red-500/20 rounded-xl animate-pulse touch-manipulation"
+                          title="Detener grabacion"
+                        >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="6" width="12" height="12" rx="2" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleStartRecording}
+                          disabled={!!previewFile || uploading}
+                          className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-xl transition-colors disabled:opacity-50 touch-manipulation"
+                          title="Grabar audio"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                        </button>
+                      )}
+                      
+                      <input
+                        type="text"
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        placeholder={isRecording ? 'Grabando...' : 'Mensaje...'}
+                        disabled={isRecording}
+                        className="flex-1 min-w-0 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-blue"
+                      />
+                      
+                      <button
+                        type="submit"
+                        disabled={sending || isRecording || (!messageInput.trim() && !previewFile)}
+                        className="p-2.5 bg-neon-blue text-white rounded-xl hover:bg-neon-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                      >
+                        {uploading ? (
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                {showInfoPanel && (
+                  <div className="hidden md:flex w-72 flex-shrink-0 border-l border-dark-border bg-dark-card flex-col overflow-hidden">
+                    <div className="p-4 border-b border-dark-border">
+                      <h3 className="font-medium text-white text-sm">Info del contacto</h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {loadingContactInfo ? (
+                        <div className="flex justify-center py-8">
+                          <div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1.5">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              Citas ({contactAppointments.length})
+                            </h4>
+                            {contactAppointments.length === 0 ? (
+                              <p className="text-xs text-gray-500 italic">Sin citas agendadas</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {contactAppointments.map(apt => (
+                                  <div key={apt.id} className="bg-dark-surface rounded-lg p-2.5">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                        apt.status === 'CONFIRMED' ? 'bg-green-500/20 text-green-400' :
+                                        apt.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-400' :
+                                        apt.status === 'COMPLETED' ? 'bg-blue-500/20 text-blue-400' :
+                                        'bg-gray-500/20 text-gray-400'
+                                      }`}>
+                                        {apt.status === 'CONFIRMED' ? 'Confirmada' :
+                                         apt.status === 'PENDING' ? 'Pendiente' :
+                                         apt.status === 'COMPLETED' ? 'Completada' : apt.status}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-white">
+                                      {new Date(apt.scheduledAt).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                      {new Date(apt.scheduledAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                    {apt.service && <p className="text-xs text-gray-500 mt-1">{apt.service}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1.5">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                              Pedidos ({contactOrders.length})
+                            </h4>
+                            {contactOrders.length === 0 ? (
+                              <p className="text-xs text-gray-500 italic">Sin pedidos</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {contactOrders.map(order => (
+                                  <div key={order.id} className="bg-dark-surface rounded-lg p-2.5">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                        order.status === 'PAID' ? 'bg-green-500/20 text-green-400' :
+                                        order.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-400' :
+                                        order.status === 'DELIVERED' ? 'bg-blue-500/20 text-blue-400' :
+                                        order.status === 'AWAITING_VOUCHER' ? 'bg-orange-500/20 text-orange-400' :
+                                        'bg-gray-500/20 text-gray-400'
+                                      }`}>
+                                        {order.status === 'PAID' ? 'Pagado' :
+                                         order.status === 'PENDING' ? 'Pendiente' :
+                                         order.status === 'DELIVERED' ? 'Entregado' :
+                                         order.status === 'AWAITING_VOUCHER' ? 'Esperando voucher' : order.status}
+                                      </span>
+                                      <span className="text-sm font-medium text-white">${order.total?.toFixed(2) || '0.00'}</span>
+                                    </div>
+                                    <p className="text-xs text-gray-400">
+                                      {new Date(order.createdAt).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </p>
+                                    {order.items && order.items.length > 0 && (
+                                      <div className="mt-1.5 space-y-0.5">
+                                        {order.items.slice(0, 2).map((item, idx) => (
+                                          <p key={idx} className="text-xs text-gray-500 truncate">
+                                            {item.quantity}x {item.name}
+                                          </p>
+                                        ))}
+                                        {order.items.length > 2 && (
+                                          <p className="text-xs text-gray-600">+{order.items.length - 2} mas</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
-                
-                <form onSubmit={handleSendMessage} className="p-3 md:p-4 flex items-center gap-1 md:gap-2">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
-                  />
-                  
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isRecording || uploading}
-                    className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-xl transition-colors touch-manipulation"
-                    title="Adjuntar archivo"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
-                  </button>
-                  
-                  {isRecording ? (
-                    <button
-                      type="button"
-                      onClick={handleStopRecording}
-                      className="p-2.5 text-red-500 bg-red-500/20 rounded-xl animate-pulse touch-manipulation"
-                      title="Detener grabacion"
-                    >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <rect x="6" y="6" width="12" height="12" rx="2" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleStartRecording}
-                      disabled={!!previewFile || uploading}
-                      className="p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-xl transition-colors disabled:opacity-50 touch-manipulation"
-                      title="Grabar audio"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                    </button>
-                  )}
-                  
-                  <input
-                    type="text"
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    placeholder={isRecording ? 'Grabando...' : 'Mensaje...'}
-                    disabled={isRecording}
-                    className="flex-1 min-w-0 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-blue"
-                  />
-                  
-                  <button
-                    type="submit"
-                    disabled={sending || isRecording || (!messageInput.trim() && !previewFile)}
-                    className="p-2.5 bg-neon-blue text-white rounded-xl hover:bg-neon-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
-                  >
-                    {uploading ? (
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                      </svg>
-                    )}
-                  </button>
-                </form>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

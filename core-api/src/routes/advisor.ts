@@ -421,6 +421,138 @@ router.put('/round-robin/:businessId', async (req: AuthRequest, res: Response) =
   }
 });
 
+router.get('/contact-info/:businessId/:contactPhone', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, contactPhone } = req.params;
+    const decodedPhone = decodeURIComponent(contactPhone);
+    
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { id: true, role: true, parentUserId: true }
+    });
+    
+    if (!user || user.role !== 'ASESOR') {
+      return res.status(403).json({ error: 'Solo asesores pueden acceder a esta informacion' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: user.parentUserId! }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+    
+    const assignment = await prisma.contactAssignment.findFirst({
+      where: { businessId, contactPhone: decodedPhone, userId: req.userId }
+    });
+    
+    if (!assignment) {
+      return res.status(403).json({ error: 'No tienes este contacto asignado' });
+    }
+    
+    const [contactSettings, orders, appointments, tagAssignment] = await Promise.all([
+      prisma.contactSettings.findFirst({
+        where: { businessId, contactPhone: decodedPhone }
+      }),
+      prisma.order.findMany({
+        where: { businessId, contactPhone: decodedPhone },
+        include: { items: true },
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      }),
+      prisma.appointment.findMany({
+        where: { businessId, contactPhone: decodedPhone },
+        orderBy: { scheduledAt: 'desc' },
+        take: 10
+      }),
+      prisma.tagAssignment.findUnique({
+        where: { businessId_contactPhone: { businessId, contactPhone: decodedPhone } },
+        include: { tag: true }
+      })
+    ]);
+    
+    res.json({
+      contact: contactSettings || { contactPhone: decodedPhone, contactName: null },
+      orders,
+      appointments,
+      tag: tagAssignment?.tag || null
+    });
+  } catch (error: any) {
+    console.error('Get contact info error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/contact-orders/:businessId/:contactPhone', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, contactPhone } = req.params;
+    const decodedPhone = decodeURIComponent(contactPhone);
+    
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { id: true, role: true, parentUserId: true }
+    });
+    
+    if (!user || user.role !== 'ASESOR') {
+      return res.status(403).json({ error: 'Solo asesores pueden acceder a esta informacion' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: user.parentUserId! }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+    
+    const orders = await prisma.order.findMany({
+      where: { businessId, contactPhone: decodedPhone },
+      include: { items: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json(orders);
+  } catch (error: any) {
+    console.error('Get contact orders error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/contact-appointments/:businessId/:contactPhone', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, contactPhone } = req.params;
+    const decodedPhone = decodeURIComponent(contactPhone);
+    
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { id: true, role: true, parentUserId: true }
+    });
+    
+    if (!user || user.role !== 'ASESOR') {
+      return res.status(403).json({ error: 'Solo asesores pueden acceder a esta informacion' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: user.parentUserId! }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+    
+    const appointments = await prisma.appointment.findMany({
+      where: { businessId, contactPhone: decodedPhone },
+      orderBy: { scheduledAt: 'desc' }
+    });
+    
+    res.json(appointments);
+  } catch (error: any) {
+    console.error('Get contact appointments error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export async function assignNextRoundRobinAdvisor(businessId: string, contactPhone: string): Promise<string | null> {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
