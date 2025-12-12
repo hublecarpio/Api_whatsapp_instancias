@@ -670,6 +670,7 @@ async function processWithAgentV2(
         
         // Mark message as read AFTER buffer expires (before responding)
         try {
+          console.log('[Agent V2] Looking for last inbound message from:', contactPhone, 'in business:', business.id);
           const lastInboundMessage = await prisma.messageLog.findFirst({
             where: {
               businessId: business.id,
@@ -677,12 +678,16 @@ async function processWithAgentV2(
               direction: 'inbound'
             },
             orderBy: { createdAt: 'desc' },
-            select: { providerMessageId: true }
+            select: { providerMessageId: true, sender: true, createdAt: true }
           });
+          
+          console.log('[Agent V2] Found message:', lastInboundMessage);
           
           if (lastInboundMessage?.providerMessageId) {
             await metaService.markMessageAsRead(lastInboundMessage.providerMessageId);
             console.log('[Agent V2] Meta Cloud message marked as read:', lastInboundMessage.providerMessageId);
+          } else {
+            console.log('[Agent V2] No providerMessageId found for message');
           }
         } catch (readError: any) {
           console.log('Could not mark Meta message as read:', readError.message);
@@ -1723,6 +1728,7 @@ async function processWithAgent(
         
         // Mark message as read AFTER buffer expires (before responding)
         try {
+          console.log('[META CLOUD] Looking for last inbound message from:', contactPhone, 'in business:', businessId);
           const lastInboundMessage = await prisma.messageLog.findFirst({
             where: {
               businessId,
@@ -1730,12 +1736,16 @@ async function processWithAgent(
               direction: 'inbound'
             },
             orderBy: { createdAt: 'desc' },
-            select: { providerMessageId: true }
+            select: { providerMessageId: true, sender: true, createdAt: true }
           });
+          
+          console.log('[META CLOUD] Found message:', lastInboundMessage);
           
           if (lastInboundMessage?.providerMessageId) {
             await metaService.markMessageAsRead(lastInboundMessage.providerMessageId);
             console.log('[META CLOUD] Message marked as read:', lastInboundMessage.providerMessageId);
+          } else {
+            console.log('[META CLOUD] No providerMessageId found for message');
           }
         } catch (readError: any) {
           console.log('Could not mark Meta message as read:', readError.message);

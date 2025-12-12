@@ -168,7 +168,8 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
       contactName: pushName,
       user_message: fullMessageForAgent,
       mediaUrl,
-      mediaAnalysis: mediaAnalysis || undefined
+      mediaAnalysis: mediaAnalysis || undefined,
+      providerMessageId: providerMessageId || undefined
     }, {
       headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
     });
