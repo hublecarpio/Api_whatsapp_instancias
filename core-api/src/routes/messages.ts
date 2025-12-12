@@ -121,8 +121,13 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     }>();
     
     messages.forEach(msg => {
-      const phone = msg.sender || msg.recipient || 'unknown';
-      if (phone === 'unknown') return;
+      let phone: string;
+      if (msg.direction === 'inbound') {
+        phone = msg.sender || 'unknown';
+      } else {
+        phone = msg.recipient || 'unknown';
+      }
+      if (phone === 'unknown' || phone === 'bot' || phone === 'system') return;
       
       const metadata = msg.metadata as any;
       const contactName = metadata?.contactName || metadata?.pushName || '';

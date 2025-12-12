@@ -338,9 +338,21 @@ async function sendWhatsAppResponse(
 ): Promise<void> {
   try {
     const instance = business.instances?.find((i: any) => i.instanceBackendId === instanceBackendId);
+    const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
     
     if (instance?.provider === 'META_CLOUD' && instance?.metaCredential) {
-      console.log(`[AI Worker] Sending via Meta Cloud API`);
+      console.log(`[AI Worker] Sending via Meta Cloud API to ${cleanPhone}`);
+      const { MetaCloudService } = await import('../metaCloud.js');
+      const metaService = new MetaCloudService({
+        accessToken: instance.metaCredential.accessToken,
+        phoneNumberId: instance.metaCredential.phoneNumberId,
+        businessId: instance.metaCredential.businessId
+      });
+      await metaService.sendMessage({
+        to: cleanPhone,
+        text: message
+      });
+      console.log(`[AI Worker] Meta Cloud message sent successfully to ${cleanPhone}`);
     } else {
       await axios.post(`${WA_API_URL}/instances/${instanceBackendId}/sendMessage`, {
         to: phone,
@@ -348,19 +360,17 @@ async function sendWhatsAppResponse(
       }, { timeout: 30000 });
     }
     
-    const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
-    
     await prisma.messageLog.create({
       data: {
         businessId: business.id,
         instanceId: instance?.id || null,
         direction: 'outbound',
-        sender: instance?.phoneNumber || 'system',
+        sender: instance?.phoneNumber || 'bot',
         recipient: cleanPhone,
         message: message,
         metadata: { 
           source: 'ai_worker',
-          provider: instance?.provider || 'baileys',
+          provider: instance?.provider || 'BAILEYS',
           agentVersion: business.agentVersion || 'v1'
         }
       }
@@ -368,7 +378,14 @@ async function sendWhatsAppResponse(
     
     console.log(`[AI Worker] Response sent and logged to ${cleanPhone}`);
   } catch (error: any) {
-    console.error(`[AI Worker] Failed to send WhatsApp response:`, error.message);
+    const errorDetails = error.response?.data 
+      ? JSON.stringify(error.response.data) 
+      : error.message;
+    console.error(`[AI Worker] Failed to send WhatsApp response:`, {
+      message: error.message,
+      status: error.response?.status,
+      details: errorDetails
+    });
   }
 }
 
