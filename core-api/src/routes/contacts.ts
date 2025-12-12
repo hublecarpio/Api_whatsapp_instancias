@@ -349,7 +349,7 @@ router.put('/:phone', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     const { phone } = req.params;
-    const { name, email, notes, botDisabled, tags, isArchived, businessId } = req.body;
+    const { name, email, notes, botDisabled, tags, isArchived, businessId, extractedData } = req.body;
 
     if (!businessId) {
       return res.status(400).json({ error: 'businessId es requerido' });
@@ -383,7 +383,40 @@ router.put('/:phone', async (req: AuthRequest, res: Response) => {
       }
     });
 
-    res.json(contact);
+    if (extractedData && typeof extractedData === 'object') {
+      const existingData = await prisma.contactExtractedData.findMany({
+        where: { businessId: business.id, contactPhone: phone }
+      });
+      const existingKeys = existingData.map(d => d.fieldKey);
+      const newKeys = Object.keys(extractedData);
+      
+      const keysToDelete = existingKeys.filter(k => !newKeys.includes(k));
+      if (keysToDelete.length > 0) {
+        await prisma.contactExtractedData.deleteMany({
+          where: { businessId: business.id, contactPhone: phone, fieldKey: { in: keysToDelete } }
+        });
+      }
+      
+      for (const [key, value] of Object.entries(extractedData)) {
+        if (key.trim()) {
+          await prisma.contactExtractedData.upsert({
+            where: { businessId_contactPhone_fieldKey: { businessId: business.id, contactPhone: phone, fieldKey: key } },
+            create: { businessId: business.id, contactPhone: phone, fieldKey: key, fieldValue: String(value || '') },
+            update: { fieldValue: String(value || '') }
+          });
+        }
+      }
+    }
+
+    const updatedExtractedData = await prisma.contactExtractedData.findMany({
+      where: { businessId: business.id, contactPhone: phone }
+    });
+    const extractedDataMap: Record<string, string> = {};
+    updatedExtractedData.forEach(d => {
+      extractedDataMap[d.fieldKey] = d.fieldValue || '';
+    });
+
+    res.json({ ...contact, extractedData: extractedDataMap });
   } catch (error: any) {
     console.error('[CONTACTS] Error updating contact:', error);
     res.status(500).json({ error: error.message });
