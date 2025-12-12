@@ -1,0 +1,219 @@
+function parseAgentOutputToWhatsAppEvents(raw, {
+  maxCaptionChars = 800,   // captions suelen permitir más que un texto normal
+  maxTextChars = 320,      // para textos normales (whatsapp-friendly)
+  maxTextSentences = 2
+} = {}) {
+  if (!raw || typeof raw !== "string") return [];
+
+  const text = raw.replace(/\r\n/g, "\n").trim();
+
+  // Detecta URLs (http/https) en cualquier parte del texto
+  const urlRegex = /(https?:\/\/[^\s)]+)(?=\s|$)/g;
+
+  // Considera "imagen" si termina en extensión típica
+  const isImageUrl = (url) =>
+    /\.(png|jpe?g|webp|gif)$/i.test(url.split("?")[0]);
+
+  // 1) Tokeniza por URLs preservando orden
+  const tokens = [];
+  let lastIdx = 0;
+  let match;
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    const url = match[1];
+    const start = match.index;
+    const end = start + url.length;
+
+    const before = text.slice(lastIdx, start);
+    if (before.trim()) tokens.push({ type: "text", value: before.trim() });
+
+    tokens.push({ type: "url", value: url });
+    lastIdx = end;
+  }
+
+  const after = text.slice(lastIdx);
+  if (after.trim()) tokens.push({ type: "text", value: after.trim() });
+
+  // 2) Construye eventos: URL imagen + caption (si el texto siguiente es corto)
+  const events = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const tk = tokens[i];
+
+    if (tk.type === "url" && isImageUrl(tk.value)) {
+      // Por defecto, sin caption
+      let caption = null;
+
+      // Si el siguiente token es texto, úsalo como caption SOLO si es "corto"
+      // y no contiene otra estructura grande.
+      const next = tokens[i + 1];
+      if (next && next.type === "text") {
+        const candidate = next.value.trim();
+
+        // Heurística determinística: si es relativamente corto, lo hacemos caption.
+        // Si es largo, lo dejamos como texto normal (para no meter biblias en caption).
+        if (candidate.length <= maxCaptionChars) {
+          caption = candidate;
+          i++; // consumimos el siguiente token
+        }
+      }
+
+      events.push({ type: "image", url: tk.value, caption });
+      continue;
+    }
+
+    // URLs que no son imagen -> trátalas como texto (o crea evento "link" si quieres)
+    if (tk.type === "url") {
+      events.push({ type: "text", text: tk.value });
+      continue;
+    }
+
+    // Texto: lo dividimos en chunks WhatsApp-friendly
+    const chunks = chunkWhatsAppMessage(tk.value, {
+      maxChars: maxTextChars,
+      maxSentences: maxTextSentences,
+      preserveBullets: true
+    });
+
+    for (const c of chunks) events.push({ type: "text", text: c });
+  }
+
+  return events;
+}
+
+/* Reusa tu chunker anterior */
+function chunkWhatsAppMessage(text, {
+  maxChars = 320,
+  maxSentences = 2,
+  preserveBullets = true
+} = {}) {
+  if (!text || typeof text !== "string") return [];
+
+  let t = text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!t) return [];
+
+  const paragraphs = t.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+
+  const isBulletLine = (line) => /^(\-|\•|\*|\d+\.)\s+/.test(line.trim());
+
+  const units = [];
+  for (const p of paragraphs) {
+    const lines = p.split("\n").map(x => x.trim()).filter(Boolean);
+    const hasBullets = preserveBullets && lines.some(isBulletLine);
+
+    if (hasBullets) {
+      for (const line of lines) units.push({ type: "line", value: line });
+    } else {
+      const sentenceParts = splitIntoSentences(p);
+      for (const s of sentenceParts) units.push({ type: "sentence", value: s });
+    }
+  }
+
+  const messages = [];
+  let current = "";
+  let sentenceCount = 0;
+
+  const flush = () => {
+    const out = current.trim();
+    if (out) messages.push(out);
+    current = "";
+    sentenceCount = 0;
+  };
+
+  for (const u of units) {
+    let piece = u.value.trim();
+    if (!piece) continue;
+
+    const pieces = (piece.length > maxChars) ? splitByWords(piece, maxChars) : [piece];
+
+    for (const part of pieces) {
+      const partIsSentence = (u.type === "sentence");
+
+      if (current && partIsSentence && sentenceCount >= maxSentences) flush();
+
+      const sep = current ? "\n" : "";
+      const candidate = current + sep + part;
+
+      if (candidate.length > maxChars) {
+        flush();
+        if (part.length > maxChars) {
+          const more = splitByWords(part, maxChars);
+          for (const m of more) messages.push(m);
+          continue;
+        }
+        current = part;
+        sentenceCount = partIsSentence ? 1 : 0;
+      } else {
+        current = candidate;
+        if (partIsSentence) sentenceCount += 1;
+      }
+    }
+  }
+
+  flush();
+  return messages.map(m => m.trim()).filter(Boolean);
+}
+
+function splitIntoSentences(text) {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (!t) return [];
+
+  const abbreviations = new Set(["sr.", "sra.", "dr.", "dra.", "ing.", "etc."]);
+  const out = [];
+  let buf = "";
+
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    buf += ch;
+
+    const isEndPunct = ch === "." || ch === "?" || ch === "!" || ch === "…";
+    if (!isEndPunct) continue;
+
+    const lastToken = buf.trim().toLowerCase().split(" ").slice(-1)[0];
+    if (abbreviations.has(lastToken)) continue;
+
+    const next = t[i + 1];
+    if (i === t.length - 1 || next === " ") {
+      out.push(buf.trim());
+      buf = "";
+      while (t[i + 1] === " ") i++;
+    }
+  }
+
+  if (buf.trim()) out.push(buf.trim());
+  return out;
+}
+
+function splitByWords(text, maxChars) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const chunks = [];
+  let cur = "";
+
+  const pushCur = () => {
+    if (cur.trim()) chunks.push(cur.trim());
+    cur = "";
+  };
+
+  for (const w of words) {
+    if (w.length > maxChars) {
+      pushCur();
+      for (let i = 0; i < w.length; i += maxChars) chunks.push(w.slice(i, i + maxChars));
+      continue;
+    }
+
+    const candidate = cur ? (cur + " " + w) : w;
+    if (candidate.length > maxChars) {
+      pushCur();
+      cur = w;
+    } else {
+      cur = candidate;
+    }
+  }
+
+  pushCur();
+  return chunks;
+}
