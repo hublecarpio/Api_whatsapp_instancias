@@ -467,193 +467,17 @@ export async function processReminders(): Promise<void> {
   }
 }
 
-function getDelayForAttempt(config: any, attemptNumber: number): number {
-  if (config.followUpSteps && Array.isArray(config.followUpSteps)) {
-    const step = config.followUpSteps[attemptNumber - 1];
-    if (step && typeof step.delayMinutes === 'number') {
-      return step.delayMinutes;
-    }
-  }
-  
-  if (attemptNumber === 1) return config.firstDelayMinutes;
-  if (attemptNumber === 2) return config.secondDelayMinutes;
-  return config.thirdDelayMinutes;
-}
-
-function getMaxAttempts(config: any): number {
-  if (config.followUpSteps && Array.isArray(config.followUpSteps)) {
-    return config.followUpSteps.length;
-  }
-  return config.maxDailyAttempts;
-}
-
-export async function checkInactiveContacts(): Promise<void> {
-  const configs = await prisma.followUpConfig.findMany({
-    where: { enabled: true },
-    include: { business: { include: { instances: true } } }
-  });
-  
-  for (const config of configs) {
-    if (!config.business.botEnabled) continue;
-    
-    const now = new Date();
-    const triggerMode = (config as any).triggerMode || 'user';
-    const stopOnReply = (config as any).stopOnReply !== false;
-    const maxAttempts = getMaxAttempts(config);
-    
-    let contactsToCheck = new Map<string, { lastMessageTime: Date; direction: string }>();
-    
-    if (triggerMode === 'user' || triggerMode === 'any') {
-      const recentInbound = await prisma.messageLog.findMany({
-        where: {
-          businessId: config.businessId,
-          direction: 'inbound',
-          createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }
-        },
-        orderBy: { createdAt: 'desc' }
-      });
-      
-      recentInbound.forEach(msg => {
-        if (msg.sender && !contactsToCheck.has(msg.sender)) {
-          contactsToCheck.set(msg.sender, { lastMessageTime: msg.createdAt, direction: 'inbound' });
-        }
-      });
-    }
-    
-    if (triggerMode === 'agent' || triggerMode === 'any') {
-      const recentOutbound = await prisma.messageLog.findMany({
-        where: {
-          businessId: config.businessId,
-          direction: 'outbound',
-          createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }
-        },
-        orderBy: { createdAt: 'desc' }
-      });
-      
-      recentOutbound.forEach(msg => {
-        if (msg.recipient) {
-          const existing = contactsToCheck.get(msg.recipient);
-          if (!existing || msg.createdAt > existing.lastMessageTime) {
-            contactsToCheck.set(msg.recipient, { lastMessageTime: msg.createdAt, direction: 'outbound' });
-          }
-        }
-      });
-    }
-    
-    for (const [contactPhone, { lastMessageTime, direction }] of contactsToCheck) {
-      let referenceTime: Date;
-      
-      if (triggerMode === 'user') {
-        const lastOutbound = await prisma.messageLog.findFirst({
-          where: {
-            businessId: config.businessId,
-            recipient: contactPhone,
-            direction: 'outbound',
-            createdAt: { gt: lastMessageTime }
-          },
-          orderBy: { createdAt: 'desc' }
-        });
-        
-        if (!lastOutbound) continue;
-        referenceTime = lastOutbound.createdAt;
-      } else if (triggerMode === 'agent') {
-        const lastOutbound = await prisma.messageLog.findFirst({
-          where: {
-            businessId: config.businessId,
-            recipient: contactPhone,
-            direction: 'outbound'
-          },
-          orderBy: { createdAt: 'desc' }
-        });
-        
-        if (!lastOutbound) continue;
-        referenceTime = lastOutbound.createdAt;
-      } else {
-        const lastMessage = await prisma.messageLog.findFirst({
-          where: {
-            businessId: config.businessId,
-            OR: [
-              { sender: contactPhone },
-              { recipient: contactPhone }
-            ]
-          },
-          orderBy: { createdAt: 'desc' }
-        });
-        
-        if (!lastMessage) continue;
-        referenceTime = lastMessage.createdAt;
-      }
-      
-      const timeSinceReference = now.getTime() - referenceTime.getTime();
-      const minutesSinceReference = timeSinceReference / (60 * 1000);
-      
-      if (minutesSinceReference < config.firstDelayMinutes) continue;
-      
-      if (stopOnReply && triggerMode !== 'user') {
-        const clientRepliedAfter = await prisma.messageLog.findFirst({
-          where: {
-            businessId: config.businessId,
-            sender: contactPhone,
-            direction: 'inbound',
-            createdAt: { gt: referenceTime }
-          }
-        });
-        
-        if (clientRepliedAfter) continue;
-      } else if (triggerMode === 'user') {
-        const clientRepliedAfter = await prisma.messageLog.findFirst({
-          where: {
-            businessId: config.businessId,
-            sender: contactPhone,
-            direction: 'inbound',
-            createdAt: { gt: referenceTime }
-          }
-        });
-        
-        if (clientRepliedAfter) continue;
-      }
-      
-      const existingReminder = await prisma.reminder.findFirst({
-        where: {
-          businessId: config.businessId,
-          contactPhone,
-          status: 'pending'
-        }
-      });
-      
-      if (existingReminder) continue;
-      
-      const todayAttempts = await getTodayAttemptCount(config.businessId, contactPhone);
-      if (todayAttempts >= maxAttempts) continue;
-      
-      const delayMinutes = getDelayForAttempt(config, todayAttempts + 1);
-      const scheduledAt = new Date(now.getTime() + delayMinutes * 60 * 1000);
-      
-      await prisma.reminder.create({
-        data: {
-          businessId: config.businessId,
-          contactPhone,
-          scheduledAt,
-          type: 'auto',
-          attemptNumber: todayAttempts + 1,
-          configId: config.id
-        }
-      });
-      
-      console.log(`Auto-reminder (${triggerMode} mode) scheduled for ${contactPhone} at ${scheduledAt}`);
-    }
-  }
-}
+// Note: getDelayForAttempt, getMaxAttempts, checkInactiveContacts removed
+// Follow-ups are now scheduled event-driven via scheduleFollowUp() in followUpService.ts
 
 let workerInterval: NodeJS.Timeout | null = null;
 
 export function startReminderWorker(): void {
-  console.log('Starting reminder worker...');
+  console.log('Starting reminder worker (event-driven mode)...');
   
   workerInterval = setInterval(async () => {
     try {
       await processReminders();
-      await checkInactiveContacts();
     } catch (error) {
       console.error('Reminder worker error:', error);
     }
@@ -662,7 +486,6 @@ export function startReminderWorker(): void {
   setTimeout(async () => {
     try {
       await processReminders();
-      await checkInactiveContacts();
     } catch (error) {
       console.error('Initial reminder check error:', error);
     }
