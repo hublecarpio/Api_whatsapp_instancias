@@ -54,6 +54,8 @@ export default function ContactsPage() {
   const [expandedDetail, setExpandedDetail] = useState<ContactDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<{ created: number; updated: number } | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<EditForm>({ name: '', email: '', notes: '', tags: [], extractedData: [] });
   const [saving, setSaving] = useState(false);
@@ -245,6 +247,31 @@ export default function ContactsPage() {
     }
   };
 
+  const refreshContacts = async () => {
+    if (!currentBusiness?.id) return;
+    
+    try {
+      setRefreshing(true);
+      setRefreshResult(null);
+      
+      const response = await axios.post(
+        `${API_URL}/contacts/refresh`,
+        { businessId: currentBusiness.id },
+        { headers: getAuthHeader() }
+      );
+      
+      setRefreshResult({ created: response.data.created, updated: response.data.updated });
+      await loadContacts(page, searchQuery);
+      
+      setTimeout(() => setRefreshResult(null), 5000);
+    } catch (error) {
+      console.error('Error refreshing contacts:', error);
+      alert('Error al actualizar contactos');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     loadContacts(page, searchQuery);
   }, [currentBusiness?.id, page]);
@@ -281,14 +308,29 @@ export default function ContactsPage() {
             {pagination.total} contactos en total
           </p>
         </div>
-        <button
-          onClick={exportCSV}
-          disabled={exporting}
-          className="btn btn-secondary"
-        >
-          {exporting ? 'Exportando...' : 'Exportar CSV'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={refreshContacts}
+            disabled={refreshing}
+            className="btn btn-primary"
+          >
+            {refreshing ? 'Sincronizando...' : 'Actualizar Contactos'}
+          </button>
+          <button
+            onClick={exportCSV}
+            disabled={exporting}
+            className="btn btn-secondary"
+          >
+            {exporting ? 'Exportando...' : 'Exportar CSV'}
+          </button>
+        </div>
       </div>
+
+      {refreshResult && (
+        <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300 text-sm">
+          Sincronizado: {refreshResult.created} nuevos, {refreshResult.updated} actualizados
+        </div>
+      )}
 
       <div className="mb-6">
         <input

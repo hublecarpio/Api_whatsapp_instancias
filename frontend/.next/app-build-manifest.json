@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/dashboard/templates/page": [
+    "/dashboard/reminders/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/templates/page.js"
+      "static/chunks/app/dashboard/reminders/page.js"
     ],
     "/dashboard/layout": [
       "static/chunks/webpack.js",
@@ -15,16 +15,6 @@
       "static/chunks/main-app.js",
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
-    ],
-    "/dashboard/whatsapp/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/whatsapp/page.js"
-    ],
-    "/dashboard/broadcasts/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/broadcasts/page.js"
     ],
     "/dashboard/contacts/page": [
       "static/chunks/webpack.js",
