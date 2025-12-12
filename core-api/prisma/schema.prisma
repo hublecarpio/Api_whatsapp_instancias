@@ -86,6 +86,7 @@ model Contact {
   messageCount    Int       @default(1)
   isArchived      Boolean   @default(false)
   botDisabled     Boolean   @default(false)
+  remindersPaused Boolean   @default(false)
   metadata        Json?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

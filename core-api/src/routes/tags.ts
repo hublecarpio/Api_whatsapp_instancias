@@ -787,4 +787,80 @@ router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req:
   }
 });
 
+router.get('/contact/:contact_phone/reminder-status', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { contact_phone } = req.params;
+    const { business_id } = req.query;
+    
+    if (!business_id) {
+      res.status(400).json({ error: 'business_id is required' });
+      return;
+    }
+    
+    const cleanPhone = contact_phone.replace(/\D/g, '').replace(/:.*$/, '');
+    
+    const contact = await prisma.contact.findUnique({
+      where: {
+        businessId_phone: {
+          businessId: business_id as string,
+          phone: cleanPhone
+        }
+      }
+    });
+    
+    res.json({
+      remindersPaused: contact?.remindersPaused || false
+    });
+  } catch (error: any) {
+    console.error('Get contact reminder status error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/contact/:contact_phone/reminder-toggle', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { contact_phone } = req.params;
+    const { business_id, remindersPaused } = req.body;
+    
+    if (!business_id) {
+      res.status(400).json({ error: 'business_id is required' });
+      return;
+    }
+    
+    if (typeof remindersPaused !== 'boolean') {
+      res.status(400).json({ error: 'remindersPaused must be a boolean' });
+      return;
+    }
+    
+    const cleanPhone = contact_phone.replace(/\D/g, '').replace(/:.*$/, '');
+    
+    const contact = await prisma.contact.upsert({
+      where: {
+        businessId_phone: {
+          businessId: business_id,
+          phone: cleanPhone
+        }
+      },
+      update: { remindersPaused },
+      create: {
+        businessId: business_id,
+        phone: cleanPhone,
+        remindersPaused,
+        firstMessageAt: new Date(),
+        lastMessageAt: new Date()
+      }
+    });
+    
+    console.log(`[REMINDERS] Contact ${cleanPhone} reminders ${remindersPaused ? 'paused' : 'resumed'}`);
+    
+    res.json({
+      success: true,
+      remindersPaused: contact.remindersPaused
+    });
+  } catch (error: any) {
+    console.error('Toggle contact reminder error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

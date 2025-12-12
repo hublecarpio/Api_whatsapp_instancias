@@ -2,11 +2,21 @@ import prisma from './prisma.js';
 
 export async function scheduleFollowUp(businessId: string, contactPhone: string): Promise<void> {
   try {
-    const config = await prisma.followUpConfig.findUnique({
-      where: { businessId }
-    });
+    const cleanPhone = contactPhone.replace(/\D/g, '');
+    
+    const [config, contact] = await Promise.all([
+      prisma.followUpConfig.findUnique({ where: { businessId } }),
+      prisma.contact.findUnique({
+        where: { businessId_phone: { businessId, phone: cleanPhone } }
+      })
+    ]);
     
     if (!config || !config.enabled) {
+      return;
+    }
+    
+    if (contact?.remindersPaused) {
+      console.log(`[FOLLOW-UP] Skipping - reminders paused for ${cleanPhone}`);
       return;
     }
     

@@ -240,7 +240,11 @@ export const tagsApi = {
   toggleContactBot: (businessId: string, contactPhone: string, botDisabled: boolean) =>
     api.patch(`/tags/contact/${contactPhone}/bot-toggle`, { business_id: businessId, botDisabled }),
   getContactExtractedData: (businessId: string, contactPhone: string) =>
-    api.get(`/tags/contact/${contactPhone}/extracted-data?business_id=${businessId}`)
+    api.get(`/tags/contact/${contactPhone}/extracted-data?business_id=${businessId}`),
+  getContactReminderStatus: (businessId: string, contactPhone: string) =>
+    api.get(`/tags/contact/${contactPhone}/reminder-status?business_id=${businessId}`),
+  toggleContactReminder: (businessId: string, contactPhone: string, remindersPaused: boolean) =>
+    api.patch(`/tags/contact/${contactPhone}/reminder-toggle`, { business_id: businessId, remindersPaused })
 };
 
 export const ordersApi = {

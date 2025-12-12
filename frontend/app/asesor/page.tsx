@@ -89,6 +89,10 @@ export default function AsesorPage() {
   const [contactOrders, setContactOrders] = useState<Order[]>([]);
   const [contactAppointments, setContactAppointments] = useState<Appointment[]>([]);
   const [loadingContactInfo, setLoadingContactInfo] = useState(false);
+  const [contactBotDisabled, setContactBotDisabled] = useState(false);
+  const [contactBotToggling, setContactBotToggling] = useState(false);
+  const [contactRemindersPaused, setContactRemindersPaused] = useState(false);
+  const [contactReminderToggling, setContactReminderToggling] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -173,11 +177,56 @@ export default function AsesorPage() {
     if (selectedConversation && selectedBusiness) {
       loadMessages();
       loadContactInfo();
+      loadContactSettings();
     } else {
       setContactOrders([]);
       setContactAppointments([]);
+      setContactBotDisabled(false);
+      setContactRemindersPaused(false);
     }
   }, [selectedConversation, selectedBusiness]);
+
+  const loadContactSettings = async () => {
+    if (!selectedConversation || !selectedBusiness) return;
+    try {
+      const [botRes, reminderRes] = await Promise.all([
+        tagsApi.getContactBotStatus(selectedBusiness.id, selectedConversation.phone),
+        tagsApi.getContactReminderStatus(selectedBusiness.id, selectedConversation.phone)
+      ]);
+      setContactBotDisabled(botRes.data.botDisabled || false);
+      setContactRemindersPaused(reminderRes.data.remindersPaused || false);
+    } catch (error) {
+      console.error('Error loading contact settings:', error);
+    }
+  };
+
+  const handleToggleContactBot = async () => {
+    if (!selectedBusiness || !selectedConversation) return;
+    setContactBotToggling(true);
+    try {
+      const newStatus = !contactBotDisabled;
+      await tagsApi.toggleContactBot(selectedBusiness.id, selectedConversation.phone, newStatus);
+      setContactBotDisabled(newStatus);
+    } catch (err) {
+      console.error('Failed to toggle contact bot:', err);
+    } finally {
+      setContactBotToggling(false);
+    }
+  };
+
+  const handleToggleContactReminder = async () => {
+    if (!selectedBusiness || !selectedConversation) return;
+    setContactReminderToggling(true);
+    try {
+      const newStatus = !contactRemindersPaused;
+      await tagsApi.toggleContactReminder(selectedBusiness.id, selectedConversation.phone, newStatus);
+      setContactRemindersPaused(newStatus);
+    } catch (err) {
+      console.error('Failed to toggle contact reminder:', err);
+    } finally {
+      setContactReminderToggling(false);
+    }
+  };
 
   const loadContactInfo = async () => {
     if (!selectedConversation || !selectedBusiness) return;
@@ -789,9 +838,35 @@ export default function AsesorPage() {
                   <p className="font-medium text-white truncate">
                     {selectedConversation.contactName || selectedConversation.phone}
                   </p>
-                  {selectedConversation.contactName && (
-                    <p className="text-xs text-gray-500 truncate">{selectedConversation.phone}</p>
-                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {selectedConversation.contactName && (
+                      <span className="text-xs text-gray-500 truncate">{selectedConversation.phone}</span>
+                    )}
+                    <button 
+                      onClick={handleToggleContactBot} 
+                      disabled={contactBotToggling} 
+                      title={contactBotDisabled ? 'Bot desactivado' : 'Bot activo'}
+                      className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                        contactBotDisabled 
+                          ? 'bg-red-500/20 text-red-400' 
+                          : 'bg-green-500/20 text-green-400'
+                      }`}
+                    >
+                      {contactBotDisabled ? '🚫 Bot off' : '🤖 Bot'}
+                    </button>
+                    <button 
+                      onClick={handleToggleContactReminder} 
+                      disabled={contactReminderToggling} 
+                      title={contactRemindersPaused ? 'Recordatorios pausados' : 'Recordatorios activos'}
+                      className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                        contactRemindersPaused 
+                          ? 'bg-yellow-500/20 text-yellow-400' 
+                          : 'bg-purple-500/20 text-purple-400'
+                      }`}
+                    >
+                      {contactRemindersPaused ? '⏸️ Rec off' : '🔔 Rec'}
+                    </button>
+                  </div>
                 </div>
                 <div className="relative" ref={tagDropdownRef}>
                   <button

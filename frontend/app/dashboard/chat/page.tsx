@@ -113,6 +113,8 @@ export default function ChatPage() {
   const [dailyContacts, setDailyContacts] = useState<DailyContactStats | null>(null);
   const [contactBotDisabled, setContactBotDisabled] = useState<boolean>(false);
   const [contactBotToggling, setContactBotToggling] = useState(false);
+  const [contactRemindersPaused, setContactRemindersPaused] = useState<boolean>(false);
+  const [contactReminderToggling, setContactReminderToggling] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [sendingTemplate, setSendingTemplate] = useState(false);
@@ -376,6 +378,7 @@ export default function ChatPage() {
       fetchMessages(selectedPhone);
       fetchWindowStatus(selectedPhone);
       fetchContactBotStatus(selectedPhone);
+      fetchContactReminderStatus(selectedPhone);
       fetchContactExtractedData(selectedPhone);
       const interval = setInterval(() => {
         fetchMessages(selectedPhone);
@@ -394,6 +397,17 @@ export default function ChatPage() {
     } catch (err) {
       console.error('Failed to fetch contact bot status:', err);
       setContactBotDisabled(false);
+    }
+  };
+
+  const fetchContactReminderStatus = async (phone: string) => {
+    if (!currentBusiness) return;
+    try {
+      const response = await tagsApi.getContactReminderStatus(currentBusiness.id, phone);
+      setContactRemindersPaused(response.data.remindersPaused || false);
+    } catch (err) {
+      console.error('Failed to fetch contact reminder status:', err);
+      setContactRemindersPaused(false);
     }
   };
 
@@ -420,6 +434,20 @@ export default function ChatPage() {
       console.error('Failed to toggle contact bot:', err);
     } finally {
       setContactBotToggling(false);
+    }
+  };
+
+  const handleToggleContactReminder = async () => {
+    if (!currentBusiness || !selectedPhone) return;
+    setContactReminderToggling(true);
+    try {
+      const newStatus = !contactRemindersPaused;
+      await tagsApi.toggleContactReminder(currentBusiness.id, selectedPhone, newStatus);
+      setContactRemindersPaused(newStatus);
+    } catch (err) {
+      console.error('Failed to toggle contact reminder:', err);
+    } finally {
+      setContactReminderToggling(false);
     }
   };
 
@@ -1054,6 +1082,18 @@ export default function ChatPage() {
                       }`}
                     >
                       {contactBotDisabled ? '🚫 Bot off' : currentBusiness.botEnabled ? '🤖 Bot' : '😴 Global off'}
+                    </button>
+                    <button 
+                      onClick={handleToggleContactReminder} 
+                      disabled={contactReminderToggling} 
+                      title={contactRemindersPaused ? 'Recordatorios pausados para este contacto' : 'Recordatorios activos para este contacto'}
+                      className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                        contactRemindersPaused 
+                          ? 'bg-accent-warning/20 text-accent-warning' 
+                          : 'bg-purple-500/20 text-purple-400'
+                      }`}
+                    >
+                      {contactRemindersPaused ? '⏸️ Rec off' : '🔔 Rec'}
                     </button>
                     {windowStatus?.provider === 'META_CLOUD' && (
                       <span className={`text-xs px-1.5 py-0.5 rounded ${windowStatus.windowOpen ? 'bg-neon-blue/20 text-neon-blue' : 'bg-accent-warning/20 text-accent-warning'}`}>
