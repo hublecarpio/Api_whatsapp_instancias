@@ -353,7 +353,25 @@ async function sendWhatsAppResponse(
       }, { timeout: 30000 });
     }
     
-    console.log(`[AI Worker] Response sent to ${phone}`);
+    const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+    
+    await prisma.messageLog.create({
+      data: {
+        businessId: business.id,
+        instanceId: instance?.id || null,
+        direction: 'outbound',
+        sender: instance?.phoneNumber || 'system',
+        recipient: cleanPhone,
+        message: message,
+        metadata: { 
+          source: 'ai_worker',
+          provider: instance?.provider || 'baileys',
+          agentVersion: business.agentVersion || 'v1'
+        }
+      }
+    });
+    
+    console.log(`[AI Worker] Response sent and logged to ${cleanPhone}`);
   } catch (error: any) {
     console.error(`[AI Worker] Failed to send WhatsApp response:`, error.message);
   }
