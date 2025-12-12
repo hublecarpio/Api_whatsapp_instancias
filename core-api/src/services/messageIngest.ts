@@ -141,6 +141,25 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     console.error('[ROUND-ROBIN] Failed to assign advisor:', err);
   }
 
+  // Cancel any pending follow-up reminders when user sends a message
+  try {
+    const cancelledReminders = await prisma.reminder.updateMany({
+      where: {
+        businessId,
+        contactPhone: cleanPhone,
+        status: 'pending'
+      },
+      data: {
+        status: 'cancelled_user_replied'
+      }
+    });
+    if (cancelledReminders.count > 0) {
+      console.log(`[FOLLOW-UP] Cancelled ${cancelledReminders.count} pending reminder(s) for ${cleanPhone} - user replied`);
+    }
+  } catch (err) {
+    console.error('[FOLLOW-UP] Failed to cancel pending reminders:', err);
+  }
+
   if (!business.botEnabled) {
     console.log('Bot disabled for business:', businessId);
     return true;
