@@ -20,7 +20,6 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   const businessObjective = (currentBusiness as any)?.businessObjective || 'SALES';
   
   const baseLinks = [
-    { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: '💬' },
     { href: '/dashboard/templates', label: 'Templates', icon: '📄' },

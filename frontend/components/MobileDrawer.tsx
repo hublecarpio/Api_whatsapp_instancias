@@ -36,7 +36,6 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
   };
 
   const links = [
-    { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: '💬' },
     { href: '/dashboard/templates', label: 'Templates', icon: '📄' },
