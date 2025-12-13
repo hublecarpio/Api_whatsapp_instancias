@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
-import { promptApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi } from '@/lib/api';
+import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi } from '@/lib/api';
 import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel, KnowledgePanel } from '@/components/AgentV2';
 
 interface ToolParameter {
@@ -89,6 +89,32 @@ interface AgentFile {
   createdAt: string;
 }
 
+type PromptSectionType = 'CORE' | 'TONE' | 'SALES' | 'POLICIES' | 'FAQ' | 'OBJECTIONS' | 'CLOSING' | 'OTHER';
+
+interface PromptSection {
+  id: string;
+  title: string;
+  content: string;
+  type: PromptSectionType;
+  isCore: boolean;
+  priority: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  metadata?: any;
+}
+
+const SECTION_TYPES: { value: PromptSectionType; label: string; description: string }[] = [
+  { value: 'CORE', label: 'Nucleo', description: 'Instrucciones fundamentales del agente' },
+  { value: 'TONE', label: 'Tono', description: 'Estilo de comunicacion y personalidad' },
+  { value: 'SALES', label: 'Ventas', description: 'Argumentos y tecnicas de venta' },
+  { value: 'POLICIES', label: 'Politicas', description: 'Politicas de envio, devolucion, etc.' },
+  { value: 'FAQ', label: 'FAQ', description: 'Preguntas frecuentes' },
+  { value: 'OBJECTIONS', label: 'Objeciones', description: 'Manejo de objeciones comunes' },
+  { value: 'CLOSING', label: 'Cierre', description: 'Tecnicas de cierre de venta' },
+  { value: 'OTHER', label: 'Otro', description: 'Contenido adicional' }
+];
+
 const DEFAULT_PROMPT = `Eres un asistente de atencion al cliente amable y profesional.
 
 Tu objetivo es ayudar a los clientes con sus consultas, proporcionar informacion sobre productos y servicios, y resolver cualquier problema que puedan tener.
@@ -150,7 +176,19 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'skills' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config' | 'api'>('prompt');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config' | 'api'>('prompt');
+  
+  const [promptSections, setPromptSections] = useState<PromptSection[]>([]);
+  const [loadingSections, setLoadingSections] = useState(false);
+  const [showSectionForm, setShowSectionForm] = useState(false);
+  const [editingSection, setEditingSection] = useState<PromptSection | null>(null);
+  const [newSection, setNewSection] = useState({
+    title: '',
+    content: '',
+    type: 'OTHER' as PromptSectionType,
+    isCore: false,
+    priority: 0
+  });
   
   const [apiKeyInfo, setApiKeyInfo] = useState<{ hasApiKey: boolean; prefix: string | null; createdAt: string | null } | null>(null);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
@@ -188,6 +226,7 @@ export default function PromptPage() {
       loadInjectionCode();
       if (version === 'v2') {
         loadV2Data();
+        loadPromptSections();
       }
     }
   }, [currentBusiness]);
@@ -197,6 +236,7 @@ export default function PromptPage() {
       loadV2Data();
       loadApiKeyInfo();
       loadWebhookConfig();
+      loadPromptSections();
     }
   }, [agentVersion]);
 
@@ -220,6 +260,128 @@ export default function PromptPage() {
     } catch (err) {
       console.error('Error loading webhook config:', err);
     }
+  };
+
+  const loadPromptSections = async () => {
+    if (!currentBusiness) return;
+    setLoadingSections(true);
+    try {
+      const res = await promptSectionsApi.list(currentBusiness.id);
+      setPromptSections(res.data.sections || []);
+    } catch (err) {
+      console.error('Error loading prompt sections:', err);
+    } finally {
+      setLoadingSections(false);
+    }
+  };
+
+  const handleCreateSection = async () => {
+    if (!currentBusiness || !newSection.title || !newSection.content) {
+      setError('Titulo y contenido son requeridos');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    try {
+      await promptSectionsApi.create(currentBusiness.id, {
+        title: newSection.title,
+        content: newSection.content,
+        type: newSection.type,
+        isCore: newSection.isCore,
+        priority: newSection.priority
+      });
+      setShowSectionForm(false);
+      setNewSection({ title: '', content: '', type: 'OTHER', isCore: false, priority: 0 });
+      loadPromptSections();
+      setSuccess('Seccion creada correctamente');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al crear seccion');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateSection = async () => {
+    if (!currentBusiness || !editingSection) return;
+    
+    setLoading(true);
+    setError('');
+    try {
+      await promptSectionsApi.update(currentBusiness.id, editingSection.id, {
+        title: newSection.title,
+        content: newSection.content,
+        type: newSection.type,
+        isCore: newSection.isCore,
+        priority: newSection.priority
+      });
+      setShowSectionForm(false);
+      setEditingSection(null);
+      setNewSection({ title: '', content: '', type: 'OTHER', isCore: false, priority: 0 });
+      loadPromptSections();
+      setSuccess('Seccion actualizada');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al actualizar seccion');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSection = async (sectionId: string) => {
+    if (!currentBusiness || !confirm('Eliminar esta seccion?')) return;
+    
+    try {
+      await promptSectionsApi.delete(currentBusiness.id, sectionId);
+      loadPromptSections();
+      setSuccess('Seccion eliminada');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al eliminar seccion');
+    }
+  };
+
+  const handleToggleSectionEnabled = async (section: PromptSection) => {
+    if (!currentBusiness) return;
+    
+    try {
+      await promptSectionsApi.update(currentBusiness.id, section.id, { enabled: !section.enabled });
+      setPromptSections(sections => 
+        sections.map(s => s.id === section.id ? { ...s, enabled: !s.enabled } : s)
+      );
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al actualizar seccion');
+    }
+  };
+
+  const handleToggleSectionCore = async (section: PromptSection) => {
+    if (!currentBusiness) return;
+    
+    try {
+      await promptSectionsApi.update(currentBusiness.id, section.id, { isCore: !section.isCore });
+      setPromptSections(sections => 
+        sections.map(s => s.id === section.id ? { ...s, isCore: !s.isCore } : s)
+      );
+      setSuccess(section.isCore ? 'Seccion movida a RAG' : 'Seccion marcada como Core');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al actualizar seccion');
+    }
+  };
+
+  const handleEditSection = (section: PromptSection) => {
+    setEditingSection(section);
+    setNewSection({
+      title: section.title,
+      content: section.content,
+      type: section.type,
+      isCore: section.isCore,
+      priority: section.priority
+    });
+    setShowSectionForm(true);
+  };
+
+  const handleCancelSectionForm = () => {
+    setShowSectionForm(false);
+    setEditingSection(null);
+    setNewSection({ title: '', content: '', type: 'OTHER', isCore: false, priority: 0 });
   };
 
   const handleGenerateApiKey = async () => {
@@ -1052,6 +1214,14 @@ export default function PromptPage() {
             Prompt Maestro
           </button>
           <button
+            onClick={() => setActiveV2Tab('sections')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'sections' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Secciones ({promptSections.length})
+          </button>
+          <button
             onClick={() => setActiveV2Tab('skills')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               activeV2Tab === 'skills' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
@@ -1144,6 +1314,260 @@ export default function PromptPage() {
               {loading ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
+        </div>
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'sections' && (
+        <div className="card">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Secciones del Prompt</h2>
+              <p className="text-sm text-gray-400">
+                Organiza tu prompt en secciones. Las secciones Core siempre se incluyen; 
+                las demas se recuperan via RAG segun el contexto del mensaje.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSectionForm(true)}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Agregar Seccion
+            </button>
+          </div>
+
+          {loadingSections ? (
+            <div className="text-center py-8 text-gray-400">Cargando secciones...</div>
+          ) : promptSections.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-400 mb-4">No hay secciones configuradas</p>
+              <p className="text-sm text-gray-500">
+                Crea secciones para organizar mejor tu prompt y habilitar RAG contextual.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {promptSections.filter(s => s.isCore).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-neon-purple mb-2 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                    Secciones Core (siempre incluidas)
+                  </h3>
+                  <div className="space-y-2">
+                    {promptSections.filter(s => s.isCore).map(section => (
+                      <div 
+                        key={section.id} 
+                        className={`p-4 rounded-lg border ${section.enabled ? 'bg-neon-purple/10 border-neon-purple/30' : 'bg-dark-hover border-gray-700 opacity-50'}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-white">{section.title}</span>
+                              <span className="text-xs px-2 py-0.5 rounded bg-neon-purple/20 text-neon-purple">
+                                {SECTION_TYPES.find(t => t.value === section.type)?.label || section.type}
+                              </span>
+                              {section.priority > 0 && (
+                                <span className="text-xs text-gray-500">P{section.priority}</span>
+                              )}
+                              {(section.metadata as any)?.hasEmbedding && (
+                                <span className="text-xs text-accent-success" title="Embeddings generados">
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-400 line-clamp-2">{section.content}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => handleToggleSectionCore(section)}
+                              className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
+                              title="Mover a RAG"
+                            >
+                              RAG
+                            </button>
+                            <button
+                              onClick={() => handleToggleSectionEnabled(section)}
+                              className={`w-10 h-5 rounded-full transition-colors ${section.enabled ? 'bg-accent-success' : 'bg-gray-600'}`}
+                            >
+                              <span className={`block w-4 h-4 rounded-full bg-white transform transition-transform ${section.enabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                            </button>
+                            <button onClick={() => handleEditSection(section)} className="p-1 text-gray-400 hover:text-white">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button onClick={() => handleDeleteSection(section.id)} className="p-1 text-gray-400 hover:text-accent-error">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {promptSections.filter(s => !s.isCore).length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-medium text-neon-blue mb-2 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    Secciones RAG (recuperadas por contexto)
+                  </h3>
+                  <div className="space-y-2">
+                    {promptSections.filter(s => !s.isCore).map(section => (
+                      <div 
+                        key={section.id} 
+                        className={`p-4 rounded-lg border ${section.enabled ? 'bg-dark-card border-gray-700' : 'bg-dark-hover border-gray-800 opacity-50'}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-white">{section.title}</span>
+                              <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300">
+                                {SECTION_TYPES.find(t => t.value === section.type)?.label || section.type}
+                              </span>
+                              {section.priority > 0 && (
+                                <span className="text-xs text-gray-500">P{section.priority}</span>
+                              )}
+                              {(section.metadata as any)?.hasEmbedding ? (
+                                <span className="text-xs text-accent-success" title="Embeddings generados - listo para RAG">
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                </span>
+                              ) : (
+                                <span className="text-xs text-amber-500" title="Sin embeddings - no aparecera en busquedas RAG">!</span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-400 line-clamp-2">{section.content}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => handleToggleSectionCore(section)}
+                              className="text-xs px-2 py-1 rounded bg-neon-purple/20 hover:bg-neon-purple/30 text-neon-purple"
+                              title="Marcar como Core"
+                            >
+                              Core
+                            </button>
+                            <button
+                              onClick={() => handleToggleSectionEnabled(section)}
+                              className={`w-10 h-5 rounded-full transition-colors ${section.enabled ? 'bg-accent-success' : 'bg-gray-600'}`}
+                            >
+                              <span className={`block w-4 h-4 rounded-full bg-white transform transition-transform ${section.enabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                            </button>
+                            <button onClick={() => handleEditSection(section)} className="p-1 text-gray-400 hover:text-white">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button onClick={() => handleDeleteSection(section.id)} className="p-1 text-gray-400 hover:text-accent-error">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {showSectionForm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-dark-card rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <h3 className="text-lg font-semibold text-white mb-4">
+                  {editingSection ? 'Editar Seccion' : 'Nueva Seccion'}
+                </h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Titulo</label>
+                    <input
+                      type="text"
+                      value={newSection.title}
+                      onChange={(e) => setNewSection({ ...newSection, title: e.target.value })}
+                      className="input"
+                      placeholder="Ej: Politica de envios"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Tipo</label>
+                      <select
+                        value={newSection.type}
+                        onChange={(e) => setNewSection({ ...newSection, type: e.target.value as PromptSectionType })}
+                        className="input"
+                      >
+                        {SECTION_TYPES.map(type => (
+                          <option key={type.value} value={type.value}>{type.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Prioridad</label>
+                      <input
+                        type="number"
+                        value={newSection.priority}
+                        onChange={(e) => setNewSection({ ...newSection, priority: parseInt(e.target.value) || 0 })}
+                        className="input"
+                        min={0}
+                        max={100}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="flex items-center gap-2 text-sm text-gray-400 mb-1">
+                      <input
+                        type="checkbox"
+                        checked={newSection.isCore}
+                        onChange={(e) => setNewSection({ ...newSection, isCore: e.target.checked })}
+                        className="rounded"
+                      />
+                      <span>Seccion Core (siempre incluida)</span>
+                    </label>
+                    <p className="text-xs text-gray-500 ml-6">
+                      Las secciones Core siempre se envian al agente. Las demas se recuperan via RAG segun relevancia.
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Contenido</label>
+                    <textarea
+                      value={newSection.content}
+                      onChange={(e) => setNewSection({ ...newSection, content: e.target.value })}
+                      className="input font-mono text-sm resize-none"
+                      rows={8}
+                      placeholder="Escribe el contenido de esta seccion..."
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex justify-end gap-3 mt-6">
+                  <button onClick={handleCancelSectionForm} className="btn btn-secondary">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={editingSection ? handleUpdateSection : handleCreateSection}
+                    disabled={loading || !newSection.title || !newSection.content}
+                    className="btn btn-primary"
+                  >
+                    {loading ? 'Guardando...' : editingSection ? 'Actualizar' : 'Crear'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

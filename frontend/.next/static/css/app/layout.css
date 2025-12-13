@@ -958,6 +958,9 @@ video {
 .ml-5 {
   margin-left: 1.25rem;
 }
+.ml-6 {
+  margin-left: 1.5rem;
+}
 .ml-8 {
   margin-left: 2rem;
 }
@@ -1320,6 +1323,9 @@ video {
   flex: 1 1 0%;
 }
 .flex-shrink-0 {
+  flex-shrink: 0;
+}
+.shrink-0 {
   flex-shrink: 0;
 }
 .-translate-x-full {
