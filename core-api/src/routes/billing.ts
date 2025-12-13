@@ -130,10 +130,11 @@ router.post('/webhook', async (req, res) => {
               data: {
                 stripeSubscriptionId: subscriptionId,
                 subscriptionStatus: trialEnd ? 'TRIAL' : 'ACTIVE',
-                trialEndAt: trialEnd
+                trialEndAt: trialEnd,
+                demoPhase: 'TRIAL'
               }
             });
-            console.log(`User ${userId} subscription activated: ${subscriptionId}`);
+            console.log(`User ${userId} subscription activated: ${subscriptionId}, demoPhase set to TRIAL`);
           }
         }
         break;

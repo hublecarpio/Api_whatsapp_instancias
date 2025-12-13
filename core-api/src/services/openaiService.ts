@@ -445,8 +445,10 @@ export async function getTokenUsageStats(businessId: string, options?: {
   };
 }
 
+export const DEMO_TOKEN_LIMIT = 150000;
 export const TRIAL_TOKEN_LIMIT = 500000;
 export const PRO_TOKEN_LIMIT = 5000000;
+export const DEMO_DAYS = 2;
 
 export async function getMonthlyTokenUsageForUser(userId: string, subscriptionStatus?: string, bonusTokens?: number): Promise<{
   totalTokens: number;
@@ -493,6 +495,9 @@ export async function checkUserTokenLimit(userId: string): Promise<{
   tokensRemaining: number;
   bonusTokens: number;
   message?: string;
+  demoPhase?: string;
+  demoExpired?: boolean;
+  needsCard?: boolean;
 }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -500,7 +505,9 @@ export async function checkUserTokenLimit(userId: string): Promise<{
       subscriptionStatus: true, 
       bonusTokens: true,
       proBonusExpiresAt: true,
-      stripeSubscriptionId: true
+      stripeSubscriptionId: true,
+      demoStartedAt: true,
+      demoPhase: true
     }
   });
   
@@ -514,26 +521,74 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     };
   }
   
-  let effectiveStatus = user.subscriptionStatus;
+  const hasValidProBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
+  const hasStripeSubscription = !!user.stripeSubscriptionId;
   
-  if (user.subscriptionStatus === 'ACTIVE' && !user.stripeSubscriptionId) {
-    const hasValidProBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
+  if (hasValidProBonus) {
+    return {
+      canUseAI: true,
+      tokensUsed: 0,
+      tokensRemaining: PRO_TOKEN_LIMIT,
+      bonusTokens: user.bonusTokens,
+      demoPhase: 'ACTIVE'
+    };
+  }
+  
+  if (user.demoPhase === 'DEMO' && user.demoStartedAt && !hasStripeSubscription) {
+    const now = new Date();
+    const demoStarted = new Date(user.demoStartedAt);
+    const hoursSinceDemo = (now.getTime() - demoStarted.getTime()) / (1000 * 60 * 60);
+    const demoExpired = hoursSinceDemo >= (DEMO_DAYS * 24);
     
-    let hasActiveEnterpriseSubscription = false;
-    if (!hasValidProBonus) {
-      const activeSubscription = await prisma.subscription.findFirst({
-        where: {
-          userId,
-          status: 'ACTIVE',
-          endsAt: { gte: new Date() }
-        }
-      });
-      hasActiveEnterpriseSubscription = !!activeSubscription;
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const usage = await prisma.tokenUsage.aggregate({
+      _sum: { totalTokens: true },
+      where: { userId, createdAt: { gte: startOfMonth } }
+    });
+    const tokensUsed = usage._sum.totalTokens || 0;
+    
+    if (demoExpired || tokensUsed >= DEMO_TOKEN_LIMIT) {
+      return {
+        canUseAI: false,
+        tokensUsed,
+        tokensRemaining: 0,
+        bonusTokens: user.bonusTokens,
+        message: demoExpired 
+          ? 'Tu periodo de prueba de 2 dias ha expirado. Agrega una tarjeta para continuar usando el agente IA.'
+          : 'Has alcanzado tu limite de 150K tokens de la fase demo. Agrega una tarjeta para continuar.',
+        demoPhase: 'DEMO',
+        demoExpired,
+        needsCard: true
+      };
     }
     
-    if (!hasValidProBonus && !hasActiveEnterpriseSubscription) {
+    return {
+      canUseAI: true,
+      tokensUsed,
+      tokensRemaining: DEMO_TOKEN_LIMIT - tokensUsed,
+      bonusTokens: user.bonusTokens,
+      demoPhase: 'DEMO',
+      demoExpired: false,
+      needsCard: false
+    };
+  }
+  
+  let effectiveStatus = user.subscriptionStatus;
+  
+  if (user.subscriptionStatus === 'ACTIVE' && !hasStripeSubscription) {
+    let hasActiveEnterpriseSubscription = false;
+    const activeSubscription = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: 'ACTIVE',
+        endsAt: { gte: new Date() }
+      }
+    });
+    hasActiveEnterpriseSubscription = !!activeSubscription;
+    
+    if (!hasActiveEnterpriseSubscription) {
       effectiveStatus = 'PENDING';
-      console.log(`[TOKEN] User ${userId} has no valid bonus or enterprise subscription, treating as PENDING`);
+      console.log(`[TOKEN] User ${userId} has no valid subscription, treating as PENDING`);
     }
   }
   
@@ -543,7 +598,9 @@ export async function checkUserTokenLimit(userId: string): Promise<{
       tokensUsed: 0,
       tokensRemaining: 0,
       bonusTokens: 0,
-      message: 'Suscribete para usar el agente IA'
+      message: 'Suscribete para usar el agente IA',
+      demoPhase: user.demoPhase || 'NONE',
+      needsCard: true
     };
   }
   
@@ -556,7 +613,8 @@ export async function checkUserTokenLimit(userId: string): Promise<{
       tokensUsed: usage.totalTokens,
       tokensRemaining: 0,
       bonusTokens: user.bonusTokens,
-      message: `Has alcanzado tu limite de ${limitText} tokens este mes.${user.subscriptionStatus === 'TRIAL' ? ' Suscribete para continuar usando el agente IA.' : ' Puedes comprar creditos adicionales.'}`
+      message: `Has alcanzado tu limite de ${limitText} tokens este mes.${user.subscriptionStatus === 'TRIAL' ? ' Suscribete para continuar usando el agente IA.' : ' Puedes comprar creditos adicionales.'}`,
+      demoPhase: user.demoPhase || 'TRIAL'
     };
   }
   
@@ -564,6 +622,7 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     canUseAI: true,
     tokensUsed: usage.totalTokens,
     tokensRemaining: usage.limit - usage.totalTokens,
-    bonusTokens: user.bonusTokens
+    bonusTokens: user.bonusTokens,
+    demoPhase: user.demoPhase || 'TRIAL'
   };
 }

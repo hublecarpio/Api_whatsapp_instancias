@@ -80,7 +80,9 @@ router.post('/register', async (req: Request, res: Response) => {
           lastVerificationSentAt: new Date(),
           referralCode: validReferralCode,
           isPro,
-          subscriptionStatus
+          subscriptionStatus,
+          demoStartedAt: enterpriseCode ? null : new Date(),
+          demoPhase: enterpriseCode ? 'ACTIVE' : 'DEMO'
         }
       });
       
@@ -326,6 +328,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         isPro: true,
         paymentLinkEnabled: true,
         proBonusExpiresAt: true,
+        demoStartedAt: true,
+        demoPhase: true,
         role: true,
         parentUserId: true
       }
@@ -355,13 +359,33 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       console.log(`[AUTO-FIX] User ${user.email} had active bonus but PENDING status, corrected to ACTIVE`);
     }
     
-    let planType: 'pro' | 'basic' | 'trial' | 'none' = 'none';
+    let planType: 'pro' | 'basic' | 'trial' | 'demo' | 'none' = 'none';
     if (hasActiveBonus || user.isPro) {
       planType = 'pro';
     } else if (hasStripeSubscription && (effectiveStatus === 'ACTIVE' || effectiveStatus === 'TRIAL')) {
       planType = 'basic';
+    } else if (user.demoPhase === 'DEMO') {
+      planType = 'demo';
     } else if (effectiveStatus === 'TRIAL') {
       planType = 'trial';
+    }
+    
+    let demoInfo = null;
+    if (user.demoPhase === 'DEMO' && user.demoStartedAt && !hasStripeSubscription) {
+      const now = new Date();
+      const demoStarted = new Date(user.demoStartedAt);
+      const hoursSinceDemo = (now.getTime() - demoStarted.getTime()) / (1000 * 60 * 60);
+      const hoursRemaining = Math.max(0, 48 - hoursSinceDemo);
+      const demoExpired = hoursSinceDemo >= 48;
+      
+      demoInfo = {
+        demoStartedAt: user.demoStartedAt,
+        hoursSinceDemo: Math.floor(hoursSinceDemo),
+        hoursRemaining: Math.floor(hoursRemaining),
+        daysRemaining: Math.ceil(hoursRemaining / 24),
+        demoExpired,
+        needsCard: demoExpired
+      };
     }
     
     res.json({
@@ -374,6 +398,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       hasActiveBonus,
       hasStripeSubscription,
       planType,
+      demoPhase: user.demoPhase,
+      demoInfo,
       role: user.role,
       parentUserId: user.parentUserId
     });

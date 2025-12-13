@@ -49,12 +49,16 @@ export default function BillingPage() {
 
   const loadData = async () => {
     try {
-      const [statusRes, tokenRes] = await Promise.all([
+      const [statusRes, tokenRes, meRes] = await Promise.all([
         billingApi.getSubscriptionStatus(),
-        billingApi.getTokenUsage()
+        billingApi.getTokenUsage(),
+        authApi.getMe()
       ]);
       setStatus(statusRes.data);
       setTokenUsage(tokenRes.data);
+      if (meRes.data) {
+        updateUser(meRes.data);
+      }
     } catch (error) {
       console.error('Error loading billing data:', error);
     } finally {
@@ -202,6 +206,8 @@ export default function BillingPage() {
   };
 
   const isEnterprise = status?.hasActiveBonus || (user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date());
+  const isDemo = (user as any)?.demoPhase === 'DEMO' || (user as any)?.planType === 'demo';
+  const demoInfo = (user as any)?.demoInfo;
 
   const getStatusBadge = () => {
     if (!status) return null;
@@ -210,6 +216,14 @@ export default function BillingPage() {
       return (
         <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
           Avanzado
+        </span>
+      );
+    }
+
+    if (isDemo) {
+      return (
+        <span className="bg-amber-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+          Demo (2 dias)
         </span>
       );
     }
@@ -298,7 +312,66 @@ export default function BillingPage() {
           </div>
         )}
 
-        {!isEnterprise && status?.subscriptionStatus === 'trial' && status.trialEndAt && (
+        {isDemo && (
+          <div className={`${demoInfo?.demoExpired ? 'bg-red-500/10 border-red-500/30' : 'bg-amber-500/10 border-amber-500/30'} border rounded-lg p-4 mb-4`}>
+            <p className={`${demoInfo?.demoExpired ? 'text-red-400' : 'text-amber-400'} font-medium flex items-center gap-2`}>
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              {demoInfo?.demoExpired ? 'Periodo Demo Expirado' : 'Periodo Demo Activo'}
+            </p>
+            <p className={`${demoInfo?.demoExpired ? 'text-red-400/70' : 'text-amber-400/70'} text-sm mt-1`}>
+              {demoInfo?.demoExpired 
+                ? 'Tu periodo de prueba de 2 dias ha terminado. Agrega una tarjeta para continuar usando el agente IA.'
+                : `Te quedan ${demoInfo?.daysRemaining || 2} dias de prueba gratis. Limite: 150K tokens.`
+              }
+            </p>
+            {demoInfo?.demoExpired && (
+              <p className={`text-red-400/70 text-sm mt-2`}>
+                Al suscribirte, obtendras 7 dias de prueba adicionales con 500K tokens y luego el plan de $97 USD/mes.
+              </p>
+            )}
+          </div>
+        )}
+
+        {isDemo && tokenUsage && (
+          <div className="bg-dark-hover rounded-lg p-4 mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-400 text-sm">Uso de tokens (Demo: 150K max)</span>
+              <span className="text-white text-sm font-medium">
+                {formatTokens(tokenUsage.tokensUsed)} / 150K
+              </span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+              <div 
+                className={`h-3 rounded-full transition-all duration-300 ${
+                  tokenUsage.tokensUsed >= 150000
+                    ? 'bg-accent-error' 
+                    : tokenUsage.tokensUsed >= 120000
+                      ? 'bg-accent-warning' 
+                      : 'bg-amber-500'
+                }`}
+                style={{ width: `${Math.min(100, (tokenUsage.tokensUsed / 150000) * 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between items-center mt-2">
+              <span className="text-gray-500 text-xs">
+                {Math.round((tokenUsage.tokensUsed / 150000) * 100)}% usado
+              </span>
+              {tokenUsage.tokensUsed >= 150000 ? (
+                <span className="text-accent-error text-xs font-medium">
+                  Limite demo alcanzado - Agrega tarjeta para continuar
+                </span>
+              ) : (
+                <span className="text-gray-500 text-xs">
+                  {formatTokens(Math.max(0, 150000 - tokenUsage.tokensUsed))} restantes
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!isEnterprise && !isDemo && status?.subscriptionStatus === 'trial' && status.trialEndAt && (
           <div className="bg-neon-blue/10 border border-neon-blue/30 rounded-lg p-4 mb-4">
             <p className="text-neon-blue">
               Tu periodo de prueba termina el <strong>{formatDate(status.trialEndAt)}</strong>
@@ -309,7 +382,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {!isEnterprise && status?.subscriptionStatus === 'trial' && tokenUsage && (
+        {!isEnterprise && !isDemo && status?.subscriptionStatus === 'trial' && tokenUsage && (
           <div className="bg-dark-hover rounded-lg p-4 mb-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-400 text-sm">Uso de tokens este mes</span>
