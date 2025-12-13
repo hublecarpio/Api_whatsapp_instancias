@@ -1,0 +1,105 @@
+CONTEXTO
+
+Actualmente la UI de Super Admin permite configurar un solo modelo para Agent V2, pero el sistema Agent V2 opera con 3 cerebros distintos (Vendor, Observer, Refiner), cada uno con requerimientos cognitivos diferentes.
+
+Esto genera:
+
+Uso innecesario de modelos caros
+
+Mayor latencia
+
+Falta de control fino de costos
+
+OBJETIVO
+
+Ajustar la UI y el runtime para que Agent V2 use modelos diferenciados por cerebro, manteniendo la experiencia simple para el Super Admin y sin exponer esto a los negocios (Admin).
+
+CAMBIOS REQUERIDOS (OBLIGATORIOS)
+1. SEMÁNTICA CORRECTA DEL CAMPO EXISTENTE
+
+El campo actual:
+
+“Modelo por defecto – Agent V2 (Python/LangGraph)”
+
+Debe representar EXCLUSIVAMENTE el modelo del Vendor Agent (respuesta al cliente).
+
+Renombrar internamente (no necesariamente en UI) como:
+
+vendor_model
+
+2. AGREGAR CONFIGURACIÓN AVANZADA (SOLO SUPER ADMIN)
+
+Agregar una sección Advanced / Interno (solo visible para Super Admin) con:
+
+Observer Agent – Modelo
+
+Default recomendado: GPT-4.1 Mini o Nano
+
+Refiner Agent – Modelo
+
+Default recomendado: GPT-4.1 Mini
+
+Estos campos:
+
+No son visibles para negocios
+
+No afectan Agent V1
+
+Sobrescriben cualquier ENV
+
+3. PRECEDENCIA DE CONFIGURACIÓN (RUNTIME)
+
+El runtime debe resolver modelos en este orden:
+
+Configuración guardada desde UI (por cerebro)
+
+Variables de entorno (fallback)
+
+Default hardcodeado
+
+Ejemplo lógico:
+
+vendor_model   = ui.vendor_model   || ENV.VENDOR_MODEL   || default
+observer_model = ui.observer_model || ENV.OBSERVER_MODEL || default
+refiner_model  = ui.refiner_model  || ENV.REFINER_MODEL  || default
+
+4. VALIDACIONES DURAS (SEGURIDAD DE COSTO)
+
+Imponer reglas:
+
+Vendor Agent ❌ NO puede usar modelos Nano
+
+Observer / Refiner ❌ NO pueden usar GPT-5.2 Pro por defecto
+
+Mostrar warning si se selecciona un modelo no recomendado (no bloquear)
+
+5. COMPORTAMIENTO POR DEFECTO (PLATAFORMA)
+
+Configurar defaults de plataforma:
+
+Vendor → GPT-5.2
+
+Observer → GPT-4.1 Mini
+
+Refiner → GPT-4.1 Mini
+
+Razonamiento → Ninguno (más rápido)
+
+Max tokens → 4096
+
+RESULTADO ESPERADO
+
+El modelo caro solo impacta donde el usuario final lo percibe
+
+Observer y Refiner son rápidos y baratos
+
+El Super Admin tiene control total
+
+Los negocios no pueden romper costos ni arquitectura
+
+Agent V2 queda optimizado para producción real
+
+NOTA FINAL
+
+No agregar nuevas features.
+Solo ajustar semántica, UI y runtime según esta orden.

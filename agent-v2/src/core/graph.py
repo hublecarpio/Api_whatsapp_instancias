@@ -33,6 +33,7 @@ from ..agents.observer import get_observer_agent
 from ..agents.refiner import get_refiner_agent
 from .tool_router import ToolRouter, format_tool_result
 from .telemetry import log_tool_execution_fire_and_forget
+from ..schemas.tool_schemas import validate_vendor_response, sanitize_vendor_response
 import time
 
 logger = logging.getLogger(__name__)
@@ -367,7 +368,7 @@ async def update_state_node(state: GraphState) -> Dict[str, Any]:
 
 
 async def finalize_response_node(state: GraphState) -> Dict[str, Any]:
-    """FASE 3: Construye la respuesta final."""
+    """FASE 3: Construye la respuesta final con validación de seguridad."""
     logger.info("Finalizing response")
     
     vendor_action = state.get("vendor_action", {})
@@ -375,7 +376,12 @@ async def finalize_response_node(state: GraphState) -> Dict[str, Any]:
     tool_success = state.get("tool_success", True)
     
     if vendor_action.get("accion") == "respuesta" or not tool_result:
-        return {"final_response": vendor_action.get("mensaje", "")}
+        response = vendor_action.get("mensaje", "")
+        is_valid, violations = validate_vendor_response(response)
+        if not is_valid:
+            logger.warning(f"[SECURITY] Response validation failed: {violations}")
+            response = sanitize_vendor_response(response)
+        return {"final_response": response}
     
     vendor = get_vendor_agent()
     refined_response, tokens = await vendor.refine_with_tool_result(
@@ -386,6 +392,11 @@ async def finalize_response_node(state: GraphState) -> Dict[str, Any]:
         business_profile=BusinessProfile.from_context(state["business_profile"]),
         tool_failed=not tool_success
     )
+    
+    is_valid, violations = validate_vendor_response(refined_response)
+    if not is_valid:
+        logger.warning(f"[SECURITY] Refined response validation failed: {violations}")
+        refined_response = sanitize_vendor_response(refined_response)
     
     return {
         "final_response": refined_response,
@@ -470,7 +481,7 @@ async def tool_router_node(state: GraphState) -> Dict[str, Any]:
 
 
 async def vendor_refine_node(state: GraphState) -> Dict[str, Any]:
-    """Legacy vendor refine node."""
+    """Legacy vendor refine node with security validation."""
     logger.info("Executing vendor refine node")
     
     vendor_action = state.get("vendor_action", {})
@@ -479,7 +490,12 @@ async def vendor_refine_node(state: GraphState) -> Dict[str, Any]:
     tool_error = state.get("tool_error")
     
     if not tool_result:
-        return {"final_response": vendor_action.get("mensaje", "")}
+        response = vendor_action.get("mensaje", "")
+        is_valid, violations = validate_vendor_response(response)
+        if not is_valid:
+            logger.warning(f"[SECURITY] Vendor response validation failed: {violations}")
+            response = sanitize_vendor_response(response)
+        return {"final_response": response}
     
     if not tool_success and tool_error:
         error_context = f"La herramienta falló: {tool_error}. Resultado: {tool_result}"
@@ -496,6 +512,11 @@ async def vendor_refine_node(state: GraphState) -> Dict[str, Any]:
         tool_failed=not tool_success
     )
     
+    is_valid, violations = validate_vendor_response(refined_response)
+    if not is_valid:
+        logger.warning(f"[SECURITY] Refined response validation failed: {violations}")
+        refined_response = sanitize_vendor_response(refined_response)
+    
     return {
         "final_response": refined_response,
         "tokens_used": state.get("tokens_used", 0) + tokens
@@ -503,14 +524,21 @@ async def vendor_refine_node(state: GraphState) -> Dict[str, Any]:
 
 
 async def response_builder_node(state: GraphState) -> Dict[str, Any]:
-    """Legacy response builder."""
+    """Legacy response builder with security validation."""
     logger.info("Building final response")
     vendor_action = state.get("vendor_action", {})
     
     if vendor_action.get("accion") == "respuesta":
-        return {"final_response": vendor_action.get("mensaje", "")}
+        response = vendor_action.get("mensaje", "")
+    else:
+        response = vendor_action.get("mensaje", "No pude procesar tu solicitud.")
     
-    return {"final_response": vendor_action.get("mensaje", "No pude procesar tu solicitud.")}
+    is_valid, violations = validate_vendor_response(response)
+    if not is_valid:
+        logger.warning(f"[SECURITY] Response builder validation failed: {violations}")
+        response = sanitize_vendor_response(response)
+    
+    return {"final_response": response}
 
 
 async def observer_node(state: GraphState) -> Dict[str, Any]:

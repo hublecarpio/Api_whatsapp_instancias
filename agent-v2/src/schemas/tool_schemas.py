@@ -135,6 +135,140 @@ def _contains_blocked_info(text: str) -> bool:
     return any(pattern in text_lower for pattern in blocked_patterns)
 
 
+BLOCKED_RESPONSE_PATTERNS = [
+    r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}",
+    r"[a-f0-9]{24,}",
+    r"token[:\s]*[a-zA-Z0-9_\-\.]+",
+    r"api_key[:\s]*[a-zA-Z0-9_\-\.]+",
+    r"secret[:\s]*[a-zA-Z0-9_\-\.]+",
+    r"business_id[:\s]*[a-zA-Z0-9_\-]+",
+    r"lead_id[:\s]*[a-zA-Z0-9_\-]+",
+    r"user_id[:\s]*[a-zA-Z0-9_\-]+",
+    r"record_id[:\s]*[a-zA-Z0-9_\-]+",
+    r"database_id[:\s]*[a-zA-Z0-9_\-]+",
+    r"internal_id[:\s]*[a-zA-Z0-9_\-]+",
+    r"_id[:\s]*[a-zA-Z0-9_\-]+",
+    r"stacktrace",
+    r"traceback",
+    r"at line \d+",
+    r"exception:",
+    r"error\s*code[:\s]*\d+",
+]
+
+
+def validate_vendor_response(response_text: str) -> tuple[bool, list[str]]:
+    """
+    FASE 10: Valida que la respuesta del Vendor no contenga información técnica.
+    
+    Retorna:
+        (is_valid, violations) - True si no hay violaciones, lista de patrones detectados
+    """
+    import re
+    
+    if not response_text:
+        return True, []
+    
+    violations = []
+    text_lower = response_text.lower()
+    
+    for pattern in BLOCKED_RESPONSE_PATTERNS:
+        if re.search(pattern, text_lower, re.IGNORECASE):
+            violations.append(pattern)
+    
+    for blocked_field in BLOCKED_FIELDS:
+        pattern = rf'\b{blocked_field}\b[:\s]*[a-zA-Z0-9_\-\.]+'
+        if re.search(pattern, text_lower, re.IGNORECASE):
+            violations.append(f"field:{blocked_field}")
+    
+    return len(violations) == 0, violations
+
+
+def sanitize_vendor_response(response_text: str) -> str:
+    """
+    FASE 10: Sanitiza la respuesta del Vendor eliminando información técnica filtrada.
+    Solo se usa como fallback si la validación falla.
+    Cubre TODOS los patrones de BLOCKED_RESPONSE_PATTERNS.
+    """
+    import re
+    
+    if not response_text:
+        return response_text
+    
+    sanitized = response_text
+    
+    sanitized = re.sub(
+        r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
+        '[ID]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'[a-f0-9]{24,}',
+        '[ID]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'(token|api_key|secret)[:\s]*[a-zA-Z0-9_\-\.]+',
+        r'\1: [REDACTED]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'(business_id|lead_id|user_id|record_id|database_id|internal_id|_id)[:\s]*[a-zA-Z0-9_\-]+',
+        r'\1: [REDACTED]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'stacktrace[:\s]*[\s\S]*?(?=\n\n|\Z)',
+        '[technical info removed]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'traceback[:\s]*[\s\S]*?(?=\n\n|\Z)',
+        '[technical info removed]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'(at line \d+[^\n]*\n?)+',
+        '[technical info removed]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'exception:[:\s]*[\s\S]*?(?=\n\n|\Z)',
+        '[error occurred]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'error\s*code[:\s]*\d+[^\n]*',
+        '[error occurred]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    sanitized = re.sub(
+        r'File "[^"]+", line \d+[^\n]*(\n\s+[^\n]+)*',
+        '[technical info removed]',
+        sanitized,
+        flags=re.IGNORECASE
+    )
+    
+    return sanitized
+
+
 def format_products_for_llm(products: List[Dict[str, Any]], max_items: int = 5) -> List[Dict[str, Any]]:
     """Formatea lista de productos para consumo del LLM - solo info comercial."""
     formatted = []
