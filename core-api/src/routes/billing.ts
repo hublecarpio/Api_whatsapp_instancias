@@ -75,6 +75,13 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
   }
 });
 
+const processedWebhookEvents: Set<string> = new Set();
+const WEBHOOK_EVENT_TTL = 5 * 60 * 1000;
+
+setInterval(() => {
+  processedWebhookEvents.clear();
+}, WEBHOOK_EVENT_TTL);
+
 router.post('/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'] as string;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
@@ -88,7 +95,13 @@ router.post('/webhook', async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  console.log(`Stripe webhook received: ${event.type}`);
+  if (processedWebhookEvents.has(event.id)) {
+    console.log(`Stripe webhook already processed: ${event.id}`);
+    return res.json({ received: true, duplicate: true });
+  }
+  
+  processedWebhookEvents.add(event.id);
+  console.log(`Stripe webhook received: ${event.type} (${event.id})`);
 
   try {
     switch (event.type) {
@@ -476,8 +489,13 @@ router.post('/portal', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-const TOKEN_CREDIT_AMOUNT = 500;
-const TOKEN_CREDIT_TOKENS = 1000000;
+const TOKEN_CREDIT_OPTIONS: { [key: number]: { amount: number; tokens: number } } = {
+  5: { amount: 500, tokens: 1000000 },
+  10: { amount: 1000, tokens: 2000000 },
+  15: { amount: 1500, tokens: 3000000 }
+};
+
+const purchaseInProgress: Set<string> = new Set();
 
 router.post('/purchase-credits', authMiddleware, async (req: AuthRequest, res) => {
   try {
@@ -487,75 +505,98 @@ router.post('/purchase-credits', authMiddleware, async (req: AuthRequest, res) =
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    if (purchaseInProgress.has(userId)) {
+      return res.status(429).json({ error: 'Ya hay una compra en proceso. Espera un momento.' });
     }
 
-    if (user.subscriptionStatus !== 'ACTIVE') {
-      return res.status(400).json({ error: 'Solo usuarios con suscripcion activa pueden comprar creditos adicionales.' });
-    }
+    purchaseInProgress.add(userId);
 
-    if (!user.stripeCustomerId) {
-      return res.status(400).json({ error: 'No tienes un metodo de pago configurado.' });
-    }
-
-    const paymentMethods = await stripe.paymentMethods.list({
-      customer: user.stripeCustomerId,
-      type: 'card'
-    });
-
-    if (paymentMethods.data.length === 0) {
-      return res.status(400).json({ error: 'No tienes una tarjeta guardada. Actualiza tu metodo de pago primero.' });
-    }
-
-    const defaultPaymentMethod = paymentMethods.data[0].id;
-
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: TOKEN_CREDIT_AMOUNT,
-      currency: 'usd',
-      customer: user.stripeCustomerId,
-      payment_method: defaultPaymentMethod,
-      off_session: true,
-      confirm: true,
-      description: `Token Credits: ${(TOKEN_CREDIT_TOKENS / 1000000).toFixed(0)}M tokens`,
-      metadata: {
-        userId: user.id,
-        type: 'token_credits',
-        tokens: TOKEN_CREDIT_TOKENS.toString()
+    try {
+      const { tier = 5 } = req.body;
+      
+      const creditOption = TOKEN_CREDIT_OPTIONS[tier as number];
+      if (!creditOption) {
+        return res.status(400).json({ error: 'Opcion de creditos invalida. Usa 5, 10 o 15.' });
       }
-    });
 
-    if (paymentIntent.status === 'succeeded') {
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          bonusTokens: {
-            increment: TOKEN_CREDIT_TOKENS
-          }
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user.subscriptionStatus !== 'ACTIVE') {
+        return res.status(400).json({ error: 'Solo usuarios con suscripcion activa pueden comprar creditos adicionales.' });
+      }
+
+      if (!user.stripeCustomerId) {
+        return res.status(400).json({ error: 'No tienes un metodo de pago configurado.' });
+      }
+
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: user.stripeCustomerId,
+        type: 'card'
+      });
+
+      if (paymentMethods.data.length === 0) {
+        return res.status(400).json({ error: 'No tienes una tarjeta guardada. Actualiza tu metodo de pago primero.' });
+      }
+
+      const defaultPaymentMethod = paymentMethods.data[0].id;
+
+      const idempotencyKey = `token_credits_${userId}_${Date.now()}`;
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: creditOption.amount,
+        currency: 'usd',
+        customer: user.stripeCustomerId,
+        payment_method: defaultPaymentMethod,
+        off_session: true,
+        confirm: true,
+        description: `Token Credits: ${(creditOption.tokens / 1000000).toFixed(0)}M tokens`,
+        metadata: {
+          userId: user.id,
+          type: 'token_credits',
+          tokens: creditOption.tokens.toString(),
+          tier: tier.toString()
         }
+      }, {
+        idempotencyKey
       });
 
-      const updatedUser = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { bonusTokens: true }
-      });
+      if (paymentIntent.status === 'succeeded') {
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            bonusTokens: {
+              increment: creditOption.tokens
+            }
+          }
+        });
 
-      console.log(`Token credits purchased: ${TOKEN_CREDIT_TOKENS} tokens for user ${user.email}`);
+        const updatedUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { bonusTokens: true }
+        });
 
-      res.json({
-        success: true,
-        message: `Se agregaron ${(TOKEN_CREDIT_TOKENS / 1000000).toFixed(0)}M tokens a tu cuenta.`,
-        tokensAdded: TOKEN_CREDIT_TOKENS,
-        newBonusTotal: updatedUser?.bonusTokens || 0,
-        amountCharged: TOKEN_CREDIT_AMOUNT / 100
-      });
-    } else {
-      res.status(400).json({ error: 'El pago no pudo ser procesado. Intenta de nuevo.' });
+        console.log(`Token credits purchased: ${creditOption.tokens} tokens ($${tier}) for user ${user.email}, PaymentIntent: ${paymentIntent.id}`);
+
+        res.json({
+          success: true,
+          message: `Se agregaron ${(creditOption.tokens / 1000000).toFixed(0)}M tokens a tu cuenta.`,
+          tokensAdded: creditOption.tokens,
+          newBonusTotal: updatedUser?.bonusTokens || 0,
+          amountCharged: creditOption.amount / 100
+        });
+      } else {
+        res.status(400).json({ error: 'El pago no pudo ser procesado. Intenta de nuevo.' });
+      }
+    } finally {
+      purchaseInProgress.delete(userId);
     }
   } catch (error: any) {
     console.error('Error purchasing token credits:', error);
+    purchaseInProgress.delete(req.userId || '');
     
     if (error.type === 'StripeCardError') {
       return res.status(400).json({ error: 'Tu tarjeta fue rechazada. Actualiza tu metodo de pago.' });
@@ -589,7 +630,7 @@ router.post('/enterprise-request', authMiddleware, async (req: AuthRequest, res)
     }
 
     const businessNames = user.businesses.map(b => b.name).join(', ') || 'Sin negocios registrados';
-    const adminEmail = process.env.SMTP_FROM_EMAIL || 'admin@efficorechat.com';
+    const enterpriseEmail = 'iam@hubleconsulting.com';
 
     const emailHtml = `
 <!DOCTYPE html>
@@ -651,7 +692,7 @@ router.post('/enterprise-request', authMiddleware, async (req: AuthRequest, res)
     `;
 
     const emailSent = await sendEmail(
-      adminEmail,
+      enterpriseEmail,
       `[Enterprise Request] Nueva solicitud de ${user.name}`,
       emailHtml
     );

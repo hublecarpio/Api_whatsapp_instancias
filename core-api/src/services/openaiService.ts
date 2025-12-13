@@ -496,7 +496,12 @@ export async function checkUserTokenLimit(userId: string): Promise<{
 }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { subscriptionStatus: true, bonusTokens: true }
+    select: { 
+      subscriptionStatus: true, 
+      bonusTokens: true,
+      proBonusExpiresAt: true,
+      stripeSubscriptionId: true
+    }
   });
   
   if (!user) {
@@ -509,7 +514,16 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     };
   }
   
-  if (user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED') {
+  let effectiveStatus = user.subscriptionStatus;
+  
+  if (user.subscriptionStatus === 'ACTIVE' && !user.stripeSubscriptionId) {
+    if (!user.proBonusExpiresAt || user.proBonusExpiresAt < new Date()) {
+      effectiveStatus = 'PENDING';
+      console.log(`[TOKEN] User ${userId} referral bonus expired, treating as PENDING`);
+    }
+  }
+  
+  if (effectiveStatus === 'PENDING' || effectiveStatus === 'CANCELED') {
     return {
       canUseAI: false,
       tokensUsed: 0,

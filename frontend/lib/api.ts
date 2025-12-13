@@ -235,7 +235,7 @@ export const billingApi = {
   openPortal: () => api.post('/billing/portal'),
   enterpriseRequest: (data: { businessDescription: string; companySize?: string; useCase?: string }) =>
     api.post('/billing/enterprise-request', data),
-  purchaseCredits: () => api.post('/billing/purchase-credits')
+  purchaseCredits: (tier: number = 5) => api.post('/billing/purchase-credits', { tier })
 };
 
 export const tagsApi = {

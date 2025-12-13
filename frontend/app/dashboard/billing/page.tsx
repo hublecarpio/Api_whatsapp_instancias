@@ -175,8 +175,14 @@ export default function BillingPage() {
     }
   };
 
-  const handlePurchaseCredits = async () => {
-    if (!confirm('Se cobraran $5 USD a tu tarjeta guardada por 1M tokens adicionales. Continuar?')) {
+  const handlePurchaseCredits = async (tier: number) => {
+    const tierInfo: Record<number, string> = {
+      5: '$5 USD por 1M tokens',
+      10: '$10 USD por 2M tokens',
+      15: '$15 USD por 3M tokens'
+    };
+    
+    if (!confirm(`Se cobraran ${tierInfo[tier]} adicionales a tu tarjeta guardada. Continuar?`)) {
       return;
     }
 
@@ -184,7 +190,7 @@ export default function BillingPage() {
     setCreditsMessage(null);
 
     try {
-      const response = await billingApi.purchaseCredits();
+      const response = await billingApi.purchaseCredits(tier);
       setCreditsMessage({ type: 'success', text: response.data.message });
       await loadData();
     } catch (error: any) {
@@ -373,19 +379,36 @@ export default function BillingPage() {
             )}
 
             <div className="mt-4 pt-3 border-t border-gray-600">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div>
-                  <p className="text-gray-400 text-sm">Necesitas mas tokens?</p>
-                  <p className="text-gray-500 text-xs">1 millon de tokens adicionales por $5 USD</p>
-                </div>
+              <p className="text-gray-400 text-sm mb-3">Recarga tokens adicionales:</p>
+              <div className="grid grid-cols-3 gap-2">
                 <button
-                  onClick={handlePurchaseCredits}
+                  onClick={() => handlePurchaseCredits(5)}
                   disabled={creditsLoading}
-                  className="btn btn-primary text-sm whitespace-nowrap"
+                  className="bg-dark-card hover:bg-neon-blue/20 border border-gray-600 hover:border-neon-blue/50 rounded-lg p-3 text-center transition-colors disabled:opacity-50"
                 >
-                  {creditsLoading ? 'Procesando...' : 'Comprar 1M tokens por $5'}
+                  <div className="text-white font-medium">$5</div>
+                  <div className="text-gray-400 text-xs">1M tokens</div>
+                </button>
+                <button
+                  onClick={() => handlePurchaseCredits(10)}
+                  disabled={creditsLoading}
+                  className="bg-dark-card hover:bg-neon-blue/20 border border-gray-600 hover:border-neon-blue/50 rounded-lg p-3 text-center transition-colors disabled:opacity-50"
+                >
+                  <div className="text-white font-medium">$10</div>
+                  <div className="text-gray-400 text-xs">2M tokens</div>
+                </button>
+                <button
+                  onClick={() => handlePurchaseCredits(15)}
+                  disabled={creditsLoading}
+                  className="bg-dark-card hover:bg-neon-blue/20 border border-gray-600 hover:border-neon-blue/50 rounded-lg p-3 text-center transition-colors disabled:opacity-50"
+                >
+                  <div className="text-white font-medium">$15</div>
+                  <div className="text-gray-400 text-xs">3M tokens</div>
                 </button>
               </div>
+              {creditsLoading && (
+                <p className="text-neon-blue text-xs mt-2 text-center">Procesando compra...</p>
+              )}
               {creditsMessage && (
                 <div className={`mt-3 p-3 rounded-lg ${
                   creditsMessage.type === 'success' 
