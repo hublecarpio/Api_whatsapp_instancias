@@ -311,8 +311,11 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           if (!isFromMe) {
             setImmediate(async () => {
               try {
-                await analyzeAndUpdateLeadStage(businessId, contactPhone);
-                await extractAndSaveContactData(businessId, contactPhone);
+                // Normalize phone to digits only for consistent tag assignment
+                const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+                console.log(`[WEBHOOK] Lead stage analysis for normalized phone: ${normalizedPhone} (original: ${contactPhone})`);
+                await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
+                await extractAndSaveContactData(businessId, normalizedPhone);
               } catch (err: any) {
                 console.error('Lead stage analysis failed:', err.message);
               }
