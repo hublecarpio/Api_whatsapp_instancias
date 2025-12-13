@@ -1,8 +1,76 @@
-import { Router, Response } from 'express';
+import { Router, Response, Request } from 'express';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import eventLogger from '../services/eventLogger.js';
 
 const router = Router();
+
+router.post('/internal/log', async (req: Request, res: Response) => {
+  try {
+    const internalSecret = process.env.INTERNAL_AGENT_SECRET;
+    const providedSecret = req.headers['x-internal-secret'];
+    
+    if (internalSecret && providedSecret !== internalSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { 
+      businessId, 
+      toolId,
+      toolName, 
+      contactPhone,
+      request: toolRequest, 
+      response: toolResponse, 
+      status, 
+      duration,
+      error: errorMessage
+    } = req.body;
+    
+    if (!businessId || !toolName) {
+      return res.status(400).json({ error: 'businessId and toolName are required' });
+    }
+    
+    let finalToolId = toolId;
+    
+    if (!finalToolId && toolName) {
+      const prompt = await prisma.agentPrompt.findUnique({
+        where: { businessId },
+        include: { tools: true }
+      });
+      
+      const matchedTool = prompt?.tools.find(t => 
+        t.name.toLowerCase() === toolName.toLowerCase()
+      );
+      finalToolId = matchedTool?.id;
+    }
+    
+    if (finalToolId) {
+      await prisma.toolLog.create({
+        data: {
+          toolId: finalToolId,
+          businessId,
+          contactPhone: contactPhone || null,
+          request: toolRequest || {},
+          response: toolResponse || null,
+          status: status || (errorMessage ? 'error' : 'success'),
+          duration: duration || null
+        }
+      });
+    }
+    
+    await eventLogger.toolExecuted(
+      businessId, 
+      toolName, 
+      !errorMessage, 
+      duration || 0
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Tool log internal error:', error);
+    res.status(500).json({ error: 'Failed to log tool execution' });
+  }
+});
 
 router.use(authMiddleware);
 
