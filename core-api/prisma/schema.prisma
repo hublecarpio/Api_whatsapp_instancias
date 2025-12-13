@@ -34,6 +34,7 @@ model User {
   paymentLinkEnabled          Boolean             @default(false)
   proBonusExpiresAt           DateTime?
   referralCode                String?
+  bonusTokens                 Int                 @default(0)
   createdAt                   DateTime            @default(now())
   businesses                  Business[]
   subscriptions               Subscription[]

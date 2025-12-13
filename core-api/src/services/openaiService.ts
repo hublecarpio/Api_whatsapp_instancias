@@ -445,12 +445,14 @@ export async function getTokenUsageStats(businessId: string, options?: {
   };
 }
 
-export const TRIAL_TOKEN_LIMIT = 100000;
-export const PRO_TOKEN_LIMIT = 350000;
+export const TRIAL_TOKEN_LIMIT = 500000;
+export const PRO_TOKEN_LIMIT = 5000000;
 
-export async function getMonthlyTokenUsageForUser(userId: string, subscriptionStatus?: string): Promise<{
+export async function getMonthlyTokenUsageForUser(userId: string, subscriptionStatus?: string, bonusTokens?: number): Promise<{
   totalTokens: number;
   limit: number;
+  baseLimit: number;
+  bonusTokens: number;
   percentUsed: number;
   isOverLimit: boolean;
 }> {
@@ -470,12 +472,16 @@ export async function getMonthlyTokenUsageForUser(userId: string, subscriptionSt
   });
   
   const totalTokens = usage._sum.totalTokens || 0;
-  const limit = subscriptionStatus === 'ACTIVE' ? PRO_TOKEN_LIMIT : TRIAL_TOKEN_LIMIT;
+  const baseLimit = subscriptionStatus === 'ACTIVE' ? PRO_TOKEN_LIMIT : TRIAL_TOKEN_LIMIT;
+  const bonus = bonusTokens || 0;
+  const limit = baseLimit + bonus;
   const percentUsed = Math.min(100, Math.round((totalTokens / limit) * 100));
   
   return {
     totalTokens,
     limit,
+    baseLimit,
+    bonusTokens: bonus,
     percentUsed,
     isOverLimit: totalTokens >= limit
   };
@@ -485,11 +491,12 @@ export async function checkUserTokenLimit(userId: string): Promise<{
   canUseAI: boolean;
   tokensUsed: number;
   tokensRemaining: number;
+  bonusTokens: number;
   message?: string;
 }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { subscriptionStatus: true }
+    select: { subscriptionStatus: true, bonusTokens: true }
   });
   
   if (!user) {
@@ -497,6 +504,7 @@ export async function checkUserTokenLimit(userId: string): Promise<{
       canUseAI: false,
       tokensUsed: 0,
       tokensRemaining: 0,
+      bonusTokens: 0,
       message: 'Usuario no encontrado'
     };
   }
@@ -506,26 +514,28 @@ export async function checkUserTokenLimit(userId: string): Promise<{
       canUseAI: false,
       tokensUsed: 0,
       tokensRemaining: 0,
+      bonusTokens: 0,
       message: 'Suscribete para usar el agente IA'
     };
   }
   
-  const usage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus);
-  const limit = user.subscriptionStatus === 'ACTIVE' ? PRO_TOKEN_LIMIT : TRIAL_TOKEN_LIMIT;
+  const usage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus, user.bonusTokens);
   
   if (usage.isOverLimit) {
-    const limitText = user.subscriptionStatus === 'ACTIVE' ? '350,000' : '100,000';
+    const limitText = user.subscriptionStatus === 'ACTIVE' ? '5M' : '500K';
     return {
       canUseAI: false,
       tokensUsed: usage.totalTokens,
       tokensRemaining: 0,
-      message: `Has alcanzado tu limite de ${limitText} tokens este mes.${user.subscriptionStatus === 'TRIAL' ? ' Suscribete para continuar usando el agente IA.' : ' El limite se reinicia el proximo mes.'}`
+      bonusTokens: user.bonusTokens,
+      message: `Has alcanzado tu limite de ${limitText} tokens este mes.${user.subscriptionStatus === 'TRIAL' ? ' Suscribete para continuar usando el agente IA.' : ' Puedes comprar creditos adicionales.'}`
     };
   }
   
   return {
     canUseAI: true,
     tokensUsed: usage.totalTokens,
-    tokensRemaining: limit - usage.totalTokens
+    tokensRemaining: usage.limit - usage.totalTokens,
+    bonusTokens: user.bonusTokens
   };
 }
