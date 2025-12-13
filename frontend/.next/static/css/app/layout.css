@@ -1985,6 +1985,9 @@ video {
 .bg-purple-500\/20 {
   background-color: rgb(168 85 247 / 0.2);
 }
+.bg-purple-500\/30 {
+  background-color: rgb(168 85 247 / 0.3);
+}
 .bg-purple-600 {
   --tw-bg-opacity: 1;
   background-color: rgb(147 51 234 / var(--tw-bg-opacity, 1));
@@ -2076,6 +2079,9 @@ video {
   --tw-gradient-to: rgb(31 41 55 / 0)  var(--tw-gradient-to-position);
   --tw-gradient-stops: var(--tw-gradient-from), #1f2937 var(--tw-gradient-via-position), var(--tw-gradient-to);
 }
+.to-dark-card {
+  --tw-gradient-to: #1F2937 var(--tw-gradient-to-position);
+}
 .to-gray-900 {
   --tw-gradient-to: #111827 var(--tw-gradient-to-position);
 }
@@ -2084,9 +2090,6 @@ video {
 }
 .to-transparent {
   --tw-gradient-to: transparent var(--tw-gradient-to-position);
-}
-.to-dark-card {
-  --tw-gradient-to: #1F2937 var(--tw-gradient-to-position);
 }
 .object-contain {
   -o-object-fit: contain;

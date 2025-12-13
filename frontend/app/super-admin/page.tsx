@@ -176,7 +176,7 @@ export default function SuperAdminPage() {
             { id: 'billing', label: 'Billing', icon: '💳' },
             { id: 'tokens', label: 'Tokens', icon: '🎯' },
             { id: 'tools', label: 'Tools', icon: '🔨' },
-            { id: 'agentv2', label: 'Agent V2', icon: '🤖' },
+            { id: 'agentv2', label: 'V2 Enterprise Pro', icon: '🤖' },
             { id: 'referrals', label: 'Referidos', icon: '🔗' },
             { id: 'system', label: 'Sistema', icon: '⚙️' }
           ].map((tab) => (
@@ -985,7 +985,7 @@ function SystemTab({ token }: { token: string }) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Modelo por defecto - Agent V2 (Python/LangGraph)
+                  Modelo por defecto - V2 Enterprise Pro (Python/LangGraph)
                 </label>
                 <select
                   value={aiSettings.defaultModelV2}
@@ -1000,13 +1000,13 @@ function SystemTab({ token }: { token: string }) {
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Modelo general para Agent V2 (fallback)
+                  Modelo general para V2 Enterprise Pro (fallback)
                 </p>
               </div>
             </div>
 
             <div className="bg-dark-card/50 p-4 rounded-lg border border-dark-border">
-              <h4 className="text-md font-semibold text-white mb-4">Agent V2 - Configuracion por Cerebro</h4>
+              <h4 className="text-md font-semibold text-white mb-4">V2 Enterprise Pro - Configuracion por Cerebro</h4>
               <p className="text-xs text-gray-400 mb-4">
                 Configura modelos diferentes para cada cerebro del agente multi-cerebro.
               </p>
@@ -1102,7 +1102,7 @@ function SystemTab({ token }: { token: string }) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Razonamiento - Agent V2
+                  Razonamiento - V2 Enterprise Pro
                 </label>
                 <select
                   value={aiSettings.defaultReasoningV2}
@@ -1770,7 +1770,7 @@ function AgentV2Tab({ token }: { token: string }) {
     }
   };
 
-  if (loading) return <div className="text-gray-400">Cargando estadisticas de Agent V2...</div>;
+  if (loading) return <div className="text-gray-400">Cargando estadisticas de V2 Enterprise Pro...</div>;
   if (error) return <div className="text-red-400">Error: {error}</div>;
   if (!data) return null;
 
@@ -1786,9 +1786,9 @@ function AgentV2Tab({ token }: { token: string }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
-          <h3 className="text-lg font-semibold text-white mb-4">Negocios usando Agent V2</h3>
+          <h3 className="text-lg font-semibold text-white mb-4">Negocios usando V2 Enterprise Pro</h3>
           {data.businesses.length === 0 ? (
-            <p className="text-gray-500">Ningun negocio esta usando Agent V2 aun</p>
+            <p className="text-gray-500">Ningun negocio esta usando V2 Enterprise Pro aun</p>
           ) : (
             <div className="overflow-x-auto max-h-80 overflow-y-auto">
               <table className="w-full">
@@ -2877,7 +2877,7 @@ function ToolLogsTab({ token }: { token: string }) {
               {logs.length}
             </span>
           </h2>
-          <p className="text-gray-400 text-sm">Historial de ejecuciones de herramientas del Agent V2</p>
+          <p className="text-gray-400 text-sm">Historial de ejecuciones de herramientas del V2 Enterprise Pro</p>
         </div>
         <button onClick={fetchData} className="btn btn-ghost text-sm">
           Actualizar

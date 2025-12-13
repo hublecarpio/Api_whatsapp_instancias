@@ -737,8 +737,8 @@ export default function PromptPage() {
   const handleChangeAgentVersion = async (version: 'v1' | 'v2') => {
     if (!currentBusiness || version === agentVersion) return;
     
-    if (version === 'v2' && !isPro) {
-      setError('El Agente V2 solo esta disponible para usuarios Pro. Contacta a soporte para actualizar tu plan.');
+    if (version === 'v2') {
+      setError('El Agente V2 Enterprise Pro requiere activacion por el administrador. Contacta a soporte para solicitarlo.');
       return;
     }
     
@@ -1127,7 +1127,7 @@ export default function PromptPage() {
             <p className="text-sm text-gray-400">
               {agentVersion === 'v1' 
                 ? 'Agente Clasico - Respuestas directas con OpenAI'
-                : 'Agente Avanzado - Procesamiento con LangGraph y memoria mejorada'}
+                : 'Agente V2 Enterprise Pro - Sistema multi-agente con LangGraph'}
             </p>
           </div>
           <div className="flex gap-2">
@@ -1144,18 +1144,16 @@ export default function PromptPage() {
             </button>
             <button
               onClick={() => handleChangeAgentVersion('v2')}
-              disabled={loading || (!isPro && agentVersion !== 'v2')}
+              disabled={loading || agentVersion !== 'v2'}
               className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
                 agentVersion === 'v2'
                   ? 'bg-neon-purple text-white'
-                  : !isPro 
-                    ? 'bg-dark-hover/50 text-gray-500 cursor-not-allowed'
-                    : 'bg-dark-hover text-gray-400 hover:text-white'
+                  : 'bg-dark-hover/50 text-gray-500 cursor-not-allowed'
               }`}
             >
-              V2 Avanzado
-              {!isPro && agentVersion !== 'v2' && (
-                <span className="text-xs bg-neon-purple/30 text-neon-purple px-2 py-0.5 rounded-full">PRO</span>
+              V2 Enterprise Pro
+              {agentVersion !== 'v2' && (
+                <span className="text-xs bg-purple-500/30 text-purple-400 px-2 py-0.5 rounded-full">ENTERPRISE</span>
               )}
             </button>
           </div>
@@ -1163,14 +1161,14 @@ export default function PromptPage() {
         {agentVersion === 'v2' && (
           <div className="mt-4 p-3 bg-neon-purple/10 border border-neon-purple/20 rounded-lg">
             <p className="text-sm text-neon-purple">
-              El Agente V2 usa procesamiento avanzado con LangGraph para respuestas mas contextuales y memoria mejorada.
+              El Agente V2 Enterprise Pro usa procesamiento avanzado con LangGraph, memoria inteligente y sistema multi-agente.
             </p>
           </div>
         )}
-        {!isPro && agentVersion !== 'v2' && (
+        {agentVersion !== 'v2' && (
           <div className="mt-4 p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
             <p className="text-sm text-gray-400">
-              El Agente V2 Avanzado solo esta disponible para usuarios Pro. Contacta a soporte para actualizar tu plan.
+              El Agente V2 Enterprise Pro requiere plan Enterprise ($400/mes). Contacta a soporte para solicitarlo.
             </p>
           </div>
         )}
