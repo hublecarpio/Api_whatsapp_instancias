@@ -12,6 +12,7 @@ interface Business {
   timezone?: string;
   currencyCode?: string;
   currencySymbol?: string;
+  businessObjective?: 'SALES' | 'APPOINTMENTS';
   instances?: any[];
   policy?: any;
   promptMaster?: any;

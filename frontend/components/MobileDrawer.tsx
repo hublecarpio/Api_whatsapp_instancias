@@ -35,8 +35,8 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
     onClose();
   };
 
-  const businessObjective = (currentBusiness as any)?.businessObjective || 'SALES';
-  const instanceProvider = (currentBusiness as any)?.instances?.[0]?.provider;
+  const businessObjective = currentBusiness?.businessObjective || 'SALES';
+  const instanceProvider = currentBusiness?.instances?.[0]?.provider;
   
   const baseLinks = [
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
