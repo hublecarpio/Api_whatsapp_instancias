@@ -97,7 +97,7 @@ export default function AppointmentsPage() {
       if (statusFilter) params.set('status', statusFilter);
       
       const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/appointments?${params}`,
+        `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/appointments?${params}`,
         { headers: getAuthHeader() }
       );
       setAppointments(response.data);
@@ -111,7 +111,7 @@ export default function AppointmentsPage() {
   const loadAvailability = async () => {
     try {
       const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/appointments/availability/config`,
+        `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/appointments/availability/config`,
         { headers: getAuthHeader() }
       );
       setAvailability(response.data);
@@ -136,7 +136,7 @@ export default function AppointmentsPage() {
   const createAppointment = async () => {
     try {
       await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/appointments`,
+        `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/appointments`,
         newAppointment,
         { headers: getAuthHeader() }
       );
@@ -169,7 +169,7 @@ export default function AppointmentsPage() {
       }
       
       await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/appointments/${id}/${endpoint}`,
+        `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/appointments/${id}/${endpoint}`,
         {},
         { headers: getAuthHeader() }
       );
@@ -184,7 +184,7 @@ export default function AppointmentsPage() {
   const saveAvailability = async () => {
     try {
       await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/appointments/availability/config`,
+        `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/appointments/availability/config`,
         { schedule: newAvailability },
         { headers: getAuthHeader() }
       );
