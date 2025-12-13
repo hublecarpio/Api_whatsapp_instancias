@@ -10,6 +10,7 @@ interface Contact {
   name: string | null;
   email?: string | null;
   extractedData?: Record<string, string | null>;
+  lastMessageAt?: string | null;
 }
 
 interface MetaTemplate {
@@ -102,8 +103,19 @@ export default function BroadcastsPage() {
   const [csvContacts, setCsvContacts] = useState<CSVContact[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [availableVariables, setAvailableVariables] = useState<AvailableVariable[]>([]);
+  const [metaMode, setMetaMode] = useState<'template' | 'regular'>('template');
 
   const isMetaCloud = instance?.provider === 'META_CLOUD';
+  
+  const contactsWithin24h = contacts.filter(c => {
+    if (!c.lastMessageAt) return false;
+    const lastMsg = new Date(c.lastMessageAt);
+    const now = new Date();
+    const hoursDiff = (now.getTime() - lastMsg.getTime()) / (1000 * 60 * 60);
+    return hoursDiff <= 24;
+  });
+  
+  const displayContacts = isMetaCloud && metaMode === 'regular' ? contactsWithin24h : contacts;
 
   const commonVariables = (() => {
     if (contactSource !== 'crm' || selectedContacts.length === 0) {
@@ -357,7 +369,12 @@ export default function BroadcastsPage() {
       return;
     }
 
-    if (!formData.content.trim() && !formData.includeMedia) {
+    if (isMetaCloud && metaMode === 'template' && !formData.templateId) {
+      alert('Selecciona una plantilla para enviar a todos los contactos');
+      return;
+    }
+
+    if (!formData.templateId && !formData.content.trim() && !formData.includeMedia) {
       alert('Debes incluir un mensaje o un archivo');
       return;
     }
@@ -485,7 +502,7 @@ export default function BroadcastsPage() {
       setSelectedContacts([]);
       setSelectAll(false);
     } else {
-      setSelectedContacts(contacts.map(c => c.phone));
+      setSelectedContacts(displayContacts.map(c => c.phone));
       setSelectAll(true);
     }
   };
@@ -752,6 +769,61 @@ export default function BroadcastsPage() {
             </div>
 
             <div className="p-4 space-y-4">
+              {isMetaCloud && (
+                <div className="flex gap-2 p-1 bg-dark-surface rounded-lg border border-dark-border">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMetaMode('template');
+                      setSelectedContacts([]);
+                      setSelectAll(false);
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                      metaMode === 'template'
+                        ? 'bg-neon-blue text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-dark-hover'
+                    }`}
+                  >
+                    Envio con Plantilla
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMetaMode('regular');
+                      setSelectedContacts([]);
+                      setSelectAll(false);
+                      setFormData(prev => ({ ...prev, templateId: '' }));
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                      metaMode === 'regular'
+                        ? 'bg-green-600 text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-dark-hover'
+                    }`}
+                  >
+                    Mensaje Normal ({contactsWithin24h.length})
+                  </button>
+                </div>
+              )}
+
+              {isMetaCloud && metaMode === 'template' && (
+                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <p className="text-sm text-blue-400">
+                    Usando plantillas puedes enviar mensajes a todos tus contactos, incluso los que no te han escrito en las ultimas 24 horas.
+                  </p>
+                </div>
+              )}
+
+              {isMetaCloud && metaMode === 'regular' && (
+                <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <p className="text-sm text-green-400">
+                    Solo puedes enviar mensajes normales a contactos que te escribieron en las ultimas 24 horas.
+                    {contactsWithin24h.length === 0 && (
+                      <span className="block mt-1 text-yellow-400">No tienes contactos dentro de la ventana de 24 horas.</span>
+                    )}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Nombre de la Campana</label>
                 <input
@@ -763,10 +835,10 @@ export default function BroadcastsPage() {
                 />
               </div>
 
-              {isMetaCloud && templates.length > 0 && (
+              {isMetaCloud && metaMode === 'template' && templates.length > 0 && (
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
                   <label className="block text-sm font-medium text-blue-400 mb-2">
-                    Plantilla de Meta (para contactos fuera de ventana 24h)
+                    Selecciona una Plantilla
                   </label>
                   <select
                     value={formData.templateId}
@@ -776,22 +848,25 @@ export default function BroadcastsPage() {
                     }}
                     className="input w-full"
                   >
-                    <option value="">Sin plantilla - Usar mensaje personalizado</option>
+                    <option value="">-- Selecciona una plantilla --</option>
                     {templates.map(template => (
                       <option key={template.id} value={template.id}>
                         {template.name} ({template.language})
                       </option>
                     ))}
                   </select>
-                  {!formData.templateId && (
-                    <p className="text-xs text-blue-400 mt-2">
-                      Sin plantilla, solo contactos dentro de la ventana 24h recibiran el mensaje.
-                    </p>
-                  )}
                 </div>
               )}
 
-              {formData.templateId && selectedTemplate ? (
+              {isMetaCloud && metaMode === 'template' && templates.length === 0 && (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                  <p className="text-sm text-yellow-400">
+                    No tienes plantillas aprobadas. Ve a la seccion de Templates para crear una.
+                  </p>
+                </div>
+              )}
+
+              {formData.templateId && selectedTemplate && (
                 <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
                   <label className="block text-sm font-medium text-green-400 mb-2">
                     Plantilla: {selectedTemplate.name}
@@ -823,7 +898,9 @@ export default function BroadcastsPage() {
                     <p className="text-xs text-green-400">Esta plantilla no tiene variables.</p>
                   )}
                 </div>
-              ) : (
+              )}
+
+              {(!isMetaCloud || metaMode === 'regular' || (isMetaCloud && metaMode === 'template' && !formData.templateId)) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Mensaje de Texto</label>
                   <textarea
@@ -893,15 +970,6 @@ export default function BroadcastsPage() {
                   </div>
                 )}
               </div>
-
-
-              {isMetaCloud && templates.length === 0 && (
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-                  <p className="text-sm text-yellow-400">
-                    No tienes plantillas aprobadas. Los contactos fuera de la ventana de 24h no recibiran mensajes.
-                  </p>
-                </div>
-              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1028,10 +1096,14 @@ export default function BroadcastsPage() {
                       </button>
                     </div>
                     <div className="border border-dark-border rounded-lg max-h-48 overflow-y-auto bg-dark-surface">
-                      {contacts.length === 0 ? (
-                        <p className="p-3 text-gray-500 text-sm">No hay contactos</p>
+                      {displayContacts.length === 0 ? (
+                        <p className="p-3 text-gray-500 text-sm">
+                          {isMetaCloud && metaMode === 'regular' 
+                            ? 'No hay contactos dentro de la ventana de 24 horas' 
+                            : 'No hay contactos'}
+                        </p>
                       ) : (
-                        contacts.map(contact => (
+                        displayContacts.map(contact => (
                           <label
                             key={contact.id}
                             className="flex items-center p-2 hover:bg-dark-hover cursor-pointer"
@@ -1050,7 +1122,12 @@ export default function BroadcastsPage() {
                         ))
                       )}
                     </div>
-                    <p className="text-sm text-gray-400 mt-1">{selectedContacts.length} contactos seleccionados</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {selectedContacts.length} de {displayContacts.length} contactos seleccionados
+                      {isMetaCloud && metaMode === 'regular' && (
+                        <span className="text-green-400 ml-1">(dentro de ventana 24h)</span>
+                      )}
+                    </p>
                   </div>
                 )}
 
