@@ -446,8 +446,9 @@ export async function getTokenUsageStats(businessId: string, options?: {
 }
 
 export const TRIAL_TOKEN_LIMIT = 100000;
+export const PRO_TOKEN_LIMIT = 350000;
 
-export async function getMonthlyTokenUsageForUser(userId: string): Promise<{
+export async function getMonthlyTokenUsageForUser(userId: string, subscriptionStatus?: string): Promise<{
   totalTokens: number;
   limit: number;
   percentUsed: number;
@@ -469,13 +470,14 @@ export async function getMonthlyTokenUsageForUser(userId: string): Promise<{
   });
   
   const totalTokens = usage._sum.totalTokens || 0;
-  const percentUsed = Math.min(100, Math.round((totalTokens / TRIAL_TOKEN_LIMIT) * 100));
+  const limit = subscriptionStatus === 'ACTIVE' ? PRO_TOKEN_LIMIT : TRIAL_TOKEN_LIMIT;
+  const percentUsed = Math.min(100, Math.round((totalTokens / limit) * 100));
   
   return {
     totalTokens,
-    limit: TRIAL_TOKEN_LIMIT,
+    limit,
     percentUsed,
-    isOverLimit: totalTokens >= TRIAL_TOKEN_LIMIT
+    isOverLimit: totalTokens >= limit
   };
 }
 
@@ -499,14 +501,6 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     };
   }
   
-  if (user.subscriptionStatus === 'ACTIVE') {
-    return {
-      canUseAI: true,
-      tokensUsed: 0,
-      tokensRemaining: Infinity
-    };
-  }
-  
   if (user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED') {
     return {
       canUseAI: false,
@@ -516,20 +510,22 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     };
   }
   
-  const usage = await getMonthlyTokenUsageForUser(userId);
+  const usage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus);
+  const limit = user.subscriptionStatus === 'ACTIVE' ? PRO_TOKEN_LIMIT : TRIAL_TOKEN_LIMIT;
   
   if (usage.isOverLimit) {
+    const limitText = user.subscriptionStatus === 'ACTIVE' ? '350,000' : '100,000';
     return {
       canUseAI: false,
       tokensUsed: usage.totalTokens,
       tokensRemaining: 0,
-      message: 'Has alcanzado tu limite de 100,000 tokens este mes. Suscribete para continuar usando el agente IA sin limites.'
+      message: `Has alcanzado tu limite de ${limitText} tokens este mes.${user.subscriptionStatus === 'TRIAL' ? ' Suscribete para continuar usando el agente IA.' : ' El limite se reinicia el proximo mes.'}`
     };
   }
   
   return {
     canUseAI: true,
     tokensUsed: usage.totalTokens,
-    tokensRemaining: TRIAL_TOKEN_LIMIT - usage.totalTokens
+    tokensRemaining: limit - usage.totalTokens
   };
 }
