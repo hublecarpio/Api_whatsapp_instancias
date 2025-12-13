@@ -32,7 +32,7 @@ from ..agents.vendor import get_vendor_agent
 from ..agents.observer import get_observer_agent
 from ..agents.refiner import get_refiner_agent
 from .tool_router import ToolRouter, format_tool_result
-from .telemetry import log_tool_execution
+from .telemetry import log_tool_execution_fire_and_forget
 import time
 
 logger = logging.getLogger(__name__)
@@ -298,19 +298,16 @@ async def execute_tool_node(state: GraphState) -> Dict[str, Any]:
     business_id = state.get("business_profile", {}).get("business_id", "")
     contact_phone = state.get("sender_phone")
     
-    try:
-        await log_tool_execution(
-            business_id=business_id,
-            tool_name=tool_name,
-            tool_input=tool_input or {},
-            result=result_text,
-            success=tool_success,
-            error=tool_error,
-            duration_ms=duration_ms,
-            contact_phone=contact_phone
-        )
-    except Exception as e:
-        logger.warning(f"Failed to log tool execution: {e}")
+    log_tool_execution_fire_and_forget(
+        business_id=business_id,
+        tool_name=tool_name,
+        tool_input=tool_input or {},
+        result=result_text,
+        success=tool_success,
+        error=tool_error,
+        duration_ms=duration_ms,
+        contact_phone=contact_phone
+    )
     
     tool_call_record: ToolCallRecord = {
         "tool_name": tool_name,
