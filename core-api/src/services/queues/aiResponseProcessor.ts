@@ -283,6 +283,20 @@ async function processWithAgentV1Worker(
   
   let systemPrompt = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
   
+  const businessObjective = business.businessObjective || 'SALES';
+  
+  if (businessObjective === 'APPOINTMENTS') {
+    systemPrompt += `\n\n## Modo de operación: CITAS Y SERVICIOS
+Tu objetivo principal es ayudar a los clientes a agendar citas y consultar disponibilidad de servicios.
+- Ofrece horarios disponibles cuando el cliente quiera agendar
+- Confirma los detalles de la cita (fecha, hora, servicio)
+- Responde preguntas sobre los servicios ofrecidos
+- NO intentes vender productos ni crear pedidos`;
+  } else {
+    systemPrompt += `\n\n## Modo de operación: VENTAS
+Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre productos.`;
+  }
+  
   if (business.policy) {
     systemPrompt += `\n\n## Políticas del negocio:`;
     if (business.policy.shippingPolicy) {
@@ -299,7 +313,7 @@ async function processWithAgentV1Worker(
   const currencySymbol = business.currencySymbol || 'S/.';
   const productCount = business.products?.length || 0;
   
-  if (productCount > 0 && productCount <= 20) {
+  if (businessObjective === 'SALES' && productCount > 0 && productCount <= 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
     business.products.forEach((product: any) => {
       systemPrompt += `\n- [ID:${product.id}] ${product.title}: ${currencySymbol}${product.price}`;

@@ -23,6 +23,7 @@ interface BusinessContext {
   tools_enabled: boolean;
   tools_config: any[];
   payment_link_enabled: boolean;
+  business_objective: 'SALES' | 'APPOINTMENTS';
 }
 
 interface Message {
@@ -139,17 +140,19 @@ export function buildBusinessContext(
   const enabledTools = (tools || []).filter(t => t.enabled);
   
   const paymentLinkEnabled = business.user?.paymentLinkEnabled ?? false;
+  const businessObjective = business.businessObjective || 'SALES';
   
   return {
     business_id: business.id,
     business_name: business.name,
     timezone: business.timezone || 'America/Lima',
-    products,
+    products: businessObjective === 'SALES' ? products : [],
     policies,
     custom_prompt: customPrompt,
     tools_enabled: enabledTools.length > 0,
     tools_config: enabledTools,
-    payment_link_enabled: paymentLinkEnabled
+    payment_link_enabled: paymentLinkEnabled,
+    business_objective: businessObjective
   };
 }
 
