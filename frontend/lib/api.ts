@@ -234,7 +234,8 @@ export const billingApi = {
   getTokenUsage: () => api.get('/billing/token-usage'),
   openPortal: () => api.post('/billing/portal'),
   enterpriseRequest: (data: { businessDescription: string; companySize?: string; useCase?: string }) =>
-    api.post('/billing/enterprise-request', data)
+    api.post('/billing/enterprise-request', data),
+  purchaseCredits: () => api.post('/billing/purchase-credits')
 };
 
 export const tagsApi = {

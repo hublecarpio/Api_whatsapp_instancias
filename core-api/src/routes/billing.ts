@@ -418,19 +418,21 @@ router.get('/token-usage', authMiddleware, async (req: AuthRequest, res) => {
 
     const user = await prisma.user.findUnique({ 
       where: { id: userId },
-      select: { subscriptionStatus: true }
+      select: { subscriptionStatus: true, bonusTokens: true }
     });
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const tokenUsage = await getMonthlyTokenUsageForUser(userId);
+    const tokenUsage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus, user.bonusTokens);
     const tokenCheck = await checkUserTokenLimit(userId);
 
     res.json({
       tokensUsed: tokenUsage.totalTokens,
       tokenLimit: tokenUsage.limit,
+      baseLimit: tokenUsage.baseLimit,
+      bonusTokens: tokenUsage.bonusTokens,
       percentUsed: tokenUsage.percentUsed,
       isOverLimit: tokenUsage.isOverLimit,
       canUseAI: tokenCheck.canUseAI,
@@ -470,6 +472,95 @@ router.post('/portal', authMiddleware, async (req: AuthRequest, res) => {
     res.json({ url: session.url });
   } catch (error: any) {
     console.error('Error creating billing portal session:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const TOKEN_CREDIT_AMOUNT = 500;
+const TOKEN_CREDIT_TOKENS = 1000000;
+
+router.post('/purchase-credits', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.subscriptionStatus !== 'ACTIVE') {
+      return res.status(400).json({ error: 'Solo usuarios con suscripcion activa pueden comprar creditos adicionales.' });
+    }
+
+    if (!user.stripeCustomerId) {
+      return res.status(400).json({ error: 'No tienes un metodo de pago configurado.' });
+    }
+
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: user.stripeCustomerId,
+      type: 'card'
+    });
+
+    if (paymentMethods.data.length === 0) {
+      return res.status(400).json({ error: 'No tienes una tarjeta guardada. Actualiza tu metodo de pago primero.' });
+    }
+
+    const defaultPaymentMethod = paymentMethods.data[0].id;
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: TOKEN_CREDIT_AMOUNT,
+      currency: 'usd',
+      customer: user.stripeCustomerId,
+      payment_method: defaultPaymentMethod,
+      off_session: true,
+      confirm: true,
+      description: `Token Credits: ${(TOKEN_CREDIT_TOKENS / 1000000).toFixed(0)}M tokens`,
+      metadata: {
+        userId: user.id,
+        type: 'token_credits',
+        tokens: TOKEN_CREDIT_TOKENS.toString()
+      }
+    });
+
+    if (paymentIntent.status === 'succeeded') {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          bonusTokens: {
+            increment: TOKEN_CREDIT_TOKENS
+          }
+        }
+      });
+
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { bonusTokens: true }
+      });
+
+      console.log(`Token credits purchased: ${TOKEN_CREDIT_TOKENS} tokens for user ${user.email}`);
+
+      res.json({
+        success: true,
+        message: `Se agregaron ${(TOKEN_CREDIT_TOKENS / 1000000).toFixed(0)}M tokens a tu cuenta.`,
+        tokensAdded: TOKEN_CREDIT_TOKENS,
+        newBonusTotal: updatedUser?.bonusTokens || 0,
+        amountCharged: TOKEN_CREDIT_AMOUNT / 100
+      });
+    } else {
+      res.status(400).json({ error: 'El pago no pudo ser procesado. Intenta de nuevo.' });
+    }
+  } catch (error: any) {
+    console.error('Error purchasing token credits:', error);
+    
+    if (error.type === 'StripeCardError') {
+      return res.status(400).json({ error: 'Tu tarjeta fue rechazada. Actualiza tu metodo de pago.' });
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
