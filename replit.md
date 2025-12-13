@@ -43,7 +43,7 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Provider-Separated Token Usage Tracking**: Tracks token usage by provider and feature.
 *   **Payment Mode Control**: Uses `paymentLinkEnabled` on User model (controlled by Super Admin toggle) to determine payment flow. When enabled, creates Stripe payment links; when disabled, creates voucher-based orders requiring payment proof images.
 *   **Voucher-Based Payment Confirmation**: For users without payment links enabled, orders are created in AWAITING_VOUCHER status. Payment confirmation requires voucher image to be attached before status can change to PAID.
-*   **Dual Business Objectives (SALES/APPOINTMENTS)**: Businesses can toggle between e-commerce (SALES) and service (APPOINTMENTS) modes, dynamically adjusting UI and AI agent tools.
+*   **Dual Business Objectives (SALES/APPOINTMENTS)**: Businesses can toggle between e-commerce (SALES) and service (APPOINTMENTS) modes, dynamically adjusting UI and AI agent tools. Both Agent V1 and V2 respect this setting - V1 modifies its system prompt to focus on scheduling/products accordingly, V2 passes the objective to Python and omits products in APPOINTMENTS mode.
 *   **Appointment Scheduling System**: Full CRUD for appointments, status tracking, double-booking prevention, and automatic reminders. Includes `agendar_cita` and `consultar_disponibilidad` AI tools.
 *   **Business Availability Configuration**: Allows businesses to configure working hours and block dates.
 *   **Delivery Tracking**: Orders include `DELIVERED` status, delivery agent assignment, and quick action buttons.
