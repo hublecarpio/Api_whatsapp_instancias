@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useBusinessStore } from '@/store/business';
 import axios from 'axios';
 
@@ -61,6 +61,24 @@ export default function ContactsPage() {
   const [saving, setSaving] = useState(false);
   const [newFieldKey, setNewFieldKey] = useState('');
   const [newTag, setNewTag] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showError = (message: string) => {
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+    }
+    setError(message);
+    errorTimeoutRef.current = setTimeout(() => setError(null), 5000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -83,8 +101,9 @@ export default function ContactsPage() {
       const response = await axios.get(`${API_URL}/contacts?${params}`, { headers: getAuthHeader() });
       setContacts(response.data.contacts);
       setPagination(response.data.pagination);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading contacts:', error);
+      showError(error.response?.data?.error || error.message || 'Error al cargar contactos');
     } finally {
       setLoading(false);
     }
@@ -115,8 +134,9 @@ export default function ContactsPage() {
         tags: data.tags || [],
         extractedData: extractedDataArray
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading contact detail:', error);
+      showError(error.response?.data?.error || error.message || 'Error al cargar detalle del contacto');
     } finally {
       setLoadingDetail(false);
     }
@@ -162,9 +182,9 @@ export default function ContactsPage() {
       await loadContactDetail(expandedPhone);
       await loadContacts(page, searchQuery);
       setIsEditing(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving contact:', error);
-      alert('Error al guardar');
+      showError(error.response?.data?.error || error.message || 'Error al guardar contacto');
     } finally {
       setSaving(false);
     }
@@ -240,8 +260,9 @@ export default function ContactsPage() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error exporting CSV:', error);
+      showError(error.response?.data?.error || error.message || 'Error al exportar CSV');
     } finally {
       setExporting(false);
     }
@@ -264,9 +285,9 @@ export default function ContactsPage() {
       await loadContacts(page, searchQuery);
       
       setTimeout(() => setRefreshResult(null), 5000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error refreshing contacts:', error);
-      alert('Error al actualizar contactos');
+      showError(error.response?.data?.error || error.message || 'Error al sincronizar contactos');
     } finally {
       setRefreshing(false);
     }
@@ -329,6 +350,13 @@ export default function ContactsPage() {
       {refreshResult && (
         <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300 text-sm">
           Sincronizado: {refreshResult.created} nuevos, {refreshResult.updated} actualizados
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-300 text-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-300 hover:text-red-100 ml-2">✕</button>
         </div>
       )}
 
