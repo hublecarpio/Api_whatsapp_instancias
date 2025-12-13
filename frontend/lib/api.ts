@@ -87,6 +87,29 @@ export const promptApi = {
   update: (id: string, data: any) => api.put(`/agent/prompt/${id}`, data)
 };
 
+export const promptSectionsApi = {
+  list: (businessId: string) => api.get(`/prompt-sections/${businessId}`),
+  get: (businessId: string, sectionId: string) => api.get(`/prompt-sections/${businessId}/${sectionId}`),
+  create: (businessId: string, data: {
+    title: string;
+    content: string;
+    type?: string;
+    isCore?: boolean;
+    priority?: number;
+  }) => api.post(`/prompt-sections/${businessId}`, data),
+  update: (businessId: string, sectionId: string, data: {
+    title?: string;
+    content?: string;
+    type?: string;
+    isCore?: boolean;
+    priority?: number;
+    enabled?: boolean;
+  }) => api.put(`/prompt-sections/${businessId}/${sectionId}`, data),
+  delete: (businessId: string, sectionId: string) => api.delete(`/prompt-sections/${businessId}/${sectionId}`),
+  search: (businessId: string, query: string, limit?: number) => 
+    api.post(`/prompt-sections/${businessId}/search`, { query, limit, includeCore: true })
+};
+
 export const toolsApi = {
   list: (businessId: string) => api.get(`/agent/tools?business_id=${businessId}`),
   create: (data: {

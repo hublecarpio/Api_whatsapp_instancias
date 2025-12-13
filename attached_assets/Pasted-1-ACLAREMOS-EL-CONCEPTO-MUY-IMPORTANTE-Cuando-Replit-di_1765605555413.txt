@@ -1,0 +1,234 @@
+1. ACLAREMOS EL CONCEPTO (MUY IMPORTANTE)
+
+Cuando Replit dice:
+
+“modo RAG: primero un prompt fijo y luego embeddings de trozos de prompt indexados”
+
+❗ NO significa:
+
+Reemplazar el prompt maestro
+
+Dejar que el LLM “arme su propio sistema”
+
+Meter reglas dinámicas sin control
+
+✅ SÍ significa:
+
+Mantener un PROMPT MAESTRO FIJO (ley máxima)
+
+Añadir fragmentos contextuales solo cuando aplican
+
+Usar embeddings para recuperar reglas, no para inventarlas
+
+2. ARQUITECTURA CORRECTA DE PROMPT EN TU SISTEMA
+
+En AGENT V2, el prompt DEBE TENER 3 CAPAS, en este orden estricto:
+
+🧱 CAPA 1 — PROMPT MAESTRO (FIJO, NO INDEXADO)
+
+Este prompt:
+
+Vive hardcodeado o versionado
+
+NO va a embeddings
+
+NO se modifica dinámicamente
+
+NO depende del negocio
+
+Contiene:
+
+Rol del agente
+
+Reglas duras
+
+Prohibiciones
+
+Contrato de salida
+
+Relación con estado y grafo
+
+👉 Este es el “kernel” del agente.
+
+Ejemplo conceptual:
+
+“Eres el Vendor Agent. No ejecutas tools. No inventas datos. Obedeces el estado…”
+
+🧱 CAPA 2 — PROMPT DE NEGOCIO (RAG CONTROLADO)
+
+Aquí sí entra RAG.
+
+Son fragmentos de prompt como:
+
+Tono de voz
+
+Políticas
+
+FAQs
+
+Argumentos comerciales
+
+Reglas aprendidas ACTIVAS
+
+Cada fragmento:
+
+Tiene título
+
+Tiene tipo
+
+Tiene prioridad
+
+Está indexado por embeddings
+
+Ejemplo:
+
+[TIPO: policy]
+[TÍTULO: Política de envíos]
+
+Texto...
+
+
+👉 El sistema recupera solo lo relevante según el mensaje del cliente.
+
+🧱 CAPA 3 — CONTEXTO DE EJECUCIÓN (NO RAG)
+
+Esto NO va a embeddings:
+
+Estado actual
+
+Memoria del lead
+
+Output sanitizado de tools
+
+Intención detectada
+
+Esto se inyecta directo al prompt.
+
+3. LO QUE NO DEBE HACERSE (CRÍTICO)
+
+❌ Meter el prompt maestro en embeddings
+❌ Permitir que reglas RAG contradigan al maestro
+❌ Recuperar demasiados fragmentos
+❌ Usar RAG para lógica (eso va en el grafo)
+
+4. CÓMO IMPLEMENTAR EL RAG DE PROMPTS (BIEN HECHO)
+ESTRUCTURA DE UN FRAGMENTO INDEXADO
+
+Cada “trozo de prompt” debe tener metadata clara:
+
+{
+  "id": "shipping_policy_v1",
+  "title": "Política de envíos",
+  "type": "policy",
+  "priority": 2,
+  "content": "Los envíos se realizan en 24-48h..."
+}
+
+
+Indexas solo content, pero guardas metadata.
+
+RETRIEVAL (MUY IMPORTANTE)
+
+Cuando llega un mensaje del cliente:
+
+Se calcula embedding del mensaje
+
+Se buscan fragmentos relevantes
+
+Se filtran por:
+
+tipo permitido
+
+prioridad
+
+límite (ej. top 3–5)
+
+Se ordenan por prioridad
+
+Se inyectan DESPUÉS del prompt maestro
+
+5. ORDEN DE CONSTRUCCIÓN DEL PROMPT FINAL
+
+El prompt final debe armarse así:
+
+[SYSTEM] PROMPT MAESTRO (FIJO)
+
+[CONTEXT] Estado + Memoria + Intención
+
+[RAG] Fragmentos relevantes del negocio
+- Política X
+- FAQ Y
+- Regla aprendida Z
+
+[USER] Mensaje del cliente
+
+
+👉 Este orden NO se negocia.
+
+6. RESPUESTA DIRECTA A TU DUDA
+
+“el prompt maestro se usa directamente, pero Replit dice hacerlo modo RAG”
+
+✔️ Sí, el prompt maestro se usa directo
+✔️ RAG es solo para fragmentos secundarios
+❌ Nunca para reemplazar el maestro
+
+Ambos tienen razón, pero cada uno en su capa.
+
+7. MENSAJE EXACTO PARA DECIRLE A REPLIT (COPIAR / PEGAR)
+
+Aquí tienes la orden final:
+
+ORDEN PARA REPLIT — PROMPT MAESTRO + RAG CONTROLADO (AGENT V2)
+
+El sistema debe usar PROMPT EN CAPAS, no un prompt único dinámico.
+
+Prompt Maestro
+
+Fijo, hardcodeado o versionado
+
+NO va a embeddings
+
+Define rol, reglas duras, prohibiciones y contrato del agente
+
+Siempre se inyecta como SYSTEM
+
+RAG de Prompts (Secundario)
+
+Fragmentos indexados por embeddings
+
+Con metadata: título, tipo, prioridad
+
+Usado solo para:
+
+políticas
+
+tono
+
+FAQs
+
+reglas aprendidas ACTIVAS
+
+Nunca para lógica de flujo
+
+Construcción del prompt final
+
+Orden obligatorio:
+
+Prompt Maestro
+
+Estado + Memoria
+
+Fragmentos RAG relevantes (limitados)
+
+Mensaje del usuario
+
+Restricciones
+
+El RAG nunca puede contradecir el prompt maestro
+
+El prompt maestro tiene prioridad absoluta
+
+Máximo N fragmentos RAG por request
+
+Este enfoque es obligatorio para mantener control, coherencia y seguridad del agente.
