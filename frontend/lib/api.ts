@@ -42,6 +42,9 @@ export const authApi = {
   resendVerification: () => api.post('/auth/resend-verification'),
   verifyEmail: (token: string) => api.get(`/auth/verify-email?token=${token}`),
   applyReferral: (code: string) => api.post('/auth/apply-referral', { code }),
+  getMyReferralCode: () => api.get('/auth/referral/my-code'),
+  claimReferralCode: (code?: string) => api.post('/auth/referral/claim', { code }),
+  getReferralStats: () => api.get('/auth/referral/stats'),
   getAdvisorInvitation: (token: string) => api.get(`/auth/advisor-invitation/${token}`),
   advisorSignup: (data: { token: string; name: string; password: string }) =>
     api.post('/auth/advisor-signup', data)

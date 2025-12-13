@@ -1893,6 +1893,10 @@ interface ReferralCode {
   expiresAt: string | null;
   createdAt: string;
   registeredUsers: number;
+  bonusDemoDays: number | null;
+  bonusTrialDays: number | null;
+  commissionRate: number | null;
+  ownerUserId: string | null;
 }
 
 function ReferralsTab({ token }: { token: string }) {
@@ -1905,6 +1909,9 @@ function ReferralsTab({ token }: { token: string }) {
   const [newType, setNewType] = useState<'STANDARD' | 'ENTERPRISE'>('STANDARD');
   const [newGrantDurationDays, setNewGrantDurationDays] = useState('');
   const [newMaxUses, setNewMaxUses] = useState('');
+  const [newBonusDemoDays, setNewBonusDemoDays] = useState('');
+  const [newBonusTrialDays, setNewBonusTrialDays] = useState('');
+  const [newCommissionRate, setNewCommissionRate] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -1954,7 +1961,10 @@ function ReferralsTab({ token }: { token: string }) {
           type: newType,
           grantTier: newType === 'ENTERPRISE' ? 'PRO' : null,
           grantDurationDays: newType === 'ENTERPRISE' ? parseInt(newGrantDurationDays) : null,
-          maxUses: newMaxUses ? parseInt(newMaxUses) : null
+          maxUses: newMaxUses ? parseInt(newMaxUses) : null,
+          bonusDemoDays: newBonusDemoDays ? parseInt(newBonusDemoDays) : null,
+          bonusTrialDays: newBonusTrialDays ? parseInt(newBonusTrialDays) : null,
+          commissionRate: newCommissionRate ? parseFloat(newCommissionRate) : null
         })
       });
 
@@ -1969,6 +1979,9 @@ function ReferralsTab({ token }: { token: string }) {
       setNewType('STANDARD');
       setNewGrantDurationDays('');
       setNewMaxUses('');
+      setNewBonusDemoDays('');
+      setNewBonusTrialDays('');
+      setNewCommissionRate('');
       setShowCreateModal(false);
       fetchCodes();
     } catch (err: any) {
@@ -2258,6 +2271,49 @@ function ReferralsTab({ token }: { token: string }) {
                   className="input w-full"
                 />
               </div>
+              
+              <div className="bg-accent-success/10 border border-accent-success/20 rounded-lg p-4 space-y-4">
+                <p className="text-accent-success text-sm font-medium">Bonus y Comisiones (Programa de Afiliados)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Dias demo extra</label>
+                    <input
+                      type="number"
+                      value={newBonusDemoDays}
+                      onChange={e => setNewBonusDemoDays(e.target.value)}
+                      className="input w-full"
+                      placeholder="3"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Dias trial extra</label>
+                    <input
+                      type="number"
+                      value={newBonusTrialDays}
+                      onChange={e => setNewBonusTrialDays(e.target.value)}
+                      className="input w-full"
+                      placeholder="7"
+                      min="0"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Comision % (para afiliados)</label>
+                  <input
+                    type="number"
+                    value={newCommissionRate}
+                    onChange={e => setNewCommissionRate(e.target.value)}
+                    className="input w-full"
+                    placeholder="20"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Porcentaje de comision por referidos suscritos</p>
+                </div>
+              </div>
+              
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
@@ -2267,6 +2323,9 @@ function ReferralsTab({ token }: { token: string }) {
                     setNewType('STANDARD');
                     setNewGrantDurationDays('');
                     setNewMaxUses('');
+                    setNewBonusDemoDays('');
+                    setNewBonusTrialDays('');
+                    setNewCommissionRate('');
                   }}
                   className="btn btn-ghost flex-1"
                 >

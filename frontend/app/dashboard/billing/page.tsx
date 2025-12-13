@@ -42,6 +42,17 @@ export default function BillingPage() {
   const [enterpriseMessage, setEnterpriseMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsMessage, setCreditsMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  
+  // Referral program state
+  const [myReferralCode, setMyReferralCode] = useState<{code: string; usageCount: number} | null>(null);
+  const [referralStats, setReferralStats] = useState<{
+    totalReferrals: number;
+    activeSubscribers: number;
+    totalEarnings: number;
+    pendingEarnings: number;
+  } | null>(null);
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimMessage, setClaimMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
     loadData();
@@ -58,6 +69,20 @@ export default function BillingPage() {
       setTokenUsage(tokenRes.data);
       if (meRes.data) {
         updateUser(meRes.data);
+      }
+      
+      // Load referral program data
+      try {
+        const [codeRes, statsRes] = await Promise.all([
+          authApi.getMyReferralCode(),
+          authApi.getReferralStats()
+        ]);
+        if (codeRes.data.referralCode) {
+          setMyReferralCode(codeRes.data.referralCode);
+        }
+        setReferralStats(statsRes.data);
+      } catch (e) {
+        // User may not have a referral code yet
       }
     } catch (error) {
       console.error('Error loading billing data:', error);
@@ -176,6 +201,32 @@ export default function BillingPage() {
       setEnterpriseMessage({ type: 'error', text: errorMsg });
     } finally {
       setEnterpriseLoading(false);
+    }
+  };
+
+  const handleClaimReferralCode = async () => {
+    setClaimLoading(true);
+    setClaimMessage(null);
+    
+    try {
+      const response = await authApi.claimReferralCode();
+      setMyReferralCode(response.data.referralCode);
+      setClaimMessage({ type: 'success', text: 'Tu codigo de referido ha sido creado exitosamente!' });
+      await loadData();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || 'Error al crear el codigo de referido';
+      setClaimMessage({ type: 'error', text: errorMsg });
+    } finally {
+      setClaimLoading(false);
+    }
+  };
+
+  const copyReferralLink = () => {
+    if (myReferralCode) {
+      const link = `${window.location.origin}/register?ref=${myReferralCode.code}`;
+      navigator.clipboard.writeText(link);
+      setClaimMessage({ type: 'success', text: 'Enlace copiado al portapapeles!' });
+      setTimeout(() => setClaimMessage(null), 3000);
     }
   };
 
@@ -665,10 +716,106 @@ export default function BillingPage() {
         </div>
       </div>
 
+      {/* Programa de Beneficios - User's own referral program */}
+      <div className="card mb-6 border-2 border-accent-success/30 bg-gradient-to-br from-accent-success/5 to-dark-card">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-accent-success/20 rounded-full flex items-center justify-center">
+            <svg className="w-5 h-5 text-accent-success" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-white">Programa de Beneficios</h2>
+            <p className="text-accent-success text-sm">Gana el 20% de comision por cada referido</p>
+          </div>
+        </div>
+        
+        <p className="text-gray-400 text-sm mb-4">
+          Comparte tu codigo y gana el 20% de cada pago que realicen tus referidos. 
+          Ademas, tus referidos reciben 3 dias extra de demo y 7 dias extra de prueba gratis.
+        </p>
+
+        {!myReferralCode ? (
+          <div className="bg-dark-hover rounded-lg p-4">
+            <p className="text-gray-300 text-sm mb-3">
+              Aun no tienes un codigo de referido. Crea uno para empezar a ganar comisiones.
+            </p>
+            <button
+              onClick={handleClaimReferralCode}
+              disabled={claimLoading}
+              className="btn btn-primary"
+            >
+              {claimLoading ? 'Creando...' : 'Crear mi codigo de referido'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-dark-hover rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-400 text-sm">Tu codigo:</span>
+                <span className="text-white font-mono text-lg font-bold">{myReferralCode.code}</span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register?ref=${myReferralCode.code}`}
+                  className="flex-1 bg-dark-card border border-gray-600 rounded-lg px-3 py-2 text-gray-300 text-sm"
+                />
+                <button
+                  onClick={copyReferralLink}
+                  className="btn btn-secondary text-sm px-4"
+                >
+                  Copiar
+                </button>
+              </div>
+            </div>
+
+            {referralStats && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-dark-hover rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-white">{referralStats.totalReferrals}</div>
+                  <div className="text-gray-400 text-xs">Referidos</div>
+                </div>
+                <div className="bg-dark-hover rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-accent-success">{referralStats.activeSubscribers}</div>
+                  <div className="text-gray-400 text-xs">Activos</div>
+                </div>
+                <div className="bg-dark-hover rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-accent-warning">${referralStats.pendingEarnings.toFixed(2)}</div>
+                  <div className="text-gray-400 text-xs">Pendiente</div>
+                </div>
+                <div className="bg-dark-hover rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-neon-blue">${referralStats.totalEarnings.toFixed(2)}</div>
+                  <div className="text-gray-400 text-xs">Total ganado</div>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3">
+              <p className="text-accent-success text-sm">
+                <strong>Como funciona:</strong> Por cada referido que se suscriba, recibiras el 20% de su pago mensual 
+                (${(97 * 0.20).toFixed(2)} USD por suscriptor activo). Los pagos se procesan el dia 1 de cada mes.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {claimMessage && (
+          <div className={`mt-3 p-3 rounded-lg ${
+            claimMessage.type === 'success' 
+              ? 'bg-accent-success/10 border border-accent-success/30 text-accent-success' 
+              : 'bg-accent-error/10 border border-accent-error/30 text-accent-error'
+          }`}>
+            {claimMessage.text}
+          </div>
+        )}
+      </div>
+
       <div className="card mb-6">
         <h2 className="text-lg font-semibold text-white mb-2">Codigo de Referido</h2>
         <p className="text-gray-400 text-sm mb-4">
-          Si tienes un codigo de referido, ingrésalo aqui para obtener dias de prueba Pro gratis.
+          Si tienes un codigo de referido, ingresalo aqui para obtener dias de prueba Pro gratis.
         </p>
         
         {user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date() && (
