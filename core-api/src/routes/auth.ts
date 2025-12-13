@@ -27,6 +27,7 @@ router.post('/register', async (req: Request, res: Response) => {
     
     let validReferralCode: string | null = null;
     let enterpriseCode: any = null;
+    let standardCode: any = null;
     
     if (referralCode) {
       const refCode = await prisma.referralCode.findUnique({
@@ -49,7 +50,10 @@ router.post('/register', async (req: Request, res: Response) => {
               enterpriseCode = refCode;
               console.log(`[REFERRAL] Enterprise code used: ${refCode.code} (${refCode.grantDurationDays} days, tier: ${refCode.grantTier})`);
             } else {
-              console.log(`[REFERRAL] Valid code used: ${refCode.code}, new count: ${refCode.usageCount + 1}`);
+              standardCode = refCode;
+              const bonusDemo = refCode.bonusDemoDays || 0;
+              const bonusTrial = refCode.bonusTrialDays || 0;
+              console.log(`[REFERRAL] Valid code used: ${refCode.code}, new count: ${refCode.usageCount + 1}, bonusDemoDays: ${bonusDemo}, bonusTrialDays: ${bonusTrial}`);
             }
           }
         } else {
@@ -69,6 +73,11 @@ router.post('/register', async (req: Request, res: Response) => {
       const isPro = !!enterpriseCode;
       const subscriptionStatus = enterpriseCode ? 'ACTIVE' : 'PENDING';
       
+      // Get the referral code ID for FK relation
+      const referralCodeRecord = enterpriseCode || standardCode;
+      const bonusDemoDays = standardCode?.bonusDemoDays || 0;
+      const bonusTrialDays = standardCode?.bonusTrialDays || 0;
+      
       const user = await tx.user.create({
         data: { 
           name, 
@@ -79,6 +88,9 @@ router.post('/register', async (req: Request, res: Response) => {
           verificationTokenExpiresAt: expiresAt,
           lastVerificationSentAt: new Date(),
           referralCode: validReferralCode,
+          referralCodeId: referralCodeRecord?.id || null,
+          bonusDemoDays,
+          bonusTrialDays,
           isPro,
           subscriptionStatus,
           demoStartedAt: enterpriseCode ? null : new Date(),
@@ -170,7 +182,11 @@ router.get('/check-referral/:code', async (req: Request, res: Response) => {
       description: refCode.description,
       type: refCode.type,
       grantsPro: refCode.type === 'ENTERPRISE',
-      grantDurationDays: refCode.grantDurationDays
+      grantDurationDays: refCode.grantDurationDays,
+      bonusDemoDays: refCode.bonusDemoDays || 0,
+      bonusTrialDays: refCode.bonusTrialDays || 0,
+      totalDemoDays: 2 + (refCode.bonusDemoDays || 0),
+      totalTrialDays: 5 + (refCode.bonusTrialDays || 0)
     });
   } catch (error) {
     console.error('Check referral error:', error);
@@ -330,6 +346,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         proBonusExpiresAt: true,
         demoStartedAt: true,
         demoPhase: true,
+        bonusDemoDays: true,
+        bonusTrialDays: true,
         role: true,
         parentUserId: true
       }
@@ -375,14 +393,19 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       const now = new Date();
       const demoStarted = new Date(user.demoStartedAt);
       const hoursSinceDemo = (now.getTime() - demoStarted.getTime()) / (1000 * 60 * 60);
-      const hoursRemaining = Math.max(0, 48 - hoursSinceDemo);
-      const demoExpired = hoursSinceDemo >= 48;
+      // Base demo is 48 hours (2 days) + bonus demo days from referral code
+      const bonusDemoHours = (user.bonusDemoDays || 0) * 24;
+      const totalDemoHours = 48 + bonusDemoHours;
+      const hoursRemaining = Math.max(0, totalDemoHours - hoursSinceDemo);
+      const demoExpired = hoursSinceDemo >= totalDemoHours;
       
       demoInfo = {
         demoStartedAt: user.demoStartedAt,
         hoursSinceDemo: Math.floor(hoursSinceDemo),
         hoursRemaining: Math.floor(hoursRemaining),
         daysRemaining: Math.ceil(hoursRemaining / 24),
+        totalDemoDays: Math.ceil(totalDemoHours / 24),
+        bonusDemoDays: user.bonusDemoDays || 0,
         demoExpired,
         needsCard: demoExpired
       };

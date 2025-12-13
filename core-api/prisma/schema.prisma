@@ -35,7 +35,10 @@ model User {
   proBonusExpiresAt           DateTime?
   stripePausedAt              DateTime?
   referralCode                String?
+  referralCodeId              String?             // FK to the referral code used at registration
   bonusTokens                 Int                 @default(0)
+  bonusDemoDays               Int                 @default(0) // Extra demo days granted at registration
+  bonusTrialDays              Int                 @default(0) // Extra Stripe trial days granted at registration
   demoStartedAt               DateTime?
   demoPhase                   String              @default("DEMO")
   createdAt                   DateTime            @default(now())
@@ -45,6 +48,8 @@ model User {
   advisors                    User[]              @relation("UserAdvisors")
   advisorInvitations          AdvisorInvitation[] @relation("InvitedBy")
   contactAssignments          ContactAssignment[]
+  ownedReferralCodes          ReferralCode[]      @relation("UserReferralCodes")
+  referredByCode              ReferralCode?       @relation("ReferredByCode", fields: [referralCodeId], references: [id], onDelete: SetNull)
 }
 
 model AdvisorInvitation {
@@ -132,11 +137,20 @@ model ReferralCode {
   usageCount        Int               @default(0)
   createdAt         DateTime          @default(now())
   expiresAt         DateTime?
-
+  
+  // Affiliate program fields
+  ownerUserId       String?           // User who owns this referral code (for affiliate tracking)
+  bonusDemoDays     Int?              // Extra demo days (without card) - adds to default 2 days
+  bonusTrialDays    Int?              // Extra Stripe trial days - adds to default 5 days
+  commissionRate    Float             @default(0.20) // Commission rate (default 20%)
+  
+  owner             User?             @relation("UserReferralCodes", fields: [ownerUserId], references: [id], onDelete: SetNull)
   subscriptions     Subscription[]
+  referredUsers     User[]            @relation("ReferredByCode")
 
   @@index([code])
   @@index([type, isActive])
+  @@index([ownerUserId])
 }
 
 model Subscription {

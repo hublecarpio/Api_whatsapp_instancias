@@ -48,7 +48,12 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
       });
     }
 
-    console.log('Creating checkout session with price:', priceId);
+    // Base trial is 5 days + any bonus trial days from referral code
+    const baseTrialDays = 5;
+    const bonusTrialDays = user.bonusTrialDays || 0;
+    const totalTrialDays = baseTrialDays + bonusTrialDays;
+    
+    console.log(`Creating checkout session with price: ${priceId}, trialDays: ${totalTrialDays} (base: ${baseTrialDays}, bonus: ${bonusTrialDays})`);
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -61,7 +66,7 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
       ],
       mode: 'subscription',
       subscription_data: {
-        trial_period_days: 5
+        trial_period_days: totalTrialDays
       },
       success_url: `${FRONTEND_URL}/dashboard?subscription=success`,
       cancel_url: `${FRONTEND_URL}/dashboard?subscription=canceled`,
