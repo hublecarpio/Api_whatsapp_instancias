@@ -309,14 +309,25 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    const phoneEntries = Object.entries(phoneStats);
+    const phonesToCheck = phoneEntries.map(([phone]) => phone);
+    
+    const existingContacts = await prisma.contact.findMany({
+      where: { 
+        businessId: business.id, 
+        phone: { in: phonesToCheck } 
+      },
+      select: { phone: true, firstMessageAt: true, lastMessageAt: true, messageCount: true, name: true }
+    });
+    
+    const existingMap = new Map(existingContacts.map(c => [c.phone, c]));
+    
     let created = 0;
     let updated = 0;
-
-    for (const [phone, stats] of Object.entries(phoneStats)) {
-      const existing = await prisma.contact.findUnique({
-        where: { businessId_phone: { businessId: business.id, phone } }
-      });
-
+    
+    const upsertPromises = phoneEntries.map(async ([phone, stats]) => {
+      const existing = existingMap.get(phone);
+      
       if (existing) {
         const updates: any = {};
         if (!existing.firstMessageAt || stats.firstMessageAt < existing.firstMessageAt) {
@@ -334,11 +345,12 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
 
         if (Object.keys(updates).length > 0) {
           await prisma.contact.update({
-            where: { id: existing.id },
+            where: { businessId_phone: { businessId: business.id, phone } },
             data: updates
           });
-          updated++;
+          return 'updated';
         }
+        return 'unchanged';
       } else {
         await prisma.contact.create({
           data: {
@@ -354,9 +366,13 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
             botDisabled: false
           }
         });
-        created++;
+        return 'created';
       }
-    }
+    });
+    
+    const results = await Promise.all(upsertPromises);
+    created = results.filter(r => r === 'created').length;
+    updated = results.filter(r => r === 'updated').length;
 
     console.log(`[CONTACTS REFRESH] Completed for business ${business.id}: created=${created}, updated=${updated}`);
     res.json({ success: true, created, updated, total: Object.keys(phoneStats).length });
