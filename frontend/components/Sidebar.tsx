@@ -57,7 +57,7 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     const planType = user.planType || 'none';
     
     if (planType === 'pro') {
-      return { label: 'Pro', class: 'status-active', dotClass: 'bg-accent-success' };
+      return { label: 'Avanzado', class: 'status-pro', dotClass: 'bg-accent-purple' };
     }
     
     if (planType === 'basic') {

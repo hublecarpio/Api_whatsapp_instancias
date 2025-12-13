@@ -24,7 +24,8 @@ module.exports = {
           success: '#10B981',
           warning: '#F59E0B',
           error: '#EF4444',
-          info: '#3B82F6'
+          info: '#3B82F6',
+          purple: '#8B5CF6'
         }
       },
       boxShadow: {

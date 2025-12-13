@@ -137,6 +137,10 @@ input, textarea, select {
     @apply bg-accent-error/20 text-accent-error;
   }
 
+  .status-pro {
+    @apply bg-accent-purple/20 text-accent-purple;
+  }
+
   .input-bar {
     @apply fixed bottom-0 left-0 right-0 bg-dark-surface border-t border-dark-border
            p-3 pb-[calc(0.75rem+var(--safe-area-bottom))] sm:relative sm:pb-3;

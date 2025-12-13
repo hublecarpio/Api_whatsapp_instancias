@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../services/prisma.js';
 import { authMiddleware, generateToken, AuthRequest } from '../middleware/auth.js';
 import { generateVerificationToken, hashToken, sendVerificationEmail, sendPasswordResetEmail, testSMTPConnection } from '../services/emailService.js';
+import { pauseStripeSubscription, resumeStripeSubscription } from './billing.js';
 
 const router = Router();
 
@@ -321,6 +322,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         trialEndAt: true,
         stripeCustomerId: true,
         stripeSubscriptionId: true,
+        stripePausedAt: true,
         isPro: true,
         paymentLinkEnabled: true,
         proBonusExpiresAt: true,
@@ -335,6 +337,13 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     
     const hasActiveBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
     const hasStripeSubscription = !!user.stripeSubscriptionId;
+    
+    if (!hasActiveBonus && user.stripePausedAt && user.stripeSubscriptionId) {
+      const resumeResult = await resumeStripeSubscription(req.userId!);
+      if (resumeResult.success) {
+        console.log(`[AUTO-RESUME] Stripe subscription resumed for user ${user.email} after Enterprise expired`);
+      }
+    }
     
     let effectiveStatus = user.subscriptionStatus;
     if (hasActiveBonus && user.subscriptionStatus === 'PENDING') {
@@ -585,6 +594,15 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
     const grantDays = refCode.grantDurationDays || 7;
     const proBonusExpiresAt = new Date();
     proBonusExpiresAt.setDate(proBonusExpiresAt.getDate() + grantDays);
+    
+    if (user.stripeSubscriptionId) {
+      const pauseResult = await pauseStripeSubscription(user.id);
+      if (pauseResult.success) {
+        console.log(`[ENTERPRISE] Paused Stripe subscription for user ${user.id} while Enterprise is active`);
+      } else {
+        console.log(`[ENTERPRISE] Could not pause Stripe subscription: ${pauseResult.error}`);
+      }
+    }
     
     await prisma.$transaction([
       prisma.user.update({

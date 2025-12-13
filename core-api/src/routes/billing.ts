@@ -341,6 +341,58 @@ router.post('/reactivate-subscription', authMiddleware, async (req: any, res) =>
   }
 });
 
+export async function pauseStripeSubscription(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user || !user.stripeSubscriptionId) {
+      return { success: false, error: 'No active subscription' };
+    }
+
+    await stripe.subscriptions.update(user.stripeSubscriptionId, {
+      pause_collection: {
+        behavior: 'void'
+      }
+    });
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { stripePausedAt: new Date() }
+    });
+
+    console.log(`[BILLING] Paused Stripe subscription for user ${userId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[BILLING] Error pausing subscription:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function resumeStripeSubscription(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user || !user.stripeSubscriptionId) {
+      return { success: false, error: 'No subscription to resume' };
+    }
+
+    await stripe.subscriptions.update(user.stripeSubscriptionId, {
+      pause_collection: null as any
+    });
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { stripePausedAt: null }
+    });
+
+    console.log(`[BILLING] Resumed Stripe subscription for user ${userId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[BILLING] Error resuming subscription:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 router.get('/contacts-today', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId;

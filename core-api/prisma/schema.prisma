@@ -33,6 +33,7 @@ model User {
   isPro                       Boolean             @default(false)
   paymentLinkEnabled          Boolean             @default(false)
   proBonusExpiresAt           DateTime?
+  stripePausedAt              DateTime?
   referralCode                String?
   bonusTokens                 Int                 @default(0)
   createdAt                   DateTime            @default(now())
