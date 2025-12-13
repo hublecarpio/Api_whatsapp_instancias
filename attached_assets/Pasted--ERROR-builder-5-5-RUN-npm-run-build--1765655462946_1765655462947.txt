@@ -1,0 +1,44 @@
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             35.4s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+1.684                                                                                                                                                                       
+1.684 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+1.684 > next build                                                                                                                                                          
+1.684                                                                                                                                                                       
+3.086 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+3.087 This information is used to shape Next.js' roadmap and prioritize features.
+3.087 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+3.087 https://nextjs.org/telemetry
+3.087 
+3.238   ▲ Next.js 14.2.16
+3.238 
+3.401    Creating an optimized production build ...
+25.45  ✓ Compiled successfully
+25.45    Linting and checking validity of types ...
+35.24 Failed to compile.
+35.24 
+35.24 ./app/dashboard/billing/page.tsx:55:17
+35.24 Type error: Property 'getMe' does not exist on type '{ register: (data: { name: string; email: string; password: string; referralCode?: string | undefined; }) => Promise<AxiosResponse<any, any, {}>>; login: (data: { email: string; password: string; }) => Promise<...>; ... 5 more ...; advisorSignup: (data: { ...; }) => Promise<...>; }'.
+35.24 
+35.24   53 |         billingApi.getSubscriptionStatus(),
+35.24   54 |         billingApi.getTokenUsage(),
+35.24 > 55 |         authApi.getMe()
+35.24      |                 ^
+35.24   56 |       ]);
+35.24   57 |       setStatus(statusRes.data);
+35.24   58 |       setTokenUsage(tokenRes.data);
+35.32 npm notice
+35.32 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+35.32 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+35.32 npm notice To update run: npm install -g npm@11.7.0
+35.32 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1

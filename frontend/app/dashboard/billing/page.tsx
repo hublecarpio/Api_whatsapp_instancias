@@ -52,7 +52,7 @@ export default function BillingPage() {
       const [statusRes, tokenRes, meRes] = await Promise.all([
         billingApi.getSubscriptionStatus(),
         billingApi.getTokenUsage(),
-        authApi.getMe()
+        authApi.me()
       ]);
       setStatus(statusRes.data);
       setTokenUsage(tokenRes.data);
