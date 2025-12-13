@@ -9,7 +9,7 @@ from .config import get_settings
 from .schemas.business_profile import BusinessProfile, Product
 from .core.memory import get_memory, update_memory, clear_memory, get_memory_stats
 from .core.embeddings import get_embedding_service
-from .core.graph import get_agent_graph
+from .core.graph import get_agent_graph, get_state_governed_graph
 from .agents.refiner import get_refiner_agent
 
 logging.basicConfig(level=logging.INFO)
@@ -108,9 +108,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"Config: CORE_API_URL={settings.core_api_url}")
     
     if settings.openai_api_key:
-        get_agent_graph()
-        logger.info("Multi-agent graph initialized")
-        logger.info("Features: Memory, Embeddings, Tools, Observer, Refiner")
+        get_state_governed_graph()
+        logger.info("State-governed multi-agent graph initialized (V2 Hardened)")
+        logger.info("Features: Memory, Embeddings, Tools, Observer, Refiner, State Governance")
     else:
         logger.error("OPENAI_API_KEY not set - agent will NOT work!")
     
@@ -263,6 +263,9 @@ async def generate_response(request: GenerateRequest):
             "knowledge_context": None,
             "dynamic_rules": dynamic_rules,
             "conversation_history": conversation_history,
+            "commercial_state": None,
+            "vendor_output": None,
+            "observer_validation": None,
             "vendor_action": None,
             "tool_result": None,
             "tool_success": True,
@@ -276,10 +279,12 @@ async def generate_response(request: GenerateRequest):
             "max_iterations": 5,
             "retry_count": 0,
             "needs_retry": False,
-            "observer_feedback": None
+            "observer_feedback": None,
+            "graph_decision": None,
+            "state_valid": True
         }
         
-        graph = get_agent_graph()
+        graph = get_state_governed_graph()
         result = await graph.ainvoke(initial_state)
         
         update_memory(lead_id, business_id, {
