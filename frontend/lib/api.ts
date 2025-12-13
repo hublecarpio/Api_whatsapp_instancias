@@ -57,7 +57,8 @@ export const businessApi = {
     api.put(`/business/${id}/bot-toggle`, { botEnabled: enabled }),
   delete: (id: string) => api.delete(`/business/${id}`),
   getInjectionCode: (id: string) => api.get(`/business/${id}/injection-code`),
-  generateInjectionCode: (id: string) => api.post(`/business/${id}/generate-injection-code`)
+  generateInjectionCode: (id: string) => api.post(`/business/${id}/generate-injection-code`),
+  getStats: (id: string) => api.get(`/business/${id}/stats`)
 };
 
 export const productApi = {

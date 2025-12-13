@@ -2,13 +2,31 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { businessApi, policyApi } from '@/lib/api';
+import { businessApi, policyApi, billingApi } from '@/lib/api';
+
+interface BusinessStats {
+  whatsapp: { status: string; connected: boolean; phone: string | null };
+  products: number;
+  messages: number;
+  contacts: number;
+  orders: number;
+  appointments: number;
+  campaigns: number;
+}
+
+interface TokenUsage {
+  tokensUsed: number;
+  tokenLimit: number;
+  percentUsed: number;
+}
 
 export default function BusinessPage() {
   const { currentBusiness, setCurrentBusiness, businesses, setBusinesses } = useBusinessStore();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [stats, setStats] = useState<BusinessStats | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -40,6 +58,18 @@ export default function BusinessPage() {
           setBrandVoice(res.data.brandVoice || '');
           setPolicyId(res.data.id);
         }
+      }).catch(() => {});
+
+      businessApi.getStats(currentBusiness.id).then((res) => {
+        setStats(res.data);
+      }).catch(() => {});
+
+      billingApi.getTokenUsage().then((res) => {
+        setTokenUsage({
+          tokensUsed: res.data.tokensUsed,
+          tokenLimit: res.data.tokenLimit,
+          percentUsed: res.data.percentUsed
+        });
       }).catch(() => {});
     }
   }, [currentBusiness]);
@@ -95,11 +125,52 @@ export default function BusinessPage() {
     }
   };
 
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toString();
+  };
+
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-0">
+    <div className="max-w-4xl mx-auto p-4 sm:p-0">
       <h1 className="text-xl sm:text-2xl font-bold text-white mb-6">
-        {currentBusiness ? 'Configurar Empresa' : 'Crear Empresa'}
+        {currentBusiness ? 'Mi Empresa' : 'Crear Empresa'}
       </h1>
+
+      {currentBusiness && stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+          <div className="card p-3 text-center">
+            <div className={`text-lg font-bold ${stats.whatsapp.connected ? 'text-accent-success' : 'text-accent-warning'}`}>
+              {stats.whatsapp.connected ? '✓' : '✗'}
+            </div>
+            <div className="text-xs text-gray-400">WhatsApp</div>
+          </div>
+          <div className="card p-3 text-center">
+            <div className="text-lg font-bold text-white">{tokenUsage ? `${tokenUsage.percentUsed}%` : '-'}</div>
+            <div className="text-xs text-gray-400">Tokens</div>
+          </div>
+          <div className="card p-3 text-center">
+            <div className="text-lg font-bold text-white">{formatNumber(stats.products)}</div>
+            <div className="text-xs text-gray-400">Productos</div>
+          </div>
+          <div className="card p-3 text-center">
+            <div className="text-lg font-bold text-white">{formatNumber(stats.messages)}</div>
+            <div className="text-xs text-gray-400">Mensajes</div>
+          </div>
+          <div className="card p-3 text-center">
+            <div className="text-lg font-bold text-white">{formatNumber(stats.contacts)}</div>
+            <div className="text-xs text-gray-400">Contactos</div>
+          </div>
+          <div className="card p-3 text-center">
+            <div className="text-lg font-bold text-white">{formatNumber(businessObjective === 'APPOINTMENTS' ? stats.appointments : stats.orders)}</div>
+            <div className="text-xs text-gray-400">{businessObjective === 'APPOINTMENTS' ? 'Citas' : 'Ordenes'}</div>
+          </div>
+          <div className="card p-3 text-center">
+            <div className="text-lg font-bold text-white">{formatNumber(stats.campaigns)}</div>
+            <div className="text-xs text-gray-400">Campanas</div>
+          </div>
+        </div>
+      )}
 
       {success && (
         <div className="bg-accent-success/10 border border-accent-success/20 text-accent-success px-4 py-3 rounded-lg mb-4">

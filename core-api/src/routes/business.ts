@@ -231,4 +231,56 @@ router.get('/:id/injection-code', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/:id/stats', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await prisma.business.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+      include: {
+        instances: {
+          select: { id: true, status: true, phoneNumber: true }
+        }
+      }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const [productCount, messageCount, contactCount, orderCount, appointmentCount, campaignCount] = await Promise.all([
+      prisma.product.count({ where: { businessId: req.params.id } }),
+      prisma.messageLog.count({ where: { businessId: req.params.id } }),
+      prisma.contact.count({ where: { businessId: req.params.id } }),
+      prisma.order.count({ where: { businessId: req.params.id } }),
+      prisma.appointment.count({ where: { businessId: req.params.id } }),
+      prisma.broadcastCampaign.count({ 
+        where: { 
+          businessId: req.params.id,
+          status: { in: ['COMPLETED', 'PAUSED', 'RUNNING'] }
+        } 
+      })
+    ]);
+
+    const instance = business.instances?.[0];
+    const whatsappStatus = instance?.status || 'disconnected';
+    const whatsappPhone = instance?.phoneNumber || null;
+
+    res.json({
+      whatsapp: {
+        status: whatsappStatus,
+        connected: whatsappStatus === 'open',
+        phone: whatsappPhone
+      },
+      products: productCount,
+      messages: messageCount,
+      contacts: contactCount,
+      orders: orderCount,
+      appointments: appointmentCount,
+      campaigns: campaignCount
+    });
+  } catch (error) {
+    console.error('Get business stats error:', error);
+    res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
 export default router;

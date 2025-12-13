@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/dashboard/billing/page": [
+    "/dashboard/business/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/billing/page.js"
+      "static/chunks/app/dashboard/business/page.js"
     ],
     "/dashboard/layout": [
       "static/chunks/webpack.js",
@@ -16,15 +16,25 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/dashboard/business/page": [
+    "/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/business/page.js"
+      "static/chunks/app/login/page.js"
     ],
-    "/dashboard/page": [
+    "/dashboard/reminders/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/page.js"
+      "static/chunks/app/dashboard/reminders/page.js"
+    ],
+    "/dashboard/tags/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/tags/page.js"
+    ],
+    "/dashboard/billing/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/billing/page.js"
     ]
   }
 }
