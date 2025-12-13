@@ -258,19 +258,6 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
 
     console.log(`[CONTACTS REFRESH] Found business: ${business.name} (${business.id})`);
 
-    const messages = await prisma.messageLog.findMany({
-      where: { businessId: business.id },
-      select: {
-        sender: true,
-        recipient: true,
-        direction: true,
-        createdAt: true,
-        metadata: true
-      }
-    });
-
-    console.log(`[CONTACTS REFRESH] Found ${messages.length} messages in MessageLog for business ${business.id}`);
-
     const phoneStats: Record<string, {
       firstMessageAt: Date;
       lastMessageAt: Date;
@@ -278,36 +265,70 @@ router.post('/refresh', async (req: AuthRequest, res: Response) => {
       name: string | null;
     }> = {};
 
-    for (const msg of messages) {
-      const phone = msg.direction === 'inbound' ? msg.sender : msg.recipient;
-      if (!phone || phone === business.id) continue;
+    const BATCH_SIZE = 10000;
+    let cursor: string | undefined;
+    let totalMessages = 0;
+    let batchNumber = 0;
 
-      const cleanPhone = phone.replace('@s.whatsapp.net', '').replace('@c.us', '');
+    while (true) {
+      const messages = await prisma.messageLog.findMany({
+        where: { businessId: business.id },
+        select: {
+          id: true,
+          sender: true,
+          recipient: true,
+          direction: true,
+          createdAt: true,
+          metadata: true
+        },
+        take: BATCH_SIZE,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+        orderBy: { id: 'asc' }
+      });
 
-      if (!phoneStats[cleanPhone]) {
-        phoneStats[cleanPhone] = {
-          firstMessageAt: msg.createdAt,
-          lastMessageAt: msg.createdAt,
-          messageCount: 0,
-          name: null
-        };
-      }
+      if (messages.length === 0) break;
 
-      phoneStats[cleanPhone].messageCount++;
-      if (msg.createdAt < phoneStats[cleanPhone].firstMessageAt) {
-        phoneStats[cleanPhone].firstMessageAt = msg.createdAt;
-      }
-      if (msg.createdAt > phoneStats[cleanPhone].lastMessageAt) {
-        phoneStats[cleanPhone].lastMessageAt = msg.createdAt;
-      }
+      batchNumber++;
+      totalMessages += messages.length;
+      cursor = messages[messages.length - 1].id;
 
-      if (msg.direction === 'inbound' && msg.metadata) {
-        const meta = msg.metadata as any;
-        if (meta.pushName && !phoneStats[cleanPhone].name) {
-          phoneStats[cleanPhone].name = meta.pushName;
+      for (const msg of messages) {
+        const phone = msg.direction === 'inbound' ? msg.sender : msg.recipient;
+        if (!phone || phone === business.id) continue;
+
+        const cleanPhone = phone.replace('@s.whatsapp.net', '').replace('@c.us', '');
+
+        if (!phoneStats[cleanPhone]) {
+          phoneStats[cleanPhone] = {
+            firstMessageAt: msg.createdAt,
+            lastMessageAt: msg.createdAt,
+            messageCount: 0,
+            name: null
+          };
+        }
+
+        phoneStats[cleanPhone].messageCount++;
+        if (msg.createdAt < phoneStats[cleanPhone].firstMessageAt) {
+          phoneStats[cleanPhone].firstMessageAt = msg.createdAt;
+        }
+        if (msg.createdAt > phoneStats[cleanPhone].lastMessageAt) {
+          phoneStats[cleanPhone].lastMessageAt = msg.createdAt;
+        }
+
+        if (msg.direction === 'inbound' && msg.metadata) {
+          const meta = msg.metadata as any;
+          if (meta.pushName && !phoneStats[cleanPhone].name) {
+            phoneStats[cleanPhone].name = meta.pushName;
+          }
         }
       }
+
+      console.log(`[CONTACTS REFRESH] Processed batch ${batchNumber}: ${messages.length} messages (total: ${totalMessages})`);
+
+      if (messages.length < BATCH_SIZE) break;
     }
+
+    console.log(`[CONTACTS REFRESH] Completed processing ${totalMessages} messages in ${batchNumber} batches for business ${business.id}`);
 
     const phoneEntries = Object.entries(phoneStats);
     const phonesToCheck = phoneEntries.map(([phone]) => phone);
