@@ -694,4 +694,47 @@ router.post('/:businessId/validate', async (req: AuthRequest, res: Response) => 
   }
 });
 
+const internalRouter = Router();
+
+internalRouter.get('/baileys-instances', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    const expectedSecret = process.env.INTERNAL_API_SECRET || 'internal-secret-key';
+    
+    if (internalSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const instances = await prisma.whatsAppInstance.findMany({
+      where: { 
+        provider: 'BAILEYS', 
+        isActive: true,
+        instanceBackendId: { not: null }
+      },
+      include: {
+        business: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+    
+    const result = instances.map(inst => ({
+      id: inst.instanceBackendId,
+      businessId: inst.business.id,
+      webhook: `${CORE_API_URL}/webhook/${inst.business.id}`,
+      status: inst.status,
+      phoneNumber: inst.phoneNumber,
+      lastConnection: inst.lastConnection
+    }));
+    
+    console.log(`[Internal API] Returning ${result.length} active Baileys instances for restoration`);
+    
+    res.json({ instances: result });
+  } catch (error) {
+    console.error('Get baileys instances error:', error);
+    res.status(500).json({ error: 'Failed to get Baileys instances' });
+  }
+});
+
+export { internalRouter };
 export default router;

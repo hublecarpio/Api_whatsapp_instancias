@@ -6,7 +6,7 @@ import businessRoutes from './routes/business.js';
 import productRoutes from './routes/products.js';
 import policyRoutes from './routes/policies.js';
 import promptRoutes from './routes/prompt.js';
-import waRoutes from './routes/whatsapp.js';
+import waRoutes, { internalRouter as waInternalRouter } from './routes/whatsapp.js';
 import agentRoutes from './routes/agent.js';
 import messageRoutes from './routes/messages.js';
 import webhookRoutes from './routes/webhook.js';
@@ -108,6 +108,7 @@ app.use('/agent/files', agentFilesRoutes);
 app.use('/public', publicRoutes);
 app.use('/advisor', advisorRoutes);
 app.use('/broadcasts', broadcastsRoutes);
+app.use('/internal/wa', waInternalRouter);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
