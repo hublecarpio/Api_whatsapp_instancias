@@ -1675,6 +1675,9 @@ video {
 .border-accent-warning\/30 {
   border-color: rgb(245 158 11 / 0.3);
 }
+.border-amber-500\/30 {
+  border-color: rgb(245 158 11 / 0.3);
+}
 .border-blue-500\/30 {
   border-color: rgb(59 130 246 / 0.3);
 }
@@ -1774,9 +1777,6 @@ video {
 .border-yellow-500\/30 {
   border-color: rgb(234 179 8 / 0.3);
 }
-.border-amber-500\/30 {
-  border-color: rgb(245 158 11 / 0.3);
-}
 .border-b-transparent {
   border-bottom-color: transparent;
 }
@@ -1836,6 +1836,13 @@ video {
 }
 .bg-accent-warning\/20 {
   background-color: rgb(245 158 11 / 0.2);
+}
+.bg-amber-500 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(245 158 11 / var(--tw-bg-opacity, 1));
+}
+.bg-amber-500\/10 {
+  background-color: rgb(245 158 11 / 0.1);
 }
 .bg-amber-500\/20 {
   background-color: rgb(245 158 11 / 0.2);
@@ -2004,6 +2011,9 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(147 51 234 / var(--tw-bg-opacity, 1));
 }
+.bg-red-500\/10 {
+  background-color: rgb(239 68 68 / 0.1);
+}
 .bg-red-500\/20 {
   background-color: rgb(239 68 68 / 0.2);
 }
@@ -2037,16 +2047,6 @@ video {
 .bg-yellow-600 {
   --tw-bg-opacity: 1;
   background-color: rgb(202 138 4 / var(--tw-bg-opacity, 1));
-}
-.bg-amber-500 {
-  --tw-bg-opacity: 1;
-  background-color: rgb(245 158 11 / var(--tw-bg-opacity, 1));
-}
-.bg-amber-500\/10 {
-  background-color: rgb(245 158 11 / 0.1);
-}
-.bg-red-500\/10 {
-  background-color: rgb(239 68 68 / 0.1);
 }
 .bg-gradient-to-b {
   background-image: linear-gradient(to bottom, var(--tw-gradient-stops));
@@ -2369,6 +2369,9 @@ video {
   --tw-text-opacity: 1;
   color: rgb(251 191 36 / var(--tw-text-opacity, 1));
 }
+.text-amber-400\/70 {
+  color: rgb(251 191 36 / 0.7);
+}
 .text-amber-500 {
   --tw-text-opacity: 1;
   color: rgb(245 158 11 / var(--tw-text-opacity, 1));
@@ -2455,6 +2458,9 @@ video {
   --tw-text-opacity: 1;
   color: rgb(248 113 113 / var(--tw-text-opacity, 1));
 }
+.text-red-400\/70 {
+  color: rgb(248 113 113 / 0.7);
+}
 .text-red-500 {
   --tw-text-opacity: 1;
   color: rgb(239 68 68 / var(--tw-text-opacity, 1));
@@ -2483,12 +2489,6 @@ video {
 .text-yellow-500 {
   --tw-text-opacity: 1;
   color: rgb(234 179 8 / var(--tw-text-opacity, 1));
-}
-.text-amber-400\/70 {
-  color: rgb(251 191 36 / 0.7);
-}
-.text-red-400\/70 {
-  color: rgb(248 113 113 / 0.7);
 }
 .underline {
   text-decoration-line: underline;
