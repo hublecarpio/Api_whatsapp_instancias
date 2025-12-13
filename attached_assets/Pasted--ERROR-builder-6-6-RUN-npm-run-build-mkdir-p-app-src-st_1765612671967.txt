@@ -1,0 +1,27 @@
+ => ERROR [builder 6/6] RUN npm run build && mkdir -p /app/src/storage/sessions                                                                                        3.6s 
+------                                                                                                                                                                      
+ > [builder 6/6] RUN npm run build && mkdir -p /app/src/storage/sessions:                                                                                                   
+0.299                                                                                                                                                                       
+0.299 > whatsapp-multi-instance-api@1.0.0 build                                                                                                                             
+0.299 > tsc                                                                                                                                                                 
+0.299                                                                                                                                                                       
+3.561 src/core/InstanceManager.ts(74,7): error TS2322: Type '{ id: string; webhook: string; status: string; phoneNumber: string | null; lastConnection: Date | null; }[]' is
+ not assignable to type 'InstanceMetadata[]'.                                                                                                                               
+3.561   Property 'createdAt' is missing in type '{ id: string; webhook: string; status: string; phoneNumber: string | null; lastConnection: Date | null; }' but required in 
+type 'InstanceMetadata'.                                                                                                                                                    
+3.561 src/core/InstanceManager.ts(216,44): error TS2345: Argument of type '{ id: string; webhook: string; status: ConnectionStatus; lastConnection: Date | null; }' is not assignable to parameter of type 'InstanceMetadata'.
+3.561   Property 'createdAt' is missing in type '{ id: string; webhook: string; status: ConnectionStatus; lastConnection: Date | null; }' but required in type 'InstanceMetadata'.
+3.561 src/core/InstanceManager.ts(285,7): error TS2322: Type '"pending"' is not assignable to type 'ConnectionStatus'.
+3.561 src/core/InstanceManager.ts(345,40): error TS2345: Argument of type '{ id: string; webhook: string; status: ConnectionStatus; lastConnection: Date | null; }' is not assignable to parameter of type 'InstanceMetadata'.
+3.561   Property 'createdAt' is missing in type '{ id: string; webhook: string; status: ConnectionStatus; lastConnection: Date | null; }' but required in type 'InstanceMetadata'.
+------
+Dockerfile:11
+--------------------
+   9 |     COPY . .
+  10 |     
+  11 | >>> RUN npm run build && mkdir -p /app/src/storage/sessions
+  12 |     
+  13 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build && mkdir -p /app/src/storage/sessions" did not complete successfully: exit code: 2
+[+] Building 40.3s (12/12) FINISHED      

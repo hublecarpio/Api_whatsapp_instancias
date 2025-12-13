@@ -1,5 +1,5 @@
 import { WhatsAppInstance, InstanceOptions } from '../instances/WhatsAppInstance';
-import { InstanceMetadata } from '../utils/types';
+import { InstanceMetadata, ConnectionStatus } from '../utils/types';
 import logger from '../utils/logger';
 import path from 'path';
 import fs from 'fs';
@@ -74,8 +74,8 @@ export class InstanceManager {
       return instances.map(inst => ({
         id: inst.id,
         webhook: inst.webhook,
-        status: inst.status,
-        phoneNumber: inst.phoneNumber,
+        status: (inst.status as ConnectionStatus) || 'disconnected',
+        createdAt: new Date(),
         lastConnection: inst.lastConnection ? new Date(inst.lastConnection) : null
       }));
     } catch (error: any) {
@@ -216,7 +216,8 @@ export class InstanceManager {
         await this.saveInstanceMetaToRedis({
           id: metadata.id,
           webhook: normalizedWebhook,
-          status: metadata.status || 'pending',
+          status: metadata.status || 'disconnected',
+          createdAt: metadata.createdAt || new Date(),
           lastConnection: metadata.lastConnection
         });
         
@@ -282,7 +283,8 @@ export class InstanceManager {
     await this.saveInstanceMetaToRedis({
       id,
       webhook: normalizedWebhook,
-      status: 'pending',
+      status: 'disconnected',
+      createdAt: new Date(),
       lastConnection: null
     });
 
@@ -346,6 +348,7 @@ export class InstanceManager {
       id,
       webhook: normalizedWebhook,
       status: instance.status,
+      createdAt: instance.createdAt || new Date(),
       lastConnection: instance.lastConnection
     });
 
