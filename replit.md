@@ -59,6 +59,7 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Buffer-to-Worker Lifecycle Management**: AI jobs track `bufferId`, and buffers are deleted only after successful AI processing.
 *   **Terminal State Handling**: Failed buffers are quarantined with `failedAt`, `failureReason`, and `retryCount` fields.
 *   **Synchronous Processing Fallback**: Falls back to `processAIResponseDirect()` when Redis/BullMQ are unavailable to prevent message loss.
+*   **Huble Consulting LLC Branding**: Reusable `HubleFooter` component displays company attribution on all dashboard pages (compact footer) and billing page (full section with explanation about Stripe payments). This clarifies the legal entity behind the service to users.
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
