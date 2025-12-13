@@ -166,6 +166,22 @@ export default function BroadcastsPage() {
   })();
 
   const [creating, setCreating] = useState(false);
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+
+  const selectedTemplate = templates.find(t => t.id === formData.templateId);
+  
+  const getTemplateVariables = (bodyText: string | null): string[] => {
+    if (!bodyText) return [];
+    const regex = /\{\{(\d+)\}\}/g;
+    const vars: string[] = [];
+    let match;
+    while ((match = regex.exec(bodyText)) !== null) {
+      if (!vars.includes(match[1])) vars.push(match[1]);
+    }
+    return vars.sort((a, b) => parseInt(a) - parseInt(b));
+  };
+
+  const templateVarList = selectedTemplate ? getTemplateVariables(selectedTemplate.bodyText) : [];
 
   const getAuthHeader = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -747,19 +763,81 @@ export default function BroadcastsPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Mensaje de Texto</label>
-                <textarea
-                  value={formData.content}
-                  onChange={e => setFormData(prev => ({ ...prev, content: e.target.value }))}
-                  className="input w-full"
-                  rows={4}
-                  placeholder="Escribe tu mensaje aqui... Usa {{1}}, {{2}} para variables del CSV"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Usa variables como {'{{1}}'}, {'{{2}}'} que seran reemplazadas con datos del CSV
-                </p>
-              </div>
+              {isMetaCloud && templates.length > 0 && (
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-blue-400 mb-2">
+                    Plantilla de Meta (para contactos fuera de ventana 24h)
+                  </label>
+                  <select
+                    value={formData.templateId}
+                    onChange={e => {
+                      setFormData(prev => ({ ...prev, templateId: e.target.value }));
+                      setTemplateVariables({});
+                    }}
+                    className="input w-full"
+                  >
+                    <option value="">Sin plantilla - Usar mensaje personalizado</option>
+                    {templates.map(template => (
+                      <option key={template.id} value={template.id}>
+                        {template.name} ({template.language})
+                      </option>
+                    ))}
+                  </select>
+                  {!formData.templateId && (
+                    <p className="text-xs text-blue-400 mt-2">
+                      Sin plantilla, solo contactos dentro de la ventana 24h recibiran el mensaje.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {formData.templateId && selectedTemplate ? (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-green-400 mb-2">
+                    Plantilla: {selectedTemplate.name}
+                  </label>
+                  {selectedTemplate.bodyText && (
+                    <p className="text-sm text-gray-400 mb-3 p-2 bg-dark-surface rounded">
+                      {selectedTemplate.bodyText}
+                    </p>
+                  )}
+                  {templateVarList.length > 0 ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-green-400">Completa las variables de la plantilla:</p>
+                      {templateVarList.map(varNum => (
+                        <div key={varNum}>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">
+                            Variable {'{{'}{varNum}{'}}'}
+                          </label>
+                          <input
+                            type="text"
+                            value={templateVariables[varNum] || ''}
+                            onChange={e => setTemplateVariables(prev => ({ ...prev, [varNum]: e.target.value }))}
+                            className="input w-full"
+                            placeholder={`Valor para {{${varNum}}}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-green-400">Esta plantilla no tiene variables.</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Mensaje de Texto</label>
+                  <textarea
+                    value={formData.content}
+                    onChange={e => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                    className="input w-full"
+                    rows={4}
+                    placeholder="Escribe tu mensaje aqui... Usa {{1}}, {{2}} para variables del CSV"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Usa variables como {'{{1}}'}, {'{{2}}'} que seran reemplazadas con datos del CSV
+                  </p>
+                </div>
+              )}
 
               <div className="border border-dark-border rounded-lg p-4 bg-dark-surface">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -816,28 +894,6 @@ export default function BroadcastsPage() {
                 )}
               </div>
 
-              {isMetaCloud && templates.length > 0 && (
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-                  <label className="block text-sm font-medium text-blue-400 mb-2">
-                    Plantilla para contactos fuera de ventana 24h (Meta Cloud)
-                  </label>
-                  <select
-                    value={formData.templateId}
-                    onChange={e => setFormData(prev => ({ ...prev, templateId: e.target.value }))}
-                    className="input w-full"
-                  >
-                    <option value="">Sin plantilla (solo ventana 24h)</option>
-                    {templates.map(template => (
-                      <option key={template.id} value={template.id}>
-                        {template.name} ({template.language})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-blue-400 mt-2">
-                    Los contactos que no hayan escrito en 24h recibiran esta plantilla en lugar del mensaje normal.
-                  </p>
-                </div>
-              )}
 
               {isMetaCloud && templates.length === 0 && (
                 <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
