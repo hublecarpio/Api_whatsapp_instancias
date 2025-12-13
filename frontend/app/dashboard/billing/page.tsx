@@ -201,8 +201,18 @@ export default function BillingPage() {
     }
   };
 
+  const isEnterprise = status?.hasActiveBonus || (user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date());
+
   const getStatusBadge = () => {
     if (!status) return null;
+
+    if (isEnterprise) {
+      return (
+        <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+          Avanzado
+        </span>
+      );
+    }
 
     const badges: Record<string, { color: string; text: string }> = {
       pending: { color: 'bg-gray-500', text: 'Sin suscripcion' },
@@ -261,13 +271,34 @@ export default function BillingPage() {
             <h2 className="text-lg font-semibold text-white mb-2">Estado de tu suscripcion</h2>
             {getStatusBadge()}
           </div>
-          <div className="sm:text-right">
-            <p className="text-gray-400 text-sm">Plan Pro</p>
-            <p className="text-white text-xl font-bold">$97 USD / mes</p>
-          </div>
+          {isEnterprise ? (
+            <div className="sm:text-right">
+              <p className="text-purple-400 text-sm">Plan Enterprise</p>
+              <p className="text-white text-xl font-bold">Tokens Ilimitados</p>
+            </div>
+          ) : (
+            <div className="sm:text-right">
+              <p className="text-gray-400 text-sm">Plan Pro</p>
+              <p className="text-white text-xl font-bold">$97 USD / mes</p>
+            </div>
+          )}
         </div>
 
-        {status?.subscriptionStatus === 'trial' && status.trialEndAt && (
+        {isEnterprise && status?.proBonusExpiresAt && (
+          <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4 mb-4">
+            <p className="text-purple-400 font-medium flex items-center gap-2">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Plan Enterprise Activo
+            </p>
+            <p className="text-purple-400/70 text-sm mt-1">
+              Tu acceso Enterprise es valido hasta el <strong>{formatDate(status.proBonusExpiresAt)}</strong>
+            </p>
+          </div>
+        )}
+
+        {!isEnterprise && status?.subscriptionStatus === 'trial' && status.trialEndAt && (
           <div className="bg-neon-blue/10 border border-neon-blue/30 rounded-lg p-4 mb-4">
             <p className="text-neon-blue">
               Tu periodo de prueba termina el <strong>{formatDate(status.trialEndAt)}</strong>
@@ -278,7 +309,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {status?.subscriptionStatus === 'trial' && tokenUsage && (
+        {!isEnterprise && status?.subscriptionStatus === 'trial' && tokenUsage && (
           <div className="bg-dark-hover rounded-lg p-4 mb-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-400 text-sm">Uso de tokens este mes</span>
@@ -319,7 +350,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {status?.subscriptionStatus === 'active' && status.nextPayment && (
+        {!isEnterprise && status?.subscriptionStatus === 'active' && status.nextPayment && (
           <div className="bg-dark-hover rounded-lg p-4 mb-4">
             <div className="flex justify-between">
               <span className="text-gray-400">Proximo pago:</span>
@@ -328,7 +359,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {status?.subscriptionStatus === 'active' && tokenUsage && (
+        {!isEnterprise && status?.subscriptionStatus === 'active' && tokenUsage && (
           <div className="bg-dark-hover rounded-lg p-4 mb-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-400 text-sm">Uso de tokens este mes</span>
@@ -544,12 +575,18 @@ export default function BillingPage() {
               </li>
             ))}
           </ul>
-          <button 
-            onClick={() => setShowEnterpriseModal(true)} 
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-          >
-            Solicitar Enterprise
-          </button>
+          {isEnterprise ? (
+            <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 text-center">
+              <span className="text-purple-400 text-sm font-medium">Plan activo</span>
+            </div>
+          ) : (
+            <button 
+              onClick={() => setShowEnterpriseModal(true)} 
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
+              Solicitar Enterprise
+            </button>
+          )}
         </div>
       </div>
 

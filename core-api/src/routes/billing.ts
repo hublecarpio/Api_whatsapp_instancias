@@ -275,11 +275,15 @@ router.get('/subscription-status', authMiddleware, async (req: any, res) => {
       }
     }
 
+    const hasActiveBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
+    
     res.json({
       subscriptionStatus: user.subscriptionStatus.toLowerCase(),
       trialEndAt: user.trialEndAt,
       nextPayment,
-      hasSubscription: !!user.stripeSubscriptionId
+      hasSubscription: !!user.stripeSubscriptionId,
+      proBonusExpiresAt: user.proBonusExpiresAt,
+      hasActiveBonus
     });
   } catch (error: any) {
     console.error('Error fetching subscription status:', error);
