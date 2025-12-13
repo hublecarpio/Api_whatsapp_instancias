@@ -320,6 +320,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         subscriptionStatus: true,
         trialEndAt: true,
         stripeCustomerId: true,
+        stripeSubscriptionId: true,
         isPro: true,
         paymentLinkEnabled: true,
         proBonusExpiresAt: true,
@@ -333,6 +334,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
     
     const hasActiveBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
+    const hasStripeSubscription = !!user.stripeSubscriptionId;
     
     let effectiveStatus = user.subscriptionStatus;
     if (hasActiveBonus && user.subscriptionStatus === 'PENDING') {
@@ -344,6 +346,15 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       console.log(`[AUTO-FIX] User ${user.email} had active bonus but PENDING status, corrected to ACTIVE`);
     }
     
+    let planType: 'pro' | 'basic' | 'trial' | 'none' = 'none';
+    if (hasActiveBonus || user.isPro) {
+      planType = 'pro';
+    } else if (hasStripeSubscription && (effectiveStatus === 'ACTIVE' || effectiveStatus === 'TRIAL')) {
+      planType = 'basic';
+    } else if (effectiveStatus === 'TRIAL') {
+      planType = 'trial';
+    }
+    
     res.json({
       ...user,
       subscriptionStatus: effectiveStatus.toLowerCase(),
@@ -352,6 +363,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       paymentLinkEnabled: user.paymentLinkEnabled || hasActiveBonus,
       proBonusExpiresAt: user.proBonusExpiresAt,
       hasActiveBonus,
+      hasStripeSubscription,
+      planType,
       role: user.role,
       parentUserId: user.parentUserId
     });

@@ -11,6 +11,8 @@ interface User {
   paymentLinkEnabled?: boolean;
   proBonusExpiresAt?: string;
   hasActiveBonus?: boolean;
+  hasStripeSubscription?: boolean;
+  planType?: 'pro' | 'basic' | 'trial' | 'none';
   role?: 'ADMIN' | 'ASESOR';
   parentUserId?: string | null;
 }

@@ -54,6 +54,16 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   const getStatusInfo = () => {
     if (!user?.subscriptionStatus) return null;
     
+    const planType = user.planType || 'none';
+    
+    if (planType === 'pro') {
+      return { label: 'Pro', class: 'status-active', dotClass: 'bg-accent-success' };
+    }
+    
+    if (planType === 'basic') {
+      return { label: 'Basic', class: 'status-active', dotClass: 'bg-neon-blue' };
+    }
+    
     const statusMap: Record<string, { label: string; class: string; dotClass: string }> = {
       active: { label: 'Plan Activo', class: 'status-active', dotClass: 'bg-accent-success' },
       trial: { label: 'Periodo de Prueba', class: 'status-trial', dotClass: 'bg-neon-blue' },
