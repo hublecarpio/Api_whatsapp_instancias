@@ -1955,12 +1955,25 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
         where: { businessId_contactPhone: { businessId: business_id, contactPhone } }
       });
       
-      const currentMessages = existingBuffer 
-        ? [...(existingBuffer.messages as string[]), user_message]
-        : [user_message];
+      // Handle both old format (array) and new format (object with texts/providerMessageIds)
+      let existingTexts: string[] = [];
+      let existingMessageIds: string[] = [];
+      
+      if (existingBuffer?.messages) {
+        const bufferData = existingBuffer.messages as any;
+        if (Array.isArray(bufferData)) {
+          // Old format: messages is an array of strings
+          existingTexts = bufferData;
+        } else if (bufferData?.texts && Array.isArray(bufferData.texts)) {
+          // New format: messages is { texts: [...], providerMessageIds: [...] }
+          existingTexts = bufferData.texts;
+          existingMessageIds = bufferData.providerMessageIds || [];
+        }
+      }
+      
+      const currentMessages = [...existingTexts, user_message];
       
       // Accumulate all providerMessageIds for marking as read later
-      const existingMessageIds = (existingBuffer?.messages as any)?.providerMessageIds || [];
       const currentProviderMessageIds = providerMessageId 
         ? [...existingMessageIds, providerMessageId]
         : existingMessageIds;
