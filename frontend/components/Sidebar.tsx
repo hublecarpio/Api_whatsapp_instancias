@@ -18,11 +18,12 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   };
 
   const businessObjective = (currentBusiness as any)?.businessObjective || 'SALES';
+  const instanceProvider = (currentBusiness as any)?.instances?.[0]?.provider;
   
   const baseLinks = [
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: '💬' },
-    { href: '/dashboard/templates', label: 'Templates', icon: '📄' },
+    ...(instanceProvider === 'META_CLOUD' ? [{ href: '/dashboard/templates', label: 'Templates', icon: '📄' }] : []),
   ];
   
   const salesLinks = [
