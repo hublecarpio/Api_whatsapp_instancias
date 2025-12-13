@@ -10,6 +10,7 @@ import EmailVerificationBanner from '@/components/EmailVerificationBanner';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
 import { businessApi, authApi, billingApi } from '@/lib/api';
+import HubleFooter from '@/components/HubleFooter';
 
 const AI_PREMIUM_PAGES = [
   '/dashboard/agent',
@@ -252,6 +253,7 @@ export default function DashboardLayout({
               <EmailVerificationBanner email={user?.email || ''} />
             )}
             {children}
+            {!isChatPage && <HubleFooter />}
           </>
         )}
       </main>

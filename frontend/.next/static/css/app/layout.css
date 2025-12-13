@@ -3016,9 +3016,18 @@ input, textarea, select {
   color: rgb(134 239 172 / var(--tw-text-opacity, 1));
 }
 
+.hover\:text-neon-blue:hover {
+  --tw-text-opacity: 1;
+  color: rgb(0 212 255 / var(--tw-text-opacity, 1));
+}
+
 .hover\:text-neon-blue-light:hover {
   --tw-text-opacity: 1;
   color: rgb(51 221 255 / var(--tw-text-opacity, 1));
+}
+
+.hover\:text-neon-blue\/80:hover {
+  color: rgb(0 212 255 / 0.8);
 }
 
 .hover\:text-purple-300:hover {

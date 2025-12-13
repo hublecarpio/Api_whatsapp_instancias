@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { billingApi, authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import HubleFooter from '@/components/HubleFooter';
 
 interface SubscriptionStatus {
   subscriptionStatus: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled';
@@ -477,6 +478,8 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      <HubleFooter variant="full" />
 
       {showEnterpriseModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
