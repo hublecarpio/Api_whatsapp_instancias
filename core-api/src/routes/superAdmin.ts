@@ -1837,4 +1837,117 @@ router.get('/internal/model-config', async (req, res) => {
   }
 });
 
+router.get('/tool-logs', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { 
+      limit = '100', 
+      offset = '0', 
+      businessId, 
+      toolName, 
+      status 
+    } = req.query;
+    
+    const where: any = {};
+    if (businessId) where.businessId = businessId;
+    if (toolName) where.tool = { name: { contains: toolName as string, mode: 'insensitive' } };
+    if (status) where.status = status;
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    const whereToday = { ...where, createdAt: { gte: today } };
+    const whereWeek = { ...where, createdAt: { gte: thisWeek } };
+    
+    const [logs, total, stats, todayCount, weekCount, avgDuration] = await Promise.all([
+      prisma.toolLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit as string),
+        skip: parseInt(offset as string),
+        include: {
+          tool: {
+            select: { id: true, name: true, description: true }
+          }
+        }
+      }),
+      prisma.toolLog.count({ where }),
+      prisma.toolLog.groupBy({
+        by: ['status'],
+        where,
+        _count: true
+      }),
+      prisma.toolLog.count({ where: whereToday }),
+      prisma.toolLog.count({ where: whereWeek }),
+      prisma.toolLog.aggregate({
+        where,
+        _avg: { duration: true }
+      })
+    ]);
+    
+    const businessNames: Record<string, string> = {};
+    const businessIds = [...new Set(logs.map(l => l.businessId))];
+    if (businessIds.length > 0) {
+      const businesses = await prisma.business.findMany({
+        where: { id: { in: businessIds } },
+        select: { id: true, name: true }
+      });
+      businesses.forEach(b => { businessNames[b.id] = b.name; });
+    }
+    
+    const logsWithBusiness = logs.map(log => ({
+      ...log,
+      businessName: businessNames[log.businessId] || 'Unknown'
+    }));
+    
+    res.json({
+      logs: logsWithBusiness,
+      total,
+      limit: parseInt(limit as string),
+      offset: parseInt(offset as string),
+      stats: {
+        today: todayCount,
+        thisWeek: weekCount,
+        avgDuration: Math.round(avgDuration._avg.duration || 0),
+        byStatus: stats.reduce((acc, s) => {
+          acc[s.status] = s._count;
+          return acc;
+        }, {} as Record<string, number>)
+      }
+    });
+  } catch (error: any) {
+    console.error('Tool logs error:', error);
+    res.status(500).json({ error: 'Failed to get tool logs' });
+  }
+});
+
+router.get('/tool-logs/businesses', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const prompts = await prisma.agentPrompt.findMany({
+      where: {
+        tools: { some: {} }
+      },
+      include: {
+        business: {
+          select: { id: true, name: true }
+        },
+        tools: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+    
+    res.json({
+      businesses: prompts.map(p => ({
+        id: p.business.id,
+        name: p.business.name,
+        tools: p.tools
+      }))
+    });
+  } catch (error: any) {
+    console.error('Tool logs businesses error:', error);
+    res.status(500).json({ error: 'Failed to get businesses with tools' });
+  }
+});
+
 export default router;

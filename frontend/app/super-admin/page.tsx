@@ -175,6 +175,7 @@ export default function SuperAdminPage() {
             { id: 'analytics', label: 'Ventas', icon: '📊' },
             { id: 'billing', label: 'Billing', icon: '💳' },
             { id: 'tokens', label: 'Tokens', icon: '🎯' },
+            { id: 'tools', label: 'Tools', icon: '🔨' },
             { id: 'agentv2', label: 'Agent V2', icon: '🤖' },
             { id: 'referrals', label: 'Referidos', icon: '🔗' },
             { id: 'system', label: 'Sistema', icon: '⚙️' }
@@ -206,6 +207,7 @@ export default function SuperAdminPage() {
         {activeTab === 'tokens' && <TokenUsageTab token={token} />}
         {activeTab === 'messages' && <MessagesTab token={token} />}
         {activeTab === 'billing' && <BillingTab token={token} />}
+        {activeTab === 'tools' && <ToolLogsTab token={token} />}
         {activeTab === 'agentv2' && <AgentV2Tab token={token} />}
         {activeTab === 'referrals' && <ReferralsTab token={token} />}
         {activeTab === 'system' && <SystemTab token={token} />}
@@ -2727,6 +2729,242 @@ function DevConsoleTab({ token }: { token: string }) {
                   <p className="text-gray-500">Detalles</p>
                   <pre className="text-gray-300 bg-dark-bg p-2 rounded overflow-x-auto text-xs">
                     {JSON.stringify(selectedEvent.details, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolLogsTab({ token }: { token: string }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<any>(null);
+  const [businesses, setBusinesses] = useState<any[]>([]);
+  const [businessFilter, setBusinessFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [selectedLog, setSelectedLog] = useState<any>(null);
+
+  const fetchData = async () => {
+    try {
+      const params = new URLSearchParams({ limit: '100' });
+      if (businessFilter) params.append('businessId', businessFilter);
+      if (statusFilter) params.append('status', statusFilter);
+
+      const [logsRes, businessesRes] = await Promise.all([
+        fetch(`/api/super-admin/tool-logs?${params}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('/api/super-admin/tool-logs/businesses', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+
+      const logsData = await logsRes.json();
+      const businessesData = await businessesRes.json();
+
+      setLogs(logsData.logs || []);
+      setStats(logsData.stats);
+      setBusinesses(businessesData.businesses || []);
+    } catch (err) {
+      console.error('Error fetching tool logs:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [token, businessFilter, statusFilter]);
+
+  const statusColors: Record<string, string> = {
+    success: 'text-accent-success bg-accent-success/10',
+    error: 'text-accent-error bg-accent-error/10',
+    pending: 'text-accent-warning bg-accent-warning/10'
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            Tool Execution History
+            <span className="text-sm font-normal text-gray-400 bg-dark-surface px-2 py-1 rounded">
+              {logs.length}
+            </span>
+          </h2>
+          <p className="text-gray-400 text-sm">Historial de ejecuciones de herramientas del Agent V2</p>
+        </div>
+        <button onClick={fetchData} className="btn btn-ghost text-sm">
+          Actualizar
+        </button>
+      </div>
+
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-neon-blue">{stats.today || 0}</p>
+            <p className="text-xs text-gray-400">Hoy</p>
+          </div>
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-white">{stats.thisWeek || 0}</p>
+            <p className="text-xs text-gray-400">Esta semana</p>
+          </div>
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-accent-success">{stats.byStatus?.success || 0}</p>
+            <p className="text-xs text-gray-400">Exitosos</p>
+          </div>
+          <div className="card py-3 text-center">
+            <p className="text-2xl font-bold text-accent-error">{stats.byStatus?.error || 0}</p>
+            <p className="text-xs text-gray-400">Errores</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-3 items-center">
+        <select
+          value={businessFilter}
+          onChange={e => setBusinessFilter(e.target.value)}
+          className="input text-sm flex-1 min-w-[150px] sm:flex-none sm:w-48"
+        >
+          <option value="">Todos los negocios</option>
+          {businesses.map(b => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="input text-sm w-32"
+        >
+          <option value="">Todos</option>
+          <option value="success">Exitosos</option>
+          <option value="error">Errores</option>
+        </select>
+        <button 
+          onClick={() => { setBusinessFilter(''); setStatusFilter(''); }}
+          className="btn btn-ghost text-sm"
+        >
+          Limpiar
+        </button>
+      </div>
+
+      <div className="card overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-dark-border">
+              <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Fecha</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Tool</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Negocio</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Estado</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Duracion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-gray-500">
+                  No hay ejecuciones registradas
+                </td>
+              </tr>
+            ) : (
+              logs.map((log) => (
+                <tr 
+                  key={log.id} 
+                  className="border-b border-dark-border hover:bg-dark-hover cursor-pointer"
+                  onClick={() => setSelectedLog(log)}
+                >
+                  <td className="py-3 px-4 text-gray-300 text-sm">
+                    {new Date(log.createdAt).toLocaleString('es-PE', { 
+                      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
+                    })}
+                  </td>
+                  <td className="py-3 px-4 text-white font-medium text-sm">
+                    {log.tool?.name || 'Unknown'}
+                  </td>
+                  <td className="py-3 px-4 text-neon-blue text-sm truncate max-w-[150px]">
+                    {log.businessName}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`text-xs px-2 py-1 rounded ${statusColors[log.status] || 'text-gray-400'}`}>
+                      {log.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-gray-400 text-sm">
+                    {log.duration ? `${log.duration}ms` : '-'}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selectedLog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3">
+          <div className="card w-full max-w-2xl max-h-[90vh] overflow-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-white">Detalle de Ejecucion</h3>
+              <button onClick={() => setSelectedLog(null)} className="text-gray-400 hover:text-white text-xl px-2">
+                X
+              </button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-gray-500">Tool</p>
+                  <p className="text-white font-medium">{selectedLog.tool?.name || 'Unknown'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Estado</p>
+                  <span className={`text-xs px-2 py-1 rounded ${statusColors[selectedLog.status]}`}>
+                    {selectedLog.status}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-gray-500">Negocio</p>
+                  <p className="text-neon-blue">{selectedLog.businessName}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Duracion</p>
+                  <p className="text-white">{selectedLog.duration ? `${selectedLog.duration}ms` : '-'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Fecha</p>
+                  <p className="text-white">{new Date(selectedLog.createdAt).toLocaleString('es-PE')}</p>
+                </div>
+                {selectedLog.contactPhone && (
+                  <div>
+                    <p className="text-gray-500">Contacto</p>
+                    <p className="text-gray-300">{selectedLog.contactPhone}</p>
+                  </div>
+                )}
+              </div>
+              {selectedLog.request && (
+                <div>
+                  <p className="text-gray-500">Request</p>
+                  <pre className="text-gray-300 bg-dark-bg p-2 rounded overflow-x-auto text-xs">
+                    {JSON.stringify(selectedLog.request, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {selectedLog.response && (
+                <div>
+                  <p className="text-gray-500">Response</p>
+                  <pre className="text-gray-300 bg-dark-bg p-2 rounded overflow-x-auto text-xs max-h-40">
+                    {typeof selectedLog.response === 'string' ? selectedLog.response : JSON.stringify(selectedLog.response, null, 2)}
                   </pre>
                 </div>
               )}
