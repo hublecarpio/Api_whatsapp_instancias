@@ -206,7 +206,9 @@ export default function BillingPage() {
   };
 
   const isEnterprise = status?.hasActiveBonus || (user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date());
-  const isDemo = (user as any)?.demoPhase === 'DEMO' || (user as any)?.planType === 'demo';
+  
+  // Enterprise takes priority over everything - hide demo/trial when Enterprise is active
+  const isDemo = !isEnterprise && ((user as any)?.demoPhase === 'DEMO' || (user as any)?.planType === 'demo');
   const demoInfo = (user as any)?.demoInfo;
 
   const getStatusBadge = () => {

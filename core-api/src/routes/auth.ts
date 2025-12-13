@@ -593,10 +593,6 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
       return res.status(404).json({ error: 'User not found' });
     }
     
-    if (user.proBonusExpiresAt && user.proBonusExpiresAt > new Date()) {
-      return res.status(400).json({ error: 'You already have an active Pro bonus' });
-    }
-    
     const refCode = await prisma.referralCode.findFirst({
       where: { 
         code: code.toUpperCase(),
@@ -618,8 +614,23 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
     }
     
     const grantDays = refCode.grantDurationDays || 7;
-    const proBonusExpiresAt = new Date();
-    proBonusExpiresAt.setDate(proBonusExpiresAt.getDate() + grantDays);
+    
+    // Accumulate days: if user already has active Enterprise, add days to existing expiration
+    // Otherwise, start from now
+    let proBonusExpiresAt: Date;
+    const now = new Date();
+    const hasActiveBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > now;
+    
+    if (hasActiveBonus) {
+      // Add days to existing expiration date
+      proBonusExpiresAt = new Date(user.proBonusExpiresAt!);
+      proBonusExpiresAt.setDate(proBonusExpiresAt.getDate() + grantDays);
+      console.log(`[ENTERPRISE] Accumulating ${grantDays} days to existing bonus for user ${user.id}`);
+    } else {
+      // Start fresh from now
+      proBonusExpiresAt = new Date();
+      proBonusExpiresAt.setDate(proBonusExpiresAt.getDate() + grantDays);
+    }
     
     if (user.stripeSubscriptionId) {
       const pauseResult = await pauseStripeSubscription(user.id);
@@ -646,12 +657,19 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
       })
     ]);
     
-    console.log(`[ENTERPRISE] User ${user.id} applied referral code ${refCode.code}, subscriptionStatus set to ACTIVE, Pro bonus expires at ${proBonusExpiresAt}`);
+    const actionType = hasActiveBonus ? 'accumulated' : 'activated';
+    console.log(`[ENTERPRISE] User ${user.id} ${actionType} referral code ${refCode.code}, +${grantDays} days, Pro bonus expires at ${proBonusExpiresAt}`);
+    
+    const message = hasActiveBonus 
+      ? `Se agregaron ${grantDays} días a tu plan Enterprise`
+      : `Plan Enterprise activado por ${grantDays} días`;
     
     res.json({ 
       success: true, 
-      message: `Pro bonus activated for ${grantDays} days`,
-      proBonusExpiresAt
+      message,
+      proBonusExpiresAt,
+      daysAdded: grantDays,
+      accumulated: hasActiveBonus
     });
   } catch (error) {
     console.error('Apply referral error:', error);
