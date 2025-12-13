@@ -617,6 +617,70 @@ router.post('/:businessId/reset', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/:businessId/groups', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { businessId: req.params.businessId }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'No WhatsApp instance for this business' });
+    }
+    
+    if (instance.provider !== 'BAILEYS') {
+      return res.status(400).json({ error: 'Group import is only available for Baileys instances' });
+    }
+    
+    if (!instance.instanceBackendId) {
+      return res.status(400).json({ error: 'Instance not properly configured' });
+    }
+    
+    const waResponse = await axios.get(`${WA_API_URL}/instances/${instance.instanceBackendId}/groups`);
+    res.json(waResponse.data);
+  } catch (error: any) {
+    console.error('Get groups error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to fetch groups' });
+  }
+});
+
+router.get('/:businessId/groups/:groupId/participants', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { businessId: req.params.businessId }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'No WhatsApp instance for this business' });
+    }
+    
+    if (instance.provider !== 'BAILEYS') {
+      return res.status(400).json({ error: 'Group import is only available for Baileys instances' });
+    }
+    
+    if (!instance.instanceBackendId) {
+      return res.status(400).json({ error: 'Instance not properly configured' });
+    }
+    
+    const waResponse = await axios.get(
+      `${WA_API_URL}/instances/${instance.instanceBackendId}/groups/${encodeURIComponent(req.params.groupId)}/participants`
+    );
+    res.json(waResponse.data);
+  } catch (error: any) {
+    console.error('Get group participants error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to fetch group participants' });
+  }
+});
+
 router.delete('/:businessId', async (req: AuthRequest, res: Response) => {
   try {
     const business = await checkBusinessAccess(req.userId!, req.params.businessId);

@@ -1755,6 +1755,10 @@ video {
 .border-orange-500\/30 {
   border-color: rgb(249 115 22 / 0.3);
 }
+.border-purple-500 {
+  --tw-border-opacity: 1;
+  border-color: rgb(168 85 247 / var(--tw-border-opacity, 1));
+}
 .border-purple-500\/20 {
   border-color: rgb(168 85 247 / 0.2);
 }

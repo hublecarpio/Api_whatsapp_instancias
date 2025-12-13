@@ -3,6 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useBusinessStore } from '@/store/business';
 import axios from 'axios';
+import { waApi } from '@/lib/api';
+
+interface WhatsAppGroup {
+  id: string;
+  subject: string;
+  size: number;
+}
+
+interface GroupParticipant {
+  phone: string;
+  isAdmin: boolean;
+}
 
 interface Contact {
   id: string;
@@ -96,11 +108,16 @@ export default function BroadcastsPage() {
     delayMaxSeconds: 10,
   });
 
-  const [contactSource, setContactSource] = useState<'crm' | 'csv'>('crm');
+  const [contactSource, setContactSource] = useState<'crm' | 'csv' | 'group'>('crm');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [csvContacts, setCsvContacts] = useState<CSVContact[]>([]);
+  const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<WhatsAppGroup | null>(null);
+  const [groupParticipants, setGroupParticipants] = useState<GroupParticipant[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [availableVariables, setAvailableVariables] = useState<AvailableVariable[]>([]);
   const [metaMode, setMetaMode] = useState<'template' | 'regular'>('template');
@@ -241,6 +258,44 @@ export default function BroadcastsPage() {
     }
   };
 
+  const loadGroups = async () => {
+    if (!currentBusiness?.id) return;
+    try {
+      setLoadingGroups(true);
+      const response = await waApi.getGroups(currentBusiness.id);
+      setGroups(response.data.groups || []);
+    } catch (error: any) {
+      console.error('Error loading groups:', error);
+      if (error.response?.status === 400) {
+        setGroups([]);
+      }
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  const loadGroupParticipants = async (groupId: string) => {
+    if (!currentBusiness?.id) return;
+    try {
+      setLoadingParticipants(true);
+      const response = await waApi.getGroupParticipants(currentBusiness.id, groupId);
+      const participants = response.data.participants || [];
+      setGroupParticipants(participants);
+      setSelectedContacts(participants.map((p: GroupParticipant) => p.phone));
+    } catch (error) {
+      console.error('Error loading group participants:', error);
+      setGroupParticipants([]);
+      setSelectedContacts([]);
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
+
+  const handleGroupSelect = async (group: WhatsAppGroup) => {
+    setSelectedGroup(group);
+    await loadGroupParticipants(group.id);
+  };
+
   const loadInstanceAndTemplates = async () => {
     if (!currentBusiness?.id) return;
     try {
@@ -360,9 +415,9 @@ export default function BroadcastsPage() {
       return;
     }
 
-    const finalContacts = contactSource === 'crm' 
-      ? selectedContacts.map(phone => ({ phone, variables: [] as string[] }))
-      : csvContacts;
+    const finalContacts = contactSource === 'csv' 
+      ? csvContacts
+      : selectedContacts.map(phone => ({ phone, variables: [] as string[] }));
 
     if (finalContacts.length === 0) {
       alert('Selecciona al menos un contacto');
@@ -1001,13 +1056,18 @@ export default function BroadcastsPage() {
 
               <div className="border-t border-dark-border pt-4">
                 <label className="block text-sm font-medium text-gray-300 mb-2">Origen de Contactos</label>
-                <div className="flex gap-4 mb-3">
+                <div className="flex flex-wrap gap-4 mb-3">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
                       name="contactSource"
                       checked={contactSource === 'crm'}
-                      onChange={() => setContactSource('crm')}
+                      onChange={() => {
+                        setContactSource('crm');
+                        setSelectedContacts([]);
+                        setSelectedGroup(null);
+                        setGroupParticipants([]);
+                      }}
                       className="accent-neon-blue"
                     />
                     <span className="text-sm text-gray-300">Contactos CRM</span>
@@ -1017,11 +1077,34 @@ export default function BroadcastsPage() {
                       type="radio"
                       name="contactSource"
                       checked={contactSource === 'csv'}
-                      onChange={() => setContactSource('csv')}
+                      onChange={() => {
+                        setContactSource('csv');
+                        setSelectedContacts([]);
+                        setSelectedGroup(null);
+                        setGroupParticipants([]);
+                      }}
                       className="accent-neon-blue"
                     />
                     <span className="text-sm text-gray-300">Importar CSV</span>
                   </label>
+                  {!isMetaCloud && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="contactSource"
+                        checked={contactSource === 'group'}
+                        onChange={() => {
+                          setContactSource('group');
+                          setSelectedContacts([]);
+                          setSelectedGroup(null);
+                          setGroupParticipants([]);
+                          loadGroups();
+                        }}
+                        className="accent-neon-blue"
+                      />
+                      <span className="text-sm text-gray-300">Importar desde Grupo</span>
+                    </label>
+                  )}
                 </div>
 
                 {contactSource === 'crm' && (
@@ -1170,6 +1253,93 @@ export default function BroadcastsPage() {
                           {csvContacts.length > 5 && <div>...y {csvContacts.length - 5} mas</div>}
                         </div>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {contactSource === 'group' && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                      <p className="text-sm text-purple-400">
+                        Importa participantes de tus grupos de WhatsApp. Solo disponible para conexiones Baileys.
+                      </p>
+                    </div>
+
+                    {loadingGroups ? (
+                      <div className="p-4 text-center text-gray-400">
+                        <p>Cargando grupos...</p>
+                      </div>
+                    ) : groups.length === 0 ? (
+                      <div className="p-4 text-center text-gray-400">
+                        <p>No se encontraron grupos.</p>
+                        <button
+                          type="button"
+                          onClick={loadGroups}
+                          className="mt-2 text-sm text-neon-blue hover:text-neon-blue-light"
+                        >
+                          Reintentar
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-2">Selecciona un grupo</label>
+                          <div className="border border-dark-border rounded-lg max-h-48 overflow-y-auto bg-dark-surface">
+                            {groups.map(group => (
+                              <div
+                                key={group.id}
+                                onClick={() => handleGroupSelect(group)}
+                                className={`flex items-center justify-between p-3 cursor-pointer transition-colors ${
+                                  selectedGroup?.id === group.id 
+                                    ? 'bg-purple-500/20 border-l-2 border-purple-500' 
+                                    : 'hover:bg-dark-hover'
+                                }`}
+                              >
+                                <span className="text-sm text-white">{group.subject}</span>
+                                <span className="text-xs text-gray-500">{group.size} miembros</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {selectedGroup && (
+                          <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                            <div className="flex justify-between items-center mb-2">
+                              <p className="text-sm font-medium text-purple-400">
+                                Grupo: {selectedGroup.subject}
+                              </p>
+                              {loadingParticipants && (
+                                <span className="text-xs text-gray-400">Cargando...</span>
+                              )}
+                            </div>
+                            {!loadingParticipants && groupParticipants.length > 0 && (
+                              <>
+                                <p className="text-sm text-green-400 mb-2">
+                                  {selectedContacts.length} participantes listos para enviar
+                                </p>
+                                <div className="text-xs text-gray-400 max-h-24 overflow-y-auto space-y-1">
+                                  {groupParticipants.slice(0, 10).map((p, i) => (
+                                    <div key={i} className="flex items-center gap-2">
+                                      <span>{p.phone}</span>
+                                      {p.isAdmin && (
+                                        <span className="px-1 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded">Admin</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                  {groupParticipants.length > 10 && (
+                                    <div className="text-gray-500">...y {groupParticipants.length - 10} mas</div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                            {!loadingParticipants && groupParticipants.length === 0 && (
+                              <p className="text-sm text-yellow-400">
+                                No se pudieron obtener los participantes de este grupo.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

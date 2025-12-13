@@ -157,7 +157,10 @@ export const waApi = {
   delete: (businessId: string) => api.delete(`/wa/${businessId}`),
   history: (businessId: string, limit?: number) => 
     api.get(`/wa/${businessId}/history${limit ? `?limit=${limit}` : ''}`),
-  validate: (businessId: string) => api.post(`/wa/${businessId}/validate`)
+  validate: (businessId: string) => api.post(`/wa/${businessId}/validate`),
+  getGroups: (businessId: string) => api.get(`/wa/${businessId}/groups`),
+  getGroupParticipants: (businessId: string, groupId: string) => 
+    api.get(`/wa/${businessId}/groups/${encodeURIComponent(groupId)}/participants`)
 };
 
 export const messageApi = {
