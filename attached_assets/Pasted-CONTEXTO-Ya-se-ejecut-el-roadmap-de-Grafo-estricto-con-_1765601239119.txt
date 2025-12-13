@@ -1,0 +1,187 @@
+CONTEXTO
+
+Ya se ejecutó el roadmap de:
+
+Grafo estricto con LangGraph
+
+Vendor Agent disciplinado (sin ejecutar tools)
+
+Observer como guardián
+
+Refiner con reglas controladas
+
+Estado como ley suprema
+
+Ahora debemos cerrar el sistema evitando fugas de información y comportamientos inestables.
+
+OBJETIVO DE ESTA FASE
+
+Implementar AISLAMIENTO TOTAL DEL LLM respecto a:
+
+Outputs crudos de tools
+
+Campos técnicos
+
+Metadata interna
+
+El LLM solo debe ver outputs humanos y seguros.
+
+FASE 9 — FILTRADO ESTRICTO DE OUTPUTS DE TOOLS
+ARCHIVOS A MODIFICAR
+
+schemas/tool_schemas.py
+
+core/tool_router.py
+
+core/graph.py (solo integración)
+
+PASO 1 — DEFINIR OUTPUT MAP POR TOOL
+
+En schemas/tool_schemas.py, definir explícitamente qué campos puede ver el LLM.
+
+Ejemplo conceptual:
+
+TOOL_OUTPUT_SCHEMAS = {
+  "payment": {
+    "payment_url": str,
+    "amount": float,
+    "currency": str
+  },
+  "search_product": {
+    "products": list
+  },
+  "media": {
+    "sent": bool
+  },
+  "crm": {
+    "status": str
+  }
+}
+
+
+❗ Todo campo NO listado aquí:
+
+Se ignora para el LLM
+
+Se conserva solo para sistema/logs
+
+PASO 2 — MODIFICAR TOOL ROUTER (CRÍTICO)
+
+En core/tool_router.py:
+
+Ejecutar la tool y capturar el JSON COMPLETO
+
+Guardar el output completo en:
+
+logs
+
+estado interno (si aplica)
+
+Aplicar el output_map según el schema
+
+Generar un objeto sanitized_output
+
+Ejemplo lógico:
+
+raw_output = execute_tool(...)
+sanitized_output = filter_output(raw_output, tool_name)
+
+PASO 3 — PROHIBIR PASO DE OUTPUT CRUDO AL LLM
+
+Regla dura en el código:
+
+❌ Nunca pasar raw_output al prompt
+✅ Solo pasar sanitized_output
+
+Esto aplica a:
+
+Vendor Agent
+
+Observer Agent
+
+Refiner Agent
+
+PASO 4 — INTEGRACIÓN CON EL GRAFO
+
+En core/graph.py:
+
+El nodo execute_tool debe:
+
+Recibir sanitized_output
+
+Actualizar el estado con datos permitidos
+
+Pasar solo datos humanos al Vendor
+
+Ejemplo:
+
+payment → solo payment_url
+
+search_product → solo lista resumida
+
+FASE 10 — BLOQUEO FINAL DE SEGURIDAD
+VALIDACIONES OBLIGATORIAS
+
+Agregar checks automáticos:
+
+Si una tool devuelve campos no mapeados → ignorar
+
+Si el Vendor intenta mencionar:
+
+IDs técnicos
+
+tokens
+
+metadata
+→ bloquear respuesta y loggear warning
+
+FASE 11 — VALIDACIÓN MANUAL POST-HARDENING
+
+Ejecutar estos tests manuales:
+
+Generar pago
+
+El Vendor SOLO menciona el link
+
+No menciona IDs
+
+Error de tool
+
+El Vendor explica el error en lenguaje humano
+
+No muestra stacktrace
+
+Search product
+
+El Vendor solo lista info comercial
+
+Si alguno falla → corregir en tool_router, no en prompts.
+
+RESULTADO ESPERADO
+
+Al finalizar esta orden:
+
+El LLM está completamente aislado
+
+Las tools son infraestructura pura
+
+El comportamiento es predecible
+
+El sistema es seguro y escalable
+
+AGENT V2 queda cerrado para producción
+
+REGLA FINAL (NO ROMPER)
+
+A partir de aquí:
+
+❌ No agregar lógica al Vendor
+
+❌ No pasar JSON crudo al LLM
+
+✅ Todo pasa por estado + grafo + filtros
+
+MENSAJE FINAL PARA REPLIT AGENT
+
+Implementa esta fase sin agregar features nuevas.
+Solo aislamiento, filtrado y validación.

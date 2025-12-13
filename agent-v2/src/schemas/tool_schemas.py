@@ -2,6 +2,153 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
 
+TOOL_OUTPUT_SCHEMAS: Dict[str, Dict[str, type]] = {
+    "search_product": {
+        "products": list,
+        "message": str
+    },
+    "payment": {
+        "payment_url": str,
+        "message": str
+    },
+    "followup": {
+        "scheduled": bool,
+        "message": str
+    },
+    "media": {
+        "sent": bool,
+        "media_url": str,
+        "message": str
+    },
+    "crm": {
+        "status": str,
+        "message": str
+    },
+    "search_knowledge": {
+        "context": str,
+        "message": str
+    },
+    "custom_tool": {
+        "result": str,
+        "message": str
+    }
+}
+
+
+BLOCKED_FIELDS = {
+    "id", "ids", "_id", "internal_id", "business_id", "lead_id", "user_id",
+    "token", "tokens", "api_key", "secret", "password", "auth",
+    "metadata", "_metadata", "internal", "_internal",
+    "stack", "stacktrace", "traceback", "error_details",
+    "raw", "raw_response", "debug", "_debug",
+    "database_id", "db_id", "record_id"
+}
+
+
+def sanitize_tool_output(tool_name: str, raw_output: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Filtra el output de una tool para que el LLM solo vea campos permitidos.
+    Los campos no listados se ignoran para el LLM pero se conservan para logs.
+    """
+    base_tool_name = tool_name.replace("custom_", "") if tool_name.startswith("custom_") else tool_name
+    
+    if tool_name.startswith("custom_"):
+        schema = TOOL_OUTPUT_SCHEMAS.get("custom_tool", {})
+    else:
+        schema = TOOL_OUTPUT_SCHEMAS.get(base_tool_name, {})
+    
+    if not schema:
+        return {
+            "success": raw_output.get("success", False),
+            "message": raw_output.get("message", "Operación completada")
+        }
+    
+    sanitized = {}
+    
+    sanitized["success"] = raw_output.get("success", False)
+    
+    for field_name in schema.keys():
+        if field_name in raw_output and raw_output[field_name] is not None:
+            value = raw_output[field_name]
+            
+            if isinstance(value, list):
+                sanitized[field_name] = _sanitize_list(value)
+            elif isinstance(value, dict):
+                sanitized[field_name] = _sanitize_dict(value)
+            else:
+                sanitized[field_name] = value
+    
+    if "message" not in sanitized:
+        if raw_output.get("success"):
+            sanitized["message"] = "Operación exitosa"
+        else:
+            error = raw_output.get("error", "Error desconocido")
+            if not _contains_blocked_info(str(error)):
+                sanitized["message"] = f"Error: {error}"
+            else:
+                sanitized["message"] = "Ocurrió un error al procesar la solicitud"
+    
+    return sanitized
+
+
+def _sanitize_dict(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Elimina campos bloqueados de un diccionario."""
+    result = {}
+    for key, value in data.items():
+        if key.lower() in BLOCKED_FIELDS:
+            continue
+        if key.startswith("_"):
+            continue
+        if isinstance(value, dict):
+            result[key] = _sanitize_dict(value)
+        elif isinstance(value, list):
+            result[key] = _sanitize_list(value)
+        else:
+            if not _contains_blocked_info(str(value)):
+                result[key] = value
+    return result
+
+
+def _sanitize_list(data: List[Any]) -> List[Any]:
+    """Sanitiza una lista de elementos."""
+    result = []
+    for item in data:
+        if isinstance(item, dict):
+            result.append(_sanitize_dict(item))
+        elif isinstance(item, list):
+            result.append(_sanitize_list(item))
+        else:
+            result.append(item)
+    return result
+
+
+def _contains_blocked_info(text: str) -> bool:
+    """Detecta si un texto contiene información técnica bloqueada."""
+    blocked_patterns = [
+        "traceback", "stacktrace", "at line",
+        "internal server error", "database error",
+        "api_key=", "token=", "secret=",
+        "password=", "auth=",
+        "record_id=", "document_id="
+    ]
+    text_lower = text.lower()
+    return any(pattern in text_lower for pattern in blocked_patterns)
+
+
+def format_products_for_llm(products: List[Dict[str, Any]], max_items: int = 5) -> List[Dict[str, Any]]:
+    """Formatea lista de productos para consumo del LLM - solo info comercial."""
+    formatted = []
+    for product in products[:max_items]:
+        formatted.append({
+            "name": product.get("name", "Producto"),
+            "price": product.get("price"),
+            "currency": product.get("currency", "$"),
+            "description": product.get("description", "")[:200] if product.get("description") else "",
+            "available": product.get("available", True)
+        })
+    return formatted
+
+
 class SearchProductInput(BaseModel):
     query: str = Field(..., description="Búsqueda del usuario para encontrar productos")
     max_results: int = Field(default=5, description="Máximo de resultados a retornar")

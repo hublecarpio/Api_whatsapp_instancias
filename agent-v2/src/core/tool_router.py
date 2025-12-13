@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import logging
 import json
 
@@ -8,7 +8,9 @@ from ..schemas.tool_schemas import (
     FollowupInput, FollowupOutput,
     MediaInput, MediaOutput,
     CRMInput, CRMOutput,
-    SearchKnowledgeInput, SearchKnowledgeOutput
+    SearchKnowledgeInput, SearchKnowledgeOutput,
+    sanitize_tool_output,
+    format_products_for_llm
 )
 from ..tools.search_product import SearchProductTool
 from ..tools.payment import PaymentTool
@@ -142,16 +144,25 @@ class ToolRouter:
         self, 
         tool_name: str, 
         input_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        Ejecuta una tool y retorna (raw_output, sanitized_output).
+        
+        - raw_output: Output completo para logs/sistema
+        - sanitized_output: Output filtrado para el LLM
+        
+        REGLA: El LLM NUNCA recibe raw_output, solo sanitized_output.
+        """
         if tool_name in self.custom_tools:
             return await self._execute_custom_tool(tool_name, input_data)
         
         if tool_name not in TOOL_DEFINITIONS:
-            return {
+            error_output = {
                 "success": False,
                 "error": f"Tool '{tool_name}' not found",
-                "message": f"Herramienta no disponible: {tool_name}"
+                "message": f"Herramienta no disponible"
             }
+            return error_output, sanitize_tool_output(tool_name, error_output)
         
         tool_def = TOOL_DEFINITIONS[tool_name]
         input_schema = tool_def["input_schema"]
@@ -173,41 +184,62 @@ class ToolRouter:
             else:
                 result = await handler.run(validated_input)
             
-            return result.model_dump()
+            raw_output = result.model_dump()
+            
+            sanitized = sanitize_tool_output(tool_name, raw_output)
+            
+            if tool_name == "search_product" and "products" in sanitized:
+                sanitized["products"] = format_products_for_llm(sanitized["products"])
+            
+            logger.info(f"[TOOL] {tool_name} executed - raw fields: {list(raw_output.keys())}, sanitized fields: {list(sanitized.keys())}")
+            
+            return raw_output, sanitized
             
         except Exception as e:
             logger.error(f"Error executing tool {tool_name}: {e}")
-            return {
+            error_output = {
                 "success": False,
                 "error": str(e),
-                "message": f"Error al ejecutar {tool_name}: {str(e)}"
+                "message": "Ocurrió un error al procesar la solicitud"
             }
+            return error_output, sanitize_tool_output(tool_name, error_output)
     
     async def _execute_custom_tool(
         self,
         tool_name: str,
         input_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Ejecuta una tool personalizada del usuario."""
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        Ejecuta una tool personalizada del usuario.
+        Retorna (raw_output, sanitized_output).
+        """
         tool_config = self.custom_tools.get(tool_name)
         if not tool_config:
-            return {
+            error_output = {
                 "success": False,
                 "error": f"Custom tool '{tool_name}' not found",
-                "message": f"Tool personalizada no encontrada: {tool_name}"
+                "message": "Tool personalizada no encontrada"
             }
+            return error_output, sanitize_tool_output(tool_name, error_output)
         
         try:
             logger.info(f"Executing custom tool: {tool_name}")
             result = await CustomToolHandler.run(tool_config, input_data)
-            return result.model_dump()
+            raw_output = result.model_dump()
+            
+            sanitized = sanitize_tool_output(tool_name, raw_output)
+            
+            logger.info(f"[CUSTOM_TOOL] {tool_name} executed - raw fields: {list(raw_output.keys())}, sanitized fields: {list(sanitized.keys())}")
+            
+            return raw_output, sanitized
         except Exception as e:
             logger.error(f"Error executing custom tool {tool_name}: {e}")
-            return {
+            error_output = {
                 "success": False,
                 "error": str(e),
-                "message": f"Error al ejecutar tool personalizada: {str(e)}"
+                "message": "Ocurrió un error al procesar la solicitud"
             }
+            return error_output, sanitize_tool_output(tool_name, error_output)
     
     def validate_tool_call(self, tool_name: str, input_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         if tool_name in self.custom_tools:
