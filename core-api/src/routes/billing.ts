@@ -4,7 +4,8 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getDailyContactStats } from '../middleware/billing.js';
 import { handlePaymentSuccess, handlePaymentCanceled } from '../services/stripePayments.js';
-import { getMonthlyTokenUsageForUser, checkUserTokenLimit, TRIAL_TOKEN_LIMIT } from '../services/openaiService.js';
+import { getMonthlyTokenUsageForUser, checkUserTokenLimit, TRIAL_TOKEN_LIMIT, PRO_TOKEN_LIMIT } from '../services/openaiService.js';
+import { sendEmail } from '../services/emailService.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -469,6 +470,113 @@ router.post('/portal', authMiddleware, async (req: AuthRequest, res) => {
     res.json({ url: session.url });
   } catch (error: any) {
     console.error('Error creating billing portal session:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/enterprise-request', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await prisma.user.findUnique({ 
+      where: { id: userId },
+      include: { businesses: { select: { name: true } } }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { businessDescription, companySize, useCase } = req.body;
+
+    if (!businessDescription) {
+      return res.status(400).json({ error: 'Descripcion del negocio es requerida' });
+    }
+
+    const businessNames = user.businesses.map(b => b.name).join(', ') || 'Sin negocios registrados';
+    const adminEmail = process.env.SMTP_FROM_EMAIL || 'admin@efficorechat.com';
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+    .field { margin-bottom: 15px; }
+    .label { font-weight: bold; color: #555; }
+    .value { background: white; padding: 10px; border-radius: 4px; margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Nueva Solicitud Enterprise</h1>
+      <p>Un usuario ha solicitado el plan Enterprise ($400/mes)</p>
+    </div>
+    <div class="content">
+      <div class="field">
+        <div class="label">Usuario</div>
+        <div class="value">${user.name} (${user.email})</div>
+      </div>
+      <div class="field">
+        <div class="label">ID de Usuario</div>
+        <div class="value">${user.id}</div>
+      </div>
+      <div class="field">
+        <div class="label">Negocios Registrados</div>
+        <div class="value">${businessNames}</div>
+      </div>
+      <div class="field">
+        <div class="label">Suscripcion Actual</div>
+        <div class="value">${user.subscriptionStatus}</div>
+      </div>
+      <div class="field">
+        <div class="label">Tamano de Empresa</div>
+        <div class="value">${companySize || 'No especificado'}</div>
+      </div>
+      <div class="field">
+        <div class="label">Caso de Uso</div>
+        <div class="value">${useCase || 'No especificado'}</div>
+      </div>
+      <div class="field">
+        <div class="label">Descripcion del Negocio</div>
+        <div class="value">${businessDescription}</div>
+      </div>
+      <div class="field">
+        <div class="label">Fecha de Solicitud</div>
+        <div class="value">${new Date().toLocaleString('es-ES', { timeZone: 'America/Lima' })}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    const emailSent = await sendEmail(
+      adminEmail,
+      `[Enterprise Request] Nueva solicitud de ${user.name}`,
+      emailHtml
+    );
+
+    if (!emailSent) {
+      console.error('Failed to send enterprise request email');
+    }
+
+    console.log(`[BILLING] Enterprise request from user ${user.id} (${user.email})`);
+
+    res.json({ 
+      success: true, 
+      message: 'Tu solicitud ha sido enviada. Nuestro equipo se pondra en contacto contigo pronto para coordinar la auditoria y configuracion.' 
+    });
+  } catch (error: any) {
+    console.error('Error processing enterprise request:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -33,6 +33,10 @@ export default function BillingPage() {
   const [referralCode, setReferralCode] = useState('');
   const [referralLoading, setReferralLoading] = useState(false);
   const [referralMessage, setReferralMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
+  const [enterpriseForm, setEnterpriseForm] = useState({ businessDescription: '', companySize: '', useCase: '' });
+  const [enterpriseLoading, setEnterpriseLoading] = useState(false);
+  const [enterpriseMessage, setEnterpriseMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
     loadData();
@@ -141,6 +145,31 @@ export default function BillingPage() {
     }
   };
 
+  const handleEnterpriseRequest = async () => {
+    if (!enterpriseForm.businessDescription.trim()) {
+      setEnterpriseMessage({ type: 'error', text: 'Por favor describe tu negocio' });
+      return;
+    }
+
+    setEnterpriseLoading(true);
+    setEnterpriseMessage(null);
+
+    try {
+      await billingApi.enterpriseRequest(enterpriseForm);
+      setEnterpriseMessage({ type: 'success', text: 'Solicitud enviada exitosamente. Nos pondremos en contacto contigo pronto.' });
+      setEnterpriseForm({ businessDescription: '', companySize: '', useCase: '' });
+      setTimeout(() => {
+        setShowEnterpriseModal(false);
+        setEnterpriseMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || 'Error al enviar la solicitud';
+      setEnterpriseMessage({ type: 'error', text: errorMsg });
+    } finally {
+      setEnterpriseLoading(false);
+    }
+  };
+
   const getStatusBadge = () => {
     if (!status) return null;
 
@@ -202,8 +231,8 @@ export default function BillingPage() {
             {getStatusBadge()}
           </div>
           <div className="sm:text-right">
-            <p className="text-gray-400 text-sm">Plan actual</p>
-            <p className="text-white text-xl font-bold">$50 USD / semana</p>
+            <p className="text-gray-400 text-sm">Plan Pro</p>
+            <p className="text-white text-xl font-bold">$97 USD / mes</p>
           </div>
         </div>
 
@@ -213,7 +242,7 @@ export default function BillingPage() {
               Tu periodo de prueba termina el <strong>{formatDate(status.trialEndAt)}</strong>
             </p>
             <p className="text-neon-blue/70 text-sm mt-1">
-              Despues de esta fecha se realizara el primer cobro de $50 USD.
+              Despues de esta fecha se realizara el primer cobro de $97 USD/mes.
             </p>
           </div>
         )}
@@ -328,6 +357,77 @@ export default function BillingPage() {
         </div>
       </div>
 
+      <div className="grid md:grid-cols-2 gap-6 mb-6">
+        <div className="card border-2 border-neon-blue/30">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Plan Pro</h3>
+            <span className="bg-neon-blue/20 text-neon-blue px-3 py-1 rounded-full text-sm">Popular</span>
+          </div>
+          <p className="text-3xl font-bold text-white mb-2">$97 <span className="text-lg text-gray-400 font-normal">USD/mes</span></p>
+          <p className="text-gray-400 text-sm mb-4">Ideal para negocios en crecimiento</p>
+          <ul className="space-y-2 mb-6">
+            {[
+              'Conexion WhatsApp ilimitada',
+              'Agente IA con 350K tokens/mes',
+              'Gestion de productos y catalogo',
+              'Seguimientos automaticos',
+              'CRM de clientes',
+              'Soporte Meta Cloud API'
+            ].map((item, i) => (
+              <li key={i} className="flex items-center text-gray-300 text-sm">
+                <svg className="w-4 h-4 text-accent-success mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                {item}
+              </li>
+            ))}
+          </ul>
+          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled') && (
+            <button onClick={handleSubscribe} disabled={actionLoading} className="btn btn-primary w-full">
+              {actionLoading ? 'Procesando...' : 'Comenzar prueba gratis'}
+            </button>
+          )}
+          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && (
+            <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
+              <span className="text-accent-success text-sm font-medium">Plan activo</span>
+            </div>
+          )}
+        </div>
+
+        <div className="card border-2 border-purple-500/30 bg-gradient-to-br from-purple-900/20 to-dark-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Enterprise Pro</h3>
+            <span className="bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full text-sm">Avanzado</span>
+          </div>
+          <p className="text-3xl font-bold text-white mb-2">$400 <span className="text-lg text-gray-400 font-normal">USD/mes</span></p>
+          <p className="text-gray-400 text-sm mb-4">Para empresas con alto volumen</p>
+          <ul className="space-y-2 mb-6">
+            {[
+              'Todo lo del Plan Pro',
+              'Agente V2 Enterprise Pro (IA avanzada)',
+              'Sistema multi-agente inteligente',
+              'Memoria de conversaciones',
+              'Aprendizaje automatico de reglas',
+              'Tokens ilimitados',
+              'Soporte prioritario'
+            ].map((item, i) => (
+              <li key={i} className="flex items-center text-gray-300 text-sm">
+                <svg className="w-4 h-4 text-purple-400 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                {item}
+              </li>
+            ))}
+          </ul>
+          <button 
+            onClick={() => setShowEnterpriseModal(true)} 
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+          >
+            Solicitar Enterprise
+          </button>
+        </div>
+      </div>
+
       <div className="card mb-6">
         <h2 className="text-lg font-semibold text-white mb-2">Codigo de Referido</h2>
         <p className="text-gray-400 text-sm mb-4">
@@ -378,26 +478,92 @@ export default function BillingPage() {
         )}
       </div>
 
-      <div className="card">
-        <h2 className="text-lg font-semibold text-white mb-4">Que incluye tu plan?</h2>
-        <ul className="space-y-3">
-          {[
-            'Conexion WhatsApp ilimitada',
-            'Agente IA con OpenAI integrado',
-            'Gestion de productos y catalogo',
-            'Seguimientos automaticos',
-            'Etiquetas y CRM de clientes',
-            'Soporte para Meta Cloud API'
-          ].map((item, i) => (
-            <li key={i} className="flex items-center text-gray-300">
-              <svg className="w-5 h-5 text-accent-success mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              {item}
-            </li>
-          ))}
-        </ul>
-      </div>
+      {showEnterpriseModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card rounded-xl max-w-lg w-full p-6 border border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Solicitar Plan Enterprise</h3>
+              <button 
+                onClick={() => { setShowEnterpriseModal(false); setEnterpriseMessage(null); }}
+                className="text-gray-400 hover:text-white"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="text-gray-400 text-sm mb-6">
+              Completa el formulario y nuestro equipo se pondra en contacto contigo para configurar tu plan Enterprise.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-gray-300 text-sm mb-2">Descripcion de tu negocio *</label>
+                <textarea
+                  value={enterpriseForm.businessDescription}
+                  onChange={(e) => setEnterpriseForm({ ...enterpriseForm, businessDescription: e.target.value })}
+                  placeholder="Describe brevemente tu negocio y como usas WhatsApp..."
+                  rows={3}
+                  className="w-full bg-dark-hover border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm mb-2">Tamano de la empresa</label>
+                <select
+                  value={enterpriseForm.companySize}
+                  onChange={(e) => setEnterpriseForm({ ...enterpriseForm, companySize: e.target.value })}
+                  className="w-full bg-dark-hover border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-purple-500"
+                >
+                  <option value="">Selecciona una opcion</option>
+                  <option value="1-10">1-10 empleados</option>
+                  <option value="11-50">11-50 empleados</option>
+                  <option value="51-200">51-200 empleados</option>
+                  <option value="200+">Mas de 200 empleados</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm mb-2">Caso de uso principal</label>
+                <input
+                  type="text"
+                  value={enterpriseForm.useCase}
+                  onChange={(e) => setEnterpriseForm({ ...enterpriseForm, useCase: e.target.value })}
+                  placeholder="Ej: Ventas, Soporte al cliente, Reservas..."
+                  className="w-full bg-dark-hover border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            {enterpriseMessage && (
+              <div className={`mt-4 p-3 rounded-lg ${
+                enterpriseMessage.type === 'success' 
+                  ? 'bg-accent-success/10 border border-accent-success/30 text-accent-success' 
+                  : 'bg-accent-error/10 border border-accent-error/30 text-accent-error'
+              }`}>
+                {enterpriseMessage.text}
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => { setShowEnterpriseModal(false); setEnterpriseMessage(null); }}
+                className="flex-1 btn btn-secondary"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEnterpriseRequest}
+                disabled={enterpriseLoading}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                {enterpriseLoading ? 'Enviando...' : 'Enviar Solicitud'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
