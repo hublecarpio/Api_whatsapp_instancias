@@ -134,6 +134,11 @@ export default function PromptPage() {
     dynamicVariables: [] as DynamicVariable[]
   });
   const [testResult, setTestResult] = useState<any>(null);
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [testingTool, setTestingTool] = useState<Tool | null>(null);
+  const [testVariables, setTestVariables] = useState<Record<string, string>>({});
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResponse, setTestResponse] = useState<{ status?: number; data?: any; error?: string; duration?: number } | null>(null);
   const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools' | 'files'>('prompt');
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedToolForLogs, setSelectedToolForLogs] = useState<Tool | null>(null);
@@ -793,6 +798,134 @@ export default function PromptPage() {
     setSelectedToolForLogs(null);
     setToolLogs([]);
     setToolStats(null);
+  };
+
+  const extractVariablesFromTool = (tool: Tool): string[] => {
+    const variables = new Set<string>();
+    const regex = /\{\{(\w+)\}\}/g;
+    
+    if (tool.url) {
+      let match;
+      while ((match = regex.exec(tool.url)) !== null) {
+        variables.add(match[1]);
+      }
+    }
+    
+    if (tool.headers) {
+      const headersStr = JSON.stringify(tool.headers);
+      let match;
+      regex.lastIndex = 0;
+      while ((match = regex.exec(headersStr)) !== null) {
+        variables.add(match[1]);
+      }
+    }
+    
+    if (tool.bodyTemplate) {
+      const bodyStr = JSON.stringify(tool.bodyTemplate);
+      let match;
+      regex.lastIndex = 0;
+      while ((match = regex.exec(bodyStr)) !== null) {
+        variables.add(match[1]);
+      }
+    }
+    
+    if (tool.dynamicVariables) {
+      tool.dynamicVariables.forEach(v => variables.add(v.name));
+    }
+    
+    return Array.from(variables);
+  };
+
+  const handleOpenTestModal = (tool: Tool) => {
+    const vars = extractVariablesFromTool(tool);
+    const initialVars: Record<string, string> = {};
+    vars.forEach(v => { initialVars[v] = ''; });
+    
+    setTestingTool(tool);
+    setTestVariables(initialVars);
+    setTestResponse(null);
+    setShowTestModal(true);
+  };
+
+  const handleCloseTestModal = () => {
+    setShowTestModal(false);
+    setTestingTool(null);
+    setTestVariables({});
+    setTestResponse(null);
+  };
+
+  const interpolateTestString = (template: string, vars: Record<string, string>): string => {
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || '');
+  };
+
+  const interpolateTestValue = (value: any, vars: Record<string, string>): any => {
+    if (typeof value === 'string') {
+      return interpolateTestString(value, vars);
+    }
+    if (Array.isArray(value)) {
+      return value.map(item => interpolateTestValue(item, vars));
+    }
+    if (value !== null && typeof value === 'object') {
+      const result: Record<string, any> = {};
+      for (const [k, v] of Object.entries(value)) {
+        result[k] = interpolateTestValue(v, vars);
+      }
+      return result;
+    }
+    return value;
+  };
+
+  const handleExecuteTest = async () => {
+    if (!testingTool) return;
+    
+    setTestLoading(true);
+    setTestResponse(null);
+    
+    const startTime = Date.now();
+    
+    try {
+      const url = interpolateTestString(testingTool.url, testVariables);
+      
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (testingTool.headers) {
+        const interpolatedHeaders = interpolateTestValue(testingTool.headers, testVariables);
+        headers = { ...headers, ...interpolatedHeaders };
+      }
+      
+      const fetchOptions: RequestInit = {
+        method: testingTool.method,
+        headers
+      };
+      
+      if (testingTool.method !== 'GET' && testingTool.bodyTemplate) {
+        const body = interpolateTestValue(testingTool.bodyTemplate, testVariables);
+        fetchOptions.body = JSON.stringify(body);
+      }
+      
+      const response = await fetch(url, fetchOptions);
+      const duration = Date.now() - startTime;
+      
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = await response.text();
+      }
+      
+      setTestResponse({
+        status: response.status,
+        data,
+        duration
+      });
+    } catch (err: any) {
+      setTestResponse({
+        error: err.message || 'Error de conexion',
+        duration: Date.now() - startTime
+      });
+    } finally {
+      setTestLoading(false);
+    }
   };
 
   const handleTestTool = async (tool: Tool) => {
@@ -1841,9 +1974,9 @@ export default function PromptPage() {
                           📋
                         </button>
                         <button
-                          onClick={() => handleTestTool(tool)}
+                          onClick={() => handleOpenTestModal(tool)}
                           className="btn btn-secondary btn-sm"
-                          title="Probar"
+                          title="Probar Tool"
                         >
                           🧪
                         </button>
@@ -2089,6 +2222,126 @@ export default function PromptPage() {
             </div>
 
             <button onClick={handleCloseLogsModal} className="btn btn-secondary mt-4">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showTestModal && testingTool && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-lg w-full max-h-[80vh] overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Test: {testingTool.name}
+                </h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  <span className="px-2 py-0.5 bg-dark-hover rounded mr-2">{testingTool.method}</span>
+                  {testingTool.url.length > 50 ? testingTool.url.substring(0, 50) + '...' : testingTool.url}
+                </p>
+              </div>
+              <button onClick={handleCloseTestModal} className="text-gray-400 hover:text-white text-xl">
+                ✕
+              </button>
+            </div>
+
+            {Object.keys(testVariables).length > 0 ? (
+              <div className="space-y-3 mb-4">
+                <p className="text-sm text-gray-300 font-medium">Variables detectadas:</p>
+                {Object.keys(testVariables).map(varName => {
+                  const dynVar = testingTool.dynamicVariables?.find(v => v.name === varName);
+                  return (
+                    <div key={varName} className="space-y-1">
+                      <label className="block text-sm text-gray-400">
+                        <span className="font-mono text-purple-400">{`{{${varName}}}`}</span>
+                        {dynVar?.description && (
+                          <span className="text-xs text-gray-500 ml-2">- {dynVar.description}</span>
+                        )}
+                      </label>
+                      <input
+                        type="text"
+                        value={testVariables[varName]}
+                        onChange={(e) => setTestVariables({ ...testVariables, [varName]: e.target.value })}
+                        placeholder={dynVar?.formatExample || `Valor para ${varName}`}
+                        className="input font-mono text-sm"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-dark-hover rounded-lg p-3 mb-4">
+                <p className="text-sm text-gray-400">No hay variables dinamicas en esta tool.</p>
+              </div>
+            )}
+
+            <button
+              onClick={handleExecuteTest}
+              disabled={testLoading}
+              className="btn btn-primary w-full mb-4"
+            >
+              {testLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Ejecutando...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  ▶ Ejecutar Test
+                </span>
+              )}
+            </button>
+
+            {testResponse && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-300">Resultado:</span>
+                  {testResponse.duration && (
+                    <span className="text-xs text-gray-500">{testResponse.duration}ms</span>
+                  )}
+                </div>
+                
+                {testResponse.error ? (
+                  <div className="bg-accent-error/10 border border-accent-error/30 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-accent-error font-medium">Error</span>
+                    </div>
+                    <p className="text-sm text-accent-error">{testResponse.error}</p>
+                  </div>
+                ) : (
+                  <div className={`rounded-lg p-3 ${
+                    testResponse.status && testResponse.status >= 200 && testResponse.status < 300
+                      ? 'bg-accent-success/10 border border-accent-success/30'
+                      : 'bg-yellow-500/10 border border-yellow-500/30'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        testResponse.status && testResponse.status >= 200 && testResponse.status < 300
+                          ? 'bg-accent-success text-white'
+                          : 'bg-yellow-500 text-black'
+                      }`}>
+                        {testResponse.status}
+                      </span>
+                      <span className={`text-sm ${
+                        testResponse.status && testResponse.status >= 200 && testResponse.status < 300
+                          ? 'text-accent-success'
+                          : 'text-yellow-500'
+                      }`}>
+                        {testResponse.status && testResponse.status >= 200 && testResponse.status < 300 ? 'OK' : 'Warning'}
+                      </span>
+                    </div>
+                    <pre className="text-xs text-gray-300 bg-dark-surface rounded p-2 overflow-x-auto max-h-48 overflow-y-auto">
+                      {typeof testResponse.data === 'string' 
+                        ? testResponse.data 
+                        : JSON.stringify(testResponse.data, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button onClick={handleCloseTestModal} className="btn btn-secondary w-full mt-4">
               Cerrar
             </button>
           </div>

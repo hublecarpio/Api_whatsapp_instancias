@@ -1,0 +1,98 @@
+Necesito que implementes una funcionalidad de testing de tools directamente dentro del formulario donde se crean las tools (POST / GET) con variables dinámicas.
+
+CONTEXTO
+
+El usuario define una tool indicando:
+
+Método (GET o POST)
+
+URL (puede contener variables dinámicas, ej: {{user_id}})
+
+Headers (JSON, con variables dinámicas)
+
+Body JSON (con variables dinámicas)
+
+Las variables dinámicas son creadas por el agente de IA y solo se referencian por nombre en la tool.
+
+REQUERIMIENTO PRINCIPAL
+
+Agregar un botón pequeño llamado “Test” dentro del mismo formulario de creación/edición de la tool.
+
+COMPORTAMIENTO DEL BOTÓN “TEST”
+
+Al hacer clic en “Test”:
+
+Se abre un modal / mini panel / drawer pequeño (no pantalla completa).
+
+El sistema detecta automáticamente todas las variables dinámicas usadas en:
+
+URL
+
+Headers
+
+Body JSON
+
+Formulario de Test
+
+Mostrar un input por cada variable detectada.
+
+Ejemplo:
+
+user_id: [________]
+token:   [________]
+amount:  [________]
+
+
+Inputs simples tipo text (no validación avanzada).
+
+Botón “Play / Run Test”
+
+Al hacer clic:
+
+Se construye la request real:
+
+Reemplazar {{variable}} por los valores ingresados
+
+Aplicar reemplazo en URL, headers y body
+
+Ejecutar la request real (fetch/axios) según método configurado.
+
+Resultado del Test
+
+Mostrar en el mismo modal:
+
+Status code (200, 400, 500, etc.)
+
+JSON de respuesta formateado
+
+En caso de error:
+
+Mostrar error claramente (timeout, 4xx, 5xx, parsing error)
+
+Estados
+
+Si la request responde correctamente → mostrar “OK”
+
+Si falla → mostrar error (esto indica que la tool aún no está lista)
+
+REGLAS IMPORTANTES
+
+❌ El test NO guarda nada
+
+❌ El test NO ejecuta lógica del agente
+
+✅ Es solo una ejecución directa de la tool
+
+✅ Debe funcionar igual para GET y POST
+
+✅ Debe soportar variables dinámicas en cualquier parte de la request
+
+OBJETIVO
+
+Permitir validar una tool antes de usarla en producción, asegurando que:
+
+Las variables están bien definidas
+
+La estructura de la request es correcta
+
+El endpoint responde como se espera

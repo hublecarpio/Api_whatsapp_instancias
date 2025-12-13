@@ -994,6 +994,9 @@ video {
 .mt-8 {
   margin-top: 2rem;
 }
+.mr-2 {
+  margin-right: 0.5rem;
+}
 .line-clamp-2 {
   overflow: hidden;
   display: -webkit-box;
@@ -2427,6 +2430,10 @@ video {
 .text-yellow-500 {
   --tw-text-opacity: 1;
   color: rgb(234 179 8 / var(--tw-text-opacity, 1));
+}
+.text-black {
+  --tw-text-opacity: 1;
+  color: rgb(0 0 0 / var(--tw-text-opacity, 1));
 }
 .underline {
   text-decoration-line: underline;
