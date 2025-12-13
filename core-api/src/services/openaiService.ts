@@ -517,9 +517,23 @@ export async function checkUserTokenLimit(userId: string): Promise<{
   let effectiveStatus = user.subscriptionStatus;
   
   if (user.subscriptionStatus === 'ACTIVE' && !user.stripeSubscriptionId) {
-    if (!user.proBonusExpiresAt || user.proBonusExpiresAt < new Date()) {
+    const hasValidProBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
+    
+    let hasActiveEnterpriseSubscription = false;
+    if (!hasValidProBonus) {
+      const activeSubscription = await prisma.subscription.findFirst({
+        where: {
+          userId,
+          status: 'ACTIVE',
+          endsAt: { gte: new Date() }
+        }
+      });
+      hasActiveEnterpriseSubscription = !!activeSubscription;
+    }
+    
+    if (!hasValidProBonus && !hasActiveEnterpriseSubscription) {
       effectiveStatus = 'PENDING';
-      console.log(`[TOKEN] User ${userId} referral bonus expired, treating as PENDING`);
+      console.log(`[TOKEN] User ${userId} has no valid bonus or enterprise subscription, treating as PENDING`);
     }
   }
   
