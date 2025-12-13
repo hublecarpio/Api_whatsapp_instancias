@@ -1,5 +1,12 @@
 # Matriz de Funcionamiento - Agente V2 (EfficoreChat)
 
+> **v2.0 - FROZEN DESIGN**  
+> Fecha: 13 de Diciembre 2025  
+> Este documento representa el diseño congelado del Agente V2.  
+> **REGLA: Ninguna lógica nueva sin reflejo explícito en `schemas/` y `core/graph.py`**
+
+---
+
 ## Resumen Ejecutivo
 
 El Agente V2 es un sistema multi-agente avanzado que utiliza LangGraph para procesar mensajes de WhatsApp de forma inteligente. A diferencia del Agente V1 (respuesta directa con OpenAI), el V2 implementa un sistema de **3 cerebros** que trabajan en conjunto para:
@@ -513,6 +520,190 @@ Body: {
 GET /memory/{lead_id}/{business_id}
 DELETE /memory/{lead_id}/{business_id}
 GET /memory/stats/{business_id}
+```
+
+---
+
+## Escenarios de Validación (FASE 8)
+
+Esta sección documenta los escenarios de prueba para validar que el sistema gobernado por estado funciona correctamente.
+
+### Escenario 1: Bloqueo de Payment Sin Productos Confirmados
+
+**Objetivo**: Verificar que el grafo NO permite generar payment links si no hay productos confirmados.
+
+**Precondiciones**:
+- `commercial_state.productos_confirmados = []`
+- `commercial_state.total_calculado = null`
+
+**Input del Usuario**: "Quiero pagar"
+
+**Comportamiento Esperado**:
+1. Vendor interpreta intención como `INTENCION_COMPRA`
+2. Vendor sugiere tool `payment`
+3. `CommercialState.can_execute_tool("payment")` retorna `(False, "No hay productos confirmados")`
+4. Grafo cambia decisión a `response_only`
+5. Respuesta final: mensaje pidiendo que primero confirme productos
+
+**Validación**:
+```python
+assert graph_decision == "response_only"
+assert "payment" not in executed_tools
+```
+
+---
+
+### Escenario 2: Transición de Etapa Comercial
+
+**Objetivo**: Verificar transiciones correctas de etapa según la intención detectada.
+
+**Matriz de Transiciones**:
+| Etapa Actual | Intención | Nueva Etapa |
+|--------------|-----------|-------------|
+| NUEVO | CONSULTA_PRODUCTO | EXPLORANDO |
+| EXPLORANDO | INTENCION_COMPRA | INTERESADO |
+| INTERESADO | CONFIRMACION_COMPRA (con productos) | CONFIRMANDO |
+| CONFIRMANDO | payment ejecutado exitoso | PAGANDO |
+
+**Validación**:
+```python
+assert commercial_state.etapa_comercial == expected_etapa
+```
+
+---
+
+### Escenario 3: Observer Como Guardián
+
+**Objetivo**: Verificar que el Observer bloquea estados inválidos.
+
+**Caso 3.1 - Intención vs Etapa Incoherente**:
+- Etapa: NUEVO
+- Intención sugerida: CONFIRMACION_COMPRA
+- **Esperado**: `estado_valido = False`, error: "Etapa no corresponde a confirmación"
+
+**Caso 3.2 - Productos Detectados vs Confirmados**:
+- `productos_confirmados = [producto_A]`
+- `productos_detectados = []`
+- **Esperado**: `estado_valido = False`, error: "Productos confirmados no existen en detectados"
+
+**Validación**:
+```python
+assert observer_validation.estado_valido == False
+assert len(observer_validation.errores) > 0
+```
+
+---
+
+### Escenario 4: Reglas Pendientes vs Activas
+
+**Objetivo**: Verificar que las nuevas reglas van a pendientes, no se aplican automáticamente.
+
+**Flujo**:
+1. Observer detecta falla recurrente
+2. Refiner propone nueva regla via `propose_rules()`
+3. Regla se guarda en `reglas_pendientes`
+4. Admin aprueba via `approve_rule(rule_id)`
+5. Regla se mueve a `reglas_activas`
+
+**Validación**:
+```python
+# Después de propose_rules
+assert new_rule in redis.get(f"agent_v2:rules_pending:{business_id}")
+assert new_rule not in redis.get(f"agent_v2:rules:{business_id}")
+
+# Después de approve_rule
+assert new_rule not in redis.get(f"agent_v2:rules_pending:{business_id}")
+assert new_rule in redis.get(f"agent_v2:rules:{business_id}")
+```
+
+---
+
+### Escenario 5: Tools Como Infraestructura Pura
+
+**Objetivo**: Verificar que las tools no contienen lógica de negocio.
+
+**Checklist**:
+- [ ] `search_product.py`: Solo recibe query, retorna productos
+- [ ] `send_media.py`: Solo recibe file_id, envía archivo
+- [ ] `payment.py`: Solo recibe datos validados, genera link
+- [ ] `crm_update.py`: Solo recibe campos, actualiza contacto
+
+**Anti-Patrón** (NO debe existir en tools):
+```python
+# MAL - Lógica de negocio en tool
+if etapa_comercial != "confirmando":
+    return {"error": "No puedes pagar"}
+```
+
+**Patrón Correcto** (validación en grafo):
+```python
+# BIEN - Tool solo ejecuta
+async def execute(self, input_data):
+    return await self.payment_service.create_link(input_data)
+```
+
+---
+
+### Escenario 6: Flujo Completo de Venta
+
+**Objetivo**: Validar el happy path completo.
+
+**Pasos**:
+1. **Cliente**: "Hola, qué tienen?" → Etapa: NUEVO → EXPLORANDO
+2. **Cliente**: "Me interesa el producto X" → Etapa: EXPLORANDO → INTERESADO
+3. **Cliente**: "Cuánto cuesta?" → Tool: search_product ejecutada
+4. **Cliente**: "Quiero 2 unidades" → productos_detectados += [X:2]
+5. **Cliente**: "Sí, confirmo el pedido" → productos_confirmados = productos_detectados
+6. **Cliente**: "Cómo pago?" → Tool: payment ejecutada (estado válido)
+7. Etapa final: PAGANDO
+
+**Validación**:
+```python
+assert final_etapa == EtapaComercial.PAGANDO
+assert len(tool_calls) == 2  # search_product + payment
+assert payment_link is not None
+```
+
+---
+
+### Escenario 7: Recuperación de Errores
+
+**Objetivo**: Verificar manejo de errores recuperables.
+
+**Caso**: Tool `payment` falla por timeout de Stripe
+
+**Comportamiento Esperado**:
+1. `tool_success = False`, `tool_error = "Stripe timeout"`
+2. Grafo NO avanza etapa a PAGANDO
+3. `EstadoError` agregado con `recoverable = True`
+4. Vendor genera respuesta de reintento
+
+**Validación**:
+```python
+assert commercial_state.etapa_comercial != EtapaComercial.PAGANDO
+assert any(e.recoverable for e in commercial_state.errores_estado)
+```
+
+---
+
+### Comandos de Prueba
+
+```bash
+# Ejecutar tests unitarios (cuando se implementen)
+cd agent-v2 && pytest tests/
+
+# Test manual via curl
+curl -X POST http://localhost:5005/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "business_context": {...},
+    "conversation_history": [],
+    "current_message": "Quiero pagar",
+    "sender_phone": "+51999999999"
+  }'
+
+# Verificar logs de decisión del grafo
+docker service logs saas_agent-v2 2>&1 | grep "graph_decision"
 ```
 
 ---

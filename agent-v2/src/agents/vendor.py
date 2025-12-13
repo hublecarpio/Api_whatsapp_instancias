@@ -1,3 +1,11 @@
+"""
+FASE 2: VENDOR AGENT - CONTRATO REDEFINIDO
+============================================
+El Vendor SOLO retorna: {intencion, mensaje, entidades_detectadas}
+PROHIBIDO: Ejecutar tools, elegir tools, generar órdenes, avanzar etapas
+El grafo (graph.py) decide todo.
+"""
+
 from typing import Dict, Any, Optional, List
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -8,7 +16,10 @@ import pytz
 
 from ..config import get_settings, get_v2_model
 from ..schemas.business_profile import BusinessProfile
-from ..schemas.vendor_state import VendorState, AgentAction, ActionType
+from ..schemas.vendor_state import (
+    VendorState, AgentAction, ActionType, 
+    VendorOutput, IntencionCliente
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +42,120 @@ def get_current_time_formatted(timezone: str) -> str:
     return f"{day_name} {now.day} de {month_name} {now.year}, {now.strftime('%H:%M')}"
 
 
+VENDOR_V2_SYSTEM_PROMPT = """Eres el "Vendor Agent" (Cerebro 1) de un sistema multi-agente de ventas.
+
+## TU ROL ESTRICTO:
+Tu ÚNICO trabajo es:
+1. Interpretar el mensaje del cliente
+2. Detectar la intención
+3. Extraer entidades (productos, cantidades, datos del cliente)
+4. Generar un mensaje de respuesta apropiado
+
+## LO QUE NO PUEDES HACER:
+- NO decides qué herramienta usar (el sistema lo decide)
+- NO ejecutas acciones (solo interpretas)
+- NO avanzas etapas del proceso de venta
+- NO generas órdenes ni pagos
+
+## FORMATO DE RESPUESTA OBLIGATORIO:
+```json
+{
+  "intencion": "saludo|consulta_producto|consulta_precio|consulta_disponibilidad|intencion_compra|confirmacion_compra|objecion|queja|soporte|despedida|otro",
+  "mensaje": "tu respuesta conversacional al cliente",
+  "entidades_detectadas": {
+    "nombre_cliente": "si lo mencionó",
+    "productos_mencionados": ["lista de productos mencionados"],
+    "cantidades": {"producto": cantidad},
+    "datos_contacto": {}
+  },
+  "productos_mencionados": ["ids o nombres de productos"],
+  "requiere_tool": true/false,
+  "tool_sugerida": "search_product|payment|media|etc o null",
+  "tool_params_sugeridos": {},
+  "confianza": 0.0-1.0
+}
+```
+
+## INTENCIONES VÁLIDAS:
+- saludo: El cliente saluda o inicia conversación
+- consulta_producto: Pregunta sobre productos específicos
+- consulta_precio: Pregunta por precios
+- consulta_disponibilidad: Pregunta si hay stock
+- intencion_compra: Muestra interés en comprar
+- confirmacion_compra: Confirma que quiere comprar
+- objecion: Tiene dudas o pone objeciones (precio alto, etc)
+- queja: Se queja de algo
+- soporte: Necesita ayuda técnica o soporte
+- despedida: Se despide
+- otro: Cualquier otra cosa
+
+## REGLAS:
+1. SIEMPRE responde en JSON válido
+2. Sé conversacional y amigable en el "mensaje"
+3. Extrae TODAS las entidades que puedas del mensaje
+4. Si necesitas información de productos, indica requiere_tool=true y tool_sugerida="search_product"
+5. Si el cliente confirma compra, indica requiere_tool=true y tool_sugerida="payment"
+6. Tu confianza debe reflejar qué tan seguro estás de la intención detectada
+"""
+
+
+def build_vendor_context(
+    profile: BusinessProfile,
+    memory: Dict[str, Any],
+    dynamic_rules: list,
+    current_time: str,
+    knowledge_context: Optional[str] = None
+) -> str:
+    """Construye el contexto del negocio para el Vendor."""
+    context = f"""
+## CONTEXTO DEL NEGOCIO:
+- Negocio: {profile.business_name}
+- Fecha/Hora: {current_time}
+"""
+    
+    if profile.custom_prompt:
+        context += f"""
+## INSTRUCCIONES DEL NEGOCIO:
+{profile.custom_prompt}
+"""
+    
+    if profile.products:
+        context += f"""
+## PRODUCTOS DISPONIBLES ({len(profile.products)}):
+"""
+        for p in profile.products[:15]:
+            stock_info = f" [Stock: {p.stock}]" if p.stock is not None else ""
+            context += f"- [ID:{p.id}] {p.name}: {profile.currency_symbol}{p.price}{stock_info}\n"
+    
+    if profile.policies:
+        context += "\n## POLÍTICAS:\n"
+        if profile.policies.shipping:
+            context += f"- Envíos: {profile.policies.shipping}\n"
+        if profile.policies.refund:
+            context += f"- Devoluciones: {profile.policies.refund}\n"
+    
+    if memory:
+        context += f"""
+## MEMORIA DEL LEAD:
+- Etapa: {memory.get('current_stage', 'nuevo')}
+- Productos vistos: {', '.join(memory.get('products_viewed', [])) or 'ninguno'}
+- Preferencias: {', '.join(memory.get('detected_preferences', [])) or 'ninguna'}
+"""
+    
+    if dynamic_rules:
+        context += "\n## REGLAS ACTIVAS:\n"
+        for rule in dynamic_rules[-10:]:
+            context += f"- {rule}\n"
+    
+    if knowledge_context:
+        context += f"""
+## INFORMACIÓN DE LA BASE DE CONOCIMIENTO:
+{knowledge_context}
+"""
+    
+    return context
+
+
 def build_vendor_system_prompt(
     profile: BusinessProfile,
     memory: Dict[str, Any],
@@ -40,6 +165,7 @@ def build_vendor_system_prompt(
     knowledge_context: Optional[str] = None,
     observer_feedback: Optional[str] = None
 ) -> str:
+    """Legacy prompt builder for backward compatibility."""
     prompt = f"""Eres un agente de ventas profesional para {profile.business_name}.
 
 FECHA Y HORA ACTUAL: {current_time}
@@ -185,6 +311,110 @@ class VendorAgent:
         if platform_model != self._current_model:
             self._init_llms()
     
+    async def interpret(
+        self,
+        current_message: str,
+        conversation_history: list,
+        business_profile: BusinessProfile,
+        lead_memory: Dict[str, Any],
+        dynamic_rules: list,
+        sender_name: Optional[str] = None,
+        knowledge_context: Optional[str] = None
+    ) -> tuple[VendorOutput, int]:
+        """
+        FASE 2: Método principal del Vendor.
+        SOLO interpreta el mensaje y retorna VendorOutput.
+        NO ejecuta tools, NO decide acciones.
+        """
+        self._ensure_model_current()
+        
+        current_time = get_current_time_formatted(business_profile.timezone)
+        
+        context = build_vendor_context(
+            profile=business_profile,
+            memory=lead_memory,
+            dynamic_rules=dynamic_rules,
+            current_time=current_time,
+            knowledge_context=knowledge_context
+        )
+        
+        system_prompt = VENDOR_V2_SYSTEM_PROMPT + context
+        
+        messages = [SystemMessage(content=system_prompt)]
+        
+        history_limit = 8
+        for msg in conversation_history[-history_limit:]:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+        
+        user_msg = current_message
+        if sender_name:
+            user_msg = f"[{sender_name}]: {current_message}"
+        messages.append(HumanMessage(content=user_msg))
+        
+        try:
+            response = self.llm.invoke(messages)
+            
+            tokens_used = 0
+            if hasattr(response, "response_metadata"):
+                usage = response.response_metadata.get("token_usage", {})
+                tokens_used = usage.get("total_tokens", 0)
+            
+            output = self._parse_vendor_output(response.content)
+            
+            return output, tokens_used
+            
+        except Exception as e:
+            logger.error(f"Vendor interpret error: {e}")
+            return VendorOutput(
+                intencion=IntencionCliente.OTRO,
+                mensaje="Lo siento, tuve un problema procesando tu mensaje. ¿Podrías repetirlo?",
+                confianza=0.5
+            ), 0
+    
+    def _parse_vendor_output(self, content: str) -> VendorOutput:
+        """Parse response into VendorOutput."""
+        try:
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            data = json.loads(content)
+            
+            intencion_str = data.get("intencion", "otro")
+            try:
+                intencion = IntencionCliente(intencion_str)
+            except ValueError:
+                intencion = IntencionCliente.OTRO
+            
+            return VendorOutput(
+                intencion=intencion,
+                mensaje=data.get("mensaje", ""),
+                entidades_detectadas=data.get("entidades_detectadas", {}),
+                productos_mencionados=data.get("productos_mencionados", []),
+                requiere_tool=data.get("requiere_tool", False),
+                tool_sugerida=data.get("tool_sugerida"),
+                tool_params_sugeridos=data.get("tool_params_sugeridos"),
+                confianza=data.get("confianza", 0.8)
+            )
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"Could not parse vendor output as JSON: {e}")
+            return VendorOutput(
+                intencion=IntencionCliente.OTRO,
+                mensaje=content,
+                confianza=0.5
+            )
+    
     async def process(
         self,
         current_message: str,
@@ -197,6 +427,7 @@ class VendorAgent:
         knowledge_context: Optional[str] = None,
         observer_feedback: Optional[str] = None
     ) -> tuple[AgentAction, int]:
+        """Legacy method for backward compatibility."""
         self._ensure_model_current()
         
         current_time = get_current_time_formatted(business_profile.timezone)
@@ -311,6 +542,7 @@ Responde SOLO con el mensaje para el cliente, sin JSON ni formato especial.
             return tool_result, 0
     
     def _parse_response(self, content: str) -> AgentAction:
+        """Legacy parser for backward compatibility."""
         try:
             content = content.strip()
             if content.startswith("```json"):
