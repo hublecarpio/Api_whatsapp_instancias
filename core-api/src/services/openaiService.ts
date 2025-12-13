@@ -40,6 +40,9 @@ let cachedSettings: {
   defaultModelV2: string;
   defaultReasoningV1: ReasoningEffort;
   defaultReasoningV2: ReasoningEffort;
+  vendorModelV2: string;
+  observerModelV2: string;
+  refinerModelV2: string;
   availableModels: string[];
   maxTokensPerRequest: number;
   enableGPT5Features: boolean;
@@ -68,6 +71,9 @@ export async function getPlatformSettings() {
     defaultModelV2: settings.defaultModelV2,
     defaultReasoningV1: settings.defaultReasoningV1,
     defaultReasoningV2: settings.defaultReasoningV2,
+    vendorModelV2: settings.vendorModelV2,
+    observerModelV2: settings.observerModelV2,
+    refinerModelV2: settings.refinerModelV2,
     availableModels: settings.availableModels,
     maxTokensPerRequest: settings.maxTokensPerRequest,
     enableGPT5Features: settings.enableGPT5Features
@@ -82,6 +88,9 @@ export async function updatePlatformSettings(updates: {
   defaultModelV2?: string;
   defaultReasoningV1?: ReasoningEffort;
   defaultReasoningV2?: ReasoningEffort;
+  vendorModelV2?: string;
+  observerModelV2?: string;
+  refinerModelV2?: string;
   availableModels?: string[];
   maxTokensPerRequest?: number;
   enableGPT5Features?: boolean;

@@ -1,0 +1,20 @@
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             11.5s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.458                                                                                                                                                                       
+0.458 > core-api@1.0.0 build                                                                                                                                                
+0.458 > tsc                                                                                                                                                                 
+0.458 
+11.34 src/routes/superAdmin.ts(1859,31): error TS2339: Property 'vendorModelV2' does not exist on type '{ defaultModelV1: string; defaultModelV2: string; defaultReasoningV1: ReasoningEffort; defaultReasoningV2: ReasoningEffort; availableModels: string[]; maxTokensPerRequest: number; enableGPT5Features: boolean; }'.
+11.34 src/routes/superAdmin.ts(1860,33): error TS2339: Property 'observerModelV2' does not exist on type '{ defaultModelV1: string; defaultModelV2: string; defaultReasoningV1: ReasoningEffort; defaultReasoningV2: ReasoningEffort; availableModels: string[]; maxTokensPerRequest: number; enableGPT5Features: boolean; }'.
+11.34 src/routes/superAdmin.ts(1861,32): error TS2339: Property 'refinerModelV2' does not exist on type '{ defaultModelV1: string; defaultModelV2: string; defaultReasoningV1: ReasoningEffort; defaultReasoningV2: ReasoningEffort; availableModels: string[]; maxTokensPerRequest: number; enableGPT5Features: boolean; }'.
+------
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
