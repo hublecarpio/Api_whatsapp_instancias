@@ -288,12 +288,12 @@ async def execute_tool_node(state: GraphState) -> Dict[str, Any]:
         }
     
     start_time = time.time()
-    result = await router.execute_tool(tool_name, tool_input)
+    raw_output, sanitized_output = await router.execute_tool(tool_name, tool_input)
     duration_ms = int((time.time() - start_time) * 1000)
     
-    result_text = format_tool_result(result)
-    tool_success = result.get("success", False)
-    tool_error = result.get("error") if not tool_success else None
+    result_text = format_tool_result(sanitized_output)
+    tool_success = raw_output.get("success", False)
+    tool_error = raw_output.get("error") if not tool_success else None
     
     business_id = state.get("business_profile", {}).get("business_id", "")
     contact_phone = state.get("sender_phone")
@@ -302,12 +302,14 @@ async def execute_tool_node(state: GraphState) -> Dict[str, Any]:
         business_id=business_id,
         tool_name=tool_name,
         tool_input=tool_input or {},
-        result=result_text,
+        result=json.dumps(raw_output),
         success=tool_success,
         error=tool_error,
         duration_ms=duration_ms,
         contact_phone=contact_phone
     )
+    
+    logger.info(f"[TOOL_ISOLATION] {tool_name}: raw_fields={list(raw_output.keys())}, sanitized_fields={list(sanitized_output.keys())}")
     
     tool_call_record: ToolCallRecord = {
         "tool_name": tool_name,
@@ -440,11 +442,13 @@ async def tool_router_node(state: GraphState) -> Dict[str, Any]:
     
     context = build_tool_context(state)
     router = ToolRouter(context)
-    result = await router.execute_tool(tool_name, tool_input)
+    raw_output, sanitized_output = await router.execute_tool(tool_name, tool_input)
     
-    result_text = format_tool_result(result)
-    tool_success = result.get("success", False)
-    tool_error = result.get("error") if not tool_success else None
+    result_text = format_tool_result(sanitized_output)
+    tool_success = raw_output.get("success", False)
+    tool_error = raw_output.get("error") if not tool_success else None
+    
+    logger.info(f"[TOOL_ISOLATION] {tool_name}: raw_fields={list(raw_output.keys())}, sanitized_fields={list(sanitized_output.keys())}")
     
     tool_call_record: ToolCallRecord = {
         "tool_name": tool_name,
