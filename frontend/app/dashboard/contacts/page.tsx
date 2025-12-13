@@ -62,7 +62,7 @@ export default function ContactsPage() {
   const [newFieldKey, setNewFieldKey] = useState('');
   const [newTag, setNewTag] = useState('');
 
-  const API_URL = process.env.NEXT_PUBLIC_CORE_API_URL || 'http://localhost:3001';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const getAuthHeader = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;

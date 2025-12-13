@@ -172,7 +172,7 @@ export default function BroadcastsPage() {
     return { Authorization: `Bearer ${token}` };
   };
 
-  const API_URL = process.env.NEXT_PUBLIC_CORE_API_URL || 'http://localhost:3001';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const loadCampaigns = async () => {
     if (!currentBusiness?.id) return;
