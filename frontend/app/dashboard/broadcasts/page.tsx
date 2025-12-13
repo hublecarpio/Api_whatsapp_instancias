@@ -263,7 +263,7 @@ export default function BroadcastsPage() {
     try {
       setLoadingGroups(true);
       const response = await waApi.getGroups(currentBusiness.id);
-      setGroups(response.data.groups || []);
+      setGroups(response.data.data?.groups || response.data.groups || []);
     } catch (error: any) {
       console.error('Error loading groups:', error);
       if (error.response?.status === 400) {
@@ -279,7 +279,7 @@ export default function BroadcastsPage() {
     try {
       setLoadingParticipants(true);
       const response = await waApi.getGroupParticipants(currentBusiness.id, groupId);
-      const participants = response.data.participants || [];
+      const participants = response.data.data?.participants || response.data.participants || [];
       setGroupParticipants(participants);
       setSelectedContacts(participants.map((p: GroupParticipant) => p.phone));
     } catch (error) {
