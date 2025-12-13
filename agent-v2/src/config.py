@@ -98,13 +98,16 @@ def fetch_platform_model_config() -> dict:
     return {
         "v2": {
             "model": settings.openai_model,
-            "reasoningEffort": "none"
+            "reasoningEffort": "none",
+            "vendorModel": settings.vendor_model,
+            "observerModel": settings.observer_model,
+            "refinerModel": settings.refiner_model
         }
     }
 
 
 def get_v2_model() -> str:
-    """Get the configured model for Agent V2."""
+    """Get the configured model for Agent V2 (legacy/default)."""
     config = fetch_platform_model_config()
     return config.get("v2", {}).get("model", "gpt-4o")
 
@@ -113,3 +116,21 @@ def get_v2_reasoning_effort() -> ReasoningEffort:
     """Get the configured reasoning effort for Agent V2."""
     config = fetch_platform_model_config()
     return config.get("v2", {}).get("reasoningEffort", "none")
+
+
+def get_vendor_model() -> str:
+    """Get the configured model for Agent V2 Vendor brain (client-facing)."""
+    config = fetch_platform_model_config()
+    return config.get("v2", {}).get("vendorModel", "gpt-5.2")
+
+
+def get_observer_model() -> str:
+    """Get the configured model for Agent V2 Observer brain (validation)."""
+    config = fetch_platform_model_config()
+    return config.get("v2", {}).get("observerModel", "gpt-4.1-mini")
+
+
+def get_refiner_model() -> str:
+    """Get the configured model for Agent V2 Refiner brain (learning)."""
+    config = fetch_platform_model_config()
+    return config.get("v2", {}).get("refinerModel", "gpt-4.1-mini")

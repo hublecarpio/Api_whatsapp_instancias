@@ -13,7 +13,7 @@ import json
 import logging
 import redis
 
-from ..config import get_settings
+from ..config import get_settings, get_refiner_model
 from ..schemas.vendor_state import (
     ObserverOutput, RefinerOutput, 
     ObserverValidation
@@ -106,11 +106,24 @@ def _get_redis_client() -> Optional[redis.Redis]:
 class RefinerAgent:
     def __init__(self):
         self.settings = get_settings()
+        self._current_model = get_refiner_model()
         self.llm = ChatOpenAI(
             api_key=self.settings.openai_api_key,
-            model=self.settings.refiner_model,
+            model=self._current_model,
             temperature=0.3
         )
+    
+    def _ensure_model_current(self):
+        """Check if model config changed and refresh if needed."""
+        platform_model = get_refiner_model()
+        if platform_model != self._current_model:
+            logger.info(f"RefinerAgent model changed: {self._current_model} -> {platform_model}")
+            self._current_model = platform_model
+            self.llm = ChatOpenAI(
+                api_key=self.settings.openai_api_key,
+                model=platform_model,
+                temperature=0.3
+            )
     
     async def propose_rules(
         self,
@@ -123,6 +136,8 @@ class RefinerAgent:
         FASE 5: Método principal del Refiner.
         Propone reglas que van a PENDIENTES, no se aplican automáticamente.
         """
+        self._ensure_model_current()
+        
         if not observer_validation.warnings and not observer_validation.errores:
             return RefinerOutput(), 0
         

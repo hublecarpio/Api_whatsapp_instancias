@@ -1727,7 +1727,10 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
   try {
     const { 
       defaultModelV1, 
-      defaultModelV2, 
+      defaultModelV2,
+      vendorModelV2,
+      observerModelV2,
+      refinerModelV2,
       defaultReasoningV1, 
       defaultReasoningV2, 
       availableModels,
@@ -1736,6 +1739,8 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
     } = req.body;
 
     const updates: any = {};
+    const NANO_MODELS = ['gpt-4.1-nano', 'gpt-5-nano'];
+    const EXPENSIVE_MODELS = ['gpt-5.2-pro'];
     
     if (defaultModelV1 !== undefined) {
       if (!AVAILABLE_MODELS.find(m => m.id === defaultModelV1)) {
@@ -1749,6 +1754,30 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
         return res.status(400).json({ error: `Invalid model: ${defaultModelV2}` });
       }
       updates.defaultModelV2 = defaultModelV2;
+    }
+    
+    if (vendorModelV2 !== undefined) {
+      if (!AVAILABLE_MODELS.find(m => m.id === vendorModelV2)) {
+        return res.status(400).json({ error: `Invalid model: ${vendorModelV2}` });
+      }
+      if (NANO_MODELS.includes(vendorModelV2)) {
+        return res.status(400).json({ error: 'Vendor brain cannot use Nano models' });
+      }
+      updates.vendorModelV2 = vendorModelV2;
+    }
+    
+    if (observerModelV2 !== undefined) {
+      if (!AVAILABLE_MODELS.find(m => m.id === observerModelV2)) {
+        return res.status(400).json({ error: `Invalid model: ${observerModelV2}` });
+      }
+      updates.observerModelV2 = observerModelV2;
+    }
+    
+    if (refinerModelV2 !== undefined) {
+      if (!AVAILABLE_MODELS.find(m => m.id === refinerModelV2)) {
+        return res.status(400).json({ error: `Invalid model: ${refinerModelV2}` });
+      }
+      updates.refinerModelV2 = refinerModelV2;
     }
     
     if (defaultReasoningV1 !== undefined) {
@@ -1826,7 +1855,10 @@ router.get('/internal/model-config', async (req, res) => {
       },
       v2: {
         model: settings.defaultModelV2,
-        reasoningEffort: settings.defaultReasoningV2
+        reasoningEffort: settings.defaultReasoningV2,
+        vendorModel: settings.vendorModelV2,
+        observerModel: settings.observerModelV2,
+        refinerModel: settings.refinerModelV2
       },
       maxTokensPerRequest: settings.maxTokensPerRequest,
       enableGPT5Features: settings.enableGPT5Features

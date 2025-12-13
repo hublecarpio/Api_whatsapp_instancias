@@ -12,7 +12,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 import json
 import logging
 
-from ..config import get_settings
+from ..config import get_settings, get_observer_model
 from ..schemas.vendor_state import (
     ObserverOutput, ObserverValidation, 
     CommercialState, VendorOutput, IntencionCliente
@@ -102,11 +102,24 @@ Si no hay fallas, objeciones o recomendaciones, devuelve listas vacías.
 class ObserverAgent:
     def __init__(self):
         self.settings = get_settings()
+        self._current_model = get_observer_model()
         self.llm = ChatOpenAI(
             api_key=self.settings.openai_api_key,
-            model=self.settings.observer_model,
+            model=self._current_model,
             temperature=0.3
         )
+    
+    def _ensure_model_current(self):
+        """Check if model config changed and refresh if needed."""
+        platform_model = get_observer_model()
+        if platform_model != self._current_model:
+            logger.info(f"ObserverAgent model changed: {self._current_model} -> {platform_model}")
+            self._current_model = platform_model
+            self.llm = ChatOpenAI(
+                api_key=self.settings.openai_api_key,
+                model=platform_model,
+                temperature=0.3
+            )
     
     async def validate(
         self,
@@ -120,6 +133,8 @@ class ObserverAgent:
         Valida el estado y retorna ObserverValidation.
         Si estado_valido=false, el grafo NO avanza.
         """
+        self._ensure_model_current()
+        
         validation_prompt = f"""Valida la siguiente situación:
 
 ## MENSAJE DEL CLIENTE:

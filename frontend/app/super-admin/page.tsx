@@ -1000,8 +1000,80 @@ function SystemTab({ token }: { token: string }) {
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Usado para el agente multi-cerebro avanzado
+                  Modelo general para Agent V2 (fallback)
                 </p>
+              </div>
+            </div>
+
+            <div className="bg-dark-card/50 p-4 rounded-lg border border-dark-border">
+              <h4 className="text-md font-semibold text-white mb-4">Agent V2 - Configuracion por Cerebro</h4>
+              <p className="text-xs text-gray-400 mb-4">
+                Configura modelos diferentes para cada cerebro del agente multi-cerebro.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Vendor (Cliente)
+                  </label>
+                  <select
+                    value={aiSettings.vendorModelV2 || 'gpt-5.2'}
+                    onChange={(e) => handleAiSettingChange('vendorModelV2', e.target.value)}
+                    className="input w-full"
+                    disabled={saving}
+                  >
+                    {aiModels.filter(m => !m.id.includes('nano')).map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Cerebro principal, interactua con cliente. Usar modelo potente.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Observer (Validador)
+                  </label>
+                  <select
+                    value={aiSettings.observerModelV2 || 'gpt-4.1-mini'}
+                    onChange={(e) => handleAiSettingChange('observerModelV2', e.target.value)}
+                    className="input w-full"
+                    disabled={saving}
+                  >
+                    {aiModels.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Valida respuestas del Vendor. Modelo economico recomendado.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Refiner (Aprendizaje)
+                  </label>
+                  <select
+                    value={aiSettings.refinerModelV2 || 'gpt-4.1-mini'}
+                    onChange={(e) => handleAiSettingChange('refinerModelV2', e.target.value)}
+                    className="input w-full"
+                    disabled={saving}
+                  >
+                    {aiModels.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Genera reglas de mejora. Modelo economico recomendado.
+                  </p>
+                </div>
               </div>
             </div>
 

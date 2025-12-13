@@ -14,7 +14,7 @@ import logging
 from datetime import datetime
 import pytz
 
-from ..config import get_settings, get_v2_model
+from ..config import get_settings, get_vendor_model
 from ..schemas.business_profile import BusinessProfile
 from ..schemas.vendor_state import (
     VendorState, AgentAction, ActionType, 
@@ -287,7 +287,7 @@ class VendorAgent:
     
     def _init_llms(self):
         """Initialize LLMs with current platform model config."""
-        platform_model = get_v2_model()
+        platform_model = get_vendor_model()
         
         if platform_model != self._current_model:
             logger.info(f"VendorAgent model changed: {self._current_model} -> {platform_model}")
@@ -307,7 +307,7 @@ class VendorAgent:
     
     def _ensure_model_current(self):
         """Check if model config changed and refresh if needed."""
-        platform_model = get_v2_model()
+        platform_model = get_vendor_model()
         if platform_model != self._current_model:
             self._init_llms()
     
