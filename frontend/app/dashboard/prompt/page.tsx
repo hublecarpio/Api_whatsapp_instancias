@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { promptApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi } from '@/lib/api';
-import { SkillsV2Panel, PromptsV2Panel, LeadMemoryPanel, RulesLearnedPanel, KnowledgePanel } from '@/components/AgentV2';
+import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel, KnowledgePanel } from '@/components/AgentV2';
 
 interface ToolParameter {
   name: string;
@@ -54,12 +54,6 @@ interface V2Skills {
   followup: boolean;
   media: boolean;
   crm: boolean;
-}
-
-interface V2Prompts {
-  vendor: string;
-  observer: string;
-  refiner: string;
 }
 
 interface LeadMemory {
@@ -153,15 +147,10 @@ export default function PromptPage() {
     media: true,
     crm: true
   });
-  const [v2Prompts, setV2Prompts] = useState<V2Prompts>({
-    vendor: '',
-    observer: '',
-    refiner: ''
-  });
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'skills' | 'prompts' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config' | 'api'>('prompt');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'skills' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config' | 'api'>('prompt');
   
   const [apiKeyInfo, setApiKeyInfo] = useState<{ hasApiKey: boolean; prefix: string | null; createdAt: string | null } | null>(null);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
@@ -457,7 +446,6 @@ export default function PromptPage() {
       if (configRes.status === 'fulfilled' && configRes.value.data) {
         const config = configRes.value.data;
         if (config.skills) setV2Skills(config.skills);
-        if (config.prompts) setV2Prompts(config.prompts);
       }
 
       if (memoriesRes.status === 'fulfilled' && memoriesRes.value.data) {
@@ -486,23 +474,6 @@ export default function PromptPage() {
     } catch (err: any) {
       setV2Skills(v2Skills);
       setError(err.response?.data?.error || 'Error al actualizar skill');
-    }
-  };
-
-  const handleSaveV2Prompts = async (prompts: V2Prompts) => {
-    if (!currentBusiness) return;
-    
-    setLoading(true);
-    setError('');
-    
-    try {
-      await agentV2Api.saveConfig(currentBusiness.id, { prompts });
-      setV2Prompts(prompts);
-      setSuccess('Prompts de V2 guardados correctamente');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al guardar prompts');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -1089,14 +1060,6 @@ export default function PromptPage() {
             Skills V2
           </button>
           <button
-            onClick={() => setActiveV2Tab('prompts')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'prompts' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            3 Cerebros
-          </button>
-          <button
             onClick={() => setActiveV2Tab('memory')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               activeV2Tab === 'memory' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
@@ -1192,13 +1155,6 @@ export default function PromptPage() {
         />
       )}
 
-      {agentVersion === 'v2' && activeV2Tab === 'prompts' && (
-        <PromptsV2Panel
-          prompts={v2Prompts}
-          onUpdatePrompts={handleSaveV2Prompts}
-          loading={loading}
-        />
-      )}
 
       {agentVersion === 'v2' && activeV2Tab === 'memory' && (
         <LeadMemoryPanel
