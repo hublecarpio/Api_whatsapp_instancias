@@ -834,4 +834,84 @@ router.post('/instances/:id/lid-mappings', async (req: Request, res: Response) =
   }
 });
 
+// Get WhatsApp groups for an instance
+router.get('/instances/:id/groups', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.getGroups();
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        count: result.groups?.length || 0,
+        groups: result.groups
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to get groups');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+// Get participants from a specific group
+router.get('/instances/:id/groups/:groupId/participants', async (req: Request, res: Response) => {
+  try {
+    const { id, groupId } = req.params;
+    const instance = InstanceManager.getInstance(id);
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        error: `Instance '${id}' not found`
+      } as ApiResponse);
+    }
+
+    const result = await instance.getGroupParticipants(groupId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      } as ApiResponse);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: id,
+        groupId,
+        groupName: result.groupName,
+        count: result.participants?.length || 0,
+        participants: result.participants
+      }
+    } as ApiResponse);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to get group participants');
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
 export default router;

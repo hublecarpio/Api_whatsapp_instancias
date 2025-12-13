@@ -1416,4 +1416,74 @@ export class WhatsAppInstance {
       lastConnection: this.lastConnection
     };
   }
+
+  async getGroups(): Promise<{ success: boolean; groups?: any[]; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Not connected' };
+    }
+
+    try {
+      const groups = await this.socket.groupFetchAllParticipating();
+      const groupList = Object.values(groups).map((group: any) => ({
+        id: group.id,
+        subject: group.subject,
+        owner: group.owner,
+        creation: group.creation,
+        size: group.size || group.participants?.length || 0,
+        restrict: group.restrict,
+        announce: group.announce
+      }));
+      
+      this.logger.info({ count: groupList.length }, 'Fetched groups');
+      return { success: true, groups: groupList };
+    } catch (error: any) {
+      this.logger.error({ error: error.message }, 'Failed to fetch groups');
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getGroupParticipants(groupId: string): Promise<{ success: boolean; participants?: any[]; groupName?: string; error?: string }> {
+    if (!this.socket || this.status !== 'connected') {
+      return { success: false, error: 'Not connected' };
+    }
+
+    try {
+      const metadata = await this.socket.groupMetadata(groupId);
+      
+      const participants = metadata.participants.map((p: any) => {
+        const jid = p.id;
+        let phoneNumber = '';
+        
+        if (jid.endsWith('@s.whatsapp.net')) {
+          phoneNumber = jid.replace('@s.whatsapp.net', '');
+        } else if (jid.endsWith('@lid')) {
+          const mapped = this.lidMappings.get(jid);
+          if (mapped) {
+            phoneNumber = mapped;
+          }
+        }
+        
+        return {
+          id: jid,
+          phone: phoneNumber,
+          admin: p.admin || null,
+          isAdmin: p.admin === 'admin' || p.admin === 'superadmin',
+          isSuperAdmin: p.admin === 'superadmin'
+        };
+      });
+
+      const validParticipants = participants.filter((p: any) => p.phone && p.phone.length >= 8);
+      
+      this.logger.info({ groupId, total: participants.length, withPhone: validParticipants.length }, 'Fetched group participants');
+      
+      return { 
+        success: true, 
+        groupName: metadata.subject,
+        participants: validParticipants 
+      };
+    } catch (error: any) {
+      this.logger.error({ error: error.message, groupId }, 'Failed to fetch group participants');
+      return { success: false, error: error.message };
+    }
+  }
 }
