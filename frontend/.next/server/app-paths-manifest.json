@@ -1,3 +1,4 @@
 {
-  "/super-admin/page": "app/super-admin/page.js"
+  "/login/page": "app/login/page.js",
+  "/dashboard/billing/page": "app/dashboard/billing/page.js"
 }

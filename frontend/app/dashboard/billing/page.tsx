@@ -17,6 +17,8 @@ interface SubscriptionStatus {
 interface TokenUsage {
   tokensUsed: number;
   tokenLimit: number;
+  baseLimit: number;
+  bonusTokens: number;
   percentUsed: number;
   isOverLimit: boolean;
   canUseAI: boolean;
@@ -38,6 +40,8 @@ export default function BillingPage() {
   const [enterpriseForm, setEnterpriseForm] = useState({ businessDescription: '', companySize: '', useCase: '' });
   const [enterpriseLoading, setEnterpriseLoading] = useState(false);
   const [enterpriseMessage, setEnterpriseMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [creditsLoading, setCreditsLoading] = useState(false);
+  const [creditsMessage, setCreditsMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
     loadData();
@@ -171,6 +175,26 @@ export default function BillingPage() {
     }
   };
 
+  const handlePurchaseCredits = async () => {
+    if (!confirm('Se cobraran $5 USD a tu tarjeta guardada por 1M tokens adicionales. Continuar?')) {
+      return;
+    }
+
+    setCreditsLoading(true);
+    setCreditsMessage(null);
+
+    try {
+      const response = await billingApi.purchaseCredits();
+      setCreditsMessage({ type: 'success', text: response.data.message });
+      await loadData();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || 'Error al comprar creditos';
+      setCreditsMessage({ type: 'error', text: errorMsg });
+    } finally {
+      setCreditsLoading(false);
+    }
+  };
+
   const getStatusBadge = () => {
     if (!status) return null;
 
@@ -298,6 +322,83 @@ export default function BillingPage() {
           </div>
         )}
 
+        {status?.subscriptionStatus === 'active' && tokenUsage && (
+          <div className="bg-dark-hover rounded-lg p-4 mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-400 text-sm">Uso de tokens este mes</span>
+              <span className="text-white text-sm font-medium">
+                {formatTokens(tokenUsage.tokensUsed)} / {formatTokens(tokenUsage.tokenLimit)}
+              </span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+              <div 
+                className={`h-3 rounded-full transition-all duration-300 ${
+                  tokenUsage.percentUsed >= 100 
+                    ? 'bg-accent-error' 
+                    : tokenUsage.percentUsed >= 80 
+                      ? 'bg-accent-warning' 
+                      : 'bg-accent-success'
+                }`}
+                style={{ width: `${Math.min(100, tokenUsage.percentUsed)}%` }}
+              />
+            </div>
+            <div className="flex justify-between items-center mt-2">
+              <span className="text-gray-500 text-xs">
+                {tokenUsage.percentUsed.toFixed(1)}% usado
+              </span>
+              {tokenUsage.isOverLimit ? (
+                <span className="text-accent-error text-xs font-medium">
+                  Limite alcanzado
+                </span>
+              ) : tokenUsage.percentUsed >= 80 ? (
+                <span className="text-accent-warning text-xs">
+                  Cerca del limite
+                </span>
+              ) : (
+                <span className="text-gray-500 text-xs">
+                  {formatTokens(tokenUsage.tokensRemaining)} restantes
+                </span>
+              )}
+            </div>
+            
+            {tokenUsage.bonusTokens > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-600">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Creditos adicionales:</span>
+                  <span className="text-accent-success text-sm font-medium">
+                    +{formatTokens(tokenUsage.bonusTokens)} tokens
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 pt-3 border-t border-gray-600">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-gray-400 text-sm">Necesitas mas tokens?</p>
+                  <p className="text-gray-500 text-xs">1 millon de tokens adicionales por $5 USD</p>
+                </div>
+                <button
+                  onClick={handlePurchaseCredits}
+                  disabled={creditsLoading}
+                  className="btn btn-primary text-sm whitespace-nowrap"
+                >
+                  {creditsLoading ? 'Procesando...' : 'Comprar 1M tokens por $5'}
+                </button>
+              </div>
+              {creditsMessage && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  creditsMessage.type === 'success' 
+                    ? 'bg-accent-success/10 border border-accent-success/30 text-accent-success' 
+                    : 'bg-accent-error/10 border border-accent-error/30 text-accent-error'
+                }`}>
+                  {creditsMessage.text}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {status?.subscriptionStatus === 'past_due' && (
           <div className="bg-accent-warning/10 border border-accent-warning/30 rounded-lg p-4 mb-4">
             <p className="text-accent-warning font-medium">Pago fallido</p>
@@ -369,7 +470,7 @@ export default function BillingPage() {
           <ul className="space-y-2 mb-6">
             {[
               'Conexion WhatsApp ilimitada',
-              'Agente IA con 350K tokens/mes',
+              'Agente IA con 5M tokens/mes',
               'Gestion de productos y catalogo',
               'Seguimientos automaticos',
               'CRM de clientes',
