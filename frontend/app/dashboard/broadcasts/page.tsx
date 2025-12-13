@@ -1087,24 +1087,7 @@ export default function BroadcastsPage() {
                     />
                     <span className="text-sm text-gray-300">Importar CSV</span>
                   </label>
-                  {!isMetaCloud && (
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="contactSource"
-                        checked={contactSource === 'group'}
-                        onChange={() => {
-                          setContactSource('group');
-                          setSelectedContacts([]);
-                          setSelectedGroup(null);
-                          setGroupParticipants([]);
-                          loadGroups();
-                        }}
-                        className="accent-neon-blue"
-                      />
-                      <span className="text-sm text-gray-300">Importar desde Grupo</span>
-                    </label>
-                  )}
+                  {/* Group import hidden - WhatsApp LID limitation prevents getting phone numbers */}
                 </div>
 
                 {contactSource === 'crm' && (
