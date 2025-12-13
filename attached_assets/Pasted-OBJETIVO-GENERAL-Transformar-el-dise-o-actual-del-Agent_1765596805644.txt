@@ -1,0 +1,263 @@
+OBJETIVO GENERAL
+
+Transformar el diseño actual del Agente V2 en un sistema estable, gobernado por estado, donde:
+
+El LLM no decide acciones críticas
+
+LangGraph controla el flujo
+
+Las tools se ejecutan solo con estado válido
+
+El aprendizaje es seguro y controlado
+
+Este roadmap NO agrega features nuevas.
+Solo ordena, endurece y hace productivo lo que ya existe.
+
+FASE 0 — CONGELAR DISEÑO (OBLIGATORIO)
+Acción
+
+Marcar el documento AGENT_V2_MATRIX.md como:
+
+Version: v2.0 – Frozen Design
+
+Regla
+
+A partir de ahora:
+
+Ninguna lógica nueva se agrega sin reflejo explícito en:
+
+schemas/
+
+core/graph.py
+
+FASE 1 — DEFINIR EL ESTADO COMO LEY SUPREMA
+Archivo
+
+schemas/vendor_state.py
+
+Acción
+
+Definir un estado único y explícito que gobierne todo el sistema.
+
+El estado debe incluir, como mínimo:
+
+etapa_comercial
+
+intencion_actual
+
+producto_detectado
+
+productos_confirmados
+
+cantidades
+
+total_calculado
+
+metodo_pago
+
+orden_generada
+
+reglas_activas
+
+reglas_pendientes
+
+errores_estado
+
+Regla crítica
+
+❗ Si un dato no está en el estado, el agente NO puede actuar sobre él.
+
+FASE 2 — REDEFINIR EL CONTRATO DEL VENDOR AGENT
+Archivo
+
+agents/vendor.py
+
+Acción
+
+Modificar el prompt y la salida del Vendor Agent.
+
+PROHIBIDO
+
+Ejecutar tools
+
+Elegir tools
+
+Generar órdenes
+
+Avanzar etapas
+
+NUEVO CONTRATO DE SALIDA (OBLIGATORIO)
+
+El Vendor Agent SOLO devuelve:
+
+{
+  "intencion": "informar | consultar_producto | ver_imagen | comprar | pagar | esperar | desconocido",
+  "mensaje": "respuesta al cliente",
+  "entidades_detectadas": {
+    "producto": "string | null",
+    "cantidad": "number | null"
+  }
+}
+
+Regla
+
+El Vendor solo conversa y propone intención.
+No ejecuta nada.
+
+FASE 3 — MOVER TODA DECISIÓN AL LANGGRAPH
+Archivo
+
+core/graph.py
+
+Acción
+
+Implementar nodos explícitos, por ejemplo:
+
+load_state
+
+vendor_response
+
+observer_validation
+
+state_validation
+
+decide_next_action
+
+execute_tool (si aplica)
+
+update_state
+
+finalize_response
+
+Regla
+
+Ninguna tool se ejecuta si el estado está incompleto
+
+El grafo decide, no el LLM
+
+FASE 4 — ENDURECER EL OBSERVER AGENT (GUARDIÁN)
+Archivo
+
+agents/observer.py
+
+Acción
+
+Convertir al Observer en validador estricto, no en sugeridor creativo.
+
+Funciones permitidas
+
+Detectar violaciones de estado
+
+Detectar saltos de etapa
+
+Detectar respuestas inválidas
+
+Output esperado
+{
+  "estado_valido": true | false,
+  "errores": ["lista de errores críticos"],
+  "warnings": ["observaciones no bloqueantes"]
+}
+
+Regla
+
+Si estado_valido = false → el grafo NO avanza.
+
+FASE 5 — CONTROLAR EL APRENDIZAJE (REFINER CON FRENO)
+Archivo
+
+agents/refiner.py
+
+Acción
+
+Separar reglas en dos niveles:
+
+reglas_pendientes
+
+reglas_activas
+
+Flujo correcto
+
+Refiner propone reglas
+
+Se guardan como reglas_pendientes
+
+Solo reglas activas afectan comportamiento
+
+Regla
+
+❗ Ninguna regla nueva se aplica automáticamente.
+
+FASE 6 — AISLAR LAS TOOLS (INFRAESTRUCTURA PURA)
+Archivos
+
+tools/*.py
+core/tool_router.py
+
+Acción
+
+Asegurar que las tools:
+
+No conocen negocio
+
+No conocen etapas
+
+Fallan si falta un parámetro
+
+Regla
+
+Las tools no contienen lógica
+
+Solo reciben input validado por el grafo
+
+FASE 7 — INTEGRAR EL BOTÓN TEST (HUMANO, NO AGENTE)
+Acción
+
+El sistema de test de tools:
+
+Es solo para humanos
+
+Nunca es usado por el agente
+
+No guarda estado
+
+No afecta memoria
+
+Regla
+
+El agente jamás usa el modo test.
+
+FASE 8 — ESCENARIOS DE VALIDACIÓN (ANTES DE PROD)
+Acción
+
+Validar manualmente estos escenarios:
+
+Compra completa feliz
+
+Cliente ambiguo
+
+Tool incompleta
+
+Pago fallido
+
+Cliente que desaparece
+
+Regla incorrecta desactivada
+
+Regla
+
+Si un escenario falla → se corrige el grafo o el estado, no el prompt.
+
+RESULTADO ESPERADO
+
+Al finalizar este roadmap, el sistema debe cumplir:
+
+El LLM no toma decisiones críticas
+
+El comportamiento es predecible
+
+Las tools son seguras
+
+El aprendizaje no degrada el sistema
+
+El V2 es gobernable y escalable
