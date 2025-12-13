@@ -134,3 +134,25 @@ def get_refiner_model() -> str:
     """Get the configured model for Agent V2 Refiner brain (learning)."""
     config = fetch_platform_model_config()
     return config.get("v2", {}).get("refinerModel", "gpt-4.1-mini")
+
+
+def fetch_prompt_sections_context(business_id: str, message: str) -> dict:
+    """Fetch relevant prompt sections via RAG from Core API."""
+    settings = get_settings()
+    
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(
+                f"{settings.core_api_url}/prompt-sections/{business_id}/context",
+                headers={"X-Internal-Secret": settings.internal_agent_secret},
+                json={"message": message, "limit": 3}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Fetched prompt sections: {len(data.get('relevantSections', []))} relevant, ~{data.get('tokenEstimate', 0)} tokens")
+                return data
+    except Exception as e:
+        logger.warning(f"Failed to fetch prompt sections: {e}")
+    
+    return {"corePrompt": "", "relevantSections": [], "fullContext": "", "tokenEstimate": 0}

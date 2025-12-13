@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 import logging
 
-from .config import get_settings
+from .config import get_settings, fetch_prompt_sections_context
 from .schemas.business_profile import BusinessProfile, Product
 from .core.memory import get_memory, update_memory, clear_memory, get_memory_stats
 from .core.embeddings import get_embedding_service
@@ -213,6 +213,14 @@ async def generate_response(request: GenerateRequest):
         learning_data = refiner.load_learning(business_id)
         dynamic_rules = learning_data.get("reglas", [])
         
+        prompt_context = fetch_prompt_sections_context(business_id, request.current_message)
+        rag_prompt = prompt_context.get("fullContext", "")
+        
+        effective_prompt = request.business_context.custom_prompt or ""
+        if rag_prompt:
+            effective_prompt = rag_prompt if rag_prompt else effective_prompt
+            logger.info(f"Using RAG prompt sections (~{prompt_context.get('tokenEstimate', 0)} tokens) instead of full custom_prompt")
+        
         products = [
             Product(
                 id=p.id,
@@ -251,7 +259,7 @@ async def generate_response(request: GenerateRequest):
                 "timezone": request.business_context.timezone,
                 "products": [p.model_dump() for p in products],
                 "policies": request.business_context.policies,
-                "custom_prompt": request.business_context.custom_prompt,
+                "custom_prompt": effective_prompt,
                 "tools_enabled": request.business_context.tools_enabled,
                 "tools_config": request.business_context.tools_config
             },
