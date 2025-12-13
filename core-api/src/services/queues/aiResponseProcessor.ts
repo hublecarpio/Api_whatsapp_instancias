@@ -153,8 +153,8 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
   } else if (provider === 'BAILEYS' && phone) {
     // Baileys marks entire chat as read via WA API
     try {
-      await axios.post(`${WA_API_URL}/instance/${instanceBackendId || targetInstanceId}/markAsRead`, {
-        phone: contactPhone
+      await axios.post(`${WA_API_URL}/instances/${instanceBackendId || targetInstanceId}/markAsRead`, {
+        from: contactPhone
       }).catch(() => {});
       console.log(`[AI Worker] Baileys: Marked chat as read for ${contactPhone}`);
     } catch (markErr: any) {
