@@ -810,4 +810,169 @@ router.post('/advisor-signup', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================
+// USER REFERRAL PROGRAM ENDPOINTS
+// ============================================
+
+// Get user's referral code (if they have one)
+router.get('/referral/my-code', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const referralCode = await prisma.referralCode.findFirst({
+      where: { ownerUserId: req.userId }
+    });
+    
+    if (!referralCode) {
+      return res.json({ hasCode: false, code: null });
+    }
+    
+    res.json({
+      hasCode: true,
+      code: referralCode.code,
+      description: referralCode.description,
+      usageCount: referralCode.usageCount,
+      bonusDemoDays: referralCode.bonusDemoDays || 0,
+      bonusTrialDays: referralCode.bonusTrialDays || 0,
+      commissionRate: referralCode.commissionRate,
+      createdAt: referralCode.createdAt
+    });
+  } catch (error) {
+    console.error('Get my referral code error:', error);
+    res.status(500).json({ error: 'Failed to get referral code' });
+  }
+});
+
+// Claim/create a referral code for the user
+router.post('/referral/claim', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { code } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+    
+    // Check if user already has a code
+    const existingUserCode = await prisma.referralCode.findFirst({
+      where: { ownerUserId: req.userId }
+    });
+    
+    if (existingUserCode) {
+      return res.status(400).json({ 
+        error: 'Ya tienes un código de referido activo',
+        existingCode: existingUserCode.code
+      });
+    }
+    
+    // Validate code format (uppercase, alphanumeric, 4-20 chars)
+    const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (normalizedCode.length < 4 || normalizedCode.length > 20) {
+      return res.status(400).json({ error: 'El código debe tener entre 4 y 20 caracteres alfanuméricos' });
+    }
+    
+    // Check if code already exists
+    const existingCode = await prisma.referralCode.findUnique({
+      where: { code: normalizedCode }
+    });
+    
+    if (existingCode) {
+      return res.status(400).json({ 
+        error: 'Este código ya está en uso. Por favor, elige otro.' 
+      });
+    }
+    
+    // Create the referral code for the user
+    const referralCode = await prisma.referralCode.create({
+      data: {
+        code: normalizedCode,
+        description: `Código de afiliado`,
+        type: 'STANDARD',
+        ownerUserId: req.userId,
+        isActive: true,
+        commissionRate: 0.20, // 20% default commission
+        bonusDemoDays: 0,
+        bonusTrialDays: 0
+      }
+    });
+    
+    console.log(`[REFERRAL] User ${req.userId} claimed code: ${normalizedCode}`);
+    
+    res.json({
+      success: true,
+      code: referralCode.code,
+      message: 'Código creado exitosamente'
+    });
+  } catch (error) {
+    console.error('Claim referral code error:', error);
+    res.status(500).json({ error: 'Failed to claim referral code' });
+  }
+});
+
+// Get referral stats for the user
+router.get('/referral/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    // Get user's referral code
+    const referralCode = await prisma.referralCode.findFirst({
+      where: { ownerUserId: req.userId }
+    });
+    
+    if (!referralCode) {
+      return res.json({
+        hasCode: false,
+        stats: null
+      });
+    }
+    
+    // Get all users who registered with this code
+    const referredUsers = await prisma.user.findMany({
+      where: { referralCodeId: referralCode.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        subscriptionStatus: true,
+        stripeSubscriptionId: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    // Calculate stats
+    const totalReferrals = referredUsers.length;
+    const activeSubscriptions = referredUsers.filter(u => 
+      u.subscriptionStatus === 'ACTIVE' && u.stripeSubscriptionId
+    ).length;
+    const trialUsers = referredUsers.filter(u => 
+      u.subscriptionStatus === 'TRIAL'
+    ).length;
+    
+    // Calculate estimated earnings (this is simplified - in production you'd track actual payments)
+    // Assuming $97/month subscription and 20% commission
+    const monthlySubscriptionPrice = 97;
+    const estimatedMonthlyEarnings = activeSubscriptions * monthlySubscriptionPrice * referralCode.commissionRate;
+    
+    res.json({
+      hasCode: true,
+      code: referralCode.code,
+      stats: {
+        totalReferrals,
+        activeSubscriptions,
+        trialUsers,
+        conversionRate: totalReferrals > 0 ? Math.round((activeSubscriptions / totalReferrals) * 100) : 0,
+        commissionRate: referralCode.commissionRate * 100,
+        estimatedMonthlyEarnings,
+        referredUsers: referredUsers.map(u => ({
+          id: u.id,
+          name: u.name,
+          email: u.email.substring(0, 3) + '***' + u.email.substring(u.email.indexOf('@')), // Mask email
+          registeredAt: u.createdAt,
+          status: u.subscriptionStatus,
+          isConverted: u.subscriptionStatus === 'ACTIVE' && !!u.stripeSubscriptionId
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Get referral stats error:', error);
+    res.status(500).json({ error: 'Failed to get referral stats' });
+  }
+});
+
 export default router;

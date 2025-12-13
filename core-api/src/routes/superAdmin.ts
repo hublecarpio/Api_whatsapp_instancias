@@ -1157,7 +1157,7 @@ router.get('/referral-codes', superAdminMiddleware, async (req: SuperAdminReques
 
 router.post('/referral-codes', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
   try {
-    const { code, description, expiresAt, type, grantTier, grantDurationDays, maxUses } = req.body;
+    const { code, description, expiresAt, type, grantTier, grantDurationDays, maxUses, bonusDemoDays, bonusTrialDays, commissionRate } = req.body;
     
     if (!code) {
       return res.status(400).json({ error: 'Code is required' });
@@ -1185,11 +1185,14 @@ router.post('/referral-codes', superAdminMiddleware, async (req: SuperAdminReque
         type: type || 'STANDARD',
         grantTier: type === 'ENTERPRISE' ? (grantTier || 'PRO') : null,
         grantDurationDays: type === 'ENTERPRISE' ? grantDurationDays : null,
-        maxUses: maxUses || null
+        maxUses: maxUses || null,
+        bonusDemoDays: bonusDemoDays || null,
+        bonusTrialDays: bonusTrialDays || null,
+        commissionRate: commissionRate !== undefined ? commissionRate : 0.20
       }
     });
     
-    console.log(`[Super Admin] Created ${type || 'STANDARD'} referral code: ${upperCode}`);
+    console.log(`[Super Admin] Created ${type || 'STANDARD'} referral code: ${upperCode} (bonusDemo: ${bonusDemoDays || 0}, bonusTrial: ${bonusTrialDays || 0})`);
     
     res.json({ code: newCode });
   } catch (error: any) {
@@ -1201,7 +1204,7 @@ router.post('/referral-codes', superAdminMiddleware, async (req: SuperAdminReque
 router.put('/referral-codes/:id', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { description, isActive, expiresAt, type, grantTier, grantDurationDays, maxUses } = req.body;
+    const { description, isActive, expiresAt, type, grantTier, grantDurationDays, maxUses, bonusDemoDays, bonusTrialDays, commissionRate } = req.body;
     
     const code = await prisma.referralCode.update({
       where: { id },
@@ -1212,7 +1215,10 @@ router.put('/referral-codes/:id', superAdminMiddleware, async (req: SuperAdminRe
         type: type ?? undefined,
         grantTier: grantTier ?? undefined,
         grantDurationDays: grantDurationDays ?? undefined,
-        maxUses: maxUses ?? undefined
+        maxUses: maxUses ?? undefined,
+        bonusDemoDays: bonusDemoDays ?? undefined,
+        bonusTrialDays: bonusTrialDays ?? undefined,
+        commissionRate: commissionRate ?? undefined
       }
     });
     
