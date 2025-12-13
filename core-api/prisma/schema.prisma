@@ -846,6 +846,37 @@ model KnowledgeDocument {
   @@index([businessId, type])
 }
 
+enum PromptSectionType {
+  CORE
+  TONE
+  SALES
+  POLICIES
+  FAQ
+  OBJECTIONS
+  CLOSING
+  OTHER
+}
+
+model PromptSection {
+  id          String            @id @default(uuid())
+  businessId  String
+  title       String
+  content     String
+  type        PromptSectionType @default(OTHER)
+  isCore      Boolean           @default(false)
+  priority    Int               @default(0)
+  embedding   Json?
+  metadata    Json?
+  enabled     Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([businessId])
+  @@index([businessId, enabled])
+  @@index([businessId, isCore])
+  @@index([businessId, type])
+}
+
 enum AppointmentStatus {
   PENDING
   CONFIRMED
