@@ -61,7 +61,7 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
       ],
       mode: 'subscription',
       subscription_data: {
-        trial_period_days: 7
+        trial_period_days: 5
       },
       success_url: `${FRONTEND_URL}/dashboard?subscription=success`,
       cancel_url: `${FRONTEND_URL}/dashboard?subscription=canceled`,
