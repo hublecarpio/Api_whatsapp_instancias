@@ -13,25 +13,41 @@ interface SubscriptionStatus {
   hasActiveBonus?: boolean;
 }
 
+interface TokenUsage {
+  tokensUsed: number;
+  tokenLimit: number;
+  percentUsed: number;
+  isOverLimit: boolean;
+  canUseAI: boolean;
+  tokensRemaining: number;
+  message?: string;
+}
+
 export default function BillingPage() {
   const { user, updateUser } = useAuthStore();
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [referralCode, setReferralCode] = useState('');
   const [referralLoading, setReferralLoading] = useState(false);
   const [referralMessage, setReferralMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
-    loadSubscriptionStatus();
+    loadData();
   }, []);
 
-  const loadSubscriptionStatus = async () => {
+  const loadData = async () => {
     try {
-      const res = await billingApi.getSubscriptionStatus();
-      setStatus(res.data);
+      const [statusRes, tokenRes] = await Promise.all([
+        billingApi.getSubscriptionStatus(),
+        billingApi.getTokenUsage()
+      ]);
+      setStatus(statusRes.data);
+      setTokenUsage(tokenRes.data);
     } catch (error) {
-      console.error('Error loading subscription status:', error);
+      console.error('Error loading billing data:', error);
     } finally {
       setLoading(false);
     }
@@ -60,7 +76,7 @@ export default function BillingPage() {
     setActionLoading(true);
     try {
       await billingApi.cancelSubscription();
-      await loadSubscriptionStatus();
+      await loadData();
       alert('Suscripcion cancelada. Mantendras acceso hasta el final del periodo.');
     } catch (error) {
       console.error('Error canceling subscription:', error);
@@ -74,13 +90,28 @@ export default function BillingPage() {
     setActionLoading(true);
     try {
       await billingApi.reactivateSubscription();
-      await loadSubscriptionStatus();
+      await loadData();
       alert('Suscripcion reactivada exitosamente!');
     } catch (error) {
       console.error('Error reactivating subscription:', error);
       alert('Error al reactivar la suscripcion');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleOpenPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await billingApi.openPortal();
+      if (res.data.url) {
+        window.location.href = res.data.url;
+      }
+    } catch (error: any) {
+      console.error('Error opening billing portal:', error);
+      alert(error.response?.data?.error || 'Error al abrir el portal de facturacion');
+    } finally {
+      setPortalLoading(false);
     }
   };
 
@@ -101,7 +132,7 @@ export default function BillingPage() {
       const meResponse = await authApi.me();
       updateUser(meResponse.data);
       
-      await loadSubscriptionStatus();
+      await loadData();
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || 'Error al aplicar el codigo';
       setReferralMessage({ type: 'error', text: errorMsg });
@@ -139,6 +170,16 @@ export default function BillingPage() {
     });
   };
 
+  const formatTokens = (tokens: number) => {
+    if (tokens >= 1000000) {
+      return `${(tokens / 1000000).toFixed(1)}M`;
+    }
+    if (tokens >= 1000) {
+      return `${(tokens / 1000).toFixed(0)}K`;
+    }
+    return tokens.toString();
+  };
+
   if (loading) {
     return (
       <div className="p-4 sm:p-6">
@@ -174,6 +215,47 @@ export default function BillingPage() {
             <p className="text-neon-blue/70 text-sm mt-1">
               Despues de esta fecha se realizara el primer cobro de $50 USD.
             </p>
+          </div>
+        )}
+
+        {status?.subscriptionStatus === 'trial' && tokenUsage && (
+          <div className="bg-dark-hover rounded-lg p-4 mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-400 text-sm">Uso de tokens este mes</span>
+              <span className="text-white text-sm font-medium">
+                {formatTokens(tokenUsage.tokensUsed)} / {formatTokens(tokenUsage.tokenLimit)}
+              </span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+              <div 
+                className={`h-3 rounded-full transition-all duration-300 ${
+                  tokenUsage.percentUsed >= 100 
+                    ? 'bg-accent-error' 
+                    : tokenUsage.percentUsed >= 80 
+                      ? 'bg-accent-warning' 
+                      : 'bg-neon-blue'
+                }`}
+                style={{ width: `${Math.min(100, tokenUsage.percentUsed)}%` }}
+              />
+            </div>
+            <div className="flex justify-between items-center mt-2">
+              <span className="text-gray-500 text-xs">
+                {tokenUsage.percentUsed}% usado
+              </span>
+              {tokenUsage.isOverLimit ? (
+                <span className="text-accent-error text-xs font-medium">
+                  Limite alcanzado - Suscribete para continuar
+                </span>
+              ) : tokenUsage.percentUsed >= 80 ? (
+                <span className="text-accent-warning text-xs">
+                  Cerca del limite
+                </span>
+              ) : (
+                <span className="text-gray-500 text-xs">
+                  {formatTokens(tokenUsage.tokensRemaining)} restantes
+                </span>
+              )}
+            </div>
           </div>
         )}
 
@@ -226,13 +308,22 @@ export default function BillingPage() {
           )}
 
           {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && (
-            <button
-              onClick={handleCancel}
-              disabled={actionLoading}
-              className="btn btn-danger"
-            >
-              {actionLoading ? 'Procesando...' : 'Cancelar suscripcion'}
-            </button>
+            <>
+              <button
+                onClick={handleOpenPortal}
+                disabled={portalLoading}
+                className="btn btn-secondary"
+              >
+                {portalLoading ? 'Abriendo...' : 'Administrar Facturacion'}
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={actionLoading}
+                className="btn btn-danger"
+              >
+                {actionLoading ? 'Procesando...' : 'Cancelar suscripcion'}
+              </button>
+            </>
           )}
         </div>
       </div>

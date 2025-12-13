@@ -444,3 +444,92 @@ export async function getTokenUsageStats(businessId: string, options?: {
     byFeature
   };
 }
+
+export const TRIAL_TOKEN_LIMIT = 100000;
+
+export async function getMonthlyTokenUsageForUser(userId: string): Promise<{
+  totalTokens: number;
+  limit: number;
+  percentUsed: number;
+  isOverLimit: boolean;
+}> {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  
+  const usage = await prisma.tokenUsage.aggregate({
+    _sum: {
+      totalTokens: true
+    },
+    where: {
+      userId,
+      createdAt: {
+        gte: startOfMonth
+      }
+    }
+  });
+  
+  const totalTokens = usage._sum.totalTokens || 0;
+  const percentUsed = Math.min(100, Math.round((totalTokens / TRIAL_TOKEN_LIMIT) * 100));
+  
+  return {
+    totalTokens,
+    limit: TRIAL_TOKEN_LIMIT,
+    percentUsed,
+    isOverLimit: totalTokens >= TRIAL_TOKEN_LIMIT
+  };
+}
+
+export async function checkUserTokenLimit(userId: string): Promise<{
+  canUseAI: boolean;
+  tokensUsed: number;
+  tokensRemaining: number;
+  message?: string;
+}> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { subscriptionStatus: true }
+  });
+  
+  if (!user) {
+    return {
+      canUseAI: false,
+      tokensUsed: 0,
+      tokensRemaining: 0,
+      message: 'Usuario no encontrado'
+    };
+  }
+  
+  if (user.subscriptionStatus === 'ACTIVE') {
+    return {
+      canUseAI: true,
+      tokensUsed: 0,
+      tokensRemaining: Infinity
+    };
+  }
+  
+  if (user.subscriptionStatus === 'PENDING' || user.subscriptionStatus === 'CANCELED') {
+    return {
+      canUseAI: false,
+      tokensUsed: 0,
+      tokensRemaining: 0,
+      message: 'Suscribete para usar el agente IA'
+    };
+  }
+  
+  const usage = await getMonthlyTokenUsageForUser(userId);
+  
+  if (usage.isOverLimit) {
+    return {
+      canUseAI: false,
+      tokensUsed: usage.totalTokens,
+      tokensRemaining: 0,
+      message: 'Has alcanzado tu limite de 100,000 tokens este mes. Suscribete para continuar usando el agente IA sin limites.'
+    };
+  }
+  
+  return {
+    canUseAI: true,
+    tokensUsed: usage.totalTokens,
+    tokensRemaining: TRIAL_TOKEN_LIMIT - usage.totalTokens
+  };
+}

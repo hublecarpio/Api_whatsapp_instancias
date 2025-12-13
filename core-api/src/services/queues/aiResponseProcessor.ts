@@ -1,7 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { AIResponseJobData, QUEUE_NAMES, getQueueConnection, getAIResponseQueue } from './index.js';
 import prisma from '../prisma.js';
-import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage, logTokenUsage } from '../openaiService.js';
+import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage, logTokenUsage, checkUserTokenLimit } from '../openaiService.js';
 import { replacePromptVariables } from '../promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../agentV2Service.js';
 import { searchProductsIntelligent } from '../productSearch.js';
@@ -98,7 +98,7 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       promptMaster: { include: { tools: { where: { enabled: true } } } },
       products: true,
       instances: { include: { metaCredential: true } },
-      user: { select: { isPro: true } }
+      user: { select: { isPro: true, id: true, subscriptionStatus: true } }
     }
   });
   
@@ -110,6 +110,15 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
   }
   
   if (!business.botEnabled) {
+    if (bufferId) {
+      await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
+    }
+    return { response: '' };
+  }
+  
+  const tokenCheck = await checkUserTokenLimit(business.userId);
+  if (!tokenCheck.canUseAI) {
+    console.log(`[AI Worker] User ${business.userId} blocked: ${tokenCheck.message}`);
     if (bufferId) {
       await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
     }
@@ -635,7 +644,7 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
       promptMaster: { include: { tools: { where: { enabled: true } } } },
       products: true,
       instances: { include: { metaCredential: true } },
-      user: { select: { isPro: true } }
+      user: { select: { isPro: true, id: true, subscriptionStatus: true } }
     }
   });
   
@@ -644,6 +653,12 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
   }
   
   if (!business.botEnabled) {
+    return { response: '' };
+  }
+  
+  const tokenCheck = await checkUserTokenLimit(business.userId);
+  if (!tokenCheck.canUseAI) {
+    console.log(`[AI Direct] User ${business.userId} blocked: ${tokenCheck.message}`);
     return { response: '' };
   }
   

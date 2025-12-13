@@ -230,7 +230,9 @@ export const billingApi = {
   getAccessStatus: (businessId?: string) => 
     api.get(`/billing/access-status${businessId ? `?businessId=${businessId}` : ''}`),
   getContactsToday: (businessId?: string) =>
-    api.get(`/billing/contacts-today${businessId ? `?businessId=${businessId}` : ''}`)
+    api.get(`/billing/contacts-today${businessId ? `?businessId=${businessId}` : ''}`),
+  getTokenUsage: () => api.get('/billing/token-usage'),
+  openPortal: () => api.post('/billing/portal')
 };
 
 export const tagsApi = {

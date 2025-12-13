@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getDailyContactStats } from '../middleware/billing.js';
 import { handlePaymentSuccess, handlePaymentCanceled } from '../services/stripePayments.js';
+import { getMonthlyTokenUsageForUser, checkUserTokenLimit, TRIAL_TOKEN_LIMIT } from '../services/openaiService.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -362,7 +363,9 @@ router.get('/access-status', authMiddleware, async (req: AuthRequest, res) => {
     const hasActiveSubscription = ['TRIAL', 'ACTIVE'].includes(user.subscriptionStatus);
     
     const canUseCrm = user.emailVerified === true;
-    const canUseAi = hasActiveSubscription;
+    
+    const tokenCheck = await checkUserTokenLimit(userId);
+    const canUseAi = tokenCheck.canUseAI;
     const canAccess = canUseCrm;
     
     let daysRemaining: number | null = null;
@@ -371,6 +374,10 @@ router.get('/access-status', authMiddleware, async (req: AuthRequest, res) => {
       const trialEnd = new Date(user.trialEndAt);
       daysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
     }
+
+    const tokenUsage = user.subscriptionStatus === 'TRIAL' 
+      ? await getMonthlyTokenUsageForUser(userId)
+      : null;
 
     res.json({
       emailVerified: user.emailVerified,
@@ -382,10 +389,83 @@ router.get('/access-status', authMiddleware, async (req: AuthRequest, res) => {
       subscriptionStatus: user.subscriptionStatus.toLowerCase(),
       trialEndAt: user.trialEndAt,
       trialDaysRemaining: daysRemaining,
-      dailyContacts: contactStats
+      dailyContacts: contactStats,
+      tokenUsage: tokenUsage ? {
+        tokensUsed: tokenUsage.totalTokens,
+        tokenLimit: tokenUsage.limit,
+        percentUsed: tokenUsage.percentUsed,
+        isOverLimit: tokenUsage.isOverLimit,
+        message: tokenCheck.message
+      } : null
     });
   } catch (error: any) {
     console.error('Error fetching access status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/token-usage', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await prisma.user.findUnique({ 
+      where: { id: userId },
+      select: { subscriptionStatus: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const tokenUsage = await getMonthlyTokenUsageForUser(userId);
+    const tokenCheck = await checkUserTokenLimit(userId);
+
+    res.json({
+      tokensUsed: tokenUsage.totalTokens,
+      tokenLimit: tokenUsage.limit,
+      percentUsed: tokenUsage.percentUsed,
+      isOverLimit: tokenUsage.isOverLimit,
+      canUseAI: tokenCheck.canUseAI,
+      tokensRemaining: tokenCheck.tokensRemaining,
+      message: tokenCheck.message,
+      subscriptionStatus: user.subscriptionStatus.toLowerCase()
+    });
+  } catch (error: any) {
+    console.error('Error fetching token usage:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/portal', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.stripeCustomerId) {
+      return res.status(400).json({ error: 'No tienes un perfil de facturacion. Inicia una suscripcion primero.' });
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripeCustomerId,
+      return_url: `${FRONTEND_URL}/dashboard/billing`
+    });
+
+    res.json({ url: session.url });
+  } catch (error: any) {
+    console.error('Error creating billing portal session:', error);
     res.status(500).json({ error: error.message });
   }
 });
