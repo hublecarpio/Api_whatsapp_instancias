@@ -20,6 +20,164 @@ from ..schemas.vendor_state import (
     VendorState, AgentAction, ActionType, 
     VendorOutput, IntencionCliente
 )
+from ..schemas.tool_schemas import (
+    SearchProductInput, PaymentInput, FollowupInput,
+    MediaInput, CRMInput, SearchKnowledgeInput
+)
+
+# Map built-in tool names to their Pydantic input models
+BUILTIN_TOOL_SCHEMAS = {
+    "search_product": SearchProductInput,
+    "payment": PaymentInput,
+    "followup": FollowupInput,
+    "media": MediaInput,
+    "crm": CRMInput,
+    "search_knowledge": SearchKnowledgeInput,
+}
+
+
+def _convert_param_to_json_schema(param: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert a parameter definition to proper JSON schema.
+    Handles arrays with items, objects with properties, enums, and formats.
+    """
+    param_type = param.get("type", "string")
+    param_desc = param.get("description", "")
+    
+    schema: Dict[str, Any] = {"description": param_desc}
+    
+    # Map types and handle complex types
+    if param_type in ["number", "integer", "float"]:
+        schema["type"] = "integer" if param_type == "integer" else "number"
+    elif param_type == "boolean":
+        schema["type"] = "boolean"
+    elif param_type == "array":
+        schema["type"] = "array"
+        # Add items schema if provided
+        items_schema = param.get("items", param.get("items_type", {}))
+        if items_schema:
+            if isinstance(items_schema, str):
+                schema["items"] = {"type": items_schema}
+            elif isinstance(items_schema, dict):
+                schema["items"] = items_schema
+        else:
+            # Default to string items if not specified
+            schema["items"] = {"type": "string"}
+    elif param_type == "object":
+        schema["type"] = "object"
+        # Add nested properties if provided
+        nested_props = param.get("properties", {})
+        if nested_props:
+            schema["properties"] = nested_props
+            schema["additionalProperties"] = False
+    else:
+        schema["type"] = "string"
+    
+    # Handle enums
+    if "enum" in param:
+        schema["enum"] = param["enum"]
+    
+    # Handle format (e.g., date-time, email)
+    if "format" in param:
+        schema["format"] = param["format"]
+    
+    return schema
+
+
+def build_openai_tools_schema(tools_available: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Convert tools_available list to OpenAI-compatible tools schema.
+    
+    For built-in tools: Uses Pydantic model_json_schema() for accurate schemas.
+    For custom tools: Converts parameter definitions to proper JSON schema.
+    
+    Returns list ready for ChatOpenAI.bind_tools().
+    """
+    openai_tools = []
+    
+    for tool_def in tools_available:
+        tool_name = tool_def.get("name", "")
+        tool_description = tool_def.get("description", "")
+        
+        # Skip tools with empty names
+        if not tool_name:
+            continue
+        
+        # Check if this is a built-in tool with Pydantic schema
+        base_tool_name = tool_name.replace("custom_", "") if tool_name.startswith("custom_") else tool_name
+        
+        if base_tool_name in BUILTIN_TOOL_SCHEMAS and not tool_name.startswith("custom_"):
+            # Use Pydantic model's JSON schema for built-in tools
+            pydantic_model = BUILTIN_TOOL_SCHEMAS[base_tool_name]
+            json_schema = pydantic_model.model_json_schema()
+            
+            # Clean up schema for OpenAI format
+            parameters_schema = {
+                "type": "object",
+                "properties": json_schema.get("properties", {}),
+                "required": json_schema.get("required", []),
+                "additionalProperties": False
+            }
+            
+            # Remove $defs if present (not needed for OpenAI)
+            if "$defs" in parameters_schema:
+                del parameters_schema["$defs"]
+            
+            function_schema = {
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                    "description": tool_description or json_schema.get("description", ""),
+                    "parameters": parameters_schema
+                }
+            }
+        else:
+            # Custom tool or tool without Pydantic model - convert parameters manually
+            tool_params = tool_def.get("parameters", [])
+            
+            # Check if parameters is already a JSON schema object (not a list)
+            if isinstance(tool_params, dict) and "properties" in tool_params:
+                # Already in JSON schema format - use directly
+                parameters_schema = {
+                    "type": "object",
+                    "properties": tool_params.get("properties", {}),
+                    "required": tool_params.get("required", []),
+                    "additionalProperties": False
+                }
+            else:
+                # Convert list of parameter definitions to JSON schema
+                param_properties = {}
+                required_params = []
+                
+                for param in tool_params:
+                    param_name = param.get("name", "")
+                    if not param_name:
+                        continue
+                    
+                    param_properties[param_name] = _convert_param_to_json_schema(param)
+                    
+                    if param.get("required", True):
+                        required_params.append(param_name)
+                
+                parameters_schema = {
+                    "type": "object",
+                    "properties": param_properties,
+                    "required": required_params,
+                    "additionalProperties": False
+                }
+            
+            function_schema = {
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                    "description": tool_description,
+                    "parameters": parameters_schema
+                }
+            }
+        
+        openai_tools.append(function_schema)
+    
+    return openai_tools
 
 logger = logging.getLogger(__name__)
 
@@ -363,8 +521,7 @@ class VendorAgent:
     ) -> tuple[VendorOutput, int]:
         """
         FASE 2: Método principal del Vendor.
-        SOLO interpreta el mensaje y retorna VendorOutput.
-        NO ejecuta tools, NO decide acciones.
+        Usa function calling nativo de OpenAI para tools.
         """
         self._ensure_model_current()
         
@@ -398,14 +555,46 @@ class VendorAgent:
         messages.append(HumanMessage(content=user_msg))
         
         try:
-            response = self.llm.invoke(messages)
+            # Use native function calling if tools are available
+            llm_to_use = self.llm
+            if tools_available:
+                openai_tools = build_openai_tools_schema(tools_available)
+                if openai_tools:
+                    llm_to_use = self.llm.bind_tools(openai_tools, tool_choice="auto")
+                    logger.info(f"Bound {len(openai_tools)} tools to LLM for native function calling")
+            
+            response = llm_to_use.invoke(messages)
             
             tokens_used = 0
             if hasattr(response, "response_metadata"):
                 usage = response.response_metadata.get("token_usage", {})
                 tokens_used = usage.get("total_tokens", 0)
             
-            output = self._parse_vendor_output(response.content)
+            # Check if response has native tool_calls
+            if hasattr(response, "tool_calls") and response.tool_calls:
+                tool_call = response.tool_calls[0]  # Take first tool call
+                tool_name = tool_call.get("name", "")
+                tool_args = tool_call.get("args", {})
+                
+                logger.info(f"Native tool call detected: {tool_name} with args {tool_args}")
+                
+                # Determine intention based on tool called
+                intencion = self._infer_intention_from_tool(tool_name)
+                
+                # Build VendorOutput with tool suggestion
+                return VendorOutput(
+                    intencion=intencion,
+                    mensaje=response.content or "",
+                    entidades_detectadas={},
+                    productos_mencionados=[],
+                    requiere_tool=True,
+                    tool_sugerida=tool_name,
+                    tool_params_sugeridos=tool_args,
+                    confianza=0.9
+                ), tokens_used
+            
+            # No tool call - parse JSON response as before
+            output = self._parse_vendor_output(response.content or "")
             
             return output, tokens_used
             
@@ -416,6 +605,23 @@ class VendorAgent:
                 mensaje="Lo siento, tuve un problema procesando tu mensaje. ¿Podrías repetirlo?",
                 confianza=0.5
             ), 0
+    
+    def _infer_intention_from_tool(self, tool_name: str) -> IntencionCliente:
+        """Infer client intention based on tool being called."""
+        tool_intention_map = {
+            "search_product": IntencionCliente.CONSULTA_PRODUCTO,
+            "search_knowledge": IntencionCliente.CONSULTA_PRODUCTO,
+            "payment": IntencionCliente.CONFIRMACION_COMPRA,
+            "media": IntencionCliente.CONSULTA_PRODUCTO,
+            "followup": IntencionCliente.OTRO,
+            "crm": IntencionCliente.OTRO,
+        }
+        # For custom tools, default to CONSULTA_DISPONIBILIDAD if it looks like availability
+        if tool_name.startswith("custom_"):
+            if "disponibilidad" in tool_name.lower() or "availability" in tool_name.lower():
+                return IntencionCliente.CONSULTA_DISPONIBILIDAD
+            return IntencionCliente.OTRO
+        return tool_intention_map.get(tool_name, IntencionCliente.OTRO)
     
     def _parse_vendor_output(self, content: str) -> VendorOutput:
         """Parse response into VendorOutput."""
