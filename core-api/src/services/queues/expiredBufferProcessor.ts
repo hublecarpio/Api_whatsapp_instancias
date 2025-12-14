@@ -96,7 +96,7 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
           const job = await queueAIResponse({
             businessId: buffer.businessId,
             contactPhone: buffer.contactPhone,
-            contactName: contactSettings?.contactName || buffer.contactPhone,
+            contactName: contactSettings?.contactName || '',
             messages,
             phone: instance.phoneNumber || '',
             instanceId: instance.id,
@@ -118,7 +118,7 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
             await processAIResponseDirect({
               businessId: buffer.businessId,
               contactPhone: buffer.contactPhone,
-              contactName: contactSettings?.contactName || buffer.contactPhone,
+              contactName: contactSettings?.contactName || '',
               messages,
               phone: instance.phoneNumber || '',
               instanceId: instance.id,
