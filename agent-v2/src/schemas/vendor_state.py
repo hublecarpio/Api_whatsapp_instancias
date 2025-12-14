@@ -55,10 +55,54 @@ class EstadoError(BaseModel):
     recoverable: bool = True
 
 
+STAGE_TRANSITIONS: Dict[str, List[str]] = {
+    "nuevo": ["explorando", "interesado"],
+    "explorando": ["interesado", "cotizando", "abandonado"],
+    "interesado": ["cotizando", "confirmando", "abandonado"],
+    "cotizando": ["negociando", "confirmando", "abandonado"],
+    "negociando": ["confirmando", "abandonado"],
+    "confirmando": ["pagando", "abandonado"],
+    "pagando": ["completado", "abandonado"],
+    "completado": [],
+    "abandonado": ["nuevo"],
+}
+
+STAGE_TOOLS: Dict[str, List[str]] = {
+    "nuevo": ["search_product", "search_knowledge"],
+    "explorando": ["search_product", "search_knowledge", "media", "followup"],
+    "interesado": ["search_product", "search_knowledge", "media", "crm", "followup"],
+    "cotizando": ["search_product", "media", "crm", "followup"],
+    "negociando": ["search_product", "media", "crm", "followup"],
+    "confirmando": ["payment", "media", "crm", "followup"],
+    "pagando": ["followup", "media", "crm"],
+    "completado": ["followup", "media", "crm"],
+    "abandonado": ["followup"],
+}
+
+TOOL_PRECONDITIONS: Dict[str, Dict[str, Any]] = {
+    "payment": {
+        "requires_productos_confirmados": True,
+        "requires_total": True,
+        "allowed_stages": ["confirmando"],
+    },
+    "followup": {
+        "allowed_stages": ["explorando", "interesado", "cotizando", "negociando", "confirmando", "pagando", "completado", "abandonado"],
+    },
+    "crm": {
+        "allowed_stages": ["interesado", "cotizando", "negociando", "confirmando", "pagando", "completado"],
+    },
+    "media": {
+        "allowed_stages": ["explorando", "interesado", "cotizando", "negociando", "confirmando", "pagando", "completado"],
+    },
+}
+
+
 class CommercialState(BaseModel):
     """
     Estado Comercial Explícito - LEY SUPREMA
     REGLA: Si un dato no está en este estado, el agente NO puede actuar sobre él.
+    
+    Máquina de estados con transiciones explícitas definidas en STAGE_TRANSITIONS.
     """
     etapa_comercial: EtapaComercial = EtapaComercial.NUEVO
     intencion_actual: Optional[IntencionCliente] = None
@@ -87,14 +131,47 @@ class CommercialState(BaseModel):
         """Verifica si hay errores críticos que impiden avanzar."""
         return any(not e.recoverable for e in self.errores_estado)
     
+    def can_transition_to(self, new_stage: EtapaComercial) -> tuple[bool, Optional[str]]:
+        """Valida si la transición de etapa es válida."""
+        current = self.etapa_comercial.value
+        target = new_stage.value
+        
+        valid_targets = STAGE_TRANSITIONS.get(current, [])
+        if target not in valid_targets:
+            return False, f"Transición inválida: {current} → {target}. Válidas: {valid_targets}"
+        
+        return True, None
+    
+    def transition_to(self, new_stage: EtapaComercial) -> tuple[bool, Optional[str]]:
+        """Intenta transicionar a una nueva etapa. Retorna (éxito, error)."""
+        can_transition, reason = self.can_transition_to(new_stage)
+        if not can_transition:
+            return False, reason
+        
+        self.etapa_comercial = new_stage
+        return True, None
+    
     def can_execute_tool(self, tool_name: str) -> tuple[bool, Optional[str]]:
         """Valida si se puede ejecutar una herramienta basado en el estado."""
         if not self.estado_valido:
             return False, "Estado inválido - no se pueden ejecutar herramientas"
         
-        if tool_name == "payment":
+        current_stage = self.etapa_comercial.value
+        stage_tools = STAGE_TOOLS.get(current_stage, [])
+        if tool_name not in stage_tools:
+            return False, f"Tool {tool_name} no disponible en etapa {current_stage}"
+        
+        preconditions = TOOL_PRECONDITIONS.get(tool_name, {})
+        
+        allowed_stages = preconditions.get("allowed_stages")
+        if allowed_stages and current_stage not in allowed_stages:
+            return False, f"Tool {tool_name} solo permitida en etapas: {allowed_stages}"
+        
+        if preconditions.get("requires_productos_confirmados"):
             if not self.productos_confirmados:
                 return False, "No hay productos confirmados para generar pago"
+        
+        if preconditions.get("requires_total"):
             if self.total_calculado is None or self.total_calculado <= 0:
                 return False, "Total no calculado o inválido"
         
@@ -102,24 +179,20 @@ class CommercialState(BaseModel):
     
     def get_next_valid_actions(self) -> List[str]:
         """Retorna las acciones válidas según el estado actual."""
-        actions = ["respuesta"]
+        stage = self.etapa_comercial.value
+        tools = STAGE_TOOLS.get(stage, []).copy()
         
-        if self.etapa_comercial == EtapaComercial.NUEVO:
-            actions.extend(["search_product", "search_knowledge"])
-        elif self.etapa_comercial == EtapaComercial.EXPLORANDO:
-            actions.extend(["search_product", "search_knowledge", "media"])
-        elif self.etapa_comercial == EtapaComercial.INTERESADO:
-            actions.extend(["search_product", "media", "crm"])
-        elif self.etapa_comercial == EtapaComercial.COTIZANDO:
-            if self.productos_detectados:
-                actions.append("media")
-        elif self.etapa_comercial == EtapaComercial.CONFIRMANDO:
-            if self.productos_confirmados and self.total_calculado:
-                actions.append("payment")
-        elif self.etapa_comercial == EtapaComercial.PAGANDO:
-            actions.append("followup")
+        validated_tools = []
+        for tool in tools:
+            can_execute, _ = self.can_execute_tool(tool)
+            if can_execute:
+                validated_tools.append(tool)
         
-        return actions
+        return ["respuesta"] + validated_tools
+    
+    def get_valid_transitions(self) -> List[str]:
+        """Retorna las etapas a las que se puede transicionar."""
+        return STAGE_TRANSITIONS.get(self.etapa_comercial.value, [])
 
 
 class VendorOutput(BaseModel):
