@@ -104,7 +104,8 @@ def build_vendor_context(
     memory: Dict[str, Any],
     dynamic_rules: list,
     current_time: str,
-    knowledge_context: Optional[str] = None
+    knowledge_context: Optional[str] = None,
+    tools_available: Optional[list] = None
 ) -> str:
     """Construye el contexto del negocio para el Vendor."""
     context = f"""
@@ -152,6 +153,12 @@ def build_vendor_context(
 ## INFORMACIÓN DE LA BASE DE CONOCIMIENTO:
 {knowledge_context}
 """
+    
+    if tools_available:
+        context += "\n## HERRAMIENTAS DISPONIBLES:\n"
+        for tool in tools_available:
+            context += f"- **{tool['name']}**: {tool['description']}\n"
+        context += "\nPuedes sugerir cualquiera de estas herramientas en 'tool_sugerida'.\n"
     
     return context
 
@@ -319,7 +326,8 @@ class VendorAgent:
         lead_memory: Dict[str, Any],
         dynamic_rules: list,
         sender_name: Optional[str] = None,
-        knowledge_context: Optional[str] = None
+        knowledge_context: Optional[str] = None,
+        tools_available: Optional[list] = None
     ) -> tuple[VendorOutput, int]:
         """
         FASE 2: Método principal del Vendor.
@@ -335,7 +343,8 @@ class VendorAgent:
             memory=lead_memory,
             dynamic_rules=dynamic_rules,
             current_time=current_time,
-            knowledge_context=knowledge_context
+            knowledge_context=knowledge_context,
+            tools_available=tools_available
         )
         
         system_prompt = VENDOR_V2_SYSTEM_PROMPT + context

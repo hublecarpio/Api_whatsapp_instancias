@@ -129,6 +129,10 @@ async def vendor_interpret_node(state: GraphState) -> Dict[str, Any]:
     dynamic_rules = state.get("dynamic_rules", [])
     knowledge_context = state.get("knowledge_context")
     
+    tool_context = build_tool_context(state)
+    tool_router = ToolRouter(tool_context)
+    tools_available = tool_router.get_available_tools()
+    
     vendor = get_vendor_agent()
     
     vendor_output, tokens = await vendor.interpret(
@@ -138,8 +142,11 @@ async def vendor_interpret_node(state: GraphState) -> Dict[str, Any]:
         lead_memory=lead_memory,
         dynamic_rules=dynamic_rules,
         sender_name=state.get("sender_name"),
-        knowledge_context=knowledge_context
+        knowledge_context=knowledge_context,
+        tools_available=tools_available
     )
+    
+    logger.info(f"Vendor suggested tool: {vendor_output.tool_sugerida}, available tools: {[t['name'] for t in tools_available]}")
     
     return {
         "vendor_output": vendor_output.model_dump(),
@@ -209,7 +216,9 @@ async def decide_action_node(state: GraphState) -> Dict[str, Any]:
     if vendor_output.requiere_tool and vendor_output.tool_sugerida:
         tool_name = vendor_output.tool_sugerida
         
-        if commercial_state:
+        is_custom_tool = tool_name.startswith("custom_")
+        
+        if commercial_state and not is_custom_tool:
             can_execute, reason = commercial_state.can_execute_tool(tool_name)
             if not can_execute:
                 logger.warning(f"Tool {tool_name} blocked by state: {reason}")
@@ -235,6 +244,9 @@ async def decide_action_node(state: GraphState) -> Dict[str, Any]:
                         "input_tool": None
                     }
                 }
+        
+        if is_custom_tool:
+            logger.info(f"Custom tool {tool_name} - bypassing state validation")
         
         return {
             "graph_decision": "execute_tool",
