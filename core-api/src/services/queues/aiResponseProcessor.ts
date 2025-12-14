@@ -8,6 +8,7 @@ import { searchProductsIntelligent } from '../productSearch.js';
 import { parseAgentOutputToWhatsAppEvents, calculateTypingDelay, WhatsAppEvent } from '../agentOutputParser.js';
 import { MetaCloudService } from '../metaCloud.js';
 import { scheduleFollowUp } from '../followUpService.js';
+import { analyzeAndUpdateLeadStage } from '../leadStageService.js';
 import axios from 'axios';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
@@ -185,6 +186,22 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     console.log(`[AI Worker] Buffer ${bufferId} deleted after successful processing`);
   }
   
+  // Analyze and update lead stage after agent response (complete interaction cycle)
+  if (result.response) {
+    setImmediate(async () => {
+      try {
+        const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+        console.log(`[AI Worker] Updating lead stage after agent response for ${normalizedPhone}`);
+        const stageResult = await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
+        if (stageResult.success) {
+          console.log(`[AI Worker] Lead stage updated to "${stageResult.newStage}" (confidence: ${stageResult.confidence})`);
+        }
+      } catch (err: any) {
+        console.error('[AI Worker] Post-response lead stage update failed:', err.message);
+      }
+    });
+  }
+  
   return result;
 }
 
@@ -197,6 +214,19 @@ async function processWithAgentV2Worker(
   instanceId: string | undefined
 ): Promise<{ response: string; tokensUsed?: number }> {
   const historyLimit = business.promptMaster?.historyLimit || 10;
+  
+  // Get current lead stage for context
+  const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+  const currentTagAssignment = await prisma.tagAssignment.findUnique({
+    where: {
+      businessId_contactPhone: {
+        businessId: business.id,
+        contactPhone: normalizedPhone
+      }
+    },
+    include: { tag: true }
+  });
+  const currentLeadStage = currentTagAssignment?.tag?.name || null;
   
   const recentMessages = await prisma.messageLog.findMany({
     where: { 
@@ -231,6 +261,12 @@ async function processWithAgentV2Worker(
   );
   
   const combinedMessage = messages.join('\n');
+  
+  // Inject lead stage into business context custom_prompt
+  if (currentLeadStage) {
+    businessContext.custom_prompt = (businessContext.custom_prompt || '') + 
+      `\n\n## Etapa comercial actual del cliente: ${currentLeadStage}\nConsidera esta etapa al responder y guía la conversación hacia el siguiente paso del proceso comercial.`;
+  }
   
   const result = await generateWithAgentV2({
     business_context: businessContext,
@@ -276,6 +312,19 @@ async function processWithAgentV1Worker(
   if (!isOpenAIConfigured()) {
     throw new Error('OpenAI API key not configured');
   }
+  
+  // Get current lead stage for context
+  const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+  const currentTagAssignment = await prisma.tagAssignment.findUnique({
+    where: {
+      businessId_contactPhone: {
+        businessId: business.id,
+        contactPhone: normalizedPhone
+      }
+    },
+    include: { tag: true }
+  });
+  const currentLeadStage = currentTagAssignment?.tag?.name || null;
   
   const promptConfig = business.promptMaster;
   const historyLimit = promptConfig?.historyLimit || 10;
@@ -348,6 +397,11 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   }
   
   systemPrompt = replacePromptVariables(systemPrompt, business.timezone || 'America/Lima');
+  
+  // Add lead stage context if available
+  if (currentLeadStage) {
+    systemPrompt += `\n\n## Etapa comercial actual del cliente: ${currentLeadStage}\nConsidera esta etapa al responder y guía la conversación hacia el siguiente paso del proceso comercial.`;
+  }
   
   const recentMessages = await prisma.messageLog.findMany({
     where: { 
@@ -838,16 +892,39 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
   
   const targetInstanceId = instanceId || business.instances?.[0]?.id;
   
+  let result: { response: string; tokensUsed?: number };
+  
   if (business.agentVersion === 'v2') {
     try {
       const v2Available = await isAgentV2Available();
       if (v2Available) {
-        return await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
+        result = await processWithAgentV2Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
+      } else {
+        result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
       }
     } catch (v2Error: any) {
       console.error('[AI Direct] Agent V2 error, falling back to V1:', v2Error.message);
+      result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
     }
+  } else {
+    result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
   }
   
-  return await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
+  // Analyze and update lead stage after agent response (complete interaction cycle)
+  if (result.response) {
+    setImmediate(async () => {
+      try {
+        const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+        console.log(`[AI Direct] Updating lead stage after agent response for ${normalizedPhone}`);
+        const stageResult = await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
+        if (stageResult.success) {
+          console.log(`[AI Direct] Lead stage updated to "${stageResult.newStage}" (confidence: ${stageResult.confidence})`);
+        }
+      } catch (err: any) {
+        console.error('[AI Direct] Post-response lead stage update failed:', err.message);
+      }
+    });
+  }
+  
+  return result;
 }
