@@ -790,22 +790,17 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
               const allVars: Record<string, any> = { ...dynamicContext, ...args };
               
               // Replace placeholders with appropriate values
+              // Strategy: use JSON.stringify for all values to ensure valid JSON output
+              // This handles strings (adds quotes), numbers, booleans, arrays, objects correctly
               for (const [key, value] of Object.entries(allVars)) {
-                const isComplex = typeof value === 'object' && value !== null;
-                
                 // For quoted placeholders like "{{key}}", replace with JSON value
                 const quotedRegex = new RegExp(`"\\{\\{${key}\\}\\}"`, 'g');
                 bodyStr = bodyStr.replace(quotedRegex, JSON.stringify(value));
                 
-                // For unquoted placeholders like {{key}}
+                // For unquoted placeholders like {{key}} - always use JSON.stringify
+                // This ensures strings get proper quotes, arrays/objects get serialized correctly
                 const unquotedRegex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-                if (isComplex) {
-                  // Arrays/objects need JSON serialization
-                  bodyStr = bodyStr.replace(unquotedRegex, JSON.stringify(value));
-                } else {
-                  // Scalars (string, number, boolean) - use raw value
-                  bodyStr = bodyStr.replace(unquotedRegex, String(value));
-                }
+                bodyStr = bodyStr.replace(unquotedRegex, JSON.stringify(value));
               }
               
               // Try parsing as JSON after interpolation
