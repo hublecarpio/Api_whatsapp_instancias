@@ -94,8 +94,12 @@ def fetch_platform_model_config() -> dict:
                 return _platform_config
     except Exception as e:
         logger.warning(f"Failed to fetch platform config: {e}")
-    
-    return {
+
+    if _platform_config:
+        logger.info("Using last known platform config after fetch failure")
+        return _platform_config
+
+    _platform_config = {
         "v2": {
             "model": settings.openai_model,
             "reasoningEffort": "none",
@@ -105,11 +109,15 @@ def fetch_platform_model_config() -> dict:
         }
     }
 
+    _config_fetch_time = now
+    return _platform_config
+
 
 def get_v2_model() -> str:
     """Get the configured model for Agent V2 (legacy/default)."""
     config = fetch_platform_model_config()
-    return config.get("v2", {}).get("model", "gpt-4o")
+    settings = get_settings()
+    return config.get("v2", {}).get("model", settings.openai_model)
 
 
 def get_v2_reasoning_effort() -> ReasoningEffort:
@@ -121,19 +129,22 @@ def get_v2_reasoning_effort() -> ReasoningEffort:
 def get_vendor_model() -> str:
     """Get the configured model for Agent V2 Vendor brain (client-facing)."""
     config = fetch_platform_model_config()
-    return config.get("v2", {}).get("vendorModel", "gpt-5.2")
+    settings = get_settings()
+    return config.get("v2", {}).get("vendorModel", settings.vendor_model)
 
 
 def get_observer_model() -> str:
     """Get the configured model for Agent V2 Observer brain (validation)."""
     config = fetch_platform_model_config()
-    return config.get("v2", {}).get("observerModel", "gpt-4.1-mini")
+    settings = get_settings()
+    return config.get("v2", {}).get("observerModel", settings.observer_model)
 
 
 def get_refiner_model() -> str:
     """Get the configured model for Agent V2 Refiner brain (learning)."""
     config = fetch_platform_model_config()
-    return config.get("v2", {}).get("refinerModel", "gpt-4.1-mini")
+    settings = get_settings()
+    return config.get("v2", {}).get("refinerModel", settings.refiner_model)
 
 
 def fetch_prompt_sections_context(business_id: str, message: str) -> dict:
