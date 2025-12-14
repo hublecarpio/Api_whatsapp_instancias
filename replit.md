@@ -36,6 +36,7 @@ The platform employs a microservices-like architecture with a **Frontend (Next.j
 *   **Production-Grade Baileys Stability**: Redis session state, watchdog heartbeat, rate limiting, error handling, and Docker restart persistence for automatic reconnection.
 *   **Gemini Multimedia Processing**: Integrates Google Gemini API for audio transcription, image, and video analysis.
 *   **Customizable Contact Data Extraction**: AI extracts custom fields from conversations.
+*   **Automatic Lead Stage Updates**: Lead stages are automatically analyzed and updated after each complete interaction cycle (client message → AI response) using Gemini. Both Agent V1 and V2 receive the current lead stage as context to guide conversations appropriately.
 *   **Intelligent Product Search**: Fuzzy matching with typo tolerance.
 *   **Provider-Separated Token Usage Tracking**: Tracks token usage by provider and feature.
 *   **Payment Mode Control**: `paymentLinkEnabled` toggle determines Stripe payment link vs. voucher-based order flow.
