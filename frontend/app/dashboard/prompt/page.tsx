@@ -176,7 +176,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'config' | 'api'>('prompt');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'files' | 'config' | 'api'>('prompt');
   
   const [promptSections, setPromptSections] = useState<PromptSection[]>([]);
   const [loadingSections, setLoadingSections] = useState(false);
@@ -1264,6 +1264,14 @@ export default function PromptPage() {
             Tools ({tools.length})
           </button>
           <button
+            onClick={() => setActiveV2Tab('files')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'files' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Archivos ({agentFiles.length})
+          </button>
+          <button
             onClick={() => {
               setActiveV2Tab('config');
               setActiveTab('config');
@@ -1982,6 +1990,214 @@ export default function PromptPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-neon-blue">4.</span>
+                <span>El agente enviara automaticamente el archivo mas relevante segun la conversacion</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'files' && (
+        <div className="space-y-6">
+          <div className="card">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Archivos del Agente</h2>
+                <p className="text-sm text-gray-400">
+                  Sube documentos, fotos o archivos que el agente puede enviar automaticamente segun el contexto de la conversacion.
+                </p>
+              </div>
+              {!showFileForm && (
+                <button
+                  onClick={() => setShowFileForm(true)}
+                  className="btn btn-primary w-full sm:w-auto"
+                >
+                  + Subir Archivo
+                </button>
+              )}
+            </div>
+
+            {showFileForm && (
+              <div className="border border-dark-hover rounded-lg p-4 mb-4 space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-white">Nuevo Archivo</h3>
+                  <button
+                    onClick={() => { setShowFileForm(false); setSelectedFile(null); setNewFile({ name: '', description: '', triggerKeywords: '', triggerContext: '' }); }}
+                    className="text-sm text-gray-400 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Archivo</label>
+                  <input
+                    type="file"
+                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                    className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-dark-hover file:text-white hover:file:bg-neon-purple/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Nombre (opcional)</label>
+                  <input
+                    type="text"
+                    value={newFile.name}
+                    onChange={(e) => setNewFile({ ...newFile, name: e.target.value })}
+                    placeholder="Nombre descriptivo del archivo"
+                    className="input"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Descripcion</label>
+                  <textarea
+                    value={newFile.description}
+                    onChange={(e) => setNewFile({ ...newFile, description: e.target.value })}
+                    placeholder="Describe el contenido del archivo para que el agente sepa cuando usarlo"
+                    className="input resize-none"
+                    rows={2}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Palabras Clave de Activacion</label>
+                  <input
+                    type="text"
+                    value={newFile.triggerKeywords}
+                    onChange={(e) => setNewFile({ ...newFile, triggerKeywords: e.target.value })}
+                    placeholder="planos, triptico, catalogo, precios (separadas por comas)"
+                    className="input"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Palabras que el cliente debe mencionar para que el agente envie este archivo</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Contexto de Envio</label>
+                  <textarea
+                    value={newFile.triggerContext}
+                    onChange={(e) => setNewFile({ ...newFile, triggerContext: e.target.value })}
+                    placeholder="Ej: Cuando el cliente pregunte por los planos de departamentos o quiera ver opciones disponibles"
+                    className="input resize-none"
+                    rows={2}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Describe el contexto o situacion en que el agente debe enviar este archivo</p>
+                </div>
+
+                <button
+                  onClick={handleUploadFile}
+                  disabled={uploadingFile || !selectedFile}
+                  className="btn btn-primary w-full"
+                >
+                  {uploadingFile ? 'Subiendo...' : 'Subir Archivo'}
+                </button>
+              </div>
+            )}
+
+            {loadingFiles ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 border-2 border-neon-purple border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : agentFiles.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <svg className="w-12 h-12 mx-auto mb-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                <p>No hay archivos configurados</p>
+                <p className="text-sm text-gray-500 mt-1">Sube archivos que el agente pueda enviar a tus clientes</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {agentFiles.map((file, idx) => (
+                  <div key={file.id} className={`border rounded-lg p-4 ${file.enabled ? 'border-dark-hover bg-dark-surface' : 'border-gray-700 bg-gray-800/50 opacity-60'}`}>
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0">
+                        {file.fileType === 'image' ? (
+                          <img src={file.fileUrl} alt={file.name} className="w-16 h-16 object-cover rounded-lg" />
+                        ) : (
+                          <div className="w-16 h-16 bg-dark-hover rounded-lg flex items-center justify-center">
+                            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs px-2 py-0.5 bg-neon-purple/20 text-neon-purple rounded">#{idx + 1}</span>
+                          <h3 className="font-medium text-white truncate">{file.name}</h3>
+                        </div>
+                        {file.description && (
+                          <p className="text-sm text-gray-400 mt-1 line-clamp-2">{file.description}</p>
+                        )}
+                        {file.triggerKeywords && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {file.triggerKeywords.split(',').map((kw, i) => (
+                              <span key={i} className="text-xs px-2 py-0.5 bg-dark-hover text-gray-300 rounded">{kw.trim()}</span>
+                            ))}
+                          </div>
+                        )}
+                        {file.triggerContext && (
+                          <p className="text-xs text-gray-500 mt-2 italic">{file.triggerContext}</p>
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-col gap-1">
+                        <button onClick={() => handleMoveFile(file.id, 'up')} disabled={idx === 0} className="p-1.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded disabled:opacity-30 disabled:cursor-not-allowed">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                        </button>
+                        <button onClick={() => handleMoveFile(file.id, 'down')} disabled={idx === agentFiles.length - 1} className="p-1.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded disabled:opacity-30 disabled:cursor-not-allowed">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleUpdateFile(file.id, { enabled: !file.enabled })}
+                          className={`p-2 rounded-lg transition-colors ${file.enabled ? 'text-accent-success hover:bg-accent-success/10' : 'text-gray-500 hover:bg-gray-700'}`}
+                          title={file.enabled ? 'Desactivar' : 'Activar'}
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            {file.enabled ? (
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            ) : (
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            )}
+                          </svg>
+                        </button>
+                        <a href={file.fileUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg" title="Ver archivo">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        </a>
+                        <button onClick={() => handleDeleteFile(file.id)} className="p-2 text-gray-400 hover:text-accent-error hover:bg-accent-error/10 rounded-lg" title="Eliminar">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card bg-dark-surface/50">
+            <h3 className="text-sm font-semibold text-gray-300 mb-2">Como funciona</h3>
+            <ul className="text-sm text-gray-400 space-y-2">
+              <li className="flex items-start gap-2">
+                <span className="text-neon-purple">1.</span>
+                <span>Sube archivos como tripticos, catalogos, planos o fotos de productos</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-neon-purple">2.</span>
+                <span>Define palabras clave y contexto para que el agente sepa cuando enviarlos</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-neon-purple">3.</span>
+                <span>El orden determina la prioridad: archivos arriba tienen precedencia</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-neon-purple">4.</span>
                 <span>El agente enviara automaticamente el archivo mas relevante segun la conversacion</span>
               </li>
             </ul>

@@ -279,7 +279,7 @@ async function processWithAgentV1Worker(
   
   const promptConfig = business.promptMaster;
   const historyLimit = promptConfig?.historyLimit || 10;
-  const tools = promptConfig?.tools || [];
+  const userTools = promptConfig?.tools || [];
   
   let systemPrompt = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
   
@@ -326,6 +326,27 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
     });
   }
   
+  const agentFiles = await prisma.agentFile.findMany({
+    where: { 
+      prompt: { businessId: business.id },
+      enabled: true 
+    },
+    orderBy: { order: 'asc' }
+  });
+  
+  if (agentFiles.length > 0) {
+    systemPrompt += `\n\n## Archivos disponibles para enviar:`;
+    systemPrompt += `\nTienes acceso a ${agentFiles.length} archivos que puedes enviar al cliente cuando sea relevante.`;
+    systemPrompt += `\nUsa la función enviar_archivo cuando el cliente pregunte por alguno de estos temas o cuando sea apropiado según el contexto:`;
+    agentFiles.forEach((file: any) => {
+      systemPrompt += `\n- [ID:${file.id}] ${file.name}`;
+      if (file.description) systemPrompt += `: ${file.description}`;
+      if (file.triggerKeywords) systemPrompt += ` (keywords: ${file.triggerKeywords})`;
+      if (file.triggerContext) systemPrompt += ` | Enviar cuando: ${file.triggerContext}`;
+    });
+    systemPrompt += `\n\nIMPORTANTE: Cuando detectes que el cliente pregunta por algo relacionado a estos archivos (por keywords o contexto), usa enviar_archivo con el ID correspondiente.`;
+  }
+  
   systemPrompt = replacePromptVariables(systemPrompt, business.timezone || 'America/Lima');
   
   const recentMessages = await prisma.messageLog.findMany({
@@ -349,38 +370,177 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   const combinedUserMessage = messages.join('\n');
   conversationHistory.push({ role: 'user', content: combinedUserMessage });
   
-  const chatMessages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    ...conversationHistory.map(msg => ({
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content
-    }))
-  ];
+  const openaiTools: any[] = [];
+  
+  if (productCount > 20) {
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: 'buscar_producto',
+        description: 'Busca productos en el catálogo por nombre o descripción.',
+        parameters: {
+          type: 'object',
+          properties: {
+            consulta: { type: 'string', description: 'Término de búsqueda' }
+          },
+          required: ['consulta']
+        }
+      }
+    });
+  }
+  
+  if (agentFiles.length > 0) {
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: 'enviar_archivo',
+        description: 'Envía un archivo (documento, imagen, catálogo, etc.) al cliente.',
+        parameters: {
+          type: 'object',
+          properties: {
+            archivo_id: { type: 'string', description: 'ID del archivo a enviar' },
+            mensaje_acompanante: { type: 'string', description: 'Mensaje breve que acompaña al archivo' }
+          },
+          required: ['archivo_id']
+        }
+      }
+    });
+  }
   
   const modelConfig = await getModelForAgent('v1', business.openaiModel);
   
-  const result = await callOpenAI({
-    model: modelConfig.model,
-    messages: chatMessages,
-    reasoningEffort: modelConfig.reasoningEffort,
-    maxTokens: 1000,
-    temperature: 0.7,
-    maxHistoryTokens: 3000,
-    context: {
-      businessId: business.id,
-      userId: business.userId,
-      feature: 'agent_v1_worker'
+  if (openaiTools.length === 0) {
+    const chatMessages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...conversationHistory.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content
+      }))
+    ];
+    
+    const result = await callOpenAI({
+      model: modelConfig.model,
+      messages: chatMessages,
+      reasoningEffort: modelConfig.reasoningEffort,
+      maxTokens: 1000,
+      temperature: 0.7,
+      maxHistoryTokens: 3000,
+      context: {
+        businessId: business.id,
+        userId: business.userId,
+        feature: 'agent_v1_worker'
+      }
+    });
+    
+    const aiResponse = result.content;
+    const tokensUsed = result.usage?.totalTokens;
+    
+    if (instanceId && aiResponse) {
+      await sendWhatsAppResponse(instanceId, phone, aiResponse, business);
     }
-  });
+    
+    return { response: aiResponse, tokensUsed };
+  }
   
-  const aiResponse = result.content;
-  const tokensUsed = result.usage?.totalTokens;
+  const { getOpenAIClient, logTokenUsage: logTokens } = await import('../openaiService.js');
+  const openai = getOpenAIClient();
+  
+  const chatParams: any = {
+    model: modelConfig.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...conversationHistory
+    ],
+    max_tokens: 1000,
+    temperature: 0.7,
+    tools: openaiTools,
+    tool_choice: 'auto'
+  };
+  
+  let completion = await openai.chat.completions.create(chatParams);
+  let totalTokens = completion.usage?.total_tokens || 0;
+  
+  let maxIterations = 5;
+  let iteration = 0;
+  
+  while (completion.choices[0]?.message?.tool_calls && iteration < maxIterations) {
+    iteration++;
+    const toolCalls = completion.choices[0].message.tool_calls;
+    const toolMessages: any[] = [completion.choices[0].message];
+    
+    for (const toolCall of toolCalls) {
+      const fn = (toolCall as any).function;
+      const toolName = fn.name;
+      
+      if (toolName === 'buscar_producto') {
+        const args = JSON.parse(fn.arguments);
+        const searchResult = await searchProductsIntelligent(business.id, args.consulta || '', 5);
+        
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(searchResult.products.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            price: `${currencySymbol}${p.price}`,
+            stock: p.stock,
+            description: p.description?.substring(0, 100)
+          })))
+        });
+      } else if (toolName === 'enviar_archivo') {
+        const args = JSON.parse(fn.arguments);
+        const archivo = agentFiles.find((f: any) => f.id === args.archivo_id);
+        
+        if (archivo) {
+          const mensajeAcompanante = args.mensaje_acompanante || '';
+          const responseText = mensajeAcompanante 
+            ? `${mensajeAcompanante}\n[MEDIA:${archivo.fileUrl}]`
+            : `[MEDIA:${archivo.fileUrl}]`;
+          
+          if (instanceId) {
+            await sendWhatsAppResponse(instanceId, phone, responseText, business);
+          }
+          
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Archivo "${archivo.name}" enviado exitosamente al cliente.`
+          });
+        } else {
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Error: Archivo con ID ${args.archivo_id} no encontrado.`
+          });
+        }
+      }
+    }
+    
+    chatParams.messages.push(...toolMessages);
+    delete chatParams.tools;
+    delete chatParams.tool_choice;
+    
+    completion = await openai.chat.completions.create(chatParams);
+    totalTokens += completion.usage?.total_tokens || 0;
+  }
+  
+  const aiResponse = completion.choices[0]?.message?.content || '';
+  
+  await logTokens({
+    businessId: business.id,
+    userId: business.userId,
+    feature: 'agent_v1_worker',
+    model: modelConfig.model,
+    promptTokens: Math.floor(totalTokens * 0.7),
+    completionTokens: Math.floor(totalTokens * 0.3),
+    totalTokens
+  }).catch(err => console.error('[AI Worker] Token logging failed:', err.message));
   
   if (instanceId && aiResponse) {
     await sendWhatsAppResponse(instanceId, phone, aiResponse, business);
   }
   
-  return { response: aiResponse, tokensUsed };
+  return { response: aiResponse, tokensUsed: totalTokens };
 }
 
 async function sendWhatsAppResponse(
