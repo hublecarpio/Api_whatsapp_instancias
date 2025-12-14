@@ -804,19 +804,19 @@ export default function BillingPage() {
             {referralStats && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-dark-hover rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-white">{referralStats.totalReferrals}</div>
+                  <div className="text-2xl font-bold text-white">{referralStats.totalReferrals || 0}</div>
                   <div className="text-gray-400 text-xs">Referidos</div>
                 </div>
                 <div className="bg-dark-hover rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-accent-success">{referralStats.activeSubscribers}</div>
+                  <div className="text-2xl font-bold text-accent-success">{referralStats.activeSubscribers || 0}</div>
                   <div className="text-gray-400 text-xs">Activos</div>
                 </div>
                 <div className="bg-dark-hover rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-accent-warning">${referralStats.pendingEarnings.toFixed(2)}</div>
+                  <div className="text-2xl font-bold text-accent-warning">${(referralStats.pendingEarnings || 0).toFixed(2)}</div>
                   <div className="text-gray-400 text-xs">Pendiente</div>
                 </div>
                 <div className="bg-dark-hover rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-neon-blue">${referralStats.totalEarnings.toFixed(2)}</div>
+                  <div className="text-2xl font-bold text-neon-blue">${(referralStats.totalEarnings || 0).toFixed(2)}</div>
                   <div className="text-gray-400 text-xs">Total ganado</div>
                 </div>
               </div>
