@@ -279,6 +279,11 @@ def format_tool_result(result: Dict[str, Any]) -> str:
         if "context" in result and result["context"]:
             return f"{message}\n\nInformación encontrada:\n{result['context']}"
         
+        if "data" in result and result["data"]:
+            import json
+            data_str = json.dumps(result["data"], ensure_ascii=False, indent=2)
+            return f"{message}\n\nDatos de la herramienta:\n{data_str}"
+        
         return message
     else:
         return result.get("message", result.get("error", "Error desconocido"))

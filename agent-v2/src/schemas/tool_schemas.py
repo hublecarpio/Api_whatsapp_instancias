@@ -29,7 +29,7 @@ TOOL_OUTPUT_SCHEMAS: Dict[str, Dict[str, type]] = {
         "message": str
     },
     "custom_tool": {
-        "result": str,
+        "data": dict,
         "message": str
     }
 }
