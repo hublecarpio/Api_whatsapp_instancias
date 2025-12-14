@@ -164,12 +164,22 @@ def validate_vendor_response(response_text: str) -> tuple[bool, list[str]]:
         (is_valid, violations) - True si no hay violaciones, lista de patrones detectados
     """
     import re
+    import json
     
     if not response_text:
         return True, []
     
     violations = []
     text_lower = response_text.lower()
+    
+    stripped = response_text.strip()
+    if stripped.startswith('{') and stripped.endswith('}'):
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict) and any(k in parsed for k in ['intencion', 'accion', 'tool_sugerida', 'requiere_tool', 'nombre_tool']):
+                violations.append("raw_json_response")
+        except json.JSONDecodeError:
+            pass
     
     for pattern in BLOCKED_RESPONSE_PATTERNS:
         if re.search(pattern, text_lower, re.IGNORECASE):
@@ -190,9 +200,19 @@ def sanitize_vendor_response(response_text: str) -> str:
     Cubre TODOS los patrones de BLOCKED_RESPONSE_PATTERNS.
     """
     import re
+    import json
     
     if not response_text:
         return response_text
+    
+    stripped = response_text.strip()
+    if stripped.startswith('{') and stripped.endswith('}'):
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict) and 'mensaje' in parsed:
+                return parsed['mensaje']
+        except json.JSONDecodeError:
+            pass
     
     sanitized = response_text
     
