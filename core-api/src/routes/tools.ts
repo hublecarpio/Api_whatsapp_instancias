@@ -258,9 +258,18 @@ router.post('/:id/test', async (req: AuthRequest, res: Response) => {
       headers
     };
     
+    let requestBody: any = null;
     if (tool.method !== 'GET' && tool.bodyTemplate) {
-      const body = interpolateValue(tool.bodyTemplate, allVars);
-      fetchOptions.body = JSON.stringify(body);
+      requestBody = interpolateValue(tool.bodyTemplate, allVars);
+      fetchOptions.body = JSON.stringify(requestBody);
+    }
+    
+    console.log('[Tool Test] Testing tool:', tool.name);
+    console.log('[Tool Test] URL:', interpolatedUrl);
+    console.log('[Tool Test] Method:', tool.method);
+    console.log('[Tool Test] Variables:', allVars);
+    if (requestBody) {
+      console.log('[Tool Test] Body:', JSON.stringify(requestBody, null, 2));
     }
     
     const startTime = Date.now();
@@ -275,11 +284,20 @@ router.post('/:id/test', async (req: AuthRequest, res: Response) => {
       parsed = data;
     }
     
+    console.log('[Tool Test] Response status:', response.status, response.statusText);
+    console.log('[Tool Test] Duration:', duration, 'ms');
+    
     res.json({
       status: response.status,
       statusText: response.statusText,
       data: parsed,
-      duration
+      duration,
+      debug: {
+        interpolatedUrl,
+        method: tool.method,
+        variables: allVars,
+        requestBody
+      }
     });
   } catch (error: any) {
     console.error('Test tool error:', error);

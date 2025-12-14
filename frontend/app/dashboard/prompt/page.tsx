@@ -158,7 +158,7 @@ export default function PromptPage() {
   const [testingTool, setTestingTool] = useState<Tool | null>(null);
   const [testVariables, setTestVariables] = useState<Record<string, string>>({});
   const [testLoading, setTestLoading] = useState(false);
-  const [testResponse, setTestResponse] = useState<{ status?: number; data?: any; error?: string; duration?: number } | null>(null);
+  const [testResponse, setTestResponse] = useState<{ status?: number; data?: any; error?: string; duration?: number; debug?: { interpolatedUrl?: string; method?: string; variables?: Record<string, string>; requestBody?: any } } | null>(null);
   const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools' | 'files'>('prompt');
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedToolForLogs, setSelectedToolForLogs] = useState<Tool | null>(null);
@@ -1022,7 +1022,8 @@ export default function PromptPage() {
       setTestResponse({
         status: res.data.status,
         data: res.data.data,
-        duration: res.data.duration
+        duration: res.data.duration,
+        debug: res.data.debug
       });
     } catch (err: any) {
       setTestResponse({
@@ -2897,6 +2898,32 @@ export default function PromptPage() {
                         : JSON.stringify(testResponse.data, null, 2)}
                     </pre>
                   </div>
+                )}
+
+                {testResponse.debug && (
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-sm text-gray-400 hover:text-white">
+                      Ver detalles de la peticion
+                    </summary>
+                    <div className="mt-2 space-y-2 text-xs">
+                      <div className="bg-dark-surface rounded p-2">
+                        <span className="text-gray-500">URL:</span>
+                        <p className="text-purple-400 font-mono break-all">{testResponse.debug.interpolatedUrl}</p>
+                      </div>
+                      <div className="bg-dark-surface rounded p-2">
+                        <span className="text-gray-500">Metodo:</span>
+                        <span className="ml-2 text-neon-blue">{testResponse.debug.method}</span>
+                      </div>
+                      {testResponse.debug.requestBody && (
+                        <div className="bg-dark-surface rounded p-2">
+                          <span className="text-gray-500">Body enviado:</span>
+                          <pre className="text-gray-300 mt-1 overflow-x-auto">
+                            {JSON.stringify(testResponse.debug.requestBody, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  </details>
                 )}
               </div>
             )}
