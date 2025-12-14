@@ -1,7 +1,7 @@
 # WhatsApp SaaS Platform
 
 ## Overview
-This project is a multi-tenant SaaS platform providing a WhatsApp API solution with integrated AI-powered chat automation. Its purpose is to enable businesses to manage WhatsApp communications, automate responses using AI, and integrate with external tools. The platform aims to streamline customer interactions, enhance business efficiency, and offer a robust, scalable communication channel. The business vision is to provide a comprehensive communication tool that leverages AI to transform customer service and engagement for various industries, offering significant market potential in the growing SaaS and communication automation sectors.
+This project is a multi-tenant SaaS platform offering a WhatsApp API solution with integrated AI-powered chat automation. It enables businesses to manage WhatsApp communications, automate responses using AI, and integrate with external tools. The platform aims to streamline customer interactions, enhance business efficiency, and provide a robust, scalable communication channel. The vision is to deliver a comprehensive communication tool that leverages AI to transform customer service and engagement across various industries, tapping into the significant market potential of the SaaS and communication automation sectors.
 
 ## User Preferences
 I prefer clear and concise explanations.
@@ -11,62 +11,54 @@ I prefer that the agent focuses on completing the current task rather than askin
 Do not make changes to the `docker-stack-external-db.yml` file.
 
 ## System Architecture
-The platform utilizes a microservices-like architecture comprising a **Frontend (Next.js)**, a **Core API (Node.js/Express)**, and a **WhatsApp API (Node.js/Baileys & Meta Cloud API)**.
+The platform employs a microservices-like architecture with a **Frontend (Next.js)**, a **Core API (Node.js/Express)**, and a **WhatsApp API (Node.js/Baileys & Meta Cloud API)**.
 
-**UI/UX Decisions**: The frontend features a modern, WhatsApp-style chat panel with message bubbles, read receipts, and support for various media types, including a collapsible sidebar, AI Agent configuration, and an accordion-style UI for orders.
+**UI/UX Decisions**: Features a modern, WhatsApp-style chat panel, collapsible sidebar, AI Agent configuration, and accordion-style UI for orders. Branding includes a reusable `HubleFooter` component.
 
 **Technical Implementations**:
 *   **AI Pipeline**: Processes incoming WhatsApp messages using business context, conversation history, and OpenAI API for AI responses.
-*   **Multi-Provider WhatsApp**: Supports both Baileys (WhatsApp Web) and Meta Cloud API (official accounts).
-*   **Meta Cloud API Integration**: Includes provider selection, webhooks, media sending, and Meta-approved message templates with 24-hour conversation window management.
+*   **Multi-Provider WhatsApp**: Supports both Baileys (WhatsApp Web) and Meta Cloud API.
+*   **Meta Cloud API Integration**: Includes provider selection, webhooks, media sending, and Meta-approved message templates.
 *   **AI Agent Tools**: Enables AI agents to call external POST endpoints with dynamic parameter interpolation.
-*   **Message Buffering**: Accumulates messages before triggering AI responses.
-*   **Multimodal Response Handling**: Automatically detects and sends various media types.
-*   **Reminder/Follow-up System**: Event-driven architecture via `followUpService.ts` that schedules follow-ups immediately after agent/human sends message and cancels them when user replies. The `reminderWorker` processes scheduled reminders, respecting business timezones and daily limits.
-*   **Redis + BullMQ Queue System**: Robust job processing for reminders, message buffering, WhatsApp messages, and AI responses with retry logic. Features a high-concurrency BullMQ AI Response Queue for parallel OpenAI API calls.
-*   **Stripe Billing Integration**: Implements a 7-day free trial, recurring payments ($97/month), webhook handling, and account suspension. Features tiered token limits (Trial: 500K tokens, Pro: 5M tokens) and on-demand token credit purchases ($5 per 1M tokens) with direct charge to saved payment method.
-*   **Plan Type Differentiation**: The `/me` endpoint returns a `planType` field ('pro' | 'basic' | 'trial' | 'none') with priority: Enterprise (via referral code/proBonusExpiresAt) > Basic (Stripe subscription) > Trial. The sidebar displays differentiated badges: "Avanzado" (purple) for enterprise users, "Basic" (blue) for Stripe subscribers.
-*   **Stripe Subscription Freeze for Enterprise**: When users apply an Enterprise referral code, their Stripe subscription is automatically paused (using `pause_collection`) to avoid double billing. When Enterprise expires, Stripe subscription auto-resumes on next login. The `stripePausedAt` field tracks pause state.
-*   **Email Verification System**: Requires email verification for WhatsApp instance creation, with server-side enforcement and SMTP integration.
-*   **Robust Deployment**: Dockerized services with improved health checks and environment variable support.
-*   **Super Admin Panel**: Centralized administration with Command Center (dashboard), DevConsole (event log viewer), user/business management, WhatsApp instance control, token usage tracking, billing, and referral code management.
-*   **System Event Logging**: Centralized `eventLogger` service tracks all platform events with severity levels and metadata.
-*   **Centralized OpenAI API Management**: Uses a single platform-wide OpenAI API key, allows model selection, and logs token usage. Features a unified `callOpenAI()` wrapper that automatically routes GPT-5+ models to the Responses API with optional reasoning effort, while GPT-4 and earlier use Chat Completions API. Includes token optimization via conversation history truncation.
-*   **Dynamic AI Model Configuration**: Super Admin can configure default AI models for Agent V1 and V2 via PlatformSettings, with support for GPT-5/5.2/5.2-Pro and configurable reasoning effort (low/medium/high). Businesses can override with custom model selection.
-*   **Per-Contact Bot Control**: Provides global and per-contact bot control with UI toggles.
-*   **Dynamic Prompt Variables**: Supports dynamic variables like `{{now}}` with configurable timezones for OpenAI prompts.
-*   **Agent V2 - Multi-Agent AI System (Python/LangGraph)**: Advanced Python microservice with a 3-brain architecture (Vendor → Observer → Refiner), 5 executable tools, Redis-backed memory, OpenAI embeddings for semantic product search, and dynamic learning. Features dynamic runtime model refresh - agents fetch platform model config from Core API (cached 60s) and rebuild LLM instances when config changes, enabling Super Admin model updates without service restart. Includes production-ready health checks with dependency validation (Redis/Core API/OpenAI), structured logging, and Docker Swarm deployment documentation (DOCKER_ENV.md).
-*   **Agent V2 State-Governed Architecture (v2.0 Hardened)**: Implements an 8-phase hardening roadmap transforming the agent into a state-governed system. Key components: (1) `CommercialState` as supreme law with explicit sales stages (`EtapaComercial`) and customer intentions (`IntencionCliente`), (2) Vendor contract restricted to interpretation only via `interpret()` method - no tool execution, (3) LangGraph state-governed flow with `load_state → vendor_interpret → state_validation → decide_action → execute_tool → update_state → finalize` nodes where the GRAPH decides actions (not LLM), (4) Observer as guardian validator blocking invalid state transitions, (5) Controlled learning with `reglas_pendientes` requiring admin approval before activation, (6) Tools as pure infrastructure without business logic. See `AGENT_V2_MATRIX.md` for validation scenarios.
-*   **Agent V2 Custom Tools Support**: Custom tools defined by businesses are now properly exposed to the Vendor LLM. The `vendor_interpret_node` fetches all available tools (built-in + custom) from `ToolRouter` and passes them to the Vendor's context. Custom tools are prefixed with `custom_` (e.g., `custom_llamar`) and bypass state validation to ensure they can always be executed. The `CustomToolHandler` in Python executes HTTP requests with dynamic parameter interpolation.
-*   **Production-Grade Baileys Stability**: Features Redis session state, watchdog heartbeat, rate limiting, and robust error handling. Includes Docker restart persistence: InstanceManager fetches active instances from Core API/PostgreSQL on startup (with Redis and local JSON fallback), enabling automatic reconnection after container restarts without requiring QR re-scan.
-*   **Gemini Multimedia Processing**: Integrates Google Gemini API for audio transcription, image analysis, and video analysis.
-*   **Meta Cloud Media Upload Flow**: Handles media download, upload to Meta's API, and audio conversion.
-*   **Customizable Contact Data Extraction**: Allows AI to define and extract custom fields from conversations.
-*   **Intelligent Product Search**: Implements fuzzy matching for product search with typo tolerance.
+*   **Reminder/Follow-up System**: Event-driven scheduling and cancellation of follow-ups, processed by a `reminderWorker` respecting business timezones.
+*   **Redis + BullMQ Queue System**: Manages reminders, message buffering, WhatsApp messages, and AI responses with retry logic and high-concurrency for OpenAI API calls.
+*   **Stripe Billing Integration**: Implements a 7-day free trial, recurring payments, webhooks, account suspension, tiered token limits, and on-demand token credit purchases. Supports subscription freezing for enterprise users.
+*   **Email Verification System**: Requires email verification for WhatsApp instance creation via SMTP.
+*   **Robust Deployment**: Dockerized services with improved health checks.
+*   **Super Admin Panel**: Centralized administration for command center, event logging, user/business management, WhatsApp instance control, token usage, billing, and referral codes.
+*   **Centralized OpenAI API Management**: Uses a single platform-wide key, allows model selection, logs token usage, and optimizes tokens via conversation history truncation. Routes GPT-5+ models to Responses API and GPT-4/earlier to Chat Completions API.
+*   **Dynamic AI Model Configuration**: Super Admin configurable default AI models (GPT-5/5.2/5.2-Pro) with reasoning effort. Businesses can override.
+*   **Per-Contact Bot Control**: Global and per-contact toggles for bot functionality.
+*   **Agent V2 - Multi-Agent AI System (Python/LangGraph)**: Advanced Python microservice with a 3-brain architecture (Vendor → Observer → Refiner), 5 executable tools, Redis-backed memory, OpenAI embeddings for semantic product search, and dynamic learning. Features dynamic runtime model refresh.
+*   **Agent V2 State-Governed Architecture (v2.0 Hardened)**: Implements an 8-phase hardening roadmap transforming the agent into a state-governed system with `CommercialState` and `EtapaComercial`. LangGraph state-governed flow with tools as pure infrastructure.
+*   **Agent V2 Simplified Graph with ReAct (v2.1)**: Refactored 2-agent architecture with feedback loop, Redis-persistent `CommercialState`, simplified validations, explicit state machine for tool governance, and ReAct retry mechanism.
+*   **Agent V2 Custom Tools Support**: Exposes custom tools (prefixed `custom_`) to the Vendor LLM, allowing dynamic HTTP requests via `CustomToolHandler`.
+*   **Production-Grade Baileys Stability**: Redis session state, watchdog heartbeat, rate limiting, error handling, and Docker restart persistence for automatic reconnection.
+*   **Gemini Multimedia Processing**: Integrates Google Gemini API for audio transcription, image, and video analysis.
+*   **Customizable Contact Data Extraction**: AI extracts custom fields from conversations.
+*   **Intelligent Product Search**: Fuzzy matching with typo tolerance.
 *   **Provider-Separated Token Usage Tracking**: Tracks token usage by provider and feature.
-*   **Payment Mode Control**: Uses `paymentLinkEnabled` on User model (controlled by Super Admin toggle) to determine payment flow. When enabled, creates Stripe payment links; when disabled, creates voucher-based orders requiring payment proof images.
-*   **Voucher-Based Payment Confirmation**: For users without payment links enabled, orders are created in AWAITING_VOUCHER status. Payment confirmation requires voucher image to be attached before status can change to PAID.
-*   **Dual Business Objectives (SALES/APPOINTMENTS)**: Businesses can toggle between e-commerce (SALES) and service (APPOINTMENTS) modes, dynamically adjusting UI and AI agent tools. Both Agent V1 and V2 respect this setting - V1 modifies its system prompt to focus on scheduling/products accordingly, V2 passes the objective to Python and omits products in APPOINTMENTS mode.
-*   **Appointment Scheduling System**: Full CRUD for appointments, status tracking, double-booking prevention, and automatic reminders. Includes `agendar_cita` and `consultar_disponibilidad` AI tools.
+*   **Payment Mode Control**: `paymentLinkEnabled` toggle determines Stripe payment link vs. voucher-based order flow.
+*   **Dual Business Objectives (SALES/APPOINTMENTS)**: Businesses can toggle between e-commerce (SALES) and service (APPOINTMENTS) modes, influencing UI and AI agent behavior.
+*   **Appointment Scheduling System**: Full CRUD, status tracking, double-booking prevention, and automatic reminders with AI tools (`agendar_cita`, `consultar_disponibilidad`).
 *   **Business Availability Configuration**: Allows businesses to configure working hours and block dates.
-*   **Delivery Tracking**: Orders include `DELIVERED` status, delivery agent assignment, and quick action buttons.
-*   **Agent Files Library (V1)**: Businesses can upload documents and images with metadata for contextual AI use via the "enviar_archivo" AI tool.
-*   **Contact CRM System**: Dedicated Contact table with automatic creation on first message, tags, notes, email, message counts, first/last message timestamps, archive functionality, and full CRUD API. Supports filtering by tags and archived status. Features accordion-style expandable contact rows with inline editing for name, email, notes, tags, and custom metadata fields.
-*   **Enhanced Mass Broadcast System**: Supports direct file upload to MinIO for images/videos/audio/documents, text+media together with captions, CSV contact import (phone,var1,var2 format), variable interpolation ({{1}}, {{2}}) for personalized messages, CRM metadata integration with named variables ({{nombre}}, {{email}}, {{custom_field}}) for CRM contacts, available variables endpoint for UI preview, frontend and backend deduplication, Meta template component preservation, smart variable filtering that shows only common variables across selected CRM contacts, frontend warnings for contacts missing required variables, and backend validation to prevent null data substitution. **WhatsApp Group Import**: For Baileys instances, users can import participants directly from their WhatsApp groups as broadcast recipients - the system fetches all groups via `socket.groupFetchAllParticipating()` and retrieves participant phone numbers from group metadata.
-*   **Referral Code System**: Marketing tracking via unique referral URLs, with CRUD for codes and usage statistics. Extended with an affiliate program: ReferralCode model includes `bonusDemoDays`, `bonusTrialDays`, `commissionRate`, and `ownerUserId`. Users can claim their own referral code via the "Programa de Beneficios" section in the billing page, share referral links, and track stats (total referrals, active subscribers, pending/total earnings). User model stores `referralCodeId`, `bonusDemoDays`, `bonusTrialDays` applied at registration. Demo period = base 48h + bonusDemoDays*24h. Stripe trial = base 5 days + bonusTrialDays.
+*   **Delivery Tracking**: Orders include `DELIVERED` status, delivery agent assignment, and quick actions.
+*   **Agent Files Library (V1)**: Businesses upload documents and images for contextual AI use via the "enviar_archivo" AI tool.
+*   **Contact CRM System**: Dedicated Contact table with automatic creation, tags, notes, email, message counts, timestamps, archive functionality, and full CRUD API with filtering. Expandable rows with inline editing.
+*   **Enhanced Mass Broadcast System**: Supports direct file upload (MinIO) for media, text+media, CSV contact import, variable interpolation (CRM metadata, named variables), deduplication, Meta template component preservation, smart variable filtering, and validation. Includes WhatsApp group import for Baileys instances.
+*   **Referral Code System**: Marketing tracking via unique URLs, with CRUD for codes and usage statistics. Extended with an affiliate program (`bonusDemoDays`, `bonusTrialDays`, `commissionRate`, `ownerUserId`) for users to claim and track their own referral codes.
 *   **Advisor/Agent System**: Role-based access control for team members with invitation workflow and contact assignment.
-*   **Round-Robin Lead Auto-Assignment**: Automatic lead distribution among selected advisors, configurable via the Team panel.
-*   **Distributed Buffer State Management**: Buffer processing state moved to Redis for horizontal scalability, using distributed locking.
-*   **BullMQ Expired Buffer Processor**: Replaced per-instance interval processing with a BullMQ repeatable job for expired buffers.
-*   **Atomic Buffer Claiming with DB Locking**: Uses `processingUntil` field and `updateMany` for atomic row-level locking of message buffers.
-*   **Buffer-to-Worker Lifecycle Management**: AI jobs track `bufferId`, and buffers are deleted only after successful AI processing.
-*   **Terminal State Handling**: Failed buffers are quarantined with `failedAt`, `failureReason`, and `retryCount` fields.
-*   **Synchronous Processing Fallback**: Falls back to `processAIResponseDirect()` when Redis/BullMQ are unavailable to prevent message loss.
-*   **Huble Consulting LLC Branding**: Reusable `HubleFooter` component displays company attribution on all dashboard pages (compact footer) and billing page (full section with explanation about Stripe payments). This clarifies the legal entity behind the service to users.
+*   **Round-Robin Lead Auto-Assignment**: Automatic lead distribution among advisors.
+*   **Distributed Buffer State Management**: Buffer processing state in Redis with distributed locking for scalability.
+*   **BullMQ Expired Buffer Processor**: Replaced interval processing with a BullMQ repeatable job for expired buffers.
+*   **Atomic Buffer Claiming with DB Locking**: Uses `processingUntil` and `updateMany` for row-level locking.
+*   **Buffer-to-Worker Lifecycle Management**: AI jobs track `bufferId`, buffers deleted post-AI processing.
+*   **Terminal State Handling**: Failed buffers quarantined with `failedAt`, `failureReason`, `retryCount`.
+*   **Synchronous Processing Fallback**: Falls back to `processAIResponseDirect()` when Redis/BullMQ are unavailable.
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
-*   **Scalability**: Horizontally scalable Core API with stateless design; state managed in Redis.
+*   **Scalability**: Horizontally scalable, stateless Core API; state managed in Redis.
 *   **Security**: JWT-based authentication.
 *   **Observability**: Message logging and tool execution history.
 
