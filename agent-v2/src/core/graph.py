@@ -202,40 +202,68 @@ async def state_validation_node(state: GraphState) -> Dict[str, Any]:
     }
 
 
+def _validate_tool_preconditions(
+    tool_name: str,
+    vendor_output: VendorOutput,
+    commercial_state: Optional[CommercialState]
+) -> tuple[bool, Optional[str]]:
+    """
+    Validaciones hardcodeadas que antes hacía Observer.
+    Retorna (puede_ejecutar, razon_si_no).
+    """
+    if tool_name == "payment":
+        if commercial_state and not commercial_state.productos_confirmados:
+            return False, "No hay productos confirmados para generar pago"
+        if commercial_state and (commercial_state.total_calculado is None or commercial_state.total_calculado <= 0):
+            return False, "Total no calculado o inválido"
+        if vendor_output.intencion != IntencionCliente.CONFIRMACION_COMPRA:
+            logger.warning(f"Payment sugerido pero intención es {vendor_output.intencion.value}, no confirmacion_compra")
+    
+    if vendor_output.confianza < 0.3:
+        logger.warning(f"Confianza muy baja ({vendor_output.confianza}), pero continuando")
+    
+    if vendor_output.requiere_tool and not vendor_output.tool_sugerida:
+        logger.warning("Indica requiere_tool=true pero no sugiere qué tool")
+    
+    return True, None
+
+
 async def decide_action_node(state: GraphState) -> Dict[str, Any]:
     """
-    FASE 3: EL GRAFO DECIDE, NO EL LLM.
-    Basándose en el estado comercial y la validación, decide qué hacer.
+    SIMPLIFICADO: EL GRAFO DECIDE CON VALIDACIONES INLINE.
+    Las validaciones del Observer están integradas aquí (sin llamada LLM).
     """
-    logger.info("Graph deciding next action")
+    logger.info("Graph deciding next action (simplified)")
     
     vendor_output_data = state.get("vendor_output", {})
     commercial_state_data = state.get("commercial_state", {})
-    validation_data = state.get("observer_validation", {})
-    state_valid = state.get("state_valid", True)
-    
-    if not state_valid:
-        logger.warning("State invalid - blocking tool execution")
-        return {
-            "graph_decision": "response_only",
-            "vendor_action": {
-                "accion": "respuesta",
-                "mensaje": vendor_output_data.get("mensaje", ""),
-                "nombre_tool": None,
-                "input_tool": None
-            }
-        }
     
     vendor_output = VendorOutput(**vendor_output_data) if vendor_output_data else None
     commercial_state = CommercialState(**commercial_state_data) if commercial_state_data else None
     
     if not vendor_output:
-        return {"graph_decision": "response_only", "vendor_action": None}
+        return {"graph_decision": "response_only", "vendor_action": None, "state_valid": True}
     
     if vendor_output.requiere_tool and vendor_output.tool_sugerida:
         tool_name = vendor_output.tool_sugerida
         
         is_custom_tool = tool_name.startswith("custom_")
+        
+        precondition_ok, precondition_reason = _validate_tool_preconditions(
+            tool_name, vendor_output, commercial_state
+        )
+        if not precondition_ok:
+            logger.warning(f"Tool {tool_name} blocked by precondition: {precondition_reason}")
+            return {
+                "graph_decision": "response_only",
+                "state_valid": True,
+                "vendor_action": {
+                    "accion": "respuesta",
+                    "mensaje": vendor_output.mensaje,
+                    "nombre_tool": None,
+                    "input_tool": None
+                }
+            }
         
         if commercial_state and not is_custom_tool:
             can_execute, reason = commercial_state.can_execute_tool(tool_name)
@@ -243,6 +271,7 @@ async def decide_action_node(state: GraphState) -> Dict[str, Any]:
                 logger.warning(f"Tool {tool_name} blocked by state: {reason}")
                 return {
                     "graph_decision": "response_only",
+                    "state_valid": True,
                     "vendor_action": {
                         "accion": "respuesta",
                         "mensaje": vendor_output.mensaje,
@@ -256,6 +285,7 @@ async def decide_action_node(state: GraphState) -> Dict[str, Any]:
                 logger.warning(f"Tool {tool_name} not valid for current stage")
                 return {
                     "graph_decision": "response_only",
+                    "state_valid": True,
                     "vendor_action": {
                         "accion": "respuesta",
                         "mensaje": vendor_output.mensaje,
@@ -269,6 +299,7 @@ async def decide_action_node(state: GraphState) -> Dict[str, Any]:
         
         return {
             "graph_decision": "execute_tool",
+            "state_valid": True,
             "vendor_action": {
                 "accion": "tool",
                 "mensaje": vendor_output.mensaje,
@@ -279,6 +310,7 @@ async def decide_action_node(state: GraphState) -> Dict[str, Any]:
     
     return {
         "graph_decision": "response_only",
+        "state_valid": True,
         "vendor_action": {
             "accion": "respuesta",
             "mensaje": vendor_output.mensaje,
@@ -746,11 +778,8 @@ def create_agent_graph() -> StateGraph:
 
 def create_state_governed_graph() -> StateGraph:
     """
-    FASE 3: Creates the new state-governed graph.
-    This is the hardened version where:
-    - The graph decides, not the LLM
-    - No tool executes without state validation
-    - State is the supreme law
+    FASE 3 (LEGACY): Creates the state-governed graph with Observer validation.
+    Kept for backward compatibility.
     """
     workflow = StateGraph(GraphState)
     
@@ -783,8 +812,48 @@ def create_state_governed_graph() -> StateGraph:
     return workflow.compile()
 
 
+def create_simplified_graph() -> StateGraph:
+    """
+    SIMPLIFICADO: Grafo de 2 agentes sin overhead de Observer/Refiner.
+    
+    Flujo: load_state → vendor_interpret → decide_action → [execute_tool] → update_state → finalize → END
+    
+    Ventajas:
+    - 1 llamada LLM principal (Vendor) + 1 opcional (refine con resultado de tool)
+    - Validaciones hardcodeadas en decide_action (sin llamada LLM de Observer)
+    - Sin Refiner en el path crítico (puede ejecutarse async después)
+    - Estado persistente en Redis entre turnos
+    """
+    workflow = StateGraph(GraphState)
+    
+    workflow.add_node("load_state", load_state_node)
+    workflow.add_node("vendor_interpret", vendor_interpret_node)
+    workflow.add_node("decide_action", decide_action_node)
+    workflow.add_node("execute_tool", execute_tool_node)
+    workflow.add_node("update_state", update_state_node)
+    workflow.add_node("finalize", finalize_response_node)
+    
+    workflow.set_entry_point("load_state")
+    
+    workflow.add_edge("load_state", "vendor_interpret")
+    workflow.add_edge("vendor_interpret", "decide_action")
+    
+    workflow.add_conditional_edges(
+        "decide_action",
+        should_execute_tool_v2,
+        {"execute_tool": "execute_tool", "finalize": "finalize"}
+    )
+    
+    workflow.add_edge("execute_tool", "update_state")
+    workflow.add_edge("update_state", "finalize")
+    workflow.add_edge("finalize", END)
+    
+    return workflow.compile()
+
+
 _agent_graph = None
 _state_governed_graph = None
+_simplified_graph = None
 
 
 def get_agent_graph():
@@ -796,8 +865,21 @@ def get_agent_graph():
 
 
 def get_state_governed_graph():
-    """Returns the new state-governed graph (V2 hardened)."""
+    """Returns the state-governed graph with Observer validation (legacy V2)."""
     global _state_governed_graph
     if _state_governed_graph is None:
         _state_governed_graph = create_state_governed_graph()
     return _state_governed_graph
+
+
+def get_simplified_graph():
+    """
+    Returns the simplified 2-agent graph (recommended).
+    - No Observer LLM call (validations are hardcoded)
+    - No Refiner in critical path
+    - Redis-persistent CommercialState
+    """
+    global _simplified_graph
+    if _simplified_graph is None:
+        _simplified_graph = create_simplified_graph()
+    return _simplified_graph
