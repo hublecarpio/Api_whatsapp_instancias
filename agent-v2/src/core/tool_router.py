@@ -259,7 +259,21 @@ class ToolRouter:
         
         try:
             logger.info(f"Executing custom tool: {tool_name}")
-            result = await CustomToolHandler.run(tool_config, input_data)
+            
+            # Build dynamic context variables
+            dynamic_context = {
+                "contactPhone": str(self.lead_id).replace("+", "").replace(" ", ""),
+                "businessId": self.business_id,
+                "businessName": self.context.get("business_name", ""),
+                "contactName": self.context.get("contact_name", ""),
+            }
+            
+            # Merge: dynamic context first, then LLM params override
+            merged_params = {**dynamic_context, **input_data}
+            
+            logger.info(f"Custom tool params - LLM: {list(input_data.keys())}, Dynamic: {list(dynamic_context.keys())}")
+            
+            result = await CustomToolHandler.run(tool_config, merged_params)
             raw_output = result.model_dump()
             
             sanitized = sanitize_tool_output(tool_name, raw_output)

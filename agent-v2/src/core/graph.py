@@ -93,7 +93,10 @@ def build_tool_context(state: GraphState) -> Dict[str, Any]:
         "embedded_products": state.get("embedded_products", []),
         "products": [p.get("product", p) for p in state.get("embedded_products", [])],
         "business_id": business_profile.get("business_id", ""),
+        "business_name": business_profile.get("business_name", ""),
         "lead_id": state.get("sender_phone", ""),
+        "contact_name": state.get("sender_name", ""),
+        "contact_phone": state.get("sender_phone", ""),
         "knowledge_context": state.get("knowledge_context"),
         "custom_tools": business_profile.get("tools_config", [])
     }

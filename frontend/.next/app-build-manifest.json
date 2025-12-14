@@ -31,35 +31,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/business/page.js"
     ],
-    "/dashboard/prompt/page": [
+    "/dashboard/whatsapp/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/prompt/page.js"
-    ],
-    "/[code]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/[code]/page.js"
+      "static/chunks/app/dashboard/whatsapp/page.js"
     ],
     "/dashboard/billing/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/billing/page.js"
     ],
-    "/dashboard/contacts/page": [
+    "/dashboard/reminders/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/contacts/page.js"
-    ],
-    "/dashboard/chat/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/chat/page.js"
-    ],
-    "/dashboard/tags/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/tags/page.js"
+      "static/chunks/app/dashboard/reminders/page.js"
     ]
   }
 }
