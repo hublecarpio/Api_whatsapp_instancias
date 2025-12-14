@@ -200,6 +200,25 @@ def get_current_time_formatted(timezone: str) -> str:
     return f"{day_name} {now.day} de {month_name} {now.year}, {now.strftime('%H:%M')}"
 
 
+# Prompt for native function calling mode (when bind_tools is active)
+VENDOR_NATIVE_TOOLS_PROMPT = """Eres un agente de ventas profesional y amigable.
+
+## TU ROL:
+Eres el asistente de ventas del negocio. Tu trabajo es:
+1. Responder las preguntas del cliente de forma natural y conversacional
+2. Usar las herramientas disponibles cuando sea necesario para obtener información
+3. Ser profesional pero cercano
+
+## REGLAS IMPORTANTES:
+- Responde SIEMPRE de forma conversacional, como si hablaras por WhatsApp
+- NO respondas con JSON ni formato estructurado
+- Si necesitas consultar disponibilidad, precios, o cualquier información que requiera una herramienta, ÚSALA directamente
+- Cuando uses una herramienta, NO digas "voy a consultar" o "déjame verificar" - simplemente usa la herramienta
+- Sé conciso y directo
+- Usa emojis de forma moderada cuando sea apropiado
+"""
+
+# Legacy prompt for JSON-based tool suggestions (without bind_tools)
 VENDOR_V2_SYSTEM_PROMPT = """Eres el "Vendor Agent" (Cerebro 1) de un sistema multi-agente de ventas.
 
 ## TU ROL ESTRICTO:
@@ -257,6 +276,66 @@ Tu ÚNICO trabajo es:
 """
 
 
+def build_native_tools_context(
+    profile: BusinessProfile,
+    memory: Dict[str, Any],
+    dynamic_rules: list,
+    current_time: str,
+    knowledge_context: Optional[str] = None
+) -> str:
+    """
+    Build context for native function calling mode.
+    Does NOT include tool instructions since bind_tools handles that.
+    """
+    context = f"""
+## CONTEXTO DEL NEGOCIO:
+- Negocio: {profile.business_name}
+- Fecha/Hora: {current_time}
+"""
+    
+    if profile.custom_prompt:
+        context += f"""
+## INSTRUCCIONES DEL NEGOCIO:
+{profile.custom_prompt}
+"""
+    
+    if profile.products:
+        context += f"""
+## PRODUCTOS DISPONIBLES ({len(profile.products)}):
+"""
+        for p in profile.products[:15]:
+            stock_info = f" [Stock: {p.stock}]" if p.stock is not None else ""
+            context += f"- [ID:{p.id}] {p.name}: {profile.currency_symbol}{p.price}{stock_info}\n"
+    
+    if profile.policies:
+        context += "\n## POLÍTICAS:\n"
+        if profile.policies.shipping:
+            context += f"- Envíos: {profile.policies.shipping}\n"
+        if profile.policies.refund:
+            context += f"- Devoluciones: {profile.policies.refund}\n"
+    
+    if memory:
+        context += f"""
+## MEMORIA DEL LEAD:
+- Etapa: {memory.get('current_stage', 'nuevo')}
+- Productos vistos: {', '.join(memory.get('products_viewed', [])) or 'ninguno'}
+- Preferencias: {', '.join(memory.get('detected_preferences', [])) or 'ninguna'}
+"""
+    
+    if dynamic_rules:
+        context += "\n## REGLAS ACTIVAS:\n"
+        for rule in dynamic_rules[-10:]:
+            context += f"- {rule}\n"
+    
+    if knowledge_context:
+        context += f"""
+## INFORMACIÓN DE LA BASE DE CONOCIMIENTO:
+{knowledge_context}
+"""
+    
+    return context
+
+
 def build_vendor_context(
     profile: BusinessProfile,
     memory: Dict[str, Any],
@@ -265,7 +344,7 @@ def build_vendor_context(
     knowledge_context: Optional[str] = None,
     tools_available: Optional[list] = None
 ) -> str:
-    """Construye el contexto del negocio para el Vendor."""
+    """Construye el contexto del negocio para el Vendor (legacy JSON mode)."""
     context = f"""
 ## CONTEXTO DEL NEGOCIO:
 - Negocio: {profile.business_name}
@@ -521,22 +600,36 @@ class VendorAgent:
     ) -> tuple[VendorOutput, int]:
         """
         FASE 2: Método principal del Vendor.
-        Usa function calling nativo de OpenAI para tools.
+        Usa function calling nativo de OpenAI para tools cuando están disponibles.
         """
         self._ensure_model_current()
         
         current_time = get_current_time_formatted(business_profile.timezone)
         
-        context = build_vendor_context(
-            profile=business_profile,
-            memory=lead_memory,
-            dynamic_rules=dynamic_rules,
-            current_time=current_time,
-            knowledge_context=knowledge_context,
-            tools_available=tools_available
-        )
+        # Determine which mode to use based on tools availability
+        use_native_tools = tools_available and len(tools_available) > 0
         
-        system_prompt = VENDOR_V2_SYSTEM_PROMPT + context
+        if use_native_tools:
+            # Use native function calling mode - clean prompt without JSON instructions
+            context = build_native_tools_context(
+                profile=business_profile,
+                memory=lead_memory,
+                dynamic_rules=dynamic_rules,
+                current_time=current_time,
+                knowledge_context=knowledge_context
+            )
+            system_prompt = VENDOR_NATIVE_TOOLS_PROMPT + context
+        else:
+            # Legacy JSON mode when no tools available
+            context = build_vendor_context(
+                profile=business_profile,
+                memory=lead_memory,
+                dynamic_rules=dynamic_rules,
+                current_time=current_time,
+                knowledge_context=knowledge_context,
+                tools_available=tools_available
+            )
+            system_prompt = VENDOR_V2_SYSTEM_PROMPT + context
         
         messages = [SystemMessage(content=system_prompt)]
         
@@ -555,9 +648,10 @@ class VendorAgent:
         messages.append(HumanMessage(content=user_msg))
         
         try:
-            # Use native function calling if tools are available
             llm_to_use = self.llm
-            if tools_available:
+            
+            if use_native_tools:
+                # Bind tools for native function calling
                 openai_tools = build_openai_tools_schema(tools_available)
                 if openai_tools:
                     llm_to_use = self.llm.bind_tools(openai_tools, tool_choice="auto")
@@ -593,10 +687,23 @@ class VendorAgent:
                     confianza=0.9
                 ), tokens_used
             
-            # No tool call - parse JSON response as before
-            output = self._parse_vendor_output(response.content or "")
-            
-            return output, tokens_used
+            # No tool call - handle based on mode
+            if use_native_tools:
+                # Native mode returns plain text response
+                return VendorOutput(
+                    intencion=IntencionCliente.OTRO,
+                    mensaje=response.content or "",
+                    entidades_detectadas={},
+                    productos_mencionados=[],
+                    requiere_tool=False,
+                    tool_sugerida=None,
+                    tool_params_sugeridos=None,
+                    confianza=0.8
+                ), tokens_used
+            else:
+                # Legacy mode parses JSON
+                output = self._parse_vendor_output(response.content or "")
+                return output, tokens_used
             
         except Exception as e:
             logger.error(f"Vendor interpret error: {e}")
