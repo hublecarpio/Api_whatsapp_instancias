@@ -175,3 +175,69 @@ def get_memory_stats(business_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting memory stats: {e}")
         return {"error": str(e), "count": 0}
+
+
+COMMERCIAL_STATE_TTL = 60 * 60 * 24 * 7
+
+
+def _commercial_state_key(business_id: str, lead_id: str) -> str:
+    """Generate Redis key for commercial state."""
+    return f"agent_v2:commercial_state:{business_id}:{lead_id}"
+
+
+def save_commercial_state(business_id: str, lead_id: str, state: Dict[str, Any]) -> bool:
+    """Persist CommercialState to Redis with 7-day TTL."""
+    client = get_redis_client()
+    
+    if client is None:
+        logger.warning("Redis not available, commercial state not saved")
+        return False
+    
+    try:
+        key = _commercial_state_key(business_id, lead_id)
+        state["persisted_at"] = datetime.utcnow().isoformat()
+        client.set(key, json.dumps(state), ex=COMMERCIAL_STATE_TTL)
+        logger.info(f"Commercial state saved for {business_id}:{lead_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving commercial state: {e}")
+        return False
+
+
+def load_commercial_state(business_id: str, lead_id: str) -> Optional[Dict[str, Any]]:
+    """Load CommercialState from Redis. Returns None if not found."""
+    client = get_redis_client()
+    
+    if client is None:
+        logger.warning("Redis not available, cannot load commercial state")
+        return None
+    
+    try:
+        key = _commercial_state_key(business_id, lead_id)
+        data = client.get(key)
+        if data:
+            state = json.loads(data)
+            logger.info(f"Commercial state loaded for {business_id}:{lead_id}, stage={state.get('etapa_comercial')}")
+            return state
+        logger.debug(f"No commercial state found for {business_id}:{lead_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Error loading commercial state: {e}")
+        return None
+
+
+def clear_commercial_state(business_id: str, lead_id: str) -> bool:
+    """Clear commercial state for a specific lead."""
+    client = get_redis_client()
+    
+    if client is None:
+        return False
+    
+    try:
+        key = _commercial_state_key(business_id, lead_id)
+        result = client.delete(key)
+        logger.info(f"Commercial state cleared for {business_id}:{lead_id}")
+        return result > 0
+    except Exception as e:
+        logger.error(f"Error clearing commercial state: {e}")
+        return False

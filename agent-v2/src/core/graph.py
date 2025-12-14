@@ -33,6 +33,7 @@ from ..agents.observer import get_observer_agent
 from ..agents.refiner import get_refiner_agent
 from .tool_router import ToolRouter, format_tool_result
 from .telemetry import log_tool_execution_fire_and_forget
+from .memory import save_commercial_state, load_commercial_state
 from ..schemas.tool_schemas import validate_vendor_response, sanitize_vendor_response
 import time
 
@@ -99,11 +100,28 @@ def build_tool_context(state: GraphState) -> Dict[str, Any]:
 
 
 async def load_state_node(state: GraphState) -> Dict[str, Any]:
-    """FASE 3: Carga el estado comercial desde memoria."""
-    logger.info("Loading commercial state")
+    """FASE 3: Carga el estado comercial desde Redis (persistente)."""
+    logger.info("Loading commercial state from Redis")
+    
+    business_id = state.get("business_profile", {}).get("business_id", "")
+    lead_id = state.get("sender_phone", "")
+    
+    persisted_state = load_commercial_state(business_id, lead_id)
+    
+    if persisted_state:
+        try:
+            persisted_state.pop("persisted_at", None)
+            commercial_state = CommercialState(**persisted_state)
+            commercial_state.reglas_activas = state.get("dynamic_rules", [])
+            logger.info(f"Restored commercial state: stage={commercial_state.etapa_comercial.value}, productos_confirmados={len(commercial_state.productos_confirmados)}")
+            return {
+                "commercial_state": commercial_state.model_dump(),
+                "state_valid": True
+            }
+        except Exception as e:
+            logger.warning(f"Failed to restore persisted state, creating new: {e}")
     
     lead_memory = state.get("lead_memory", {})
-    
     commercial_state = CommercialState(
         etapa_comercial=EtapaComercial(lead_memory.get("current_stage", "nuevo")) 
             if lead_memory.get("current_stage") in [e.value for e in EtapaComercial] 
@@ -114,6 +132,7 @@ async def load_state_node(state: GraphState) -> Dict[str, Any]:
         ultima_actualizacion=datetime.now().isoformat()
     )
     
+    logger.info(f"Created new commercial state: stage={commercial_state.etapa_comercial.value}")
     return {
         "commercial_state": commercial_state.model_dump(),
         "state_valid": True
@@ -346,7 +365,7 @@ async def execute_tool_node(state: GraphState) -> Dict[str, Any]:
 
 
 async def update_state_node(state: GraphState) -> Dict[str, Any]:
-    """FASE 3: Actualiza el estado comercial basado en la interacción."""
+    """FASE 3: Actualiza el estado comercial y persiste en Redis."""
     logger.info("Updating commercial state")
     
     commercial_state_data = state.get("commercial_state", {})
@@ -376,7 +395,15 @@ async def update_state_node(state: GraphState) -> Dict[str, Any]:
     
     commercial_state.ultima_actualizacion = datetime.now().isoformat()
     
-    return {"commercial_state": commercial_state.model_dump()}
+    updated_state = commercial_state.model_dump()
+    
+    business_id = state.get("business_profile", {}).get("business_id", "")
+    lead_id = state.get("sender_phone", "")
+    if business_id and lead_id:
+        save_commercial_state(business_id, lead_id, updated_state)
+        logger.info(f"Persisted commercial state: stage={commercial_state.etapa_comercial.value}")
+    
+    return {"commercial_state": updated_state}
 
 
 async def finalize_response_node(state: GraphState) -> Dict[str, Any]:
