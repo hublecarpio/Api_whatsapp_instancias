@@ -173,10 +173,24 @@ def build_vendor_context(
             context += "\n### Personalizadas del negocio (PRIORIZA ESTAS):\n"
             for tool in custom_tools:
                 context += f"- **{tool['name']}**: {tool['description']}\n"
+                params = tool.get('parameters', [])
+                if params:
+                    context += "  Parámetros requeridos para tool_params_sugeridos:\n"
+                    for p in params:
+                        req_mark = "*" if p.get('required', True) else ""
+                        context += f"    - {p['name']}{req_mark}: {p.get('description', 'sin descripción')}\n"
         
-        context += "\nIMPORTANTE: Cuando uses una herramienta, pon su nombre EXACTO en 'tool_sugerida'.\n"
+        context += "\nIMPORTANTE: Cuando uses una herramienta personalizada:\n"
+        context += "1. Pon su nombre EXACTO en 'tool_sugerida'\n"
+        context += "2. Pon los parámetros requeridos en 'tool_params_sugeridos'\n"
         if custom_tools:
-            context += f"Ejemplo con custom tool: tool_sugerida=\"{custom_tools[0]['name']}\"\n"
+            example_tool = custom_tools[0]
+            example_params = example_tool.get('parameters', [])
+            if example_params:
+                params_example = {p['name']: f"<valor_{p['name']}>" for p in example_params[:2]}
+                context += f"Ejemplo: tool_sugerida=\"{example_tool['name']}\", tool_params_sugeridos={params_example}\n"
+            else:
+                context += f"Ejemplo: tool_sugerida=\"{example_tool['name']}\"\n"
     
     return context
 

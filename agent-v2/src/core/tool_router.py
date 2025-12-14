@@ -98,23 +98,28 @@ class ToolRouter:
                 }
         logger.info(f"Loaded {len(self.custom_tools)} custom tools")
     
-    def get_available_tools(self) -> List[Dict[str, str]]:
+    def get_available_tools(self) -> List[Dict[str, Any]]:
         tools = [
             {
                 "name": tool["name"],
-                "description": tool["description"]
+                "description": tool["description"],
+                "parameters": []
             }
             for tool in TOOL_DEFINITIONS.values()
         ]
         for tool in self.custom_tools.values():
-            params_desc = ""
+            params_list = []
             if tool.get("parameters"):
-                params = [p.get("name", "") for p in tool["parameters"] if p.get("required", True)]
-                if params:
-                    params_desc = f" (Requiere: {', '.join(params)})"
+                for p in tool["parameters"]:
+                    params_list.append({
+                        "name": p.get("name", ""),
+                        "description": p.get("description", ""),
+                        "required": p.get("required", True)
+                    })
             tools.append({
                 "name": tool["name"],
-                "description": f"{tool['description']}{params_desc}"
+                "description": tool['description'],
+                "parameters": params_list
             })
         return tools
     
