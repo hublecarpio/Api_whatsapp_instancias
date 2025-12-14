@@ -78,8 +78,8 @@ export default function BillingPage() {
           authApi.getMyReferralCode(),
           authApi.getReferralStats()
         ]);
-        if (codeRes.data.referralCode) {
-          setMyReferralCode(codeRes.data.referralCode);
+        if (codeRes.data.hasCode && codeRes.data.code) {
+          setMyReferralCode({ code: codeRes.data.code, usageCount: codeRes.data.usageCount || 0 });
         }
         setReferralStats(statsRes.data);
       } catch (e) {
