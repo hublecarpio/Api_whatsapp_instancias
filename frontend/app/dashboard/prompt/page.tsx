@@ -938,31 +938,31 @@ export default function PromptPage() {
 
   const extractVariablesFromTool = (tool: Tool): string[] => {
     const variables = new Set<string>();
-    const regex = /\{\{(\w+)\}\}/g;
     
     if (tool.url) {
-      let match;
-      while ((match = regex.exec(tool.url)) !== null) {
-        variables.add(match[1]);
-      }
+      const urlMatches = tool.url.match(/\{\{(\w+)\}\}/g) || [];
+      urlMatches.forEach(m => {
+        const varName = m.replace(/\{\{|\}\}/g, '');
+        variables.add(varName);
+      });
     }
     
     if (tool.headers) {
       const headersStr = JSON.stringify(tool.headers);
-      let match;
-      regex.lastIndex = 0;
-      while ((match = regex.exec(headersStr)) !== null) {
-        variables.add(match[1]);
-      }
+      const headerMatches = headersStr.match(/\{\{(\w+)\}\}/g) || [];
+      headerMatches.forEach(m => {
+        const varName = m.replace(/\{\{|\}\}/g, '');
+        variables.add(varName);
+      });
     }
     
     if (tool.bodyTemplate) {
       const bodyStr = JSON.stringify(tool.bodyTemplate);
-      let match;
-      regex.lastIndex = 0;
-      while ((match = regex.exec(bodyStr)) !== null) {
-        variables.add(match[1]);
-      }
+      const bodyMatches = bodyStr.match(/\{\{(\w+)\}\}/g) || [];
+      bodyMatches.forEach(m => {
+        const varName = m.replace(/\{\{|\}\}/g, '');
+        variables.add(varName);
+      });
     }
     
     if (tool.dynamicVariables) {
