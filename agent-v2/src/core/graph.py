@@ -147,6 +147,14 @@ async def vendor_interpret_node(state: GraphState) -> Dict[str, Any]:
     lead_memory = state["lead_memory"] or {}
     dynamic_rules = state.get("dynamic_rules", [])
     knowledge_context = state.get("knowledge_context")
+    observer_feedback = state.get("observer_feedback")
+    
+    if observer_feedback:
+        if dynamic_rules:
+            dynamic_rules = dynamic_rules + [f"[FEEDBACK]: {observer_feedback}"]
+        else:
+            dynamic_rules = [f"[FEEDBACK]: {observer_feedback}"]
+        logger.info(f"ReAct: Vendor received feedback: {observer_feedback}")
     
     tool_context = build_tool_context(state)
     tool_router = ToolRouter(tool_context)
@@ -170,7 +178,8 @@ async def vendor_interpret_node(state: GraphState) -> Dict[str, Any]:
     return {
         "vendor_output": vendor_output.model_dump(),
         "tokens_used": state.get("tokens_used", 0) + tokens,
-        "iteration_count": state.get("iteration_count", 0) + 1
+        "iteration_count": state.get("iteration_count", 0) + 1,
+        "observer_feedback": None
     }
 
 
@@ -729,6 +738,49 @@ def should_execute_tool_v2(state: GraphState) -> str:
     return "finalize"
 
 
+def should_retry_react(state: GraphState) -> str:
+    """ReAct: Decide if we should retry after tool execution."""
+    tool_success = state.get("tool_success", True)
+    iteration_count = state.get("iteration_count", 0)
+    max_iterations = state.get("max_iterations", 3)
+    
+    if not tool_success and iteration_count < max_iterations:
+        logger.info(f"ReAct retry: tool failed, iteration {iteration_count}/{max_iterations}")
+        return "retry"
+    
+    return "continue"
+
+
+async def react_retry_node(state: GraphState) -> Dict[str, Any]:
+    """
+    ReAct Feedback Loop: Re-interpreta después de fallo de tool.
+    El Vendor recibe feedback del error para intentar una acción diferente.
+    
+    IMPORTANTE: Limpia todos los datos obsoletos para forzar fresh reasoning.
+    """
+    logger.info("ReAct: Retrying after tool failure")
+    
+    tool_error = state.get("tool_error", "Error desconocido")
+    tool_name = state.get("vendor_action", {}).get("nombre_tool", "unknown")
+    current_iteration = state.get("iteration_count", 0)
+    
+    feedback = f"La herramienta '{tool_name}' falló: {tool_error}. Intenta una respuesta alternativa o usa otra herramienta."
+    
+    logger.info(f"ReAct retry: clearing stale data, iteration {current_iteration}")
+    
+    return {
+        "observer_feedback": feedback,
+        "vendor_output": None,
+        "observer_validation": None,
+        "state_valid": True,
+        "tool_result": None,
+        "tool_success": True,
+        "tool_error": None,
+        "graph_decision": None,
+        "vendor_action": None
+    }
+
+
 def create_agent_graph() -> StateGraph:
     """Creates the legacy graph for backward compatibility."""
     workflow = StateGraph(GraphState)
@@ -814,15 +866,20 @@ def create_state_governed_graph() -> StateGraph:
 
 def create_simplified_graph() -> StateGraph:
     """
-    SIMPLIFICADO: Grafo de 2 agentes sin overhead de Observer/Refiner.
+    SIMPLIFICADO CON REACT: Grafo de 2 agentes con feedback loop.
     
-    Flujo: load_state → vendor_interpret → decide_action → [execute_tool] → update_state → finalize → END
+    Flujo normal: 
+        load_state → vendor_interpret → decide_action → execute_tool → check_result → update_state → finalize → END
+    
+    Flujo ReAct (si tool falla):
+        ... → execute_tool → check_result → react_retry → vendor_interpret → ...
     
     Ventajas:
     - 1 llamada LLM principal (Vendor) + 1 opcional (refine con resultado de tool)
     - Validaciones hardcodeadas en decide_action (sin llamada LLM de Observer)
-    - Sin Refiner en el path crítico (puede ejecutarse async después)
+    - Feedback loop ReAct: reintentos automáticos cuando herramientas fallan
     - Estado persistente en Redis entre turnos
+    - Límite de iteraciones para prevenir loops infinitos
     """
     workflow = StateGraph(GraphState)
     
@@ -830,6 +887,7 @@ def create_simplified_graph() -> StateGraph:
     workflow.add_node("vendor_interpret", vendor_interpret_node)
     workflow.add_node("decide_action", decide_action_node)
     workflow.add_node("execute_tool", execute_tool_node)
+    workflow.add_node("react_retry", react_retry_node)
     workflow.add_node("update_state", update_state_node)
     workflow.add_node("finalize", finalize_response_node)
     
@@ -844,7 +902,13 @@ def create_simplified_graph() -> StateGraph:
         {"execute_tool": "execute_tool", "finalize": "finalize"}
     )
     
-    workflow.add_edge("execute_tool", "update_state")
+    workflow.add_conditional_edges(
+        "execute_tool",
+        should_retry_react,
+        {"retry": "react_retry", "continue": "update_state"}
+    )
+    
+    workflow.add_edge("react_retry", "vendor_interpret")
     workflow.add_edge("update_state", "finalize")
     workflow.add_edge("finalize", END)
     
