@@ -84,8 +84,18 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // Check if user has Enterprise plan before allowing V2 activation
     if (agentVersion === 'v2' && existing.agentVersion !== 'v2') {
-      return res.status(403).json({ error: 'V2 Enterprise Pro solo puede ser activado por el administrador. Contacta a soporte para solicitarlo.' });
+      const user = await prisma.user.findUnique({
+        where: { id: req.userId },
+        select: { isPro: true, proBonusExpiresAt: true }
+      });
+      
+      const hasEnterprise = user?.isPro || (user?.proBonusExpiresAt && user.proBonusExpiresAt > new Date());
+      
+      if (!hasEnterprise) {
+        return res.status(403).json({ error: 'V2 Enterprise Pro requiere plan Enterprise activo. Contacta a soporte para solicitarlo.' });
+      }
     }
     
     const updateData: any = {};
