@@ -329,6 +329,50 @@ async def decide_action_node(state: GraphState) -> Dict[str, Any]:
     }
 
 
+async def decide_action_direct_node(state: GraphState) -> Dict[str, Any]:
+    """
+    ULTRA-SIMPLIFICADO: Si el Vendor sugiere tool, se ejecuta DIRECTAMENTE.
+    Sin validaciones de CommercialState que bloqueen.
+    Funciona como V1 - el LLM decide, nosotros ejecutamos.
+    """
+    logger.info("Graph deciding next action (DIRECT - no blocking validations)")
+    
+    vendor_output_data = state.get("vendor_output", {})
+    vendor_output = VendorOutput(**vendor_output_data) if vendor_output_data else None
+    
+    if not vendor_output:
+        return {"graph_decision": "response_only", "vendor_action": None, "state_valid": True}
+    
+    # Si el Vendor sugiere una herramienta, ejecutar DIRECTAMENTE
+    if vendor_output.requiere_tool and vendor_output.tool_sugerida:
+        tool_name = vendor_output.tool_sugerida
+        
+        logger.info(f"DIRECT execution: tool={tool_name}, params={vendor_output.tool_params_sugeridos}")
+        
+        return {
+            "graph_decision": "execute_tool",
+            "state_valid": True,
+            "vendor_action": {
+                "accion": "tool",
+                "mensaje": vendor_output.mensaje,
+                "nombre_tool": tool_name,
+                "input_tool": vendor_output.tool_params_sugeridos or {}
+            }
+        }
+    
+    # Sin herramienta - responder directamente
+    return {
+        "graph_decision": "response_only",
+        "state_valid": True,
+        "vendor_action": {
+            "accion": "respuesta",
+            "mensaje": vendor_output.mensaje,
+            "nombre_tool": None,
+            "input_tool": None
+        }
+    }
+
+
 async def execute_tool_node(state: GraphState) -> Dict[str, Any]:
     """FASE 3: Ejecuta tool SOLO si el estado es válido."""
     logger.info("Executing tool (state-validated)")
@@ -924,9 +968,50 @@ def create_simplified_graph() -> StateGraph:
     return workflow.compile()
 
 
+def create_direct_graph() -> StateGraph:
+    """
+    DIRECT GRAPH: Ejecución directa de herramientas como V1.
+    
+    Flujo simple: 
+        load_state → vendor_interpret → decide_action_direct → execute_tool → update_state → finalize → END
+    
+    Diferencias con otros grafos:
+    - NO hay validaciones de CommercialState que bloqueen herramientas
+    - NO hay Observer LLM call
+    - Si el Vendor sugiere tool → se ejecuta DIRECTAMENTE
+    - Funciona como V1 pero con la estructura de V2
+    """
+    workflow = StateGraph(GraphState)
+    
+    workflow.add_node("load_state", load_state_node)
+    workflow.add_node("vendor_interpret", vendor_interpret_node)
+    workflow.add_node("decide_action", decide_action_direct_node)  # DIRECT version
+    workflow.add_node("execute_tool", execute_tool_node)
+    workflow.add_node("update_state", update_state_node)
+    workflow.add_node("finalize", finalize_response_node)
+    
+    workflow.set_entry_point("load_state")
+    
+    workflow.add_edge("load_state", "vendor_interpret")
+    workflow.add_edge("vendor_interpret", "decide_action")
+    
+    workflow.add_conditional_edges(
+        "decide_action",
+        should_execute_tool_v2,
+        {"execute_tool": "execute_tool", "finalize": "finalize"}
+    )
+    
+    workflow.add_edge("execute_tool", "update_state")
+    workflow.add_edge("update_state", "finalize")
+    workflow.add_edge("finalize", END)
+    
+    return workflow.compile()
+
+
 _agent_graph = None
 _state_governed_graph = None
 _simplified_graph = None
+_direct_graph = None
 
 
 def get_agent_graph():
@@ -947,12 +1032,26 @@ def get_state_governed_graph():
 
 def get_simplified_graph():
     """
-    Returns the simplified 2-agent graph (recommended).
+    Returns the simplified 2-agent graph.
     - No Observer LLM call (validations are hardcoded)
     - No Refiner in critical path
     - Redis-persistent CommercialState
+    - BUT: CommercialState can still block tools
     """
     global _simplified_graph
     if _simplified_graph is None:
         _simplified_graph = create_simplified_graph()
     return _simplified_graph
+
+
+def get_direct_graph():
+    """
+    Returns the DIRECT graph (RECOMMENDED - works like V1).
+    - NO blocking validations
+    - If Vendor suggests tool → execute immediately
+    - Simple and reliable
+    """
+    global _direct_graph
+    if _direct_graph is None:
+        _direct_graph = create_direct_graph()
+    return _direct_graph
