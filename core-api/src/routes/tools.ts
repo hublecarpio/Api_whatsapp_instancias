@@ -207,27 +207,65 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+function interpolateString(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || '');
+}
+
+function interpolateValue(value: any, vars: Record<string, string>): any {
+  if (typeof value === 'string') {
+    return interpolateString(value, vars);
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => interpolateValue(item, vars));
+  }
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = interpolateValue(v, vars);
+    }
+    return result;
+  }
+  return value;
+}
+
 router.post('/:id/test', async (req: AuthRequest, res: Response) => {
   try {
-    const { testPayload } = req.body;
+    const { testVariables = {} } = req.body;
     
     const tool = await prisma.agentTool.findUnique({
       where: { id: req.params.id },
-      include: { prompt: { include: { business: { select: { userId: true } } } } }
+      include: { prompt: { include: { business: { select: { userId: true, timezone: true } } } } }
     });
     
     if (!tool || tool.prompt.business.userId !== req.userId) {
       return res.status(404).json({ error: 'Tool not found' });
     }
     
-    const response = await fetch(tool.url, {
+    const timezone = (tool.prompt.business as any).timezone || 'America/Lima';
+    const now = new Date().toLocaleString('es-PE', { timeZone: timezone });
+    const allVars = { now, ...testVariables };
+    
+    const interpolatedUrl = interpolateString(tool.url, allVars);
+    
+    let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (tool.headers) {
+      const interpolatedHeaders = interpolateValue(tool.headers, allVars);
+      headers = { ...headers, ...interpolatedHeaders };
+    }
+    
+    const fetchOptions: RequestInit = {
       method: tool.method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(tool.headers as Record<string, string> || {})
-      },
-      body: JSON.stringify(testPayload || {})
-    });
+      headers
+    };
+    
+    if (tool.method !== 'GET' && tool.bodyTemplate) {
+      const body = interpolateValue(tool.bodyTemplate, allVars);
+      fetchOptions.body = JSON.stringify(body);
+    }
+    
+    const startTime = Date.now();
+    const response = await fetch(interpolatedUrl, fetchOptions);
+    const duration = Date.now() - startTime;
     
     const data = await response.text();
     let parsed;
@@ -240,7 +278,8 @@ router.post('/:id/test', async (req: AuthRequest, res: Response) => {
     res.json({
       status: response.status,
       statusText: response.statusText,
-      data: parsed
+      data: parsed,
+      duration
     });
   } catch (error: any) {
     console.error('Test tool error:', error);

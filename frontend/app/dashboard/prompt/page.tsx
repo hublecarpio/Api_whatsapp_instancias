@@ -1017,47 +1017,16 @@ export default function PromptPage() {
     setTestLoading(true);
     setTestResponse(null);
     
-    const startTime = Date.now();
-    
     try {
-      const url = interpolateTestString(testingTool.url, testVariables);
-      
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (testingTool.headers) {
-        const interpolatedHeaders = interpolateTestValue(testingTool.headers, testVariables);
-        headers = { ...headers, ...interpolatedHeaders };
-      }
-      
-      const fetchOptions: RequestInit = {
-        method: testingTool.method,
-        headers
-      };
-      
-      if (testingTool.method !== 'GET' && testingTool.bodyTemplate) {
-        const body = interpolateTestValue(testingTool.bodyTemplate, testVariables);
-        fetchOptions.body = JSON.stringify(body);
-      }
-      
-      const response = await fetch(url, fetchOptions);
-      const duration = Date.now() - startTime;
-      
-      let data;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        data = await response.text();
-      }
-      
+      const res = await toolsApi.test(testingTool.id, { testVariables });
       setTestResponse({
-        status: response.status,
-        data,
-        duration
+        status: res.data.status,
+        data: res.data.data,
+        duration: res.data.duration
       });
     } catch (err: any) {
       setTestResponse({
-        error: err.message || 'Error de conexion',
-        duration: Date.now() - startTime
+        error: err.response?.data?.error || err.message || 'Error de conexion'
       });
     } finally {
       setTestLoading(false);
