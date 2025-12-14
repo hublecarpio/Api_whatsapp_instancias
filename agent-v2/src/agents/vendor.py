@@ -50,10 +50,10 @@ Tu ÚNICO trabajo es:
 2. Detectar la intención
 3. Extraer entidades (productos, cantidades, datos del cliente)
 4. Generar un mensaje de respuesta apropiado
+5. SUGERIR herramientas cuando sea apropiado (usa EXACTAMENTE el nombre que aparece en HERRAMIENTAS DISPONIBLES)
 
 ## LO QUE NO PUEDES HACER:
-- NO decides qué herramienta usar (el sistema lo decide)
-- NO ejecutas acciones (solo interpretas)
+- NO ejecutas acciones (solo sugieres)
 - NO avanzas etapas del proceso de venta
 - NO generas órdenes ni pagos
 
@@ -70,8 +70,8 @@ Tu ÚNICO trabajo es:
   },
   "productos_mencionados": ["ids o nombres de productos"],
   "requiere_tool": true/false,
-  "tool_sugerida": "search_product|payment|media|etc o null",
-  "tool_params_sugeridos": {},
+  "tool_sugerida": "nombre_exacto_de_herramienta_de_la_lista o null",
+  "tool_params_sugeridos": {"param1": "valor1"},
   "confianza": 0.0-1.0
 }
 ```
@@ -155,10 +155,28 @@ def build_vendor_context(
 """
     
     if tools_available:
-        context += "\n## HERRAMIENTAS DISPONIBLES:\n"
+        context += "\n## HERRAMIENTAS DISPONIBLES (usa el nombre EXACTO en tool_sugerida):\n"
+        builtin_tools = []
+        custom_tools = []
         for tool in tools_available:
-            context += f"- **{tool['name']}**: {tool['description']}\n"
-        context += "\nPuedes sugerir cualquiera de estas herramientas en 'tool_sugerida'.\n"
+            if tool['name'].startswith('custom_'):
+                custom_tools.append(tool)
+            else:
+                builtin_tools.append(tool)
+        
+        if builtin_tools:
+            context += "### Integradas:\n"
+            for tool in builtin_tools:
+                context += f"- **{tool['name']}**: {tool['description']}\n"
+        
+        if custom_tools:
+            context += "\n### Personalizadas del negocio (PRIORIZA ESTAS):\n"
+            for tool in custom_tools:
+                context += f"- **{tool['name']}**: {tool['description']}\n"
+        
+        context += "\nIMPORTANTE: Cuando uses una herramienta, pon su nombre EXACTO en 'tool_sugerida'.\n"
+        if custom_tools:
+            context += f"Ejemplo con custom tool: tool_sugerida=\"{custom_tools[0]['name']}\"\n"
     
     return context
 
