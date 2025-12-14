@@ -384,11 +384,17 @@ async def finalize_response_node(state: GraphState) -> Dict[str, Any]:
     logger.info("Finalizing response")
     
     vendor_action = state.get("vendor_action", {})
+    vendor_output = state.get("vendor_output", {})
     tool_result = state.get("tool_result")
     tool_success = state.get("tool_success", True)
     
     if vendor_action.get("accion") == "respuesta" or not tool_result:
-        response = vendor_action.get("mensaje", "")
+        response = vendor_action.get("mensaje", "") or vendor_output.get("mensaje", "")
+        
+        if not response or response.lower().strip() in ["(tool_call)", "tool_call", ""]:
+            response = "Un momento, estoy procesando tu solicitud..."
+            logger.warning(f"[FINALIZE] Empty or invalid message detected, using fallback")
+        
         is_valid, violations = validate_vendor_response(response)
         if not is_valid:
             logger.warning(f"[SECURITY] Response validation failed: {violations}")
