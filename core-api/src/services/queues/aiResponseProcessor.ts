@@ -461,6 +461,61 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
     });
   }
   
+  // Add appointment tools for APPOINTMENTS mode
+  if (businessObjective === 'APPOINTMENTS') {
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: 'consultar_disponibilidad',
+        description: 'Consulta los horarios disponibles para agendar una cita en una fecha específica.',
+        parameters: {
+          type: 'object',
+          properties: {
+            fecha: {
+              type: 'string',
+              description: 'Fecha para consultar disponibilidad en formato YYYY-MM-DD'
+            }
+          },
+          required: ['fecha']
+        }
+      }
+    });
+    
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: 'agendar_cita',
+        description: 'Agenda una cita con el cliente en la fecha y hora especificada. Usa esta función cuando el cliente confirme que quiere agendar una cita y hayas verificado disponibilidad.',
+        parameters: {
+          type: 'object',
+          properties: {
+            fecha_hora: {
+              type: 'string',
+              description: 'Fecha y hora de la cita en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss)'
+            },
+            nombre_cliente: {
+              type: 'string',
+              description: 'Nombre del cliente'
+            },
+            servicio: {
+              type: 'string',
+              description: 'Tipo de servicio o cita'
+            },
+            duracion_minutos: {
+              type: 'number',
+              description: 'Duración de la cita en minutos (default: 60)'
+            },
+            notas: {
+              type: 'string',
+              description: 'Notas adicionales para la cita'
+            }
+          },
+          required: ['fecha_hora', 'nombre_cliente']
+        }
+      }
+    });
+  }
+  
   const modelConfig = await getModelForAgent('v1', business.openaiModel);
   
   if (openaiTools.length === 0) {
@@ -565,6 +620,88 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
             role: 'tool',
             tool_call_id: toolCall.id,
             content: `Error: Archivo con ID ${args.archivo_id} no encontrado.`
+          });
+        }
+      } else if (toolName === 'consultar_disponibilidad') {
+        const args = JSON.parse(fn.arguments);
+        const fecha = args.fecha;
+        
+        console.log(`[AI Worker] Checking availability for ${fecha}`);
+        
+        try {
+          const response = await axios.get(
+            `${process.env.CORE_API_URL || 'http://localhost:3001'}/appointments/internal/availability`,
+            {
+              params: { businessId: business.id, date: fecha },
+              headers: { 'X-Internal-Secret': process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me' }
+            }
+          );
+          
+          const slots = response.data.slots || [];
+          const formattedSlots = slots.map((s: any) => `${s.time} - ${s.available ? 'Disponible' : 'Ocupado'}`).join('\n');
+          
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: slots.length > 0 
+              ? `Horarios para ${fecha}:\n${formattedSlots}`
+              : `No hay horarios configurados para ${fecha}. El negocio puede no tener disponibilidad ese día.`
+          });
+        } catch (err: any) {
+          console.error('[AI Worker] Availability check failed:', err.message);
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Error al consultar disponibilidad: ${err.message}`
+          });
+        }
+      } else if (toolName === 'agendar_cita') {
+        const args = JSON.parse(fn.arguments);
+        const fechaHora = args.fecha_hora;
+        const nombreCliente = args.nombre_cliente;
+        const servicio = args.servicio || '';
+        const duracion = args.duracion_minutos || 60;
+        const notas = args.notas || '';
+        
+        console.log(`[AI Worker] Scheduling appointment for ${fechaHora}, client: ${nombreCliente}`);
+        
+        try {
+          const response = await axios.post(
+            `${process.env.CORE_API_URL || 'http://localhost:3001'}/appointments/internal/schedule`,
+            {
+              businessId: business.id,
+              dateTime: fechaHora,
+              clientName: nombreCliente,
+              clientPhone: contactPhone.replace(/\D/g, ''),
+              service: servicio,
+              durationMinutes: duracion,
+              notes: notas
+            },
+            {
+              headers: { 'X-Internal-Secret': process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me' }
+            }
+          );
+          
+          if (response.data.success) {
+            const apt = response.data.appointment;
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: `Cita agendada exitosamente:\n- Fecha: ${apt.date}\n- Hora: ${apt.time}\n- Cliente: ${nombreCliente}\n- Servicio: ${servicio || 'General'}`
+            });
+          } else {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: `No se pudo agendar la cita: ${response.data.error || 'Horario no disponible'}`
+            });
+          }
+        } catch (err: any) {
+          console.error('[AI Worker] Appointment scheduling failed:', err.message);
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Error al agendar cita: ${err.response?.data?.error || err.message}`
           });
         }
       }
