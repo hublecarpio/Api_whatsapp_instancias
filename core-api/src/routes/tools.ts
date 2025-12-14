@@ -38,8 +38,11 @@ router.post('/internal/log', async (req: Request, res: Response) => {
         include: { tools: true }
       });
       
+      const cleanToolName = toolName.replace(/^custom_/, '');
+      
       const matchedTool = prompt?.tools.find(t => 
-        t.name.toLowerCase() === toolName.toLowerCase()
+        t.name.toLowerCase() === toolName.toLowerCase() ||
+        t.name.toLowerCase() === cleanToolName.toLowerCase()
       );
       finalToolId = matchedTool?.id;
     }

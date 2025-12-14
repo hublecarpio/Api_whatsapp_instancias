@@ -267,6 +267,9 @@ def format_tool_result(result: Dict[str, Any]) -> str:
     if result.get("success"):
         message = result.get("message", "Operación exitosa")
         
+        if "summary" in result and result["summary"]:
+            return f"{message}\n\nResultado:\n{result['summary']}"
+        
         if "products" in result and result["products"]:
             products = result["products"][:3]
             products_text = "\n".join([
@@ -287,6 +290,8 @@ def format_tool_result(result: Dict[str, Any]) -> str:
         if "data" in result and result["data"]:
             import json
             data_str = json.dumps(result["data"], ensure_ascii=False, indent=2)
+            if len(data_str) > 1000:
+                data_str = data_str[:1000] + "... [truncado]"
             return f"{message}\n\nDatos de la herramienta:\n{data_str}"
         
         return message

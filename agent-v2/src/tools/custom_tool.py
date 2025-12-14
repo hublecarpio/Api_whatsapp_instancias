@@ -24,7 +24,47 @@ class CustomToolOutput(BaseModel):
     success: bool
     message: str
     data: Optional[Dict[str, Any]] = None
+    summary: Optional[str] = None
     error: Optional[str] = None
+
+
+def summarize_array_response(data: Any, max_items: int = 5) -> str:
+    """Sintetiza arrays grandes en texto útil para el LLM."""
+    if isinstance(data, list):
+        total = len(data)
+        items = data[:max_items]
+        
+        summary_parts = []
+        for i, item in enumerate(items, 1):
+            if isinstance(item, dict):
+                key_values = []
+                for k, v in list(item.items())[:4]:
+                    if v is not None and str(v).strip():
+                        key_values.append(f"{k}: {v}")
+                summary_parts.append(f"{i}. {', '.join(key_values)}")
+            else:
+                summary_parts.append(f"{i}. {item}")
+        
+        result = "\n".join(summary_parts)
+        if total > max_items:
+            result += f"\n... y {total - max_items} más (total: {total})"
+        return result
+    
+    elif isinstance(data, dict):
+        if 'data' in data and isinstance(data['data'], list):
+            return summarize_array_response(data['data'], max_items)
+        if 'results' in data and isinstance(data['results'], list):
+            return summarize_array_response(data['results'], max_items)
+        if 'items' in data and isinstance(data['items'], list):
+            return summarize_array_response(data['items'], max_items)
+        
+        key_values = []
+        for k, v in list(data.items())[:6]:
+            if v is not None and not isinstance(v, (list, dict)):
+                key_values.append(f"{k}: {v}")
+        return ", ".join(key_values)
+    
+    return str(data)[:500]
 
 
 def interpolate_params(template: Any, params: Dict[str, Any]) -> Any:
@@ -107,10 +147,12 @@ class CustomToolHandler:
                     response_data = {"text": response.text[:1000]}
                 
                 if response.is_success:
+                    summary = summarize_array_response(response_data)
                     return CustomToolOutput(
                         success=True,
                         message=f"Tool ejecutada exitosamente",
-                        data=response_data
+                        data=response_data,
+                        summary=summary
                     )
                 else:
                     return CustomToolOutput(
