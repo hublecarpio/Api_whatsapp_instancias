@@ -1232,14 +1232,6 @@ export default function PromptPage() {
             Secciones ({promptSections.length})
           </button>
           <button
-            onClick={() => setActiveV2Tab('skills')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'skills' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Skills V2
-          </button>
-          <button
             onClick={() => setActiveV2Tab('memory')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               activeV2Tab === 'memory' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
@@ -1581,13 +1573,6 @@ export default function PromptPage() {
         </div>
       )}
 
-      {agentVersion === 'v2' && activeV2Tab === 'skills' && (
-        <SkillsV2Panel
-          skills={v2Skills}
-          onToggleSkill={handleToggleV2Skill}
-          loading={loadingV2}
-        />
-      )}
 
 
       {agentVersion === 'v2' && activeV2Tab === 'memory' && (
