@@ -53,6 +53,7 @@ export default function BillingPage() {
   } | null>(null);
   const [claimLoading, setClaimLoading] = useState(false);
   const [claimMessage, setClaimMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [customReferralCode, setCustomReferralCode] = useState('');
 
   useEffect(() => {
     loadData();
@@ -205,13 +206,26 @@ export default function BillingPage() {
   };
 
   const handleClaimReferralCode = async () => {
+    const normalizedCode = customReferralCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    
+    if (!normalizedCode) {
+      setClaimMessage({ type: 'error', text: 'Por favor ingresa un codigo personalizado' });
+      return;
+    }
+    
+    if (normalizedCode.length < 4 || normalizedCode.length > 20) {
+      setClaimMessage({ type: 'error', text: 'El codigo debe tener entre 4 y 20 caracteres alfanumericos' });
+      return;
+    }
+    
     setClaimLoading(true);
     setClaimMessage(null);
     
     try {
-      const response = await authApi.claimReferralCode();
-      setMyReferralCode(response.data.referralCode);
+      const response = await authApi.claimReferralCode(normalizedCode);
+      setMyReferralCode({ code: response.data.code, usageCount: 0 });
       setClaimMessage({ type: 'success', text: 'Tu codigo de referido ha sido creado exitosamente!' });
+      setCustomReferralCode('');
       await loadData();
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || 'Error al crear el codigo de referido';
@@ -738,15 +752,31 @@ export default function BillingPage() {
         {!myReferralCode ? (
           <div className="bg-dark-hover rounded-lg p-4">
             <p className="text-gray-300 text-sm mb-3">
-              Aun no tienes un codigo de referido. Crea uno para empezar a ganar comisiones.
+              Aun no tienes un codigo de referido. Elige un codigo personalizado para empezar a ganar comisiones.
             </p>
-            <button
-              onClick={handleClaimReferralCode}
-              disabled={claimLoading}
-              className="btn btn-primary"
-            >
-              {claimLoading ? 'Creando...' : 'Crear mi codigo de referido'}
-            </button>
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                value={customReferralCode}
+                onChange={(e) => setCustomReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                placeholder="Ej: MICODIGO2024"
+                maxLength={20}
+                className="flex-1 bg-dark-card border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:border-accent-success focus:outline-none"
+              />
+              <button
+                onClick={handleClaimReferralCode}
+                disabled={claimLoading || !customReferralCode.trim()}
+                className="btn btn-primary"
+              >
+                {claimLoading ? 'Creando...' : 'Crear codigo'}
+              </button>
+            </div>
+            <p className="text-gray-500 text-xs">4-20 caracteres alfanumericos. Solo letras y numeros.</p>
+            {claimMessage && (
+              <p className={`mt-2 text-sm ${claimMessage.type === 'success' ? 'text-accent-success' : 'text-red-400'}`}>
+                {claimMessage.text}
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-4">

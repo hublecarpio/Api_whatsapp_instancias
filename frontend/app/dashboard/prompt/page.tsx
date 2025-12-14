@@ -737,8 +737,11 @@ export default function PromptPage() {
   const handleChangeAgentVersion = async (version: 'v1' | 'v2') => {
     if (!currentBusiness || version === agentVersion) return;
     
-    if (version === 'v2') {
-      setError('El Agente V2 Enterprise Pro requiere activacion por el administrador. Contacta a soporte para solicitarlo.');
+    // Check if user has Enterprise plan (proBonusExpiresAt in the future or planType === 'pro')
+    const hasEnterprise = (user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro';
+    
+    if (version === 'v2' && !hasEnterprise) {
+      setError('El Agente V2 Enterprise Pro requiere plan Enterprise activo. Contacta a soporte para solicitarlo.');
       return;
     }
     
@@ -1144,11 +1147,13 @@ export default function PromptPage() {
             </button>
             <button
               onClick={() => handleChangeAgentVersion('v2')}
-              disabled={loading || agentVersion !== 'v2'}
+              disabled={loading}
               className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
                 agentVersion === 'v2'
                   ? 'bg-neon-purple text-white'
-                  : 'bg-dark-hover/50 text-gray-500 cursor-not-allowed'
+                  : ((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro')
+                    ? 'bg-dark-hover text-purple-400 hover:bg-neon-purple/20 hover:text-white'
+                    : 'bg-dark-hover/50 text-gray-500 cursor-not-allowed'
               }`}
             >
               V2 Enterprise Pro
@@ -1165,10 +1170,17 @@ export default function PromptPage() {
             </p>
           </div>
         )}
-        {agentVersion !== 'v2' && (
+        {agentVersion !== 'v2' && !((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro') && (
           <div className="mt-4 p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
             <p className="text-sm text-gray-400">
               El Agente V2 Enterprise Pro requiere plan Enterprise ($400/mes). Contacta a soporte para solicitarlo.
+            </p>
+          </div>
+        )}
+        {agentVersion !== 'v2' && ((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro') && (
+          <div className="mt-4 p-3 bg-neon-purple/10 border border-neon-purple/30 rounded-lg">
+            <p className="text-sm text-neon-purple">
+              Tienes plan Enterprise activo. Haz clic en "V2 Enterprise Pro" para activar el agente avanzado.
             </p>
           </div>
         )}
