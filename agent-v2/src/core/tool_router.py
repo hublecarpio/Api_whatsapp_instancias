@@ -1,7 +1,9 @@
 from typing import Dict, Any, Optional, List, Tuple
 import logging
 import json
+import time
 
+from .telemetry import log_tool_execution_fire_and_forget
 from ..schemas.tool_schemas import (
     SearchProductInput, SearchProductOutput,
     PaymentInput, PaymentOutput,
@@ -158,6 +160,8 @@ class ToolRouter:
         
         REGLA: El LLM NUNCA recibe raw_output, solo sanitized_output.
         """
+        start_time = time.time()
+        
         if tool_name in self.custom_tools:
             return await self._execute_custom_tool(tool_name, input_data)
         
@@ -196,17 +200,42 @@ class ToolRouter:
             if tool_name == "search_product" and "products" in sanitized:
                 sanitized["products"] = format_products_for_llm(sanitized["products"])
             
+            duration_ms = int((time.time() - start_time) * 1000)
             logger.info(f"[TOOL] {tool_name} executed - raw fields: {list(raw_output.keys())}, sanitized fields: {list(sanitized.keys())}")
+            
+            log_tool_execution_fire_and_forget(
+                business_id=self.business_id,
+                tool_name=tool_name,
+                tool_input=input_data,
+                result=json.dumps(sanitized, ensure_ascii=False),
+                success=raw_output.get("success", True),
+                error=None,
+                duration_ms=duration_ms,
+                contact_phone=self.context.get("contact_phone")
+            )
             
             return raw_output, sanitized
             
         except Exception as e:
+            duration_ms = int((time.time() - start_time) * 1000)
             logger.error(f"Error executing tool {tool_name}: {e}")
             error_output = {
                 "success": False,
                 "error": str(e),
                 "message": "Ocurrió un error al procesar la solicitud"
             }
+            
+            log_tool_execution_fire_and_forget(
+                business_id=self.business_id,
+                tool_name=tool_name,
+                tool_input=input_data,
+                result=None,
+                success=False,
+                error=str(e),
+                duration_ms=duration_ms,
+                contact_phone=self.context.get("contact_phone")
+            )
+            
             return error_output, sanitize_tool_output(tool_name, error_output)
     
     async def _execute_custom_tool(
@@ -218,6 +247,7 @@ class ToolRouter:
         Ejecuta una tool personalizada del usuario.
         Retorna (raw_output, sanitized_output).
         """
+        start_time = time.time()
         tool_config = self.custom_tools.get(tool_name)
         if not tool_config:
             error_output = {
@@ -233,17 +263,42 @@ class ToolRouter:
             raw_output = result.model_dump()
             
             sanitized = sanitize_tool_output(tool_name, raw_output)
+            duration_ms = int((time.time() - start_time) * 1000)
             
             logger.info(f"[CUSTOM_TOOL] {tool_name} executed - raw fields: {list(raw_output.keys())}, sanitized fields: {list(sanitized.keys())}")
             
+            log_tool_execution_fire_and_forget(
+                business_id=self.business_id,
+                tool_name=tool_name,
+                tool_input=input_data,
+                result=json.dumps(sanitized, ensure_ascii=False),
+                success=raw_output.get("success", True),
+                error=None,
+                duration_ms=duration_ms,
+                contact_phone=self.context.get("contact_phone")
+            )
+            
             return raw_output, sanitized
         except Exception as e:
+            duration_ms = int((time.time() - start_time) * 1000)
             logger.error(f"Error executing custom tool {tool_name}: {e}")
             error_output = {
                 "success": False,
                 "error": str(e),
                 "message": "Ocurrió un error al procesar la solicitud"
             }
+            
+            log_tool_execution_fire_and_forget(
+                business_id=self.business_id,
+                tool_name=tool_name,
+                tool_input=input_data,
+                result=None,
+                success=False,
+                error=str(e),
+                duration_ms=duration_ms,
+                contact_phone=self.context.get("contact_phone")
+            )
+            
             return error_output, sanitize_tool_output(tool_name, error_output)
     
     def validate_tool_call(self, tool_name: str, input_data: Dict[str, Any]) -> tuple[bool, Optional[str]]:
