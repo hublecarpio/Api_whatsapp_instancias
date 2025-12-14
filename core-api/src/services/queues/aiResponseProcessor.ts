@@ -516,6 +516,47 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
     });
   }
   
+  // Add custom tools from business configuration
+  for (const customTool of userTools) {
+    const parameters: any = {
+      type: 'object',
+      properties: {} as Record<string, any>,
+      required: [] as string[],
+      additionalProperties: false
+    };
+    
+    if (customTool.parameters && Array.isArray(customTool.parameters)) {
+      for (const param of customTool.parameters) {
+        const typeMap: Record<string, string> = {
+          'string': 'string',
+          'number': 'number',
+          'integer': 'integer',
+          'boolean': 'boolean',
+          'array': 'array',
+          'object': 'object'
+        };
+        parameters.properties[param.name] = {
+          type: typeMap[param.type] || 'string',
+          description: param.description || param.name
+        };
+        if (param.required) {
+          parameters.required.push(param.name);
+        }
+      }
+    }
+    
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: `custom_${customTool.name}`,
+        description: customTool.description || `Custom tool: ${customTool.name}`,
+        parameters
+      }
+    });
+    
+    console.log(`[AI Worker V1] Added custom tool: custom_${customTool.name}`);
+  }
+  
   const modelConfig = await getModelForAgent('v1', business.openaiModel);
   
   if (openaiTools.length === 0) {
@@ -702,6 +743,190 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
             role: 'tool',
             tool_call_id: toolCall.id,
             content: `Error al agendar cita: ${err.response?.data?.error || err.message}`
+          });
+        }
+      } else if (toolName.startsWith('custom_')) {
+        // Handle custom tools
+        const actualToolName = toolName.replace('custom_', '');
+        const toolConfig = userTools.find((t: any) => t.name === actualToolName);
+        
+        if (!toolConfig) {
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Error: Custom tool "${actualToolName}" not found.`
+          });
+          continue;
+        }
+        
+        console.log(`[AI Worker V1] Executing custom tool: ${actualToolName}`);
+        
+        try {
+          const args = JSON.parse(fn.arguments);
+          
+          // Build request body from args and template
+          let requestBody: any = {};
+          if (toolConfig.bodyTemplate) {
+            // Parse template as base object, then merge/override with args
+            let baseTemplate: any = {};
+            try {
+              baseTemplate = typeof toolConfig.bodyTemplate === 'string'
+                ? JSON.parse(toolConfig.bodyTemplate)
+                : toolConfig.bodyTemplate;
+            } catch {
+              // If template is not valid JSON, use string interpolation fallback
+              // First replace placeholders with proper JSON values, then try parsing
+              let bodyStr = String(toolConfig.bodyTemplate);
+              
+              // Dynamic context variables
+              const dynamicContext: Record<string, string> = {
+                contactPhone: contactPhone.replace(/\D/g, ''),
+                contactName: contactName || '',
+                businessId: business.id,
+                businessName: business.name || ''
+              };
+              
+              // Combine args with dynamic context
+              const allVars: Record<string, any> = { ...dynamicContext, ...args };
+              
+              // Replace placeholders with appropriate values
+              for (const [key, value] of Object.entries(allVars)) {
+                const isComplex = typeof value === 'object' && value !== null;
+                
+                // For quoted placeholders like "{{key}}", replace with JSON value
+                const quotedRegex = new RegExp(`"\\{\\{${key}\\}\\}"`, 'g');
+                bodyStr = bodyStr.replace(quotedRegex, JSON.stringify(value));
+                
+                // For unquoted placeholders like {{key}}
+                const unquotedRegex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+                if (isComplex) {
+                  // Arrays/objects need JSON serialization
+                  bodyStr = bodyStr.replace(unquotedRegex, JSON.stringify(value));
+                } else {
+                  // Scalars (string, number, boolean) - use raw value
+                  bodyStr = bodyStr.replace(unquotedRegex, String(value));
+                }
+              }
+              
+              // Try parsing as JSON after interpolation
+              try {
+                requestBody = JSON.parse(bodyStr);
+              } catch {
+                requestBody = bodyStr;
+              }
+              baseTemplate = null;
+            }
+            
+            if (baseTemplate !== null) {
+              // Recursively interpolate placeholders in template values
+              const interpolate = (obj: any): any => {
+                if (typeof obj === 'string') {
+                  // Check if entire value is a placeholder
+                  const fullMatch = obj.match(/^\{\{(\w+)\}\}$/);
+                  if (fullMatch) {
+                    const key = fullMatch[1];
+                    // Return the raw value (preserves type for arrays/objects)
+                    if (key in args) return args[key];
+                    // Check dynamic context
+                    const dynamicContext: Record<string, string> = {
+                      contactPhone: contactPhone.replace(/\D/g, ''),
+                      contactName: contactName || '',
+                      businessId: business.id,
+                      businessName: business.name || ''
+                    };
+                    if (key in dynamicContext) return dynamicContext[key];
+                    return obj; // Keep placeholder if not found
+                  }
+                  // Partial placeholders - string interpolation
+                  let result = obj;
+                  for (const [key, value] of Object.entries(args)) {
+                    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+                    const stringValue = (typeof value === 'object' && value !== null)
+                      ? JSON.stringify(value)
+                      : String(value);
+                    result = result.replace(regex, stringValue);
+                  }
+                  // Also replace dynamic variables
+                  if (toolConfig.dynamicVariables) {
+                    const dynamicContext: Record<string, string> = {
+                      contactPhone: contactPhone.replace(/\D/g, ''),
+                      contactName: contactName || '',
+                      businessId: business.id,
+                      businessName: business.name || ''
+                    };
+                    for (const [key, value] of Object.entries(dynamicContext)) {
+                      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+                      result = result.replace(regex, value);
+                    }
+                  }
+                  return result;
+                } else if (Array.isArray(obj)) {
+                  return obj.map(interpolate);
+                } else if (typeof obj === 'object' && obj !== null) {
+                  const result: any = {};
+                  for (const [k, v] of Object.entries(obj)) {
+                    result[k] = interpolate(v);
+                  }
+                  return result;
+                }
+                return obj;
+              };
+              
+              requestBody = interpolate(baseTemplate);
+            }
+          } else {
+            // If no template, use args directly
+            requestBody = args;
+          }
+          
+          // Parse headers - only default to JSON if body is an object
+          let headers: Record<string, string> = {};
+          if (typeof requestBody === 'object' && requestBody !== null) {
+            headers['Content-Type'] = 'application/json';
+          }
+          if (toolConfig.headers) {
+            const configHeaders = typeof toolConfig.headers === 'string' 
+              ? JSON.parse(toolConfig.headers) 
+              : toolConfig.headers;
+            headers = { ...headers, ...configHeaders };
+          }
+          
+          const method = (toolConfig.method || 'POST').toUpperCase();
+          const axiosConfig: any = {
+            method,
+            url: toolConfig.url,
+            headers,
+            timeout: 30000
+          };
+          
+          if (method === 'GET') {
+            axiosConfig.params = requestBody;
+          } else {
+            axiosConfig.data = requestBody;
+          }
+          
+          console.log(`[AI Worker V1] Custom tool ${actualToolName}: ${method} ${toolConfig.url}`);
+          
+          const response = await axios(axiosConfig);
+          
+          const responseContent = typeof response.data === 'object' 
+            ? JSON.stringify(response.data) 
+            : String(response.data);
+          
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: responseContent.substring(0, 4000) // Limit response size
+          });
+          
+          console.log(`[AI Worker V1] Custom tool ${actualToolName} executed successfully`);
+          
+        } catch (err: any) {
+          console.error(`[AI Worker V1] Custom tool ${actualToolName} failed:`, err.message);
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Error executing ${actualToolName}: ${err.response?.data?.message || err.message}`
           });
         }
       }
