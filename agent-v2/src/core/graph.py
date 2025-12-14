@@ -456,38 +456,47 @@ async def finalize_response_node(state: GraphState) -> Dict[str, Any]:
     tool_result = state.get("tool_result")
     tool_success = state.get("tool_success", True)
     
-    if vendor_action.get("accion") == "respuesta" or not tool_result:
-        response = vendor_action.get("mensaje", "") or vendor_output.get("mensaje", "")
+    # CRITICAL FIX: When a tool was executed (tool_result exists), we MUST use refine_with_tool_result
+    # to construct the response based on the tool's output.
+    # Only use direct message when NO tool was executed (response_only path).
+    has_tool_result = tool_result is not None and tool_result != ""
+    tool_was_executed = vendor_action.get("accion") == "tool" and vendor_action.get("nombre_tool")
+    
+    if has_tool_result or tool_was_executed:
+        # Tool was executed - use refine_with_tool_result to build response
+        vendor = get_vendor_agent()
+        refined_response, tokens = await vendor.refine_with_tool_result(
+            original_message=vendor_action.get("mensaje", ""),
+            tool_name=vendor_action.get("nombre_tool", ""),
+            tool_result=tool_result or "La herramienta no devolvió resultados",
+            current_message=state["current_message"],
+            business_profile=BusinessProfile.from_context(state["business_profile"]),
+            tool_failed=not tool_success
+        )
         
-        if not response or response.lower().strip() in ["(tool_call)", "tool_call", ""]:
-            response = "Un momento, estoy procesando tu solicitud..."
-            logger.warning(f"[FINALIZE] Empty or invalid message detected, using fallback")
-        
-        is_valid, violations = validate_vendor_response(response)
+        is_valid, violations = validate_vendor_response(refined_response)
         if not is_valid:
-            logger.warning(f"[SECURITY] Response validation failed: {violations}")
-            response = sanitize_vendor_response(response)
-        return {"final_response": response}
+            logger.warning(f"[SECURITY] Refined response validation failed: {violations}")
+            refined_response = sanitize_vendor_response(refined_response)
+        
+        return {
+            "final_response": refined_response,
+            "tokens_used": state.get("tokens_used", 0) + tokens
+        }
     
-    vendor = get_vendor_agent()
-    refined_response, tokens = await vendor.refine_with_tool_result(
-        original_message=vendor_action.get("mensaje", ""),
-        tool_name=vendor_action.get("nombre_tool", ""),
-        tool_result=tool_result,
-        current_message=state["current_message"],
-        business_profile=BusinessProfile.from_context(state["business_profile"]),
-        tool_failed=not tool_success
-    )
+    # No tool executed - use direct message from vendor
+    response = vendor_action.get("mensaje", "") or vendor_output.get("mensaje", "")
     
-    is_valid, violations = validate_vendor_response(refined_response)
+    # Safety check for invalid/empty messages
+    if not response or response.lower().strip() in ["(tool_call)", "tool_call", ""]:
+        response = "Un momento, estoy procesando tu solicitud..."
+        logger.warning(f"[FINALIZE] Empty or invalid message detected, using fallback")
+    
+    is_valid, violations = validate_vendor_response(response)
     if not is_valid:
-        logger.warning(f"[SECURITY] Refined response validation failed: {violations}")
-        refined_response = sanitize_vendor_response(refined_response)
-    
-    return {
-        "final_response": refined_response,
-        "tokens_used": state.get("tokens_used", 0) + tokens
-    }
+        logger.warning(f"[SECURITY] Response validation failed: {violations}")
+        response = sanitize_vendor_response(response)
+    return {"final_response": response}
 
 
 async def vendor_node(state: GraphState) -> Dict[str, Any]:

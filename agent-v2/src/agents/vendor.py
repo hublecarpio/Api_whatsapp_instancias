@@ -675,10 +675,16 @@ class VendorAgent:
                 # Determine intention based on tool called
                 intencion = self._infer_intention_from_tool(tool_name)
                 
-                # Build VendorOutput with tool suggestion
+                # CRITICAL: When using native tool calls, the response.content may be empty
+                # or contain residual text like "(tool_call)". We must NOT send this to the client.
+                # The real message will be constructed AFTER executing the tool in finalize_response_node.
+                # Set mensaje to empty - finalize will call refine_with_tool_result to build the real response.
+                mensaje = ""
+                
+                # Build VendorOutput with tool suggestion (mensaje intentionally empty)
                 return VendorOutput(
                     intencion=intencion,
-                    mensaje=response.content or "",
+                    mensaje=mensaje,
                     entidades_detectadas={},
                     productos_mencionados=[],
                     requiere_tool=True,
