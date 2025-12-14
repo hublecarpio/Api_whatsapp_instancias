@@ -52,7 +52,23 @@ export async function analyzeAndUpdateLeadStage(
       description: tag.description || tag.name
     }));
 
-    const analysis = await geminiService.analyzeLeadStage(conversationHistory, availableStages);
+    const currentAssignment = await prisma.tagAssignment.findUnique({
+      where: {
+        businessId_contactPhone: {
+          businessId,
+          contactPhone
+        }
+      },
+      include: { tag: true }
+    });
+
+    const currentStageName = currentAssignment?.tag?.name;
+
+    const analysis = await geminiService.analyzeLeadStage(
+      conversationHistory, 
+      availableStages,
+      currentStageName
+    );
 
     if (!analysis.success || !analysis.stageName) {
       return { success: false, error: analysis.error || 'Could not determine stage' };
@@ -66,22 +82,14 @@ export async function analyzeAndUpdateLeadStage(
       return { success: false, error: `Stage "${analysis.stageName}" not found in available tags` };
     }
 
-    const currentAssignment = await prisma.tagAssignment.findUnique({
-      where: {
-        businessId_contactPhone: {
-          businessId,
-          contactPhone
-        }
-      },
-      include: { tag: true }
-    });
-
-    if (currentAssignment?.tagId === targetTag.id) {
+    if (!analysis.shouldChange || currentAssignment?.tagId === targetTag.id) {
       return {
         success: true,
-        newStage: analysis.stageName,
+        newStage: currentStageName || analysis.stageName,
         confidence: analysis.confidence,
-        reasoning: 'Stage unchanged - already at this stage'
+        reasoning: analysis.shouldChange === false 
+          ? `Mantiene etapa actual: ${analysis.reasoning}`
+          : 'Stage unchanged - already at this stage'
       };
     }
 

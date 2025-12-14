@@ -224,53 +224,81 @@ export class GeminiService {
 
   async analyzeLeadStage(
     conversationHistory: { role: string; content: string }[],
-    availableStages: { name: string; description: string }[]
-  ): Promise<{ success: boolean; stageName: string; confidence: number; reasoning: string; error?: string }> {
+    availableStages: { name: string; description: string }[],
+    currentStageName?: string
+  ): Promise<{ success: boolean; stageName: string; confidence: number; reasoning: string; shouldChange: boolean; error?: string }> {
     if (!this.isConfigured()) {
-      return { success: false, stageName: '', confidence: 0, reasoning: '', error: 'Gemini API not configured' };
+      return { success: false, stageName: '', confidence: 0, reasoning: '', shouldChange: false, error: 'Gemini API not configured' };
+    }
+
+    if (availableStages.length === 0) {
+      return { success: false, stageName: '', confidence: 0, reasoning: '', shouldChange: false, error: 'No stages configured' };
     }
 
     try {
-      const stagesList = availableStages.map((s, i) => `${i + 1}. "${s.name}": ${s.description}`).join('\n');
+      const stageNames = availableStages.map(s => s.name);
+      const stagesWithDescriptions = availableStages
+        .map((s, i) => `${i + 1}. "${s.name}"${s.description ? `: ${s.description}` : ''}`)
+        .join('\n');
       
       const conversationText = conversationHistory
         .slice(-20)
         .map(msg => `${msg.role === 'assistant' ? 'Agente' : 'Cliente'}: ${msg.content}`)
         .join('\n');
 
-      const prompt = `Analiza esta conversación de WhatsApp entre un agente de ventas y un cliente potencial.
+      const currentStageContext = currentStageName 
+        ? `\nETAPA ACTUAL DEL LEAD: "${currentStageName}"`
+        : '\nETAPA ACTUAL DEL LEAD: Sin asignar (nuevo)';
 
-ETAPAS DISPONIBLES:
-${stagesList}
+      const prompt = `Eres un clasificador estricto de leads en un embudo de ventas. Tu trabajo es determinar en qué etapa se encuentra un lead basándote ÚNICAMENTE en las etapas definidas por el negocio.
 
-CONVERSACIÓN:
+## ETAPAS DISPONIBLES (SOLO PUEDES ELEGIR UNA DE ESTAS):
+${stagesWithDescriptions}
+${currentStageContext}
+
+## CONVERSACIÓN A ANALIZAR:
 ${conversationText}
 
-Determina en qué etapa del embudo de ventas se encuentra este lead basándote en el contenido de la conversación.
+## INSTRUCCIONES ESTRICTAS:
 
-Responde SOLO en formato JSON con esta estructura exacta:
+1. **SOLO PUEDES RESPONDER CON UNA DE LAS ETAPAS LISTADAS ARRIBA** - No inventes etapas nuevas.
+
+2. **CRITERIOS DE CLASIFICACIÓN** (analiza la conversación buscando estas señales):
+   - Primera interacción / saludo inicial → etapa más temprana del embudo
+   - Preguntas sobre productos/servicios/precios → etapa de interés/exploración
+   - Solicitud de cotización o negociación → etapa intermedia
+   - Confirmación de compra / envío de pago → etapa avanzada/cierre
+   - Rechazo explícito / sin respuesta prolongada → etapa de pérdida (si existe)
+   - Seguimiento post-venta → etapa final (si existe)
+
+3. **DECISIÓN DE CAMBIO**: 
+   - Si la etapa actual es correcta, mantén "shouldChange": false
+   - Solo cambia si hay evidencia CLARA en la conversación de que el lead avanzó o retrocedió
+   - Un solo mensaje no es suficiente para cambiar - busca patrones
+
+4. **CONFIANZA**:
+   - 0.9-1.0: Evidencia muy clara (ej: "quiero comprar", "ya pagué")
+   - 0.7-0.89: Evidencia moderada (ej: preguntas de precio, interés)
+   - 0.5-0.69: Poca evidencia, inferencia
+   - <0.5: Muy incierto, mejor mantener etapa actual
+
+## RESPONDE SOLO EN JSON:
 {
-  "stageName": "nombre exacto de la etapa",
+  "stageName": "NOMBRE EXACTO de una etapa de la lista",
   "confidence": 0.85,
-  "reasoning": "breve explicación de por qué esta etapa"
+  "reasoning": "Explicación breve de por qué esta etapa",
+  "shouldChange": true/false
 }
 
-Reglas:
-- Si el cliente acaba de escribir su primer mensaje, es "Nuevo"
-- Si pregunta por productos, precios o muestra interés, es "Interesado"
-- Si está negociando, pidiendo descuentos o hablando de condiciones, es "Negociando"
-- Si se envió enlace de pago o está por cerrar la compra, sigue siendo "Negociando" hasta que pague
-- Si ya pagó o confirmó la compra, es "Cerrado"
-- Si dice que no le interesa o deja de responder por mucho tiempo, es "Perdido"
-- Si está esperando algo (respuesta, decisión), es "Pendiente"`;
+IMPORTANTE: stageName DEBE ser EXACTAMENTE igual a uno de los nombres de etapa listados arriba: ${JSON.stringify(stageNames)}`;
 
       const response = await axios.post(
         `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
         {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 256
+            temperature: 0.1,
+            maxOutputTokens: 300
           }
         },
         {
@@ -283,17 +311,51 @@ Reglas:
       
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        return { success: false, stageName: '', confidence: 0, reasoning: '', error: 'Invalid response format' };
+        return { success: false, stageName: '', confidence: 0, reasoning: '', shouldChange: false, error: 'Invalid response format' };
       }
 
       const result = JSON.parse(jsonMatch[0]);
-      console.log('[GEMINI] Lead stage analysis:', result);
+      
+      const suggestedStage = result.stageName || '';
+      const stageExists = stageNames.some(
+        name => name.toLowerCase() === suggestedStage.toLowerCase()
+      );
+      
+      if (!stageExists) {
+        console.warn(`[GEMINI] Suggested stage "${suggestedStage}" not in available stages, finding closest match...`);
+        
+        const closestMatch = this.findClosestStage(suggestedStage, stageNames);
+        if (closestMatch) {
+          result.stageName = closestMatch;
+          result.reasoning = `(Corregido de "${suggestedStage}") ${result.reasoning}`;
+        } else {
+          return { 
+            success: false, 
+            stageName: '', 
+            confidence: 0, 
+            reasoning: '', 
+            shouldChange: false,
+            error: `Stage "${suggestedStage}" not found in available stages` 
+          };
+        }
+      }
+
+      const shouldChange = currentStageName 
+        ? result.stageName.toLowerCase() !== currentStageName.toLowerCase() && result.shouldChange !== false
+        : true;
+
+      console.log('[GEMINI] Lead stage analysis:', { 
+        ...result, 
+        shouldChange,
+        currentStage: currentStageName 
+      });
 
       return {
         success: true,
-        stageName: result.stageName || '',
+        stageName: result.stageName,
         confidence: result.confidence || 0,
-        reasoning: result.reasoning || ''
+        reasoning: result.reasoning || '',
+        shouldChange
       };
     } catch (error: any) {
       console.error('[GEMINI] Lead stage analysis failed:', error.response?.data || error.message);
@@ -302,9 +364,43 @@ Reglas:
         stageName: '',
         confidence: 0,
         reasoning: '',
+        shouldChange: false,
         error: error.response?.data?.error?.message || error.message
       };
     }
+  }
+
+  private findClosestStage(suggested: string, available: string[]): string | null {
+    const suggestedLower = suggested.toLowerCase();
+    
+    for (const stage of available) {
+      if (stage.toLowerCase().includes(suggestedLower) || suggestedLower.includes(stage.toLowerCase())) {
+        return stage;
+      }
+    }
+    
+    const keywords: Record<string, string[]> = {
+      'nuevo': ['nuevo', 'new', 'inicial', 'primero', 'entrada'],
+      'interesado': ['interes', 'curious', 'explorando', 'consulta'],
+      'cotizando': ['cotiza', 'precio', 'quote', 'presupuesto'],
+      'negociando': ['negocia', 'descuento', 'condicion'],
+      'confirmado': ['confirm', 'acepta', 'si quiero', 'cierre'],
+      'pagado': ['pag', 'complet', 'cerrado', 'ganado'],
+      'perdido': ['perdido', 'rechaz', 'no interes', 'lost']
+    };
+    
+    for (const stage of available) {
+      const stageLower = stage.toLowerCase();
+      for (const [key, synonyms] of Object.entries(keywords)) {
+        if (synonyms.some(s => suggestedLower.includes(s))) {
+          if (synonyms.some(s => stageLower.includes(s)) || stageLower.includes(key)) {
+            return stage;
+          }
+        }
+      }
+    }
+    
+    return available[0];
   }
 
   async extractContactData(
