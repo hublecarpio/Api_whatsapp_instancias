@@ -24,6 +24,7 @@ interface TokenUsage {
   canUseAI: boolean;
   tokensRemaining: number;
   message?: string;
+  subscriptionTier?: 'BASIC' | 'PRO' | 'ENTERPRISE';
 }
 
 export default function BillingPage() {
@@ -92,10 +93,10 @@ export default function BillingPage() {
     }
   };
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = async (plan: 'BASIC' | 'PRO' = 'PRO') => {
     setActionLoading(true);
     try {
-      const res = await billingApi.createCheckoutSession();
+      const res = await billingApi.createCheckoutSession(plan);
       if (res.data.url) {
         window.location.href = res.data.url;
       }
@@ -357,10 +358,20 @@ export default function BillingPage() {
               <p className="text-purple-400 text-sm">Plan Enterprise</p>
               <p className="text-white text-xl font-bold">Tokens Ilimitados</p>
             </div>
+          ) : tokenUsage?.subscriptionTier === 'PRO' ? (
+            <div className="sm:text-right">
+              <p className="text-neon-blue text-sm">Plan Pro</p>
+              <p className="text-white text-xl font-bold">$97 USD / mes</p>
+            </div>
+          ) : tokenUsage?.subscriptionTier === 'BASIC' ? (
+            <div className="sm:text-right">
+              <p className="text-gray-400 text-sm">Plan Basic</p>
+              <p className="text-white text-xl font-bold">$29 USD / mes</p>
+            </div>
           ) : (
             <div className="sm:text-right">
-              <p className="text-gray-400 text-sm">Plan Pro</p>
-              <p className="text-white text-xl font-bold">$97 USD / mes</p>
+              <p className="text-gray-400 text-sm">Sin plan activo</p>
+              <p className="text-white text-xl font-bold">Elige un plan</p>
             </div>
           )}
         </div>
@@ -612,19 +623,9 @@ export default function BillingPage() {
         )}
 
         <div className="flex flex-wrap gap-3 mt-6">
-          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled') && (
-            <button
-              onClick={handleSubscribe}
-              disabled={actionLoading}
-              className="btn btn-primary"
-            >
-              {actionLoading ? 'Procesando...' : 'Iniciar suscripcion con 7 dias gratis'}
-            </button>
-          )}
-
           {status?.subscriptionStatus === 'past_due' && (
             <button
-              onClick={handleSubscribe}
+              onClick={() => handleSubscribe('PRO')}
               disabled={actionLoading}
               className="bg-accent-warning hover:bg-yellow-600 disabled:opacity-50 text-dark-bg px-6 py-3 rounded-lg font-medium transition-colors"
             >
@@ -654,21 +655,63 @@ export default function BillingPage() {
       </div>
 
       <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <div className="card border-2 border-neon-blue/30">
+        <div className="card border-2 border-gray-600/30">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Plan Pro</h3>
-            <span className="bg-neon-blue/20 text-neon-blue px-3 py-1 rounded-full text-sm">Popular</span>
+            <h3 className="text-lg font-semibold text-white">Plan Basic</h3>
+            <span className="bg-gray-500/20 text-gray-400 px-3 py-1 rounded-full text-sm">Economico</span>
           </div>
-          <p className="text-3xl font-bold text-white mb-2">$97 <span className="text-lg text-gray-400 font-normal">USD/mes</span></p>
-          <p className="text-gray-400 text-sm mb-4">Ideal para negocios en crecimiento</p>
+          <p className="text-3xl font-bold text-white mb-2">$29 <span className="text-lg text-gray-400 font-normal">USD/mes</span></p>
+          <p className="text-gray-400 text-sm mb-4">Para emprendedores y pequenos negocios</p>
           <ul className="space-y-2 mb-6">
             {[
               'Conexion WhatsApp ilimitada',
-              'Agente IA con 5M tokens/mes',
+              'Agente IA con 1.6M tokens/mes',
               'Gestion de productos y catalogo',
               'Seguimientos automaticos',
               'CRM de clientes',
-              'Soporte Meta Cloud API'
+              'Broadcast masivo',
+              'Soporte por email'
+            ].map((item, i) => (
+              <li key={i} className="flex items-center text-gray-300 text-sm">
+                <svg className="w-4 h-4 text-accent-success mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                {item}
+              </li>
+            ))}
+            <li className="flex items-center text-gray-500 text-sm line-through">
+              <svg className="w-4 h-4 text-gray-600 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+              Webhooks y API Keys (solo Pro)
+            </li>
+          </ul>
+          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled') && (
+            <button onClick={() => handleSubscribe('BASIC')} disabled={actionLoading} className="btn btn-secondary w-full">
+              {actionLoading ? 'Procesando...' : 'Comenzar con Basic'}
+            </button>
+          )}
+          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && tokenUsage?.subscriptionTier === 'BASIC' && (
+            <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
+              <span className="text-accent-success text-sm font-medium">Plan activo</span>
+            </div>
+          )}
+        </div>
+
+        <div className="card border-2 border-neon-blue/30">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Plan Pro</h3>
+            <span className="bg-neon-blue/20 text-neon-blue px-3 py-1 rounded-full text-sm">Recomendado</span>
+          </div>
+          <p className="text-3xl font-bold text-white mb-2">$97 <span className="text-lg text-gray-400 font-normal">USD/mes</span></p>
+          <p className="text-gray-400 text-sm mb-4">Para negocios en crecimiento</p>
+          <ul className="space-y-2 mb-6">
+            {[
+              'Todo lo del plan Basic',
+              'Agente IA con 5M tokens/mes',
+              'Webhooks personalizados',
+              'API Keys para integraciones',
+              'Soporte prioritario'
             ].map((item, i) => (
               <li key={i} className="flex items-center text-gray-300 text-sm">
                 <svg className="w-4 h-4 text-accent-success mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -679,11 +722,11 @@ export default function BillingPage() {
             ))}
           </ul>
           {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled') && (
-            <button onClick={handleSubscribe} disabled={actionLoading} className="btn btn-primary w-full">
+            <button onClick={() => handleSubscribe('PRO')} disabled={actionLoading} className="btn btn-primary w-full">
               {actionLoading ? 'Procesando...' : 'Comenzar prueba gratis'}
             </button>
           )}
-          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && (
+          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && tokenUsage?.subscriptionTier === 'PRO' && (
             <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
               <span className="text-accent-success text-sm font-medium">Plan activo</span>
             </div>

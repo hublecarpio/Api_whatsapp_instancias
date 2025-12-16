@@ -230,7 +230,8 @@ export const templatesApi = {
 };
 
 export const billingApi = {
-  createCheckoutSession: () => api.post('/billing/create-checkout-session'),
+  createCheckoutSession: (plan?: string) => api.post('/billing/create-checkout-session', { plan: plan || 'PRO' }),
+  getPlans: () => api.get('/billing/plans'),
   getSubscriptionStatus: () => api.get('/billing/subscription-status'),
   cancelSubscription: () => api.post('/billing/cancel-subscription'),
   reactivateSubscription: () => api.post('/billing/reactivate-subscription'),
