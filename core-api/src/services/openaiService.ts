@@ -447,10 +447,31 @@ export async function getTokenUsageStats(businessId: string, options?: {
 
 export const DEMO_TOKEN_LIMIT = 150000;
 export const TRIAL_TOKEN_LIMIT = 500000;
+export const BASIC_TOKEN_LIMIT = 1600000;
 export const PRO_TOKEN_LIMIT = 5000000;
 export const DEMO_DAYS = 2;
 
-export async function getMonthlyTokenUsageForUser(userId: string, subscriptionStatus?: string, bonusTokens?: number): Promise<{
+export function getTokenLimitByTier(tier: string, subscriptionStatus: string): number {
+  if (subscriptionStatus !== 'ACTIVE') {
+    return TRIAL_TOKEN_LIMIT;
+  }
+  switch (tier) {
+    case 'BASIC':
+      return BASIC_TOKEN_LIMIT;
+    case 'PRO':
+    case 'ENTERPRISE':
+      return PRO_TOKEN_LIMIT;
+    default:
+      return BASIC_TOKEN_LIMIT;
+  }
+}
+
+export async function getMonthlyTokenUsageForUser(
+  userId: string, 
+  subscriptionStatus?: string, 
+  subscriptionTier?: string,
+  bonusTokens?: number
+): Promise<{
   totalTokens: number;
   limit: number;
   baseLimit: number;
@@ -474,7 +495,8 @@ export async function getMonthlyTokenUsageForUser(userId: string, subscriptionSt
   });
   
   const totalTokens = usage._sum.totalTokens || 0;
-  const baseLimit = subscriptionStatus === 'ACTIVE' ? PRO_TOKEN_LIMIT : TRIAL_TOKEN_LIMIT;
+  const tier = subscriptionTier || 'BASIC';
+  const baseLimit = getTokenLimitByTier(tier, subscriptionStatus || 'TRIAL');
   const bonus = bonusTokens || 0;
   const limit = baseLimit + bonus;
   const percentUsed = Math.min(100, Math.round((totalTokens / limit) * 100));
@@ -498,11 +520,13 @@ export async function checkUserTokenLimit(userId: string): Promise<{
   demoPhase?: string;
   demoExpired?: boolean;
   needsCard?: boolean;
+  subscriptionTier?: string;
 }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { 
-      subscriptionStatus: true, 
+      subscriptionStatus: true,
+      subscriptionTier: true,
       bonusTokens: true,
       proBonusExpiresAt: true,
       stripeSubscriptionId: true,
@@ -604,17 +628,19 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     };
   }
   
-  const usage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus, user.bonusTokens);
+  const tier = user.subscriptionTier || 'BASIC';
+  const usage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus, tier, user.bonusTokens);
   
   if (usage.isOverLimit) {
-    const limitText = user.subscriptionStatus === 'ACTIVE' ? '5M' : '500K';
+    const limitText = tier === 'PRO' || tier === 'ENTERPRISE' ? '5M' : tier === 'BASIC' ? '1.6M' : '500K';
     return {
       canUseAI: false,
       tokensUsed: usage.totalTokens,
       tokensRemaining: 0,
       bonusTokens: user.bonusTokens,
       message: `Has alcanzado tu limite de ${limitText} tokens este mes.${user.subscriptionStatus === 'TRIAL' ? ' Suscribete para continuar usando el agente IA.' : ' Puedes comprar creditos adicionales.'}`,
-      demoPhase: user.demoPhase || 'TRIAL'
+      demoPhase: user.demoPhase || 'TRIAL',
+      subscriptionTier: tier
     };
   }
   
@@ -623,6 +649,7 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     tokensUsed: usage.totalTokens,
     tokensRemaining: usage.limit - usage.totalTokens,
     bonusTokens: user.bonusTokens,
-    demoPhase: user.demoPhase || 'TRIAL'
+    demoPhase: user.demoPhase || 'TRIAL',
+    subscriptionTier: tier
   };
 }
