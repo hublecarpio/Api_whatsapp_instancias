@@ -29,6 +29,7 @@ model User {
   stripeCustomerId            String?
   stripeSubscriptionId        String?
   subscriptionStatus          SubscriptionStatus  @default(PENDING)
+  subscriptionTier            SubscriptionTier    @default(BASIC)
   trialEndAt                  DateTime?
   isPro                       Boolean             @default(false)
   paymentLinkEnabled          Boolean             @default(false)
@@ -115,6 +116,7 @@ enum ReferralCodeType {
 
 enum SubscriptionTier {
   STANDARD
+  BASIC
   PRO
   ENTERPRISE
 }
