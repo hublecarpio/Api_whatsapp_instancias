@@ -2190,9 +2190,38 @@ function generateApiKey(): string {
   return `efk_${crypto.randomBytes(32).toString('hex')}`;
 }
 
+async function checkProFeatureAccess(userId: string): Promise<{ allowed: boolean; tier: string; message?: string }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { subscriptionTier: true, subscriptionStatus: true }
+  });
+  
+  if (!user) {
+    return { allowed: false, tier: 'UNKNOWN', message: 'User not found' };
+  }
+  
+  const tier = user.subscriptionTier || 'BASIC';
+  const isProOrHigher = tier === 'PRO' || tier === 'ENTERPRISE';
+  
+  if (!isProOrHigher) {
+    return { 
+      allowed: false, 
+      tier, 
+      message: 'Esta funcion solo esta disponible para el plan PRO ($97/mes). Tu plan actual es BASIC ($29/mes).' 
+    };
+  }
+  
+  return { allowed: true, tier };
+}
+
 router.post('/api-key/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
+    
+    const proAccess = await checkProFeatureAccess(req.userId!);
+    if (!proAccess.allowed) {
+      return res.status(403).json({ error: proAccess.message, tier: proAccess.tier, requiresPro: true });
+    }
     
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -2300,6 +2329,11 @@ router.put('/webhook/:businessId', authMiddleware, async (req: AuthRequest, res:
   try {
     const { businessId } = req.params;
     const { webhookUrl, webhookEvents } = req.body;
+    
+    const proAccess = await checkProFeatureAccess(req.userId!);
+    if (!proAccess.allowed) {
+      return res.status(403).json({ error: proAccess.message, tier: proAccess.tier, requiresPro: true });
+    }
     
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
