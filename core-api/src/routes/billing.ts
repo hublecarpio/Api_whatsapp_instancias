@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { getDailyContactStats } from '../middleware/billing.js';
 import { handlePaymentSuccess, handlePaymentCanceled } from '../services/stripePayments.js';
-import { getMonthlyTokenUsageForUser, checkUserTokenLimit, TRIAL_TOKEN_LIMIT, PRO_TOKEN_LIMIT } from '../services/openaiService.js';
+import { getMonthlyTokenUsageForUser, checkUserTokenLimit, TRIAL_TOKEN_LIMIT, BASIC_TOKEN_LIMIT, PRO_TOKEN_LIMIT } from '../services/openaiService.js';
 import { sendEmail } from '../services/emailService.js';
 
 const router = express.Router();
@@ -14,15 +14,40 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 const PRICE_ID_WEEKLY = (process.env.STRIPE_PRICE_WEEKLY_50 || '').trim();
 const PRICE_ID_MONTHLY = (process.env.STRIPE_PRICE_MONTHLY_97 || '').trim();
+const PRICE_ID_BASIC = (process.env.STRIPE_PRICE_BASIC_29 || '').trim();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5000';
+
+const PLAN_CONFIG: Record<string, { priceId: string; tier: 'BASIC' | 'PRO'; name: string; price: number; tokens: string }> = {
+  BASIC: {
+    priceId: PRICE_ID_BASIC,
+    tier: 'BASIC',
+    name: 'Plan Basic',
+    price: 29,
+    tokens: '1.6M'
+  },
+  PRO: {
+    priceId: PRICE_ID_MONTHLY,
+    tier: 'PRO', 
+    name: 'Plan Pro',
+    price: 97,
+    tokens: '5M'
+  }
+};
 
 router.post('/create-checkout-session', authMiddleware, async (req: any, res) => {
   try {
-    const priceId = PRICE_ID_MONTHLY || PRICE_ID_WEEKLY;
+    const { plan = 'PRO' } = req.body;
+    const planConfig = PLAN_CONFIG[plan.toUpperCase()];
+    
+    if (!planConfig) {
+      return res.status(400).json({ error: 'Invalid plan. Choose BASIC or PRO.' });
+    }
+    
+    const priceId = planConfig.priceId;
     
     if (!priceId) {
-      console.error('No Stripe price ID configured');
-      return res.status(500).json({ error: 'Stripe price not configured. Please contact support.' });
+      console.error(`No Stripe price ID configured for plan: ${plan}`);
+      return res.status(500).json({ error: `Stripe price not configured for ${plan} plan. Please contact support.` });
     }
 
     const userId = req.userId;
@@ -53,7 +78,7 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
     const bonusTrialDays = user.bonusTrialDays || 0;
     const totalTrialDays = baseTrialDays + bonusTrialDays;
     
-    console.log(`Creating checkout session with price: ${priceId}, trialDays: ${totalTrialDays} (base: ${baseTrialDays}, bonus: ${bonusTrialDays})`);
+    console.log(`Creating checkout session with plan: ${plan}, price: ${priceId}, trialDays: ${totalTrialDays}`);
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -66,11 +91,12 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
       ],
       mode: 'subscription',
       subscription_data: {
-        trial_period_days: totalTrialDays
+        trial_period_days: totalTrialDays,
+        metadata: { tier: planConfig.tier }
       },
-      success_url: `${FRONTEND_URL}/dashboard?subscription=success`,
+      success_url: `${FRONTEND_URL}/dashboard?subscription=success&plan=${plan}`,
       cancel_url: `${FRONTEND_URL}/dashboard?subscription=canceled`,
-      metadata: { userId: user.id }
+      metadata: { userId: user.id, tier: planConfig.tier }
     });
 
     res.json({ url: session.url });
@@ -82,6 +108,12 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
 
 const processedWebhookEvents: Set<string> = new Set();
 const WEBHOOK_EVENT_TTL = 5 * 60 * 1000;
+
+function getTierFromPriceId(priceId: string): 'BASIC' | 'PRO' {
+  if (priceId === PRICE_ID_BASIC) return 'BASIC';
+  if (priceId === PRICE_ID_MONTHLY || priceId === PRICE_ID_WEEKLY) return 'PRO';
+  return 'BASIC';
+}
 
 setInterval(() => {
   processedWebhookEvents.clear();
@@ -123,23 +155,28 @@ router.post('/webhook', async (req, res) => {
         } else if (session.mode === 'subscription') {
           const userId = session.metadata?.userId;
           const subscriptionId = session.subscription as string;
+          const tierFromMetadata = session.metadata?.tier as 'BASIC' | 'PRO' | undefined;
 
           if (userId && subscriptionId) {
             const subscription = await stripe.subscriptions.retrieve(subscriptionId);
             const trialEnd = subscription.trial_end 
               ? new Date(subscription.trial_end * 1000) 
               : null;
+            
+            const priceId = subscription.items.data[0]?.price?.id || '';
+            const tier = tierFromMetadata || getTierFromPriceId(priceId);
 
             await prisma.user.update({
               where: { id: userId },
               data: {
                 stripeSubscriptionId: subscriptionId,
                 subscriptionStatus: trialEnd ? 'TRIAL' : 'ACTIVE',
+                subscriptionTier: tier,
                 trialEndAt: trialEnd,
                 demoPhase: 'TRIAL'
               }
             });
-            console.log(`User ${userId} subscription activated: ${subscriptionId}, demoPhase set to TRIAL`);
+            console.log(`User ${userId} subscription activated: ${subscriptionId}, tier: ${tier}, demoPhase set to TRIAL`);
           }
         }
         break;
@@ -493,14 +530,15 @@ router.get('/token-usage', authMiddleware, async (req: AuthRequest, res) => {
 
     const user = await prisma.user.findUnique({ 
       where: { id: userId },
-      select: { subscriptionStatus: true, bonusTokens: true }
+      select: { subscriptionStatus: true, subscriptionTier: true, bonusTokens: true }
     });
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const tokenUsage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus, user.bonusTokens);
+    const tier = user.subscriptionTier || 'BASIC';
+    const tokenUsage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus, tier, user.bonusTokens);
     const tokenCheck = await checkUserTokenLimit(userId);
 
     res.json({
@@ -513,7 +551,8 @@ router.get('/token-usage', authMiddleware, async (req: AuthRequest, res) => {
       canUseAI: tokenCheck.canUseAI,
       tokensRemaining: tokenCheck.tokensRemaining,
       message: tokenCheck.message,
-      subscriptionStatus: user.subscriptionStatus.toLowerCase()
+      subscriptionStatus: user.subscriptionStatus.toLowerCase(),
+      subscriptionTier: tier
     });
   } catch (error: any) {
     console.error('Error fetching token usage:', error);
@@ -773,6 +812,52 @@ router.post('/enterprise-request', authMiddleware, async (req: AuthRequest, res)
     console.error('Error processing enterprise request:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+router.get('/plans', async (_req, res) => {
+  const plans = [
+    {
+      id: 'BASIC',
+      name: 'Plan Basic',
+      price: 29,
+      currency: 'USD',
+      interval: 'month',
+      tokens: '1.6M',
+      tokenLimit: BASIC_TOKEN_LIMIT,
+      features: [
+        'Agente IA ilimitado',
+        '1.6M tokens/mes',
+        'WhatsApp Web + Meta Cloud API',
+        'CRM de contactos',
+        'Productos y catalogo',
+        'Broadcast masivo',
+        'Soporte por email'
+      ],
+      excluded: ['Webhooks', 'API Keys'],
+      available: !!PRICE_ID_BASIC
+    },
+    {
+      id: 'PRO',
+      name: 'Plan Pro',
+      price: 97,
+      currency: 'USD',
+      interval: 'month',
+      tokens: '5M',
+      tokenLimit: PRO_TOKEN_LIMIT,
+      features: [
+        'Todo lo del plan Basic',
+        '5M tokens/mes',
+        'Webhooks personalizados',
+        'API Keys para integraciones',
+        'Soporte prioritario'
+      ],
+      excluded: [],
+      available: !!PRICE_ID_MONTHLY,
+      recommended: true
+    }
+  ];
+
+  res.json({ plans });
 });
 
 export default router;
