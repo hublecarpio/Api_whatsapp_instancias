@@ -71,7 +71,7 @@ router.post('/register', async (req: Request, res: Response) => {
     
     const result = await prisma.$transaction(async (tx) => {
       const isPro = !!enterpriseCode;
-      const subscriptionStatus = enterpriseCode ? 'ACTIVE' : 'PENDING';
+      const subscriptionStatus = enterpriseCode ? 'ACTIVE' : 'TRIAL';
       
       // Get the referral code ID for FK relation
       const referralCodeRecord = enterpriseCode || standardCode;
