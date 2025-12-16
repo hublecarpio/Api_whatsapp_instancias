@@ -2,6 +2,13 @@
   "/super-admin/page": "app/super-admin/page.js",
   "/dashboard/billing/page": "app/dashboard/billing/page.js",
   "/dashboard/products/page": "app/dashboard/products/page.js",
+  "/dashboard/orders/page": "app/dashboard/orders/page.js",
+  "/dashboard/business/page": "app/dashboard/business/page.js",
+  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
+  "/dashboard/contacts/page": "app/dashboard/contacts/page.js",
+  "/dashboard/broadcasts/page": "app/dashboard/broadcasts/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
   "/dashboard/chat/page": "app/dashboard/chat/page.js",
-  "/dashboard/orders/page": "app/dashboard/orders/page.js"
+  "/dashboard/tags/page": "app/dashboard/tags/page.js",
+  "/dashboard/reminders/page": "app/dashboard/reminders/page.js"
 }
