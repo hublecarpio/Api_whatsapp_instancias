@@ -4,6 +4,7 @@ import prisma from '../services/prisma.js';
 import { analyzeAndUpdateLeadStage, extractAndSaveContactData } from '../services/leadStageService.js';
 import { geminiService } from '../services/gemini.js';
 import { logTokenUsage } from '../services/tokenLogger.js';
+import { dispatchUserMessage } from '../services/webhookService.js';
 
 const router = Router();
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
@@ -288,6 +289,19 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               }
             }
           });
+          
+          // Dispatch user_message webhook for incoming messages
+          if (!isFromMe) {
+            dispatchUserMessage(
+              businessId,
+              contactPhone,
+              contactName,
+              mediaAnalysis ? `${data.text || ''}\n[Media: ${mediaAnalysis}]` : (data.text || ''),
+              mediaType || 'text',
+              data.mediaUrl,
+              mediaAnalysis ? { analysis: mediaAnalysis } : undefined
+            ).catch(err => console.error('[WEBHOOK] Failed to dispatch user_message webhook:', err.message));
+          }
           
           if (!isFromMe && business.botEnabled) {
             const cleanPhoneForSettings = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
