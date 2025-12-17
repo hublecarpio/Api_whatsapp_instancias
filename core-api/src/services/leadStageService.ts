@@ -1,5 +1,6 @@
 import prisma from './prisma.js';
 import { geminiService } from './gemini.js';
+import { dispatchStageChange } from './webhookService.js';
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -135,6 +136,14 @@ export async function analyzeAndUpdateLeadStage(
     });
 
     console.log(`[LEAD STAGE] Updated ${contactPhone} to "${analysis.stageName}" (confidence: ${analysis.confidence})`);
+    
+    // Dispatch stage_change webhook
+    dispatchStageChange(
+      businessId,
+      contactPhone,
+      currentStageName || null,
+      analysis.stageName
+    ).catch(err => console.error('[LEAD STAGE] Failed to dispatch stage_change webhook:', err.message));
 
     return {
       success: true,
