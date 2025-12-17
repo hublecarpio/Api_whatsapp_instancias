@@ -5,6 +5,25 @@ import { GoogleCalendarService } from '../services/googleCalendar.js';
 
 const router = Router();
 
+// Get frontend URL for redirects after OAuth callback
+function getFrontendUrl(): string {
+  if (process.env.FRONTEND_URL) {
+    return process.env.FRONTEND_URL;
+  }
+  if (process.env.APP_DOMAIN) {
+    // If APP_DOMAIN is set, derive frontend URL (replace api. with app.)
+    const appDomain = process.env.APP_DOMAIN;
+    if (appDomain.includes('api.')) {
+      return appDomain.replace('api.', 'app.');
+    }
+    return appDomain;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  return 'http://localhost:5000';
+}
+
 router.get('/status', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
@@ -61,23 +80,25 @@ router.get('/auth-url', authMiddleware, async (req: AuthRequest, res: Response) 
 });
 
 router.get('/callback', async (req: Request, res: Response) => {
+  const frontendUrl = getFrontendUrl();
+  
   try {
     const { code, state, error: oauthError } = req.query;
 
     if (oauthError) {
       console.error('[GoogleCalendar] OAuth error:', oauthError);
-      return res.redirect('/dashboard/settings?gcal_error=oauth_denied');
+      return res.redirect(`${frontendUrl}/dashboard/settings?gcal_error=oauth_denied`);
     }
 
     if (!code || !state) {
-      return res.redirect('/dashboard/settings?gcal_error=missing_params');
+      return res.redirect(`${frontendUrl}/dashboard/settings?gcal_error=missing_params`);
     }
 
     let stateData: { businessId: string; userId: string };
     try {
       stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
     } catch {
-      return res.redirect('/dashboard/settings?gcal_error=invalid_state');
+      return res.redirect(`${frontendUrl}/dashboard/settings?gcal_error=invalid_state`);
     }
 
     const tokens = await GoogleCalendarService.exchangeCodeForTokens(code as string);
@@ -101,10 +122,10 @@ router.get('/callback', async (req: Request, res: Response) => {
     });
 
     console.log(`[GoogleCalendar] Connected for business ${stateData.businessId}, email: ${email}`);
-    res.redirect('/dashboard/appointments?gcal_success=true');
+    res.redirect(`${frontendUrl}/dashboard/appointments?gcal_success=true`);
   } catch (error: any) {
     console.error('[GoogleCalendar] Callback error:', error);
-    res.redirect('/dashboard/appointments?gcal_error=token_exchange_failed');
+    res.redirect(`${frontendUrl}/dashboard/appointments?gcal_error=token_exchange_failed`);
   }
 });
 
