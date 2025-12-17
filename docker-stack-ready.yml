@@ -46,6 +46,9 @@ services:
       - STRIPE_WEBHOOK_SECRET=whsec_TU_STRIPE_WEBHOOK_SECRET
       - STRIPE_PRICE_WEEKLY_50=price_TU_STRIPE_PRICE_ID
       - FRONTEND_URL=https://app.efficore.es
+      - BACKEND_URL=https://api.efficore.es
+      - GOOGLE_CLIENT_ID=TU_GOOGLE_CLIENT_ID
+      - GOOGLE_CLIENT_SECRET=TU_GOOGLE_CLIENT_SECRET
       - SMTP_HOST=smtp.tuservidor.com
       - SMTP_PORT=587
       - SMTP_USER=correo@tudominio.com

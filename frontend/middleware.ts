@@ -5,6 +5,11 @@ function getCoreApiUrl(): string {
 }
 
 export async function middleware(request: NextRequest) {
+  // Skip OAuth routes - they need browser redirects, not proxy fetch
+  if (request.nextUrl.pathname.startsWith('/api/auth/google')) {
+    return NextResponse.next();
+  }
+  
   if (request.nextUrl.pathname.startsWith('/api/')) {
     const apiUrl = getCoreApiUrl();
     const path = request.nextUrl.pathname.replace('/api', '');
