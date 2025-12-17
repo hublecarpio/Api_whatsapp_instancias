@@ -383,6 +383,55 @@ async function processWithAgentV1Worker(
   const businessObjective = business.businessObjective || 'SALES';
   
   if (businessObjective === 'APPOINTMENTS') {
+    // Generate current date/time context for semantic interpretation
+    const timezone = business.timezone || 'America/Lima';
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('es-PE', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      weekday: 'long'
+    });
+    const formattedNow = formatter.format(now);
+    
+    // Calculate tomorrow's date in the same timezone
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowFormatter = new Intl.DateTimeFormat('es-PE', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'long'
+    });
+    const formattedTomorrow = tomorrowFormatter.format(tomorrow);
+    
+    // ISO date for today
+    const isoFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const todayISO = isoFormatter.format(now);
+    const tomorrowISO = isoFormatter.format(tomorrow);
+    
+    systemPrompt += `\n\n## Contexto temporal (para interpretar fechas relativas)
+- Fecha y hora actual: ${formattedNow}
+- Zona horaria: ${timezone}
+- Hoy en formato ISO: ${todayISO}
+- Mañana: ${formattedTomorrow} (ISO: ${tomorrowISO})
+
+IMPORTANTE para fechas:
+- Cuando el cliente diga "mañana", usa la fecha ${tomorrowISO}
+- Cuando diga "hoy", usa ${todayISO}
+- Convierte SIEMPRE las fechas relativas a formato ISO 8601 (YYYY-MM-DDTHH:mm:ss) internamente
+- NO preguntes al cliente por el formato de fecha, interpreta semánticamente lo que dice`;
+    
     systemPrompt += `\n\n## Modo de operación: CITAS Y SERVICIOS
 Tu objetivo principal es ayudar a los clientes a agendar citas y consultar disponibilidad de servicios.
 - Ofrece horarios disponibles cuando el cliente quiera agendar
