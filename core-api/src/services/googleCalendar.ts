@@ -2,7 +2,29 @@ import prisma from './prisma.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/google-calendar/callback';
+
+function getBackendUrl(): string {
+  if (process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL;
+  }
+  if (process.env.APP_DOMAIN) {
+    return process.env.APP_DOMAIN;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  return 'http://localhost:3001';
+}
+
+function getCalendarRedirectUri(): string {
+  if (process.env.GOOGLE_REDIRECT_URI) {
+    return process.env.GOOGLE_REDIRECT_URI;
+  }
+  const backendUrl = getBackendUrl();
+  const uri = `${backendUrl}/google-calendar/callback`;
+  console.log('[GoogleCalendar] Redirect URI:', uri);
+  return uri;
+}
 
 interface TokenResponse {
   access_token: string;
@@ -59,7 +81,7 @@ export class GoogleCalendarService {
 
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: GOOGLE_REDIRECT_URI,
+      redirect_uri: getCalendarRedirectUri(),
       response_type: 'code',
       scope: scopes.join(' '),
       access_type: 'offline',
@@ -82,7 +104,7 @@ export class GoogleCalendarService {
         code,
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: GOOGLE_REDIRECT_URI,
+        redirect_uri: getCalendarRedirectUri(),
         grant_type: 'authorization_code'
       })
     });
