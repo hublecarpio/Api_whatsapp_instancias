@@ -1,13 +1,7 @@
-import { google } from 'googleapis';
-
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
-// For OAuth callbacks, we need the PUBLIC URL (accessible from browser)
-// GOOGLE_CALLBACK_URL = public API URL for OAuth redirects
-// Falls back to BACKEND_URL, APP_DOMAIN, or REPLIT_DEV_DOMAIN
 function getPublicApiUrl(): string {
-  // Priority: GOOGLE_CALLBACK_URL > BACKEND_URL > APP_DOMAIN > REPLIT_DEV_DOMAIN
   if (process.env.GOOGLE_CALLBACK_URL) {
     return process.env.GOOGLE_CALLBACK_URL;
   }
@@ -34,30 +28,29 @@ export function isGoogleAuthConfigured(): boolean {
   return !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 }
 
-export function getGoogleAuthClient() {
-  if (!isGoogleAuthConfigured()) {
-    throw new Error('Google Auth not configured');
-  }
-  
-  return new google.auth.OAuth2(
-    GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET,
-    getRedirectUri()
-  );
-}
-
 export function getGoogleAuthUrl(state: string): string {
-  const oauth2Client = getGoogleAuthClient();
-  
-  return oauth2Client.generateAuthUrl({
+  if (!GOOGLE_CLIENT_ID) {
+    throw new Error('Google Client ID not configured');
+  }
+
+  const scopes = [
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile'
+  ];
+
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: getRedirectUri(),
+    response_type: 'code',
+    scope: scopes.join(' '),
     access_type: 'offline',
-    scope: [
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile'
-    ],
-    state,
-    prompt: 'consent select_account'
+    prompt: 'consent',
+    state
   });
+
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  console.log('[GoogleAuth] Generated auth URL:', authUrl);
+  return authUrl;
 }
 
 export interface GoogleUserInfo {
@@ -70,14 +63,54 @@ export interface GoogleUserInfo {
   picture?: string;
 }
 
+interface TokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  token_type: string;
+  scope: string;
+}
+
+async function exchangeCodeForTokens(code: string): Promise<TokenResponse> {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    throw new Error('Google OAuth not configured');
+  }
+
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      redirect_uri: getRedirectUri(),
+      grant_type: 'authorization_code'
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('[GoogleAuth] Token exchange failed:', error);
+    throw new Error(`Token exchange failed: ${error}`);
+  }
+
+  return response.json();
+}
+
 export async function getGoogleUserInfo(code: string): Promise<GoogleUserInfo> {
-  const oauth2Client = getGoogleAuthClient();
+  const tokens = await exchangeCodeForTokens(code);
   
-  const { tokens } = await oauth2Client.getToken(code);
-  oauth2Client.setCredentials(tokens);
-  
-  const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-  const { data } = await oauth2.userinfo.get();
+  const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    headers: { Authorization: `Bearer ${tokens.access_token}` }
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('[GoogleAuth] Failed to get user info:', error);
+    throw new Error('Failed to get user info from Google');
+  }
+
+  const data = await response.json();
   
   if (!data.id || !data.email) {
     throw new Error('Failed to get user info from Google');
