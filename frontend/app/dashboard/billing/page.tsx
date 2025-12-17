@@ -107,9 +107,15 @@ export default function BillingPage() {
       if (res.data.url) {
         window.location.href = res.data.url;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating checkout session:', error);
-      alert('Error al crear la sesion de pago');
+      // Handle case where user already has active subscription
+      if (error.response?.data?.hasActiveSubscription) {
+        alert('Ya tienes una suscripcion activa. Recarga la pagina para ver tu estado actual.');
+        loadData(); // Refresh data to show current state
+      } else {
+        alert('Error al crear la sesion de pago');
+      }
     } finally {
       setActionLoading(false);
     }
@@ -142,6 +148,26 @@ export default function BillingPage() {
     } catch (error) {
       console.error('Error reactivating subscription:', error);
       alert('Error al reactivar la suscripcion');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUpgrade = async (targetPlan: 'PRO') => {
+    if (!confirm(`Deseas actualizar tu plan a ${targetPlan}? Se aplicara un prorrateo por la diferencia de precio.`)) {
+      return;
+    }
+    
+    setActionLoading(true);
+    try {
+      const res = await billingApi.upgradeSubscription(targetPlan);
+      if (res.data.success) {
+        alert(res.data.message || 'Plan actualizado exitosamente!');
+        await loadData();
+      }
+    } catch (error: any) {
+      console.error('Error upgrading subscription:', error);
+      alert(error.response?.data?.error || 'Error al actualizar el plan');
     } finally {
       setActionLoading(false);
     }
@@ -712,12 +738,14 @@ export default function BillingPage() {
               Webhooks y API Keys (solo Pro)
             </li>
           </ul>
-          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || (status?.subscriptionStatus === 'trial' && !status?.hasSubscription)) && (
+          {/* Show subscribe button only if no active subscription */}
+          {!status?.hasSubscription && (status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || status?.subscriptionStatus === 'trial') && (
             <button onClick={() => handleSubscribe('BASIC')} disabled={actionLoading} className="btn btn-secondary w-full">
               {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar con tarjeta (5 dias gratis)' : 'Comenzar con Basic'}
             </button>
           )}
-          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && status?.hasSubscription && tokenUsage?.subscriptionTier === 'BASIC' && (
+          {/* Show active badge if user has BASIC subscription */}
+          {status?.hasSubscription && (status?.subscriptionTier === 'BASIC' || tokenUsage?.subscriptionTier === 'BASIC') && (
             <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
               <span className="text-accent-success text-sm font-medium">Plan activo</span>
             </div>
@@ -747,12 +775,20 @@ export default function BillingPage() {
               </li>
             ))}
           </ul>
-          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || (status?.subscriptionStatus === 'trial' && !status?.hasSubscription)) && (
+          {/* Show subscribe/upgrade button only if no subscription OR has BASIC and wants to upgrade */}
+          {!status?.hasSubscription && (status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || status?.subscriptionStatus === 'trial') && (
             <button onClick={() => handleSubscribe('PRO')} disabled={actionLoading} className="btn btn-primary w-full">
               {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar Pro (5 dias gratis)' : 'Comenzar con Pro'}
             </button>
           )}
-          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && status?.hasSubscription && tokenUsage?.subscriptionTier === 'PRO' && (
+          {/* Show upgrade button for BASIC users */}
+          {status?.hasSubscription && (status?.subscriptionTier === 'BASIC' || tokenUsage?.subscriptionTier === 'BASIC') && (
+            <button onClick={() => handleUpgrade('PRO')} disabled={actionLoading} className="btn btn-primary w-full">
+              {actionLoading ? 'Procesando...' : 'Upgrade a Pro'}
+            </button>
+          )}
+          {/* Show active badge if user has PRO subscription */}
+          {status?.hasSubscription && (status?.subscriptionTier === 'PRO' || tokenUsage?.subscriptionTier === 'PRO') && (
             <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
               <span className="text-accent-success text-sm font-medium">Plan activo</span>
             </div>

@@ -57,6 +57,46 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Validate: reject if user already has an active Stripe subscription
+    // Double-check: also validate using local subscriptionStatus as fallback
+    if (user.stripeSubscriptionId || ['TRIAL', 'ACTIVE'].includes(user.subscriptionStatus)) {
+      // If we have a subscription ID, verify with Stripe
+      if (user.stripeSubscriptionId) {
+        try {
+          const existingSubscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+          if (['active', 'trialing', 'past_due'].includes(existingSubscription.status)) {
+            return res.status(400).json({ 
+              error: 'Ya tienes una suscripción activa. Para cambiar de plan, usa la opción de upgrade.',
+              hasActiveSubscription: true
+            });
+          }
+          // Subscription exists but is canceled/inactive - allow new checkout
+        } catch (stripeError: any) {
+          // If subscription doesn't exist in Stripe, clear local reference and allow checkout
+          if (stripeError.code === 'resource_missing') {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { stripeSubscriptionId: null, subscriptionStatus: 'PENDING' }
+            });
+          } else {
+            // For any other Stripe error (network, auth, etc.), reject to be safe
+            console.error('Stripe error checking subscription:', stripeError.message);
+            return res.status(503).json({ 
+              error: 'No se pudo verificar el estado de tu suscripción. Intenta de nuevo.',
+              retryable: true
+            });
+          }
+        }
+      } else {
+        // No Stripe ID but local status shows active - this shouldn't happen but block it
+        console.warn(`User ${userId} has active local status but no Stripe ID - blocking checkout`);
+        return res.status(400).json({ 
+          error: 'Hay un conflicto con tu estado de suscripción. Contacta soporte.',
+          hasActiveSubscription: true
+        });
+      }
+    }
+
     let customerId = user.stripeCustomerId;
 
     if (!customerId) {
@@ -405,6 +445,69 @@ router.post('/reactivate-subscription', authMiddleware, async (req: any, res) =>
     });
   } catch (error: any) {
     console.error('Error reactivating subscription:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upgrade subscription from BASIC to PRO
+router.post('/upgrade-subscription', authMiddleware, async (req: any, res) => {
+  try {
+    const userId = req.userId;
+    const { targetPlan = 'PRO' } = req.body;
+    
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!user.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No hay suscripcion activa para actualizar' });
+    }
+    
+    const planConfig = PLAN_CONFIG[targetPlan.toUpperCase()];
+    if (!planConfig) {
+      return res.status(400).json({ error: 'Plan invalido' });
+    }
+    
+    // Get current subscription
+    const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+    
+    if (!['active', 'trialing'].includes(subscription.status)) {
+      return res.status(400).json({ error: 'La suscripcion no esta activa' });
+    }
+    
+    // Get current price to check if it's different
+    const currentPriceId = subscription.items.data[0]?.price.id;
+    if (currentPriceId === planConfig.priceId) {
+      return res.status(400).json({ error: 'Ya tienes este plan activo' });
+    }
+    
+    // Update the subscription to the new plan
+    await stripe.subscriptions.update(user.stripeSubscriptionId, {
+      items: [{
+        id: subscription.items.data[0].id,
+        price: planConfig.priceId,
+      }],
+      proration_behavior: 'create_prorations', // Pro-rate the difference
+      metadata: { tier: planConfig.tier }
+    });
+    
+    // Update user record
+    await prisma.user.update({
+      where: { id: userId },
+      data: { subscriptionTier: planConfig.tier }
+    });
+    
+    console.log(`[BILLING] User ${userId} upgraded to ${planConfig.tier}`);
+    
+    res.json({ 
+      success: true, 
+      message: `Plan actualizado a ${planConfig.name}`,
+      newTier: planConfig.tier
+    });
+  } catch (error: any) {
+    console.error('Error upgrading subscription:', error);
     res.status(500).json({ error: error.message });
   }
 });
