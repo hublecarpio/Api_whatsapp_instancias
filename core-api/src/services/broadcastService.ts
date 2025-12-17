@@ -170,6 +170,26 @@ export async function sendBroadcastMessage(
       }
     });
 
+    // Create MessageLog entry so broadcasts appear in chat history and agent context
+    const messageContent = interpolatedCampaign.content || interpolatedCampaign.mediaCaption || '[Mensaje multimedia]';
+    await prisma.messageLog.create({
+      data: {
+        businessId: campaign.businessId,
+        instanceId: instance.id,
+        direction: 'outbound',
+        sender: 'broadcast',
+        recipient: cleanPhone,
+        message: messageContent,
+        mediaUrl: campaign.mediaUrl || undefined,
+        metadata: {
+          isBroadcast: true,
+          campaignId,
+          usedTemplate,
+          messageType: campaign.messageType
+        }
+      }
+    });
+
     return { success: true, usedTemplate };
   } catch (error: any) {
     const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
