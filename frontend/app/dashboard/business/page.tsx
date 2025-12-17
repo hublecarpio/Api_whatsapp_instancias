@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { businessApi, policyApi, billingApi } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
+import { businessApi, policyApi, billingApi, authApi } from '@/lib/api';
 import Starter from '@/components/Starter';
 
 interface BusinessStats {
@@ -21,14 +22,43 @@ interface TokenUsage {
   percentUsed: number;
 }
 
+const COUNTRY_CODES = [
+  { code: '+51', country: 'Peru', flag: '🇵🇪' },
+  { code: '+52', country: 'Mexico', flag: '🇲🇽' },
+  { code: '+57', country: 'Colombia', flag: '🇨🇴' },
+  { code: '+54', country: 'Argentina', flag: '🇦🇷' },
+  { code: '+56', country: 'Chile', flag: '🇨🇱' },
+  { code: '+55', country: 'Brasil', flag: '🇧🇷' },
+  { code: '+593', country: 'Ecuador', flag: '🇪🇨' },
+  { code: '+591', country: 'Bolivia', flag: '🇧🇴' },
+  { code: '+595', country: 'Paraguay', flag: '🇵🇾' },
+  { code: '+598', country: 'Uruguay', flag: '🇺🇾' },
+  { code: '+58', country: 'Venezuela', flag: '🇻🇪' },
+  { code: '+506', country: 'Costa Rica', flag: '🇨🇷' },
+  { code: '+503', country: 'El Salvador', flag: '🇸🇻' },
+  { code: '+502', country: 'Guatemala', flag: '🇬🇹' },
+  { code: '+504', country: 'Honduras', flag: '🇭🇳' },
+  { code: '+505', country: 'Nicaragua', flag: '🇳🇮' },
+  { code: '+507', country: 'Panama', flag: '🇵🇦' },
+  { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
+  { code: '+34', country: 'Espana', flag: '🇪🇸' },
+];
+
 export default function BusinessPage() {
   const { currentBusiness, setCurrentBusiness, businesses, setBusinesses, updateBusiness } = useBusinessStore();
+  const { user, setAuth } = useAuthStore();
   const [loading, setLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [stats, setStats] = useState<BusinessStats | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [phoneCountryCode, setPhoneCountryCode] = useState('+51');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -42,6 +72,49 @@ export default function BusinessPage() {
   const [brandVoice, setBrandVoice] = useState('');
   const [policyId, setPolicyId] = useState<string | null>(null);
   const [businessObjective, setBusinessObjective] = useState<'SALES' | 'APPOINTMENTS'>('SALES');
+
+  useEffect(() => {
+    if (user) {
+      setUserName(user.name || '');
+      setUserEmail(user.email || '');
+      
+      if (user.phone) {
+        const matchedCode = COUNTRY_CODES.find(c => user.phone?.startsWith(c.code));
+        if (matchedCode) {
+          setPhoneCountryCode(matchedCode.code);
+          setPhoneNumber(user.phone.substring(matchedCode.code.length).trim());
+        } else {
+          setPhoneNumber(user.phone);
+        }
+      }
+    }
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    setProfileLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const fullPhone = phoneNumber ? `${phoneCountryCode} ${phoneNumber.replace(/\D/g, '')}` : undefined;
+      await authApi.updateProfile({ 
+        name: userName,
+        phone: fullPhone 
+      });
+      
+      const response = await authApi.getMe();
+      const token = localStorage.getItem('token');
+      if (token) {
+        setAuth(response.data, token);
+      }
+      
+      setSuccess('Perfil actualizado correctamente');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al actualizar perfil');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (currentBusiness) {
@@ -230,6 +303,78 @@ export default function BusinessPage() {
           {error}
         </div>
       )}
+
+      <div className="card mb-6">
+        <h2 className="text-lg font-semibold text-white mb-4">Mi Perfil</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Nombre completo
+            </label>
+            <input
+              type="text"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              className="input"
+              placeholder="Tu nombre completo"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Correo electronico
+            </label>
+            <div className="relative">
+              <input
+                type="email"
+                value={userEmail}
+                className="input bg-dark-surface/50 text-gray-400 cursor-not-allowed pr-20"
+                disabled
+                readOnly
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 bg-dark-bg px-2 py-1 rounded">
+                No editable
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">El correo es la clave de tu cuenta y no se puede cambiar</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Telefono de contacto
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={phoneCountryCode}
+                onChange={(e) => setPhoneCountryCode(e.target.value)}
+                className="input w-32"
+              >
+                {COUNTRY_CODES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.code}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^\d\s]/g, '');
+                  setPhoneNumber(value);
+                }}
+                className="input flex-1"
+                placeholder="999 888 777"
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Para contactarte sobre tu cuenta</p>
+          </div>
+        </div>
+        <button
+          onClick={handleSaveProfile}
+          disabled={profileLoading || !userName}
+          className="btn btn-secondary mt-4"
+        >
+          {profileLoading ? 'Guardando...' : 'Guardar perfil'}
+        </button>
+      </div>
 
       <div className="card mb-6">
         <h2 className="text-lg font-semibold text-white mb-4">Informacion basica</h2>

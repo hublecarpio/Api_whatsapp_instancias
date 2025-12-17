@@ -40,7 +40,7 @@ export const authApi = {
     api.post('/auth/login', data),
   me: () => api.get('/auth/me'),
   getMe: () => api.get('/auth/me'),
-  updateProfile: (data: { businessName?: string; phone?: string }) =>
+  updateProfile: (data: { name?: string; businessName?: string; phone?: string }) =>
     api.put('/auth/profile', data),
   googleAuthStatus: () => api.get('/auth/google/status'),
   resendVerification: () => api.post('/auth/resend-verification'),

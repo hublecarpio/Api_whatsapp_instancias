@@ -4,6 +4,8 @@ interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string;
+  googlePicture?: string;
   emailVerified?: boolean;
   subscriptionStatus?: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled';
   needsSubscription?: boolean;

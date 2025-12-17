@@ -1005,7 +1005,7 @@ setInterval(() => {
 
 router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { businessName, phone } = req.body;
+    const { name, businessName, phone } = req.body;
     
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
@@ -1016,11 +1016,20 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response) =
       return res.status(404).json({ error: 'User not found' });
     }
     
+    const userUpdates: any = {};
+    
+    if (name && name.trim()) {
+      userUpdates.name = name.trim();
+    }
+    
     if (phone) {
-      const cleanPhone = phone.replace(/\D/g, '');
+      userUpdates.phone = phone;
+    }
+    
+    if (Object.keys(userUpdates).length > 0) {
       await prisma.user.update({
         where: { id: req.userId },
-        data: { phone: cleanPhone }
+        data: userUpdates
       });
     }
     
