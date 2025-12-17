@@ -2137,7 +2137,8 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
         products: { select: { id: true } },
         instances: { select: { status: true, provider: true } },
         availability: { select: { dayOfWeek: true, isBlocked: true } },
-        policy: true
+        policy: true,
+        user: { select: { paymentLinkEnabled: true } }
       }
     });
     
@@ -2153,6 +2154,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     const agentFiles = business.promptMaster?.files || [];
     const hasAvailability = business.availability?.some((a: any) => !a.isBlocked) || false;
     const instanceConnected = business.instances?.some((i: any) => i.status === 'open' || i.status === 'connected') || false;
+    const paymentLinkEnabled = business.user?.paymentLinkEnabled ?? false;
     
     const activeTools: any[] = [];
     const inactiveTools: any[] = [];
@@ -2167,8 +2169,15 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       }
       
       if (productCount > 0) {
-        activeTools.push({ name: 'crear_enlace_pago', type: 'builtin', description: 'Genera enlaces de pago' });
+        if (paymentLinkEnabled) {
+          activeTools.push({ name: 'crear_enlace_pago', type: 'builtin', description: 'Genera enlaces de pago con Stripe' });
+          inactiveTools.push({ name: 'crear_pedido_voucher', reason: 'Link de pago activado por Super Admin' });
+        } else {
+          activeTools.push({ name: 'crear_pedido_voucher', type: 'builtin', description: 'Crea pedidos con comprobante de pago' });
+          inactiveTools.push({ name: 'crear_enlace_pago', reason: 'Solo activable por Super Admin' });
+        }
       } else {
+        inactiveTools.push({ name: 'crear_pedido_voucher', reason: 'Sin productos configurados' });
         inactiveTools.push({ name: 'crear_enlace_pago', reason: 'Sin productos configurados' });
         warnings.push('Agrega productos para habilitar ventas');
       }
@@ -2188,6 +2197,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       }
       
       inactiveTools.push({ name: 'buscar_producto', reason: 'Solo en modo VENTAS' });
+      inactiveTools.push({ name: 'crear_pedido_voucher', reason: 'Solo en modo VENTAS' });
       inactiveTools.push({ name: 'crear_enlace_pago', reason: 'Solo en modo VENTAS' });
     }
     
@@ -2227,6 +2237,8 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       model: business.openaiModel || 'gpt-4o-mini',
       botEnabled: business.botEnabled ?? true,
       instanceConnected,
+      paymentLinkEnabled,
+      paymentMode: paymentLinkEnabled ? 'Link de Pago (Stripe)' : 'Voucher/Comprobante',
       activeTools,
       inactiveTools,
       contextItems,

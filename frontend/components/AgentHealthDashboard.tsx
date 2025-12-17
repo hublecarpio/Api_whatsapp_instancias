@@ -24,6 +24,8 @@ interface AgentHealth {
   model: string;
   botEnabled: boolean;
   instanceConnected: boolean;
+  paymentLinkEnabled: boolean;
+  paymentMode: string;
   activeTools: ToolInfo[];
   inactiveTools: ToolInfo[];
   contextItems: ContextItem[];
@@ -121,6 +123,22 @@ export default function AgentHealthDashboard({ businessId }: { businessId: strin
                 <div className="text-sm text-white truncate" title={health.model}>{health.model}</div>
               </div>
             </div>
+
+            {health.objective === 'SALES' && (
+              <div className={`rounded-lg p-3 border ${health.paymentLinkEnabled ? 'bg-accent-success/10 border-accent-success/30' : 'bg-dark-card border-dark-border'}`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{health.paymentLinkEnabled ? '💳' : '🧾'}</span>
+                  <div>
+                    <div className="text-sm font-medium text-white">Modo de Pago: {health.paymentMode}</div>
+                    <div className="text-xs text-gray-400">
+                      {health.paymentLinkEnabled 
+                        ? 'Links de pago con Stripe activado por Super Admin' 
+                        : 'Pedidos con voucher/comprobante (por defecto)'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {health.warnings.length > 0 && (
               <div className="bg-accent-warning/10 border border-accent-warning/30 rounded-lg p-3">
