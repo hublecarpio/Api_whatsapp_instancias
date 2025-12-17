@@ -179,11 +179,11 @@ export default function DashboardLayout({
   }, [pathname]);
 
   useEffect(() => {
-    if (isReady && currentBusiness && emailVerified) {
+    if (isReady && currentBusiness) {
       const needsOnboarding = currentBusiness.onboardingCompleted !== true;
       setShowStarter(needsOnboarding);
     }
-  }, [isReady, currentBusiness, emailVerified]);
+  }, [isReady, currentBusiness]);
 
   if (!isReady) {
     return (

@@ -5,9 +5,10 @@ import { motion } from 'framer-motion';
 interface EffiProps {
   message: string;
   mood?: 'happy' | 'thinking' | 'celebrating';
+  compact?: boolean;
 }
 
-export default function Effi({ message, mood = 'happy' }: EffiProps) {
+export default function Effi({ message, mood = 'happy', compact = false }: EffiProps) {
   const eyeAnimation = {
     blink: {
       scaleY: [1, 0.1, 1],
@@ -22,16 +23,18 @@ export default function Effi({ message, mood = 'happy' }: EffiProps) {
     }
   };
 
+  const size = compact ? 60 : 80;
+
   return (
-    <div className="flex items-end gap-4">
+    <div className={`flex items-end ${compact ? 'gap-2 sm:gap-3' : 'gap-4'}`}>
       <motion.div
         animate="bounce"
         variants={bodyBounce}
-        className="relative"
+        className="relative flex-shrink-0"
       >
         <svg
-          width="80"
-          height="80"
+          width={size}
+          height={size}
           viewBox="0 0 80 80"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
@@ -103,9 +106,11 @@ export default function Effi({ message, mood = 'happy' }: EffiProps) {
         initial={{ opacity: 0, x: -10, scale: 0.9 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
         transition={{ delay: 0.2 }}
-        className="relative bg-[#1a1a2e] border border-gray-700 rounded-2xl rounded-bl-none px-4 py-3 max-w-xs shadow-lg"
+        className={`relative bg-[#1a1a2e] border border-gray-700 rounded-2xl rounded-bl-none shadow-lg ${
+          compact ? 'px-3 py-2 max-w-[200px] sm:max-w-xs' : 'px-4 py-3 max-w-xs'
+        }`}
       >
-        <p className="text-white text-sm leading-relaxed">{message}</p>
+        <p className={`text-white leading-relaxed ${compact ? 'text-xs sm:text-sm' : 'text-sm'}`}>{message}</p>
         <div className="absolute -bottom-2 left-0 w-3 h-3 bg-[#1a1a2e] border-l border-b border-gray-700 transform rotate-[-45deg]" />
       </motion.div>
     </div>
