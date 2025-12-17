@@ -104,7 +104,8 @@ export default function BusinessPage() {
     setVerificationSuccess('');
     
     try {
-      await authApi.sendPhoneVerification();
+      const fullPhone = `${phoneCountryCode}${phoneNumber.replace(/\D/g, '')}`;
+      await authApi.sendPhoneVerification(fullPhone);
       setShowVerificationInput(true);
       setVerificationSuccess('Codigo enviado! Revisa tu WhatsApp');
     } catch (err: any) {
@@ -442,19 +443,15 @@ export default function BusinessPage() {
                 )}
                 
                 {!showVerificationInput ? (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400">Tu numero no esta verificado</span>
-                    {!(user as any)?.phone ? (
-                      <span className="text-xs text-yellow-400">Primero guarda tu perfil para poder verificar</span>
-                    ) : (
-                      <button
-                        onClick={handleSendVerificationCode}
-                        disabled={verificationLoading}
-                        className="btn btn-xs btn-secondary w-fit"
-                      >
-                        {verificationLoading ? 'Enviando...' : 'Verificar ahora'}
-                      </button>
-                    )}
+                    <button
+                      onClick={handleSendVerificationCode}
+                      disabled={verificationLoading || !phoneNumber}
+                      className="btn btn-xs btn-secondary"
+                    >
+                      {verificationLoading ? 'Enviando...' : 'Verificar ahora'}
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-2">

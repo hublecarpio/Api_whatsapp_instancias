@@ -52,7 +52,7 @@ export const authApi = {
   getAdvisorInvitation: (token: string) => api.get(`/auth/advisor-invitation/${token}`),
   advisorSignup: (data: { token: string; name: string; password: string }) =>
     api.post('/auth/advisor-signup', data),
-  sendPhoneVerification: () => api.post('/auth/phone/send-verification'),
+  sendPhoneVerification: (phone: string) => api.post('/auth/phone/send-verification', { phone }),
   verifyPhone: (code: string) => api.post('/auth/phone/verify', { code })
 };
 

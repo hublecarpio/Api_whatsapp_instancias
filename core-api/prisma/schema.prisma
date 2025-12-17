@@ -17,6 +17,7 @@ model User {
   name                        String
   email                       String              @unique
   phone                       String?
+  pendingPhone                String?
   phoneVerified               Boolean             @default(false)
   phoneVerificationCode       String?
   phoneVerificationExpiresAt  DateTime?

@@ -1147,6 +1147,17 @@ async function sendPhoneVerificationCode(userId: string, phone: string): Promise
 
 router.post('/phone/send-verification', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    const { phone } = req.body;
+    
+    if (!phone) {
+      return res.status(400).json({ error: 'El numero de telefono es requerido' });
+    }
+    
+    const normalizedPhone = phone.replace(/\s+/g, '');
+    if (!normalizedPhone.startsWith('+') || normalizedPhone.length < 10) {
+      return res.status(400).json({ error: 'Formato de telefono invalido. Debe incluir codigo de pais (ej: +51999888777)' });
+    }
+    
     const user = await prisma.user.findUnique({
       where: { id: req.userId }
     });
@@ -1155,12 +1166,8 @@ router.post('/phone/send-verification', authMiddleware, async (req: AuthRequest,
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
     
-    if (!user.phone) {
-      return res.status(400).json({ error: 'Primero debes agregar un numero de telefono en tu perfil' });
-    }
-    
-    if (user.phoneVerified) {
-      return res.status(400).json({ error: 'Tu numero ya esta verificado' });
+    if (user.phone === normalizedPhone && user.phoneVerified) {
+      return res.status(400).json({ error: 'Este numero ya esta verificado' });
     }
     
     if (user.lastPhoneVerificationSentAt) {
@@ -1175,7 +1182,12 @@ router.post('/phone/send-verification', authMiddleware, async (req: AuthRequest,
       }
     }
     
-    const result = await sendPhoneVerificationCode(req.userId!, user.phone);
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { pendingPhone: normalizedPhone }
+    });
+    
+    const result = await sendPhoneVerificationCode(req.userId!, normalizedPhone);
     
     if (!result.success) {
       return res.status(500).json({ error: result.error });
@@ -1208,12 +1220,8 @@ router.post('/phone/verify', authMiddleware, async (req: AuthRequest, res: Respo
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
     
-    if (!user.phone) {
-      return res.status(400).json({ error: 'No tienes un numero de telefono registrado' });
-    }
-    
-    if (user.phoneVerified) {
-      return res.status(400).json({ error: 'Tu numero ya esta verificado' });
+    if (!user.pendingPhone) {
+      return res.status(400).json({ error: 'No hay un numero pendiente de verificacion. Solicita un codigo primero.' });
     }
     
     if (!user.phoneVerificationCode || !user.phoneVerificationExpiresAt) {
@@ -1231,13 +1239,15 @@ router.post('/phone/verify', authMiddleware, async (req: AuthRequest, res: Respo
     await prisma.user.update({
       where: { id: req.userId },
       data: {
+        phone: user.pendingPhone,
+        pendingPhone: null,
         phoneVerified: true,
         phoneVerificationCode: null,
         phoneVerificationExpiresAt: null
       }
     });
     
-    console.log(`[PhoneVerification] Phone verified for user ${req.userId}`);
+    console.log(`[PhoneVerification] Phone ${user.pendingPhone} verified and saved for user ${req.userId}`);
     
     res.json({ success: true, message: 'Numero verificado correctamente' });
   } catch (error) {
