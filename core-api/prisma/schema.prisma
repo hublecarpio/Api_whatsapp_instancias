@@ -17,6 +17,10 @@ model User {
   name                        String
   email                       String              @unique
   phone                       String?
+  phoneVerified               Boolean             @default(false)
+  phoneVerificationCode       String?
+  phoneVerificationExpiresAt  DateTime?
+  lastPhoneVerificationSentAt DateTime?
   passwordHash                String?
   googleId                    String?             @unique
   googlePicture               String?
