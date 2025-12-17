@@ -23,6 +23,7 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   const baseLinks = [
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: '💬' },
+    { href: '/dashboard/prompt', label: 'Agente IA', icon: '🤖' },
     ...(instanceProvider === 'META_CLOUD' ? [{ href: '/dashboard/templates', label: 'Templates', icon: '📄' }] : []),
   ];
   
@@ -37,9 +38,8 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   
   const commonLinks = [
     { href: '/dashboard/contacts', label: 'Contactos', icon: '👥' },
-    { href: '/dashboard/broadcasts', label: 'Envio Masivo', icon: '📢' },
-    { href: '/dashboard/prompt', label: 'Agente IA', icon: '🤖' },
     { href: '/dashboard/chat', label: 'Chat', icon: '💭' },
+    { href: '/dashboard/broadcasts', label: 'Envio Masivo', icon: '📢' },
     { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' },
     { href: '/dashboard/reminders', label: 'Seguimientos', icon: '⏰' },
     { href: '/dashboard/billing', label: 'Facturacion', icon: '💳' }
