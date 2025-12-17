@@ -2242,27 +2242,20 @@ export default function PromptPage() {
             </div>
           </div>
 
-          <div className="card">
-            <h2 className="text-lg font-semibold text-white mb-2">Webhook URL</h2>
+          <div className="card bg-accent-purple/10 border-accent-purple/30">
+            <h2 className="text-lg font-semibold text-white mb-2">Webhooks</h2>
             <p className="text-sm text-gray-400 mb-4">
-              Configura una URL para recibir notificaciones de eventos del agente.
+              Configura webhooks para recibir eventos en tiempo real cuando el agente responde, llegan mensajes, o cambian estados.
             </p>
-            
-            <div className="space-y-4">
-              <input
-                type="url"
-                value={webhookUrl}
-                onChange={(e) => setWebhookUrl(e.target.value)}
-                placeholder="https://tu-servidor.com/webhook"
-                className="input"
-              />
-              <button
-                onClick={handleSaveWebhook}
-                className="btn btn-primary"
-              >
-                Guardar Webhook
-              </button>
-            </div>
+            <a 
+              href="/dashboard/api-docs" 
+              className="btn btn-primary inline-flex items-center gap-2"
+            >
+              Configurar Webhooks
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </a>
           </div>
         </div>
       )}
@@ -2946,68 +2939,20 @@ export default function PromptPage() {
             </div>
           </div>
 
-          <div className="card">
-            <h2 className="text-lg font-semibold text-white mb-2">Webhook</h2>
+          <div className="card bg-accent-purple/10 border-accent-purple/30">
+            <h2 className="text-lg font-semibold text-white mb-2">Webhooks</h2>
             <p className="text-sm text-gray-400 mb-4">
-              Configura un webhook para recibir notificaciones de eventos en tiempo real.
+              Configura webhooks para recibir eventos en tiempo real cuando el agente responde, llegan mensajes, o cambian estados.
             </p>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">URL del Webhook</label>
-                <input
-                  type="url"
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                  placeholder="https://tu-servidor.com/webhook"
-                  className="input"
-                />
-                <p className="text-xs text-gray-500 mt-1">Debe ser HTTPS</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Eventos</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(webhookConfig?.availableEvents || ['user_message', 'agent_message', 'state_change', 'tool_call', 'stage_change']).map(event => (
-                    <label key={event} className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg cursor-pointer hover:bg-dark-hover">
-                      <input
-                        type="checkbox"
-                        checked={selectedEvents.includes(event)}
-                        onChange={() => handleToggleEvent(event)}
-                        className="w-4 h-4 rounded border-gray-600 bg-dark-hover text-neon-blue focus:ring-neon-blue"
-                      />
-                      <span className="text-sm text-gray-300">{event.replace(/_/g, ' ')}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {webhookConfig?.webhookSecret && (
-                <div className="p-3 bg-dark-surface rounded-lg">
-                  <p className="text-xs text-gray-400 mb-1">Webhook Secret (para verificar firmas):</p>
-                  <code className="text-xs text-gray-300 font-mono break-all">{webhookConfig.webhookSecret}</code>
-                </div>
-              )}
-
-              <button
-                onClick={handleSaveWebhook}
-                disabled={loadingWebhook}
-                className="btn btn-primary"
-              >
-                {loadingWebhook ? 'Guardando...' : 'Guardar Webhook'}
-              </button>
-            </div>
-          </div>
-
-          <div className="card bg-dark-surface/50">
-            <h3 className="text-sm font-semibold text-gray-300 mb-2">Formato de Eventos</h3>
-            <div className="text-xs text-gray-400 space-y-2">
-              <p><strong>user_message:</strong> Cuando un usuario envia un mensaje (incluye texto, imagenes, audio, video)</p>
-              <p><strong>agent_message:</strong> Cuando el agente responde (incluye respuesta y media enviada)</p>
-              <p><strong>state_change:</strong> Cuando cambia el estado del cliente (etapa, tags)</p>
-              <p><strong>tool_call:</strong> Cuando el agente ejecuta una herramienta</p>
-              <p><strong>stage_change:</strong> Cuando el cliente avanza de etapa</p>
-            </div>
+            <a 
+              href="/dashboard/api-docs" 
+              className="btn btn-primary inline-flex items-center gap-2"
+            >
+              Configurar Webhooks
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </a>
           </div>
         </div>
       )}

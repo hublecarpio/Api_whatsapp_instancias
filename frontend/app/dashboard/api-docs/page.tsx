@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { agentApiKeyApi } from '@/lib/api';
+import { agentApiKeyApi, agentWebhookApi } from '@/lib/api';
 
 export default function ApiDocsPage() {
   const { currentBusiness } = useBusinessStore();
@@ -13,6 +13,18 @@ export default function ApiDocsPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('enviar');
 
+  const [webhookConfig, setWebhookConfig] = useState<{ 
+    webhookUrl: string | null; 
+    webhookEvents: string[]; 
+    webhookSecret: string | null; 
+    availableEvents: string[] 
+  } | null>(null);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
+  const [loadingWebhook, setLoadingWebhook] = useState(false);
+  const [webhookSuccess, setWebhookSuccess] = useState<string | null>(null);
+  const [webhookError, setWebhookError] = useState<string | null>(null);
+
   const baseUrl = typeof window !== 'undefined' 
     ? `${window.location.protocol}//${window.location.host.replace(':5000', ':3001')}`
     : 'https://tu-dominio.com';
@@ -20,6 +32,7 @@ export default function ApiDocsPage() {
   useEffect(() => {
     if (currentBusiness?.id) {
       loadApiKeyInfo();
+      loadWebhookConfig();
     }
   }, [currentBusiness?.id]);
 
@@ -32,6 +45,17 @@ export default function ApiDocsPage() {
       console.error('Error loading API key info:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadWebhookConfig = async () => {
+    try {
+      const res = await agentWebhookApi.get(currentBusiness!.id);
+      setWebhookConfig(res.data);
+      setWebhookUrl(res.data.webhookUrl || '');
+      setSelectedEvents(res.data.webhookEvents || []);
+    } catch (err) {
+      console.error('Error loading webhook config:', err);
     }
   };
 
@@ -62,6 +86,33 @@ export default function ApiDocsPage() {
       setNewApiKey(null);
     } catch (error) {
       console.error('Error revoking API key:', error);
+    }
+  };
+
+  const handleToggleEvent = (event: string) => {
+    setSelectedEvents(prev => 
+      prev.includes(event) 
+        ? prev.filter(e => e !== event)
+        : [...prev, event]
+    );
+  };
+
+  const handleSaveWebhook = async () => {
+    setWebhookError(null);
+    setWebhookSuccess(null);
+    setLoadingWebhook(true);
+    try {
+      const res = await agentWebhookApi.update(currentBusiness!.id, {
+        webhookUrl: webhookUrl || null,
+        webhookEvents: selectedEvents
+      });
+      setWebhookConfig(res.data);
+      setWebhookSuccess('Webhook configurado correctamente');
+      setTimeout(() => setWebhookSuccess(null), 3000);
+    } catch (err: any) {
+      setWebhookError(err.response?.data?.error || 'Error al configurar webhook');
+    } finally {
+      setLoadingWebhook(false);
     }
   };
 
@@ -96,12 +147,20 @@ export default function ApiDocsPage() {
     { id: 'citas', label: 'Citas' },
   ];
 
+  const availableEvents = webhookConfig?.availableEvents || [
+    'user_message', 
+    'agent_message', 
+    'state_change', 
+    'tool_call', 
+    'stage_change'
+  ];
+
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white mb-2">Documentacion API</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">API & Webhooks</h1>
         <p className="text-gray-400">
-          Integra tu CRM o sistemas externos con nuestra API. Envia mensajes, consulta contactos y mas.
+          Integra tu CRM o sistemas externos con nuestra API. Envia mensajes, consulta contactos y recibe eventos en tiempo real.
         </p>
       </div>
 
@@ -169,6 +228,108 @@ export default function ApiDocsPage() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="bg-accent-purple/10 border border-accent-purple/30 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-white mb-4">Configurar Webhook</h2>
+        <p className="text-gray-400 text-sm mb-4">
+          Recibe eventos en tiempo real cuando llegan mensajes, el agente responde, o cambia el estado de un contacto.
+        </p>
+
+        {webhookSuccess && (
+          <div className="mb-4 p-3 bg-accent-success/10 border border-accent-success/30 rounded-lg text-accent-success text-sm">
+            {webhookSuccess}
+          </div>
+        )}
+        {webhookError && (
+          <div className="mb-4 p-3 bg-accent-error/10 border border-accent-error/30 rounded-lg text-accent-error text-sm">
+            {webhookError}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">URL del Webhook</label>
+            <input
+              type="url"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+              placeholder="https://tu-servidor.com/webhook"
+              className="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-purple/50"
+            />
+            <p className="text-xs text-gray-500 mt-1">Debe ser HTTPS para produccion</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Eventos a recibir</label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {availableEvents.map(event => (
+                <label key={event} className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg cursor-pointer hover:bg-dark-hover border border-dark-border">
+                  <input
+                    type="checkbox"
+                    checked={selectedEvents.includes(event)}
+                    onChange={() => handleToggleEvent(event)}
+                    className="w-4 h-4 rounded border-gray-600 bg-dark-hover text-accent-purple focus:ring-accent-purple"
+                  />
+                  <span className="text-sm text-gray-300">{event.replace(/_/g, ' ')}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {webhookConfig?.webhookSecret && (
+            <div className="p-3 bg-dark-surface rounded-lg border border-dark-border">
+              <p className="text-xs text-gray-400 mb-1">Webhook Secret (para verificar firmas HMAC-SHA256):</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs text-gray-300 font-mono break-all">{webhookConfig.webhookSecret}</code>
+                <button
+                  onClick={() => copyToClipboard(webhookConfig.webhookSecret!, 'secret')}
+                  className="text-xs text-gray-400 hover:text-white"
+                >
+                  {copied === 'secret' ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleSaveWebhook}
+            disabled={loadingWebhook}
+            className="px-4 py-2 bg-accent-purple text-white rounded-lg hover:bg-accent-purple/80 transition-colors text-sm"
+          >
+            {loadingWebhook ? 'Guardando...' : 'Guardar Webhook'}
+          </button>
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-dark-border">
+          <h3 className="text-sm font-semibold text-gray-300 mb-2">Formato de Eventos</h3>
+          <div className="text-xs text-gray-400 space-y-1">
+            <p><code className="text-accent-purple">user_message</code> - Cuando un usuario envia un mensaje (texto, imagenes, audio, video)</p>
+            <p><code className="text-accent-purple">agent_message</code> - Cuando el agente responde (incluye respuesta y media enviada)</p>
+            <p><code className="text-accent-purple">state_change</code> - Cuando cambia el estado del cliente (etapa, tags)</p>
+            <p><code className="text-accent-purple">tool_call</code> - Cuando el agente ejecuta una herramienta</p>
+            <p><code className="text-accent-purple">stage_change</code> - Cuando el cliente avanza de etapa</p>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold text-gray-300 mb-2">Ejemplo de Payload</h3>
+          <CodeBlock
+            id="webhook-example"
+            language="json"
+            code={`{
+  "event": "user_message",
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "businessId": "abc123",
+  "data": {
+    "contactPhone": "5215512345678",
+    "contactName": "Juan Perez",
+    "message": "Hola, quiero informacion",
+    "messageType": "text"
+  }
+}`}
+          />
+        </div>
       </div>
 
       <div className="bg-dark-surface rounded-xl border border-dark-border p-6">
@@ -400,17 +561,6 @@ curl -X GET "${baseUrl}/api/v1/appointments?from=2024-01-01&to=2024-12-31" \\
             />
           </div>
         </div>
-      </div>
-
-      <div className="bg-accent-purple/10 border border-accent-purple/30 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-2">Webhooks</h2>
-        <p className="text-gray-400 mb-4">
-          Recibe eventos en tiempo real cuando llegan mensajes, el agente responde, o cambia el estado de un contacto.
-          Configura tu URL en la seccion de Agente IA.
-        </p>
-        <p className="text-gray-400 text-sm">
-          Eventos disponibles: <code className="text-accent-purple">user_message</code>, <code className="text-accent-purple">agent_message</code>, <code className="text-accent-purple">stage_change</code>, <code className="text-accent-purple">tool_call</code>
-        </p>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import { searchProductsIntelligent } from '../services/productSearch.js';
 import { queueAIResponse, getAIQueueStats } from '../services/queues/aiResponseProcessor.js';
 import { getAIResponseQueue } from '../services/queues/index.js';
 import { scheduleFollowUp } from '../services/followUpService.js';
+import { dispatchAgentMessage } from '../services/webhookService.js';
 
 const router = Router();
 
@@ -844,6 +845,15 @@ async function processWithAgentV2(
       });
       
       console.log(`[Agent V2] Response sent to ${contactPhone}:`, aiResponse.substring(0, 100));
+      
+      // Dispatch agent_message webhook
+      dispatchAgentMessage(
+        business.id,
+        contactPhone,
+        aiResponse,
+        sentMedia.length > 0 ? sentMedia.map((m: any) => m.url) : undefined,
+        undefined
+      ).catch(err => console.error('[Agent V2] Failed to dispatch agent_message webhook:', err.message));
       
       // Schedule follow-up after sending response
       await scheduleFollowUp(business.id, contactPhone, 'ai');
@@ -1919,6 +1929,15 @@ async function processWithAgent(
           }
         }
       });
+      
+      // Dispatch agent_message webhook
+      dispatchAgentMessage(
+        businessId,
+        contactPhone,
+        aiResponse,
+        sentMedia.length > 0 ? sentMedia.map(m => m.url) : undefined,
+        undefined
+      ).catch(err => console.error('[Agent V1] Failed to dispatch agent_message webhook:', err.message));
       
       // Schedule follow-up after sending response
       await scheduleFollowUp(businessId, contactPhone, 'ai');
