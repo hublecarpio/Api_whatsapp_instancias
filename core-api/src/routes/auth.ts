@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 import prisma from '../services/prisma.js';
 import { authMiddleware, generateToken, AuthRequest } from '../middleware/auth.js';
 import { generateVerificationToken, hashToken, sendVerificationEmail, sendPasswordResetEmail, testSMTPConnection } from '../services/emailService.js';
 import { pauseStripeSubscription, resumeStripeSubscription } from './billing.js';
+import { isGoogleAuthConfigured, getGoogleAuthUrl, getGoogleUserInfo } from '../services/googleAuth.js';
 
 const router = Router();
 
@@ -985,6 +987,243 @@ router.get('/referral/stats', authMiddleware, async (req: AuthRequest, res: Resp
   } catch (error) {
     console.error('Get referral stats error:', error);
     res.status(500).json({ error: 'Failed to get referral stats' });
+  }
+});
+
+// Store Google OAuth states temporarily (in production, use Redis)
+const googleAuthStates = new Map<string, { referralCode?: string; createdAt: number }>();
+
+// Clean up old states periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [state, data] of googleAuthStates.entries()) {
+    if (now - data.createdAt > 10 * 60 * 1000) { // 10 minutes
+      googleAuthStates.delete(state);
+    }
+  }
+}, 60000);
+
+router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessName, phone } = req.body;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      include: { businesses: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (phone) {
+      const cleanPhone = phone.replace(/\D/g, '');
+      await prisma.user.update({
+        where: { id: req.userId },
+        data: { phone: cleanPhone }
+      });
+    }
+    
+    if (businessName && user.businesses.length > 0) {
+      await prisma.business.update({
+        where: { id: user.businesses[0].id },
+        data: { name: businessName }
+      });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+router.get('/google/status', async (req: Request, res: Response) => {
+  res.json({ configured: isGoogleAuthConfigured() });
+});
+
+router.get('/google', async (req: Request, res: Response) => {
+  try {
+    if (!isGoogleAuthConfigured()) {
+      return res.status(503).json({ error: 'Google authentication is not configured' });
+    }
+    
+    const { referralCode } = req.query;
+    const state = uuidv4();
+    
+    googleAuthStates.set(state, {
+      referralCode: typeof referralCode === 'string' ? referralCode : undefined,
+      createdAt: Date.now()
+    });
+    
+    const authUrl = getGoogleAuthUrl(state);
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('[GoogleAuth] Start error:', error);
+    res.redirect('/login?error=google_auth_failed');
+  }
+});
+
+router.get('/google/callback', async (req: Request, res: Response) => {
+  try {
+    const { code, state } = req.query;
+    
+    if (!code || typeof code !== 'string') {
+      return res.redirect('/login?error=no_code');
+    }
+    
+    if (!state || typeof state !== 'string') {
+      return res.redirect('/login?error=invalid_state');
+    }
+    
+    const stateData = googleAuthStates.get(state);
+    if (!stateData) {
+      return res.redirect('/login?error=expired_state');
+    }
+    googleAuthStates.delete(state);
+    
+    const googleUser = await getGoogleUserInfo(code);
+    console.log(`[GoogleAuth] Got user info: ${googleUser.email}`);
+    
+    // Check if user exists by googleId or email
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { googleId: googleUser.id },
+          { email: googleUser.email }
+        ]
+      }
+    });
+    
+    let isNewUser = false;
+    
+    if (user) {
+      // Existing user - update Google info if not already linked
+      if (!user.googleId) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            googleId: googleUser.id,
+            googlePicture: googleUser.picture,
+            emailVerified: true // Google emails are verified
+          }
+        });
+        console.log(`[GoogleAuth] Linked Google account to existing user: ${user.email}`);
+      }
+    } else {
+      // New user - create account
+      isNewUser = true;
+      
+      // Process referral code if provided
+      let validReferralCode: string | null = null;
+      let enterpriseCode: any = null;
+      let standardCode: any = null;
+      
+      if (stateData.referralCode) {
+        const refCode = await prisma.referralCode.findUnique({
+          where: { code: stateData.referralCode.toUpperCase() }
+        });
+        
+        if (refCode && refCode.isActive) {
+          if (!refCode.expiresAt || refCode.expiresAt > new Date()) {
+            if (!refCode.maxUses || refCode.usageCount < refCode.maxUses) {
+              validReferralCode = refCode.code;
+              
+              await prisma.referralCode.update({
+                where: { id: refCode.id },
+                data: { usageCount: { increment: 1 } }
+              });
+              
+              if (refCode.type === 'ENTERPRISE' && refCode.grantDurationDays) {
+                enterpriseCode = refCode;
+              } else {
+                standardCode = refCode;
+              }
+            }
+          }
+        }
+      }
+      
+      const result = await prisma.$transaction(async (tx) => {
+        const isPro = !!enterpriseCode;
+        const subscriptionStatus = enterpriseCode ? 'ACTIVE' : 'TRIAL';
+        const referralCodeRecord = enterpriseCode || standardCode;
+        const bonusDemoDays = standardCode?.bonusDemoDays || 0;
+        const bonusTrialDays = standardCode?.bonusTrialDays || 0;
+        
+        const baseDemoDays = 2;
+        const totalDemoDays = baseDemoDays + bonusDemoDays;
+        const trialEndAt = enterpriseCode ? null : new Date(Date.now() + totalDemoDays * 24 * 60 * 60 * 1000);
+        
+        const newUser = await tx.user.create({
+          data: {
+            name: googleUser.name,
+            email: googleUser.email,
+            googleId: googleUser.id,
+            googlePicture: googleUser.picture,
+            emailVerified: true, // Google accounts are pre-verified
+            referralCode: validReferralCode,
+            referralCodeId: referralCodeRecord?.id || null,
+            bonusDemoDays,
+            bonusTrialDays,
+            isPro,
+            subscriptionStatus,
+            subscriptionTier: 'BASIC',
+            trialEndAt,
+            demoStartedAt: enterpriseCode ? null : new Date(),
+            demoPhase: enterpriseCode ? 'ACTIVE' : 'DEMO'
+          }
+        });
+        
+        if (enterpriseCode) {
+          const now = new Date();
+          const subscriptionEndsAt = new Date(now.getTime() + enterpriseCode.grantDurationDays * 24 * 60 * 60 * 1000);
+          
+          await tx.subscription.create({
+            data: {
+              userId: newUser.id,
+              source: 'ENTERPRISE',
+              tier: enterpriseCode.grantTier || 'PRO',
+              status: 'ACTIVE',
+              startsAt: now,
+              endsAt: subscriptionEndsAt,
+              referralCodeId: enterpriseCode.id,
+              activatedBy: 'referral_code',
+              notes: `Auto-activated via enterprise code: ${enterpriseCode.code} (Google Sign-In)`
+            }
+          });
+        }
+        
+        // Create default business with generic name (will ask for details later)
+        const business = await tx.business.create({
+          data: {
+            userId: newUser.id,
+            name: 'Mi Empresa',
+            description: 'Configura los datos de tu empresa',
+            botEnabled: true
+          }
+        });
+        
+        console.log(`[GoogleAuth] Created new user ${newUser.id} and business ${business.id}`);
+        
+        return { user: newUser, business, isPro };
+      });
+      
+      user = result.user;
+    }
+    
+    const token = generateToken(user.id);
+    
+    // Redirect to frontend with token
+    // Use a special page that will store the token and redirect
+    const redirectUrl = isNewUser 
+      ? `/auth/google-callback?token=${token}&new=true`
+      : `/auth/google-callback?token=${token}`;
+    
+    res.redirect(redirectUrl);
+  } catch (error: any) {
+    console.error('[GoogleAuth] Callback error:', error);
+    res.redirect('/login?error=google_auth_failed');
   }
 });
 

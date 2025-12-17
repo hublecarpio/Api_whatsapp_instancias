@@ -39,6 +39,10 @@ export const authApi = {
   login: (data: { email: string; password: string }) =>
     api.post('/auth/login', data),
   me: () => api.get('/auth/me'),
+  getMe: () => api.get('/auth/me'),
+  updateProfile: (data: { businessName?: string; phone?: string }) =>
+    api.put('/auth/profile', data),
+  googleAuthStatus: () => api.get('/auth/google/status'),
   resendVerification: () => api.post('/auth/resend-verification'),
   verifyEmail: (token: string) => api.get(`/auth/verify-email?token=${token}`),
   applyReferral: (code: string) => api.post('/auth/apply-referral', { code }),
