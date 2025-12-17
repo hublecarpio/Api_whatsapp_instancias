@@ -1365,7 +1365,6 @@ router.post('/google/exchange', async (req: Request, res: Response) => {
               status: 'ACTIVE',
               startsAt: now,
               endsAt: subscriptionEndsAt,
-              monthlyTokenLimit: 10000000,
               referralCodeId: enterpriseCode.id
             }
           });

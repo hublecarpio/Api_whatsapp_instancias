@@ -1,0 +1,18 @@
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             29.7s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         0.474                                                                                                                                                                       
+0.474 > core-api@1.0.0 build                                                                                                                                                
+0.474 > tsc                                                                                                                                                                 
+0.474                                                                                                                                                                       
+29.40 src/routes/auth.ts(1368,15): error TS2353: Object literal may only specify known properties, and 'monthlyTokenLimit' does not exist in type 'Without<SubscriptionCreat
+eInput, SubscriptionUncheckedCreateInput> & SubscriptionUncheckedCreateInput'.                                                                                              
+------                                                                                                                                                                      
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
