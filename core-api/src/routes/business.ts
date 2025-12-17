@@ -279,7 +279,7 @@ router.get('/:id/stats', async (req: AuthRequest, res: Response) => {
     res.json({
       whatsapp: {
         status: whatsappStatus,
-        connected: whatsappStatus === 'open',
+        connected: whatsappStatus === 'open' || whatsappStatus === 'connected',
         phone: whatsappPhone
       },
       products: productCount,
