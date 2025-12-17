@@ -141,6 +141,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4000
+      - CORE_API_URL=https://api.efficore.es
     networks:
       - whatsapp_internal
       - traefik_public
