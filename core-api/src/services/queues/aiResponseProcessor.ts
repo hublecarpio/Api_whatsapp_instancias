@@ -10,8 +10,52 @@ import { MetaCloudService } from '../metaCloud.js';
 import { scheduleFollowUp } from '../followUpService.js';
 import { analyzeAndUpdateLeadStage } from '../leadStageService.js';
 import axios from 'axios';
+import eventLogger from '../eventLogger.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+
+interface ToolLogData {
+  businessId: string;
+  toolId?: string;
+  toolName: string;
+  contactPhone: string;
+  request: any;
+  response: any;
+  status: 'success' | 'error';
+  duration: number;
+  error?: string;
+}
+
+async function logCustomToolExecution(data: ToolLogData): Promise<void> {
+  try {
+    // Log to ToolLog table if we have a toolId
+    if (data.toolId) {
+      await prisma.toolLog.create({
+        data: {
+          toolId: data.toolId,
+          businessId: data.businessId,
+          contactPhone: data.contactPhone || null,
+          request: data.request || {},
+          response: data.response || null,
+          status: data.status,
+          duration: data.duration || null
+        }
+      });
+    }
+    
+    // Also log to event logger for analytics
+    await eventLogger.toolExecuted(
+      data.businessId,
+      data.toolName,
+      data.status === 'success',
+      data.duration || 0
+    );
+    
+    console.log(`[Tool Log] Logged ${data.status} execution of ${data.toolName} (${data.duration}ms)`);
+  } catch (err) {
+    console.error(`[Tool Log] Failed to log tool execution:`, err);
+  }
+}
 const WORKER_CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '40', 10);
 const QUEUE_ADD_TIMEOUT = 5000;
 const LOCK_DURATION = 120000;
@@ -761,11 +805,12 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
         
         console.log(`[AI Worker V1] Executing custom tool: ${actualToolName}`);
         
+        let toolStartTime = Date.now();
+        let requestBody: any = {};
+        let method = 'POST';
+        
         try {
           const args = JSON.parse(fn.arguments);
-          
-          // Build request body from args and template
-          let requestBody: any = {};
           if (toolConfig.bodyTemplate) {
             // Parse template as base object, then merge/override with args
             let baseTemplate: any = {};
@@ -886,7 +931,7 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
             headers = { ...headers, ...configHeaders };
           }
           
-          const method = (toolConfig.method || 'POST').toUpperCase();
+          method = (toolConfig.method || 'POST').toUpperCase();
           const axiosConfig: any = {
             method,
             url: toolConfig.url,
@@ -902,7 +947,9 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
           
           console.log(`[AI Worker V1] Custom tool ${actualToolName}: ${method} ${toolConfig.url}`);
           
+          toolStartTime = Date.now();
           const response = await axios(axiosConfig);
+          const toolDuration = Date.now() - toolStartTime;
           
           const responseContent = typeof response.data === 'object' 
             ? JSON.stringify(response.data) 
@@ -914,10 +961,45 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
             content: responseContent.substring(0, 4000) // Limit response size
           });
           
-          console.log(`[AI Worker V1] Custom tool ${actualToolName} executed successfully`);
+          console.log(`[AI Worker V1] Custom tool ${actualToolName} executed successfully in ${toolDuration}ms`);
+          
+          // Log tool execution to database
+          try {
+            await logCustomToolExecution({
+              businessId: business.id,
+              toolId: toolConfig.id,
+              toolName: actualToolName,
+              contactPhone,
+              request: { url: toolConfig.url, method, body: requestBody, headers },
+              response: response.data,
+              status: 'success',
+              duration: toolDuration
+            });
+          } catch (logErr) {
+            console.error(`[AI Worker V1] Failed to log tool execution:`, logErr);
+          }
           
         } catch (err: any) {
+          const toolDuration = Date.now() - toolStartTime;
           console.error(`[AI Worker V1] Custom tool ${actualToolName} failed:`, err.message);
+          
+          // Log failed tool execution
+          try {
+            await logCustomToolExecution({
+              businessId: business.id,
+              toolId: toolConfig?.id,
+              toolName: actualToolName,
+              contactPhone,
+              request: { url: toolConfig?.url, method, body: requestBody },
+              response: null,
+              status: 'error',
+              duration: toolDuration,
+              error: err.response?.data?.message || err.message
+            });
+          } catch (logErr) {
+            console.error(`[AI Worker V1] Failed to log tool error:`, logErr);
+          }
+          
           toolMessages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
