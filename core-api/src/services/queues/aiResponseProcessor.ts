@@ -1070,23 +1070,49 @@ async function sendWhatsAppResponse(
       return;
     }
     
-    await prisma.messageLog.create({
-      data: {
-        businessId: business.id,
-        instanceId: instance.id,
-        direction: 'outbound',
-        sender: instance.phoneNumber || 'bot',
-        recipient: cleanPhone,
-        message: message,
-        metadata: { 
-          source: 'ai_worker',
-          provider: instance.provider || 'BAILEYS',
-          agentVersion: business.agentVersion || 'v1',
-          eventCount: events.length,
-          sentMedia: sentMedia.length > 0 ? sentMedia : undefined
-        }
+    // Save each parsed event as a separate message in the database
+    // This ensures the UI displays messages in the same format as WhatsApp
+    for (const event of events) {
+      if (event.type === 'text' && event.text) {
+        await prisma.messageLog.create({
+          data: {
+            businessId: business.id,
+            instanceId: instance.id,
+            direction: 'outbound',
+            sender: instance.phoneNumber || 'bot',
+            recipient: cleanPhone,
+            message: event.text,
+            metadata: { 
+              source: 'ai_worker',
+              provider: instance.provider || 'BAILEYS',
+              agentVersion: business.agentVersion || 'v1',
+              type: 'text'
+            }
+          }
+        });
+      } else if (event.url) {
+        // For media events (image, video, audio, document)
+        await prisma.messageLog.create({
+          data: {
+            businessId: business.id,
+            instanceId: instance.id,
+            direction: 'outbound',
+            sender: instance.phoneNumber || 'bot',
+            recipient: cleanPhone,
+            message: event.caption || null,
+            mediaUrl: event.url,
+            metadata: { 
+              source: 'ai_worker',
+              provider: instance.provider || 'BAILEYS',
+              agentVersion: business.agentVersion || 'v1',
+              type: event.type,
+              mediaType: event.type,
+              filename: event.filename
+            }
+          }
+        });
       }
-    });
+    }
     
     // Schedule follow-up after sending response
     await scheduleFollowUp(business.id, cleanPhone);
