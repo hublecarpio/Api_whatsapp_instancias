@@ -3316,10 +3316,10 @@ function DelegatedAgentTab({ token }: { token: string }) {
                     <span 
                       key={inst.id}
                       className={`text-xs px-2 py-0.5 rounded ${
-                        inst.status === 'open' ? 'text-accent-success bg-accent-success/10' : 'text-gray-400 bg-gray-500/10'
+                        (inst.status === 'open' || inst.status === 'connected') ? 'text-accent-success bg-accent-success/10' : 'text-gray-400 bg-gray-500/10'
                       }`}
                     >
-                      {inst.phoneNumber || 'WhatsApp'} ({inst.status})
+                      {inst.phoneNumber || 'WhatsApp'} ({inst.status === 'connected' ? 'Conectado' : inst.status === 'open' ? 'Conectado' : inst.status})
                     </span>
                   ))}
                 </div>
@@ -3465,7 +3465,7 @@ function DelegatedAgentTab({ token }: { token: string }) {
                             Actual
                           </span>
                         )}
-                        {user.businesses?.[0]?.instances?.some((i: any) => i.status === 'open') && (
+                        {user.businesses?.[0]?.instances?.some((i: any) => i.status === 'open' || i.status === 'connected') && (
                           <span className="text-xs text-accent-success px-2 py-1 bg-accent-success/10 rounded">
                             WhatsApp Activo
                           </span>
