@@ -3116,6 +3116,7 @@ function DelegatedAgentTab({ token }: { token: string }) {
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactStats, setContactStats] = useState<any>({});
   const [syncing, setSyncing] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -3162,6 +3163,8 @@ function DelegatedAgentTab({ token }: { token: string }) {
   };
 
   const assignAgent = async (userId: string) => {
+    if (assigning) return;
+    setAssigning(true);
     try {
       const response = await fetch('/api/super-admin/delegated-agent', {
         method: 'POST',
@@ -3172,12 +3175,27 @@ function DelegatedAgentTab({ token }: { token: string }) {
         body: JSON.stringify({ userId })
       });
       
+      let data: any = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = { error: `Error del servidor (${response.status})` };
+      }
+      
       if (response.ok) {
+        alert('Agente asignado correctamente');
         await fetchDelegation();
         setShowAssignModal(false);
+      } else {
+        const errorMsg = data.error || data.details || `Error al asignar agente (${response.status})`;
+        console.error('Server error:', data);
+        alert(errorMsg);
       }
     } catch (err) {
       console.error('Error assigning agent:', err);
+      alert('Error de conexion al asignar agente. Verifica tu conexion a internet.');
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -3439,19 +3457,25 @@ function DelegatedAgentTab({ token }: { token: string }) {
               Solo se muestran usuarios con email verificado y WhatsApp conectado
             </p>
 
-            <div className="space-y-2">
+            {assigning && (
+              <div className="text-center py-4 text-neon-blue">
+                Asignando agente...
+              </div>
+            )}
+
+            <div className={`space-y-2 ${assigning ? 'opacity-50 pointer-events-none' : ''}`}>
               {availableAgents.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No hay usuarios disponibles</p>
               ) : (
                 availableAgents.map((user) => (
                   <div 
                     key={user.id}
-                    className={`p-4 rounded-lg border ${
+                    className={`p-4 rounded-lg border transition-colors ${
                       user.isCurrentAgent 
                         ? 'border-neon-blue bg-neon-blue/10' 
                         : 'border-dark-border hover:bg-dark-hover cursor-pointer'
                     }`}
-                    onClick={() => !user.isCurrentAgent && assignAgent(user.id)}
+                    onClick={() => !user.isCurrentAgent && !assigning && assignAgent(user.id)}
                   >
                     <div className="flex items-center justify-between">
                       <div>
