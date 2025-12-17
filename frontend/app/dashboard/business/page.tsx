@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { businessApi, policyApi, billingApi } from '@/lib/api';
+import Starter from '@/components/Starter';
 
 interface BusinessStats {
   whatsapp: { status: string; connected: boolean; phone: string | null };
@@ -21,12 +22,13 @@ interface TokenUsage {
 }
 
 export default function BusinessPage() {
-  const { currentBusiness, setCurrentBusiness, businesses, setBusinesses } = useBusinessStore();
+  const { currentBusiness, setCurrentBusiness, businesses, setBusinesses, updateBusiness } = useBusinessStore();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [stats, setStats] = useState<BusinessStats | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -131,11 +133,57 @@ export default function BusinessPage() {
     return num.toString();
   };
 
+  const handleResumeOnboarding = async () => {
+    if (currentBusiness) {
+      try {
+        await businessApi.update(currentBusiness.id, { onboardingSkipped: false });
+        updateBusiness(currentBusiness.id, { onboardingSkipped: false } as any);
+        setShowOnboarding(true);
+      } catch (err) {
+        console.error('Error resuming onboarding:', err);
+      }
+    }
+  };
+
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    if (currentBusiness) {
+      businessApi.get(currentBusiness.id).then(res => {
+        setCurrentBusiness(res.data);
+      }).catch(() => {});
+    }
+  };
+
+  const showResumeButton = currentBusiness && 
+    (currentBusiness as any).onboardingSkipped === true && 
+    (currentBusiness as any).onboardingCompleted !== true;
+
+  if (showOnboarding && currentBusiness) {
+    return (
+      <Starter
+        businessId={currentBusiness.id}
+        businessName={currentBusiness.name}
+        onComplete={handleOnboardingComplete}
+      />
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-0">
-      <h1 className="text-xl sm:text-2xl font-bold text-white mb-6">
-        {currentBusiness ? 'Mi Empresa' : 'Crear Empresa'}
-      </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">
+          {currentBusiness ? 'Mi Empresa' : 'Crear Empresa'}
+        </h1>
+        {showResumeButton && (
+          <button
+            onClick={handleResumeOnboarding}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition"
+          >
+            <span>🚀</span>
+            Completar configuracion inicial
+          </button>
+        )}
+      </div>
 
       {currentBusiness && stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">

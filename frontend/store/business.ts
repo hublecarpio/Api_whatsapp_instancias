@@ -14,6 +14,7 @@ interface Business {
   currencySymbol?: string;
   businessObjective?: 'SALES' | 'APPOINTMENTS';
   onboardingCompleted?: boolean;
+  onboardingSkipped?: boolean;
   instances?: any[];
   policy?: any;
   promptMaster?: any;

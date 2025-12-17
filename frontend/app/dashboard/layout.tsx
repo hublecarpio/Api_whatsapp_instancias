@@ -180,7 +180,8 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (isReady && currentBusiness) {
-      const needsOnboarding = currentBusiness.onboardingCompleted !== true;
+      const needsOnboarding = currentBusiness.onboardingCompleted !== true && 
+                              (currentBusiness as any).onboardingSkipped !== true;
       setShowStarter(needsOnboarding);
     }
   }, [isReady, currentBusiness]);

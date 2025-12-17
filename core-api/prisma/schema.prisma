@@ -283,6 +283,7 @@ model Business {
   roundRobinAdvisors String[]          @default([])
   roundRobinLastIndex Int              @default(0)
   onboardingCompleted Boolean          @default(false)
+  onboardingSkipped   Boolean          @default(false)
   createdAt         DateTime           @default(now())
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)

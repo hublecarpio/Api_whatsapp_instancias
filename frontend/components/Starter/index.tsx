@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Effi from './Effi';
 import StepWhatsApp from './StepWhatsApp';
-import StepProducts from './StepProducts';
 import StepAgent from './StepAgent';
 import { businessApi } from '@/lib/api';
 import { useBusinessStore } from '@/store/business';
@@ -19,42 +18,43 @@ interface Business {
   id: string;
   name: string;
   onboardingCompleted?: boolean;
+  onboardingSkipped?: boolean;
   [key: string]: any;
 }
 
 const STEPS = [
   { id: 1, title: 'WhatsApp', icon: '📱' },
-  { id: 2, title: 'Productos', icon: '🛍️' },
-  { id: 3, title: 'Asistente', icon: '🤖' },
+  { id: 2, title: 'Asistente', icon: '🤖' },
 ];
 
 const EFFI_MESSAGES = [
   '¡Hola! Soy Effi. Vamos a conectar tu WhatsApp para empezar.',
-  'Ahora agrega algunos productos o servicios que ofreces.',
-  '¡Último paso! Configura cómo responderá tu asistente IA.',
+  '¡Ultimo paso! Configura como responder tu asistente IA.',
 ];
 
 export default function Starter({ businessId, businessName, onComplete }: StarterProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [stepCompleted, setStepCompleted] = useState<Record<number, boolean>>({});
   const [isExiting, setIsExiting] = useState(false);
+  const [showFinalScreen, setShowFinalScreen] = useState(false);
   const { updateBusiness } = useBusinessStore();
 
   const handleStepComplete = (step: number) => {
-    setStepCompleted(prev => ({ ...prev, [step]: true }));
+    const newStepCompleted = { ...stepCompleted, [step]: true };
+    setStepCompleted(newStepCompleted);
     
-    if (step < 3) {
+    if (step < 2) {
       setTimeout(() => setCurrentStep(step + 1), 500);
     } else {
-      handleFinish();
+      handleFinish(newStepCompleted);
     }
   };
 
   const handleSkipStep = () => {
-    if (currentStep < 3) {
+    if (currentStep < 2) {
       setCurrentStep(currentStep + 1);
     } else {
-      handleFinish();
+      handleFinish(stepCompleted);
     }
   };
 
@@ -62,33 +62,106 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
     setIsExiting(true);
     
     try {
-      await businessApi.update(businessId, { onboardingCompleted: true });
-      updateBusiness(businessId, { onboardingCompleted: true } as Partial<Business>);
+      await businessApi.update(businessId, { onboardingSkipped: true });
+      updateBusiness(businessId, { onboardingSkipped: true } as Partial<Business>);
     } catch (error) {
-      console.error('Error marking onboarding complete:', error);
+      console.error('Error marking onboarding skipped:', error);
     }
     
     setTimeout(onComplete, 300);
   };
 
-  const handleFinish = async () => {
-    setIsExiting(true);
+  const handleFinish = async (completedSteps: Record<number, boolean>) => {
+    const whatsAppCompleted = completedSteps[1] === true;
+    const agentCompleted = completedSteps[2] === true;
+    const bothCompleted = whatsAppCompleted && agentCompleted;
     
     try {
-      await businessApi.update(businessId, { onboardingCompleted: true });
-      updateBusiness(businessId, { onboardingCompleted: true } as Partial<Business>);
+      if (bothCompleted) {
+        await businessApi.update(businessId, { onboardingCompleted: true, onboardingSkipped: false });
+        updateBusiness(businessId, { onboardingCompleted: true, onboardingSkipped: false } as Partial<Business>);
+      } else {
+        await businessApi.update(businessId, { onboardingSkipped: true });
+        updateBusiness(businessId, { onboardingSkipped: true } as Partial<Business>);
+      }
     } catch (error) {
-      console.error('Error marking onboarding complete:', error);
+      console.error('Error updating onboarding status:', error);
     }
     
-    setTimeout(onComplete, 800);
+    if (bothCompleted) {
+      setShowFinalScreen(true);
+    } else {
+      setIsExiting(true);
+      setTimeout(onComplete, 300);
+    }
+  };
+
+  const handleCloseFinal = () => {
+    setIsExiting(true);
+    setTimeout(onComplete, 300);
   };
 
   const getMood = () => {
-    if (currentStep === 3 && stepCompleted[2]) return 'celebrating';
+    if (showFinalScreen) return 'celebrating';
     if (Object.values(stepCompleted).some(v => v)) return 'happy';
     return 'thinking';
   };
+
+  if (showFinalScreen) {
+    return (
+      <AnimatePresence>
+        {!isExiting && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-gradient-to-br from-[#0a0a14] via-[#12121f] to-[#0a0a14] flex flex-col overflow-auto"
+          >
+            <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full px-4 py-8">
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.2, type: 'spring' }}
+                className="text-center"
+              >
+                <Effi message="¡Todo listo! Tu asistente esta preparado." mood="celebrating" />
+                
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="mt-8"
+                >
+                  <div className="bg-[#25D366]/10 border border-[#25D366]/30 rounded-2xl p-6 mb-6">
+                    <div className="text-5xl mb-4">🎉</div>
+                    <h2 className="text-2xl font-bold text-white mb-3">
+                      ¡Configuracion completada!
+                    </h2>
+                    <p className="text-gray-300 text-lg mb-4">
+                      Ahora hablale a tu numero de WhatsApp y prueba tu agente
+                    </p>
+                    <div className="bg-[#1a1a2e] rounded-xl p-4 text-left">
+                      <p className="text-gray-400 text-sm mb-2">Tip:</p>
+                      <p className="text-white text-sm">
+                        Envia un mensaje desde otro telefono al numero que conectaste y veras como tu asistente responde automaticamente.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleCloseFinal}
+                    className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition text-lg"
+                  >
+                    Ir al panel →
+                  </button>
+                </motion.div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  }
 
   return (
     <AnimatePresence>
@@ -115,7 +188,7 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
                 onClick={handleSkipAll}
                 className="text-gray-500 hover:text-white transition text-xs sm:text-sm px-3 py-1.5 rounded-lg hover:bg-gray-800/50 flex-shrink-0"
               >
-                Saltar tutorial →
+                Omitir →
               </button>
             </div>
 
@@ -169,17 +242,10 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
                 />
               )}
               {currentStep === 2 && (
-                <StepProducts
-                  businessId={businessId}
-                  onComplete={() => handleStepComplete(2)}
-                  onSkip={handleSkipStep}
-                />
-              )}
-              {currentStep === 3 && (
                 <StepAgent
                   businessId={businessId}
                   businessName={businessName}
-                  onComplete={() => handleStepComplete(3)}
+                  onComplete={() => handleStepComplete(2)}
                   onSkip={handleSkipStep}
                 />
               )}
@@ -190,7 +256,7 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
                 onClick={handleSkipStep}
                 className="text-gray-400 hover:text-white transition text-xs sm:text-sm"
               >
-                {currentStep === 3 ? 'Terminar después' : 'Saltar paso'}
+                {currentStep === 2 ? 'Terminar despues' : 'Saltar paso'}
               </button>
               
               <div className="text-gray-500 text-xs sm:text-sm">
