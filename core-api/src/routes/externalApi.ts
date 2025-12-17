@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import axios from 'axios';
 import prisma from '../services/prisma';
 import eventLogger from '../services/eventLogger';
+import { dispatchAgentMessage } from '../services/webhookService';
 
 const router = Router();
 
@@ -142,15 +143,60 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
       }
       
       const response = await axios.post(`${waApiUrl}${endpoint}`, payload);
+      const messageId = response.data.messageId || response.data.key?.id;
+      
+      // Register message in MessageLog (like agent message)
+      await prisma.messageLog.create({
+        data: {
+          businessId: business.id,
+          instanceId: instance.instanceId,
+          sender: instance.phoneNumber || business.id,
+          recipient: cleanTo,
+          message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
+          direction: 'OUTGOING',
+          mediaUrl: mediaUrl || null,
+          providerMessageId: messageId,
+          metadata: { source: 'external_api', mediaType }
+        }
+      });
+      
+      // Update or create contact
+      const now = new Date();
+      await prisma.contact.upsert({
+        where: {
+          businessId_phone: { businessId: business.id, phone: cleanTo }
+        },
+        create: {
+          businessId: business.id,
+          phone: cleanTo,
+          name: cleanTo,
+          firstMessageAt: now,
+          lastMessageAt: now,
+          messageCount: 1
+        },
+        update: {
+          lastMessageAt: now,
+          messageCount: { increment: 1 }
+        }
+      });
+      
+      // Dispatch webhook for external integrations
+      await dispatchAgentMessage(
+        business.id,
+        cleanTo,
+        message || '',
+        mediaUrl ? [mediaUrl] : undefined,
+        ['external_api']
+      );
       
       await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API a ${cleanTo}`, {
         businessId: business.id,
-        details: { to: cleanTo, hasMedia: !!mediaUrl }
+        details: { to: cleanTo, hasMedia: !!mediaUrl, messageId }
       });
       
       res.json({
         success: true,
-        messageId: response.data.messageId || response.data.key?.id,
+        messageId,
         to: cleanTo
       });
       
@@ -195,14 +241,60 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
         }
       );
       
+      const messageId = response.data.messages?.[0]?.id;
+      
+      // Register message in MessageLog (like agent message)
+      await prisma.messageLog.create({
+        data: {
+          businessId: business.id,
+          instanceId: instance.instanceId,
+          sender: instance.phoneNumber || business.id,
+          recipient: cleanTo,
+          message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
+          direction: 'OUTGOING',
+          mediaUrl: mediaUrl || null,
+          providerMessageId: messageId,
+          metadata: { source: 'external_api', provider: 'META_CLOUD', mediaType }
+        }
+      });
+      
+      // Update or create contact
+      const now = new Date();
+      await prisma.contact.upsert({
+        where: {
+          businessId_phone: { businessId: business.id, phone: cleanTo }
+        },
+        create: {
+          businessId: business.id,
+          phone: cleanTo,
+          name: cleanTo,
+          firstMessageAt: now,
+          lastMessageAt: now,
+          messageCount: 1
+        },
+        update: {
+          lastMessageAt: now,
+          messageCount: { increment: 1 }
+        }
+      });
+      
+      // Dispatch webhook for external integrations
+      await dispatchAgentMessage(
+        business.id,
+        cleanTo,
+        message || '',
+        mediaUrl ? [mediaUrl] : undefined,
+        ['external_api']
+      );
+      
       await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API META a ${cleanTo}`, {
         businessId: business.id,
-        details: { to: cleanTo, hasMedia: !!mediaUrl }
+        details: { to: cleanTo, hasMedia: !!mediaUrl, messageId }
       });
       
       res.json({
         success: true,
-        messageId: response.data.messages?.[0]?.id,
+        messageId,
         to: cleanTo
       });
     } else {

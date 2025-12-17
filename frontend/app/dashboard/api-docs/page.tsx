@@ -26,8 +26,16 @@ export default function ApiDocsPage() {
   const [webhookError, setWebhookError] = useState<string | null>(null);
 
   const baseUrl = typeof window !== 'undefined' 
-    ? `${window.location.protocol}//${window.location.host.replace(':5000', ':3001')}`
-    : 'https://tu-dominio.com';
+    ? (() => {
+        const host = window.location.host;
+        // Production: app.efficore.es -> api.efficore.es
+        if (host.includes('efficore.es')) {
+          return 'https://api.efficore.es';
+        }
+        // Development: replace frontend port with backend port
+        return `${window.location.protocol}//${host.replace(':5000', ':3001')}`;
+      })()
+    : 'https://api.efficore.es';
 
   useEffect(() => {
     if (currentBusiness?.id) {
