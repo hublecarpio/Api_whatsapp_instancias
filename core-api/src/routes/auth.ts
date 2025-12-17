@@ -1043,6 +1043,9 @@ router.get('/google/status', async (req: Request, res: Response) => {
 });
 
 router.get('/google', async (req: Request, res: Response) => {
+  const getFrontendUrl = () => process.env.FRONTEND_URL || process.env.APP_DOMAIN || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'http://localhost:5000');
+  
   try {
     if (!isGoogleAuthConfigured()) {
       return res.status(503).json({ error: 'Google authentication is not configured' });
@@ -1057,28 +1060,34 @@ router.get('/google', async (req: Request, res: Response) => {
     });
     
     const authUrl = getGoogleAuthUrl(state);
+    console.log(`[GoogleAuth] Redirecting to Google: ${authUrl}`);
     res.redirect(authUrl);
   } catch (error) {
     console.error('[GoogleAuth] Start error:', error);
-    res.redirect('/login?error=google_auth_failed');
+    const frontendUrl = getFrontendUrl();
+    res.redirect(`${frontendUrl}/login?error=google_auth_failed`);
   }
 });
 
 router.get('/google/callback', async (req: Request, res: Response) => {
+  const getFrontendUrl = () => process.env.FRONTEND_URL || process.env.APP_DOMAIN || 
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'http://localhost:5000');
+  
   try {
     const { code, state } = req.query;
+    const frontendUrl = getFrontendUrl();
     
     if (!code || typeof code !== 'string') {
-      return res.redirect('/login?error=no_code');
+      return res.redirect(`${frontendUrl}/login?error=no_code`);
     }
     
     if (!state || typeof state !== 'string') {
-      return res.redirect('/login?error=invalid_state');
+      return res.redirect(`${frontendUrl}/login?error=invalid_state`);
     }
     
     const stateData = googleAuthStates.get(state);
     if (!stateData) {
-      return res.redirect('/login?error=expired_state');
+      return res.redirect(`${frontendUrl}/login?error=expired_state`);
     }
     googleAuthStates.delete(state);
     
@@ -1215,15 +1224,16 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     const token = generateToken(user.id);
     
     // Redirect to frontend with token
-    // Use a special page that will store the token and redirect
     const redirectUrl = isNewUser 
-      ? `/auth/google-callback?token=${token}&new=true`
-      : `/auth/google-callback?token=${token}`;
+      ? `${frontendUrl}/auth/google-callback?token=${token}&new=true`
+      : `${frontendUrl}/auth/google-callback?token=${token}`;
     
+    console.log(`[GoogleAuth] Redirecting to: ${redirectUrl}`);
     res.redirect(redirectUrl);
   } catch (error: any) {
     console.error('[GoogleAuth] Callback error:', error);
-    res.redirect('/login?error=google_auth_failed');
+    const frontendUrl = getFrontendUrl();
+    res.redirect(`${frontendUrl}/login?error=google_auth_failed`);
   }
 });
 

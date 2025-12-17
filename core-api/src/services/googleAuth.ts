@@ -2,8 +2,26 @@ import { google } from 'googleapis';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const APP_DOMAIN = process.env.APP_DOMAIN || process.env.FRONTEND_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
-const REDIRECT_URI = `${APP_DOMAIN}/api/auth/google/callback`;
+
+function getBackendUrl(): string {
+  if (process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL;
+  }
+  if (process.env.APP_DOMAIN) {
+    return process.env.APP_DOMAIN;
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  return 'http://localhost:3001';
+}
+
+function getRedirectUri(): string {
+  const backendUrl = getBackendUrl();
+  const uri = `${backendUrl}/auth/google/callback`;
+  console.log('[GoogleAuth] Redirect URI:', uri);
+  return uri;
+}
 
 export function isGoogleAuthConfigured(): boolean {
   return !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
@@ -17,7 +35,7 @@ export function getGoogleAuthClient() {
   return new google.auth.OAuth2(
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
-    REDIRECT_URI
+    getRedirectUri()
   );
 }
 
