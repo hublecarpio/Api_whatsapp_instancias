@@ -22,7 +22,7 @@ The platform employs a microservices-like architecture with a **Frontend (Next.j
 *   **AI Agent Tools**: Enables AI agents to call external POST endpoints with dynamic parameter interpolation.
 *   **Reminder/Follow-up System**: Event-driven scheduling and cancellation of follow-ups, processed by a `reminderWorker` respecting business timezones.
 *   **Redis + BullMQ Queue System**: Manages reminders, message buffering, WhatsApp messages, and AI responses with retry logic and high-concurrency for OpenAI API calls.
-*   **Stripe Billing Integration**: Implements a 7-day free trial, recurring payments, webhooks, account suspension, tiered token limits, and on-demand token credit purchases. Supports subscription freezing for enterprise users. Tiered pricing: BASIC ($29/month, 1.6M tokens) and PRO ($97/month, 5M tokens, webhooks, API keys).
+*   **Stripe Billing Integration**: Implements tiered pricing with BASIC ($29/month, 1.6M tokens) and PRO ($97/month, 5M tokens, webhooks, API keys). New user flow: 2-day trial without card (500K tokens), then 5-day trial with card on chosen plan. Referral codes add bonus demo days. Features recurring payments, webhooks, account suspension, and on-demand token credit purchases. Supports subscription freezing for enterprise users.
 *   **Email Verification System**: Requires email verification for WhatsApp instance creation via SMTP.
 *   **Robust Deployment**: Dockerized services with improved health checks.
 *   **Super Admin Panel**: Centralized administration for command center, event logging, user/business management, WhatsApp instance control, token usage, billing, and referral codes.

@@ -531,7 +531,8 @@ export async function checkUserTokenLimit(userId: string): Promise<{
       proBonusExpiresAt: true,
       stripeSubscriptionId: true,
       demoStartedAt: true,
-      demoPhase: true
+      demoPhase: true,
+      trialEndAt: true
     }
   });
   
@@ -558,11 +559,18 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     };
   }
   
-  if (user.demoPhase === 'DEMO' && user.demoStartedAt && !hasStripeSubscription) {
+  if ((user.demoPhase === 'DEMO' || user.subscriptionStatus === 'TRIAL') && !hasStripeSubscription) {
     const now = new Date();
-    const demoStarted = new Date(user.demoStartedAt);
-    const hoursSinceDemo = (now.getTime() - demoStarted.getTime()) / (1000 * 60 * 60);
-    const demoExpired = hoursSinceDemo >= (DEMO_DAYS * 24);
+    
+    // Use trialEndAt if available, otherwise fall back to demoStartedAt calculation
+    let demoExpired = false;
+    if (user.trialEndAt) {
+      demoExpired = now > new Date(user.trialEndAt);
+    } else if (user.demoStartedAt) {
+      const demoStarted = new Date(user.demoStartedAt);
+      const hoursSinceDemo = (now.getTime() - demoStarted.getTime()) / (1000 * 60 * 60);
+      demoExpired = hoursSinceDemo >= (DEMO_DAYS * 24);
+    }
     
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const usage = await prisma.tokenUsage.aggregate({
@@ -571,7 +579,10 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     });
     const tokensUsed = usage._sum.totalTokens || 0;
     
-    if (demoExpired || tokensUsed >= DEMO_TOKEN_LIMIT) {
+    // For TRIAL users, use TRIAL token limit; for DEMO users, use DEMO limit
+    const tokenLimit = user.subscriptionStatus === 'TRIAL' ? TRIAL_TOKEN_LIMIT : DEMO_TOKEN_LIMIT;
+    
+    if (demoExpired || tokensUsed >= tokenLimit) {
       return {
         canUseAI: false,
         tokensUsed,
@@ -579,8 +590,8 @@ export async function checkUserTokenLimit(userId: string): Promise<{
         bonusTokens: user.bonusTokens,
         message: demoExpired 
           ? 'Tu periodo de prueba de 2 dias ha expirado. Agrega una tarjeta para continuar usando el agente IA.'
-          : 'Has alcanzado tu limite de 150K tokens de la fase demo. Agrega una tarjeta para continuar.',
-        demoPhase: 'DEMO',
+          : `Has alcanzado tu limite de ${tokenLimit >= 1000000 ? `${(tokenLimit / 1000000).toFixed(1)}M` : `${(tokenLimit / 1000).toFixed(0)}K`} tokens de la fase de prueba. Agrega una tarjeta para continuar.`,
+        demoPhase: user.demoPhase,
         demoExpired,
         needsCard: true
       };
@@ -589,9 +600,9 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     return {
       canUseAI: true,
       tokensUsed,
-      tokensRemaining: DEMO_TOKEN_LIMIT - tokensUsed,
+      tokensRemaining: tokenLimit - tokensUsed,
       bonusTokens: user.bonusTokens,
-      demoPhase: 'DEMO',
+      demoPhase: user.demoPhase,
       demoExpired: false,
       needsCard: false
     };
