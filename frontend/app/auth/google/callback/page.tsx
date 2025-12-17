@@ -6,18 +6,22 @@ import { useAuthStore } from '@/store/auth';
 import { authApi } from '@/lib/api';
 import Logo from '@/components/Logo';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
 function GoogleCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setAuth } = useAuthStore();
   const [error, setError] = useState('');
-  const [status, setStatus] = useState<'loading' | 'complete-profile' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'processing' | 'complete-profile' | 'error'>('loading');
   
   const [businessName, setBusinessName] = useState('');
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
     const token = searchParams.get('token');
     const isNew = searchParams.get('new') === 'true';
     const errorParam = searchParams.get('error');
@@ -28,33 +32,82 @@ function GoogleCallbackContent() {
       return;
     }
     
-    if (!token) {
-      setError('Token no recibido');
-      setStatus('error');
+    if (token) {
+      localStorage.setItem('token', token);
+      
+      authApi.getMe()
+        .then(response => {
+          setAuth(response.data, token);
+          
+          if (isNew) {
+            setStatus('complete-profile');
+          } else {
+            if (response.data.role === 'ASESOR') {
+              router.push('/asesor');
+            } else {
+              router.push('/dashboard');
+            }
+          }
+        })
+        .catch(err => {
+          console.error('Error getting user:', err);
+          setError('Error al obtener datos del usuario');
+          setStatus('error');
+        });
       return;
     }
     
-    localStorage.setItem('token', token);
-    
-    authApi.getMe()
-      .then(response => {
-        setAuth(response.data, token);
-        
-        if (isNew) {
-          setStatus('complete-profile');
-        } else {
-          if (response.data.role === 'ASESOR') {
-            router.push('/asesor');
-          } else {
-            router.push('/dashboard');
-          }
-        }
+    if (code && state) {
+      setStatus('processing');
+      
+      fetch(`${API_URL}/auth/google/exchange`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code, state }),
       })
-      .catch(err => {
-        console.error('Error getting user:', err);
-        setError('Error al obtener datos del usuario');
-        setStatus('error');
-      });
+        .then(async (res) => {
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Error al procesar autenticacion');
+          }
+          return res.json();
+        })
+        .then((data) => {
+          const { token: jwtToken, isNew: newUser } = data;
+          localStorage.setItem('token', jwtToken);
+          
+          authApi.getMe()
+            .then(response => {
+              setAuth(response.data, jwtToken);
+              
+              if (newUser) {
+                setStatus('complete-profile');
+              } else {
+                if (response.data.role === 'ASESOR') {
+                  router.push('/asesor');
+                } else {
+                  router.push('/dashboard');
+                }
+              }
+            })
+            .catch(err => {
+              console.error('Error getting user:', err);
+              setError('Error al obtener datos del usuario');
+              setStatus('error');
+            });
+        })
+        .catch((err) => {
+          console.error('Error exchanging code:', err);
+          setError(err.message || 'Error al iniciar sesion con Google');
+          setStatus('error');
+        });
+      return;
+    }
+    
+    setError('Parametros de autenticacion no recibidos');
+    setStatus('error');
   }, [searchParams, setAuth, router]);
 
   const handleCompleteProfile = async (e: React.FormEvent) => {
@@ -178,7 +231,9 @@ function GoogleCallbackContent() {
           <Logo size="lg" />
         </div>
         <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-gray-400">Iniciando sesion con Google...</p>
+        <p className="text-gray-400">
+          {status === 'processing' ? 'Procesando autenticacion...' : 'Iniciando sesion con Google...'}
+        </p>
       </div>
     </div>
   );

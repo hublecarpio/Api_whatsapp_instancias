@@ -1225,8 +1225,8 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     
     // Redirect to frontend with token
     const redirectUrl = isNewUser 
-      ? `${frontendUrl}/auth/google-callback?token=${token}&new=true`
-      : `${frontendUrl}/auth/google-callback?token=${token}`;
+      ? `${frontendUrl}/auth/google/callback?token=${token}&new=true`
+      : `${frontendUrl}/auth/google/callback?token=${token}`;
     
     console.log(`[GoogleAuth] Redirecting to: ${redirectUrl}`);
     res.redirect(redirectUrl);
@@ -1234,6 +1234,158 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     console.error('[GoogleAuth] Callback error:', error);
     const frontendUrl = getFrontendUrl();
     res.redirect(`${frontendUrl}/login?error=google_auth_failed`);
+  }
+});
+
+router.post('/google/exchange', async (req: Request, res: Response) => {
+  try {
+    const { code, state } = req.body;
+    
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'Authorization code is required' });
+    }
+    
+    if (!state || typeof state !== 'string') {
+      return res.status(400).json({ error: 'State parameter is required' });
+    }
+    
+    const stateData = googleAuthStates.get(state);
+    if (!stateData) {
+      return res.status(400).json({ error: 'Invalid or expired state' });
+    }
+    googleAuthStates.delete(state);
+    
+    const googleUser = await getGoogleUserInfo(code);
+    console.log(`[GoogleAuth Exchange] Got user info: ${googleUser.email}`);
+    
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { googleId: googleUser.id },
+          { email: googleUser.email }
+        ]
+      }
+    });
+    
+    let isNewUser = false;
+    
+    if (user) {
+      if (!user.googleId) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            googleId: googleUser.id,
+            googlePicture: googleUser.picture,
+            emailVerified: true
+          }
+        });
+        console.log(`[GoogleAuth Exchange] Linked Google account to existing user: ${user.email}`);
+      }
+    } else {
+      isNewUser = true;
+      
+      let validReferralCode: string | null = null;
+      let enterpriseCode: any = null;
+      let standardCode: any = null;
+      
+      if (stateData.referralCode) {
+        const refCode = await prisma.referralCode.findUnique({
+          where: { code: stateData.referralCode.toUpperCase() }
+        });
+        
+        if (refCode && refCode.isActive) {
+          if (!refCode.expiresAt || refCode.expiresAt > new Date()) {
+            if (!refCode.maxUses || refCode.usageCount < refCode.maxUses) {
+              validReferralCode = refCode.code;
+              
+              await prisma.referralCode.update({
+                where: { id: refCode.id },
+                data: { usageCount: { increment: 1 } }
+              });
+              
+              if (refCode.type === 'ENTERPRISE' && refCode.grantDurationDays) {
+                enterpriseCode = refCode;
+              } else {
+                standardCode = refCode;
+              }
+            }
+          }
+        }
+      }
+      
+      const result = await prisma.$transaction(async (tx) => {
+        const isPro = !!enterpriseCode;
+        const subscriptionStatus = enterpriseCode ? 'ACTIVE' : 'TRIAL';
+        const referralCodeRecord = enterpriseCode || standardCode;
+        const bonusDemoDays = standardCode?.bonusDemoDays || 0;
+        const bonusTrialDays = standardCode?.bonusTrialDays || 0;
+        
+        const baseDemoDays = 2;
+        const totalDemoDays = baseDemoDays + bonusDemoDays;
+        const trialEndAt = enterpriseCode ? null : new Date(Date.now() + totalDemoDays * 24 * 60 * 60 * 1000);
+        
+        const newUser = await tx.user.create({
+          data: {
+            name: googleUser.name,
+            email: googleUser.email,
+            googleId: googleUser.id,
+            googlePicture: googleUser.picture,
+            emailVerified: true,
+            referralCode: validReferralCode,
+            referralCodeId: referralCodeRecord?.id || null,
+            bonusDemoDays,
+            bonusTrialDays,
+            isPro,
+            subscriptionStatus,
+            subscriptionTier: 'BASIC',
+            trialEndAt,
+            demoStartedAt: enterpriseCode ? null : new Date(),
+            demoPhase: enterpriseCode ? 'ACTIVE' : 'DEMO'
+          }
+        });
+        
+        if (enterpriseCode) {
+          const now = new Date();
+          const subscriptionEndsAt = new Date(now.getTime() + enterpriseCode.grantDurationDays * 24 * 60 * 60 * 1000);
+          
+          await tx.subscription.create({
+            data: {
+              userId: newUser.id,
+              source: 'ENTERPRISE',
+              tier: 'ENTERPRISE',
+              status: 'ACTIVE',
+              startedAt: now,
+              endsAt: subscriptionEndsAt,
+              monthlyTokenLimit: 10000000,
+              referralCodeId: enterpriseCode.id
+            }
+          });
+        }
+        
+        const business = await tx.business.create({
+          data: {
+            userId: newUser.id,
+            name: 'Mi Empresa',
+            description: 'Configura los datos de tu empresa',
+            botEnabled: true
+          }
+        });
+        
+        console.log(`[GoogleAuth Exchange] Created new user ${newUser.id} and business ${business.id}`);
+        
+        return { user: newUser, business, isPro };
+      });
+      
+      user = result.user;
+    }
+    
+    const token = generateToken(user.id);
+    
+    console.log(`[GoogleAuth Exchange] Success for user: ${user.email}, isNew: ${isNewUser}`);
+    res.json({ token, isNew: isNewUser });
+  } catch (error: any) {
+    console.error('[GoogleAuth Exchange] Error:', error);
+    res.status(500).json({ error: 'Failed to exchange authorization code' });
   }
 });
 
