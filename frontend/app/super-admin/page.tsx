@@ -1895,6 +1895,7 @@ interface ReferralCode {
   expiresAt: string | null;
   createdAt: string;
   registeredUsers: number;
+  totalUses: number;
   bonusDemoDays: number | null;
   bonusTrialDays: number | null;
   commissionRate: number | null;
@@ -2040,7 +2041,7 @@ function ReferralsTab({ token }: { token: string }) {
     }
   };
 
-  const totalRegistered = codes.reduce((sum, c) => sum + c.registeredUsers, 0);
+  const totalRegistered = codes.reduce((sum, c) => sum + c.totalUses, 0);
   const activeCodes = codes.filter(c => c.isActive).length;
   const enterpriseCodes = codes.filter(c => c.type === 'ENTERPRISE').length;
 
@@ -2136,7 +2137,7 @@ function ReferralsTab({ token }: { token: string }) {
                       onClick={() => handleViewUsers(code.code)}
                       className="text-neon-blue hover:underline"
                     >
-                      {code.registeredUsers}
+                      {code.totalUses}
                       {code.maxUses && <span className="text-gray-500">/{code.maxUses}</span>}
                     </button>
                   </td>

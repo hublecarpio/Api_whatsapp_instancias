@@ -1138,14 +1138,15 @@ router.get('/referral-codes', superAdminMiddleware, async (req: SuperAdminReques
       _count: true
     });
     
-    const usageMap = usersWithCodes.reduce<Record<string, number>>((acc, u) => {
+    const registrationMap = usersWithCodes.reduce<Record<string, number>>((acc, u) => {
       if (u.referralCode) acc[u.referralCode] = u._count;
       return acc;
     }, {});
     
     const codesWithStats = codes.map(c => ({
       ...c,
-      registeredUsers: usageMap[c.code] || 0
+      registeredUsers: registrationMap[c.code] || 0,
+      totalUses: c.usageCount || 0
     }));
     
     res.json({ codes: codesWithStats });
