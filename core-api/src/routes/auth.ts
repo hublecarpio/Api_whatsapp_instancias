@@ -896,7 +896,7 @@ router.post('/referral/claim', authMiddleware, async (req: AuthRequest, res: Res
         type: 'STANDARD',
         ownerUserId: req.userId,
         isActive: true,
-        commissionRate: 0.20, // 20% default commission
+        commissionRate: 0.10, // 10% default commission
         bonusDemoDays: 0,
         bonusTrialDays: 0
       }
