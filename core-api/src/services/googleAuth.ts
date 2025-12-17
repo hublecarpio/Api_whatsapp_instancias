@@ -3,7 +3,14 @@ import { google } from 'googleapis';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
-function getBackendUrl(): string {
+// For OAuth callbacks, we need the PUBLIC URL (accessible from browser)
+// GOOGLE_CALLBACK_URL = public API URL for OAuth redirects
+// Falls back to BACKEND_URL, APP_DOMAIN, or REPLIT_DEV_DOMAIN
+function getPublicApiUrl(): string {
+  // Priority: GOOGLE_CALLBACK_URL > BACKEND_URL > APP_DOMAIN > REPLIT_DEV_DOMAIN
+  if (process.env.GOOGLE_CALLBACK_URL) {
+    return process.env.GOOGLE_CALLBACK_URL;
+  }
   if (process.env.BACKEND_URL) {
     return process.env.BACKEND_URL;
   }
@@ -17,8 +24,8 @@ function getBackendUrl(): string {
 }
 
 function getRedirectUri(): string {
-  const backendUrl = getBackendUrl();
-  const uri = `${backendUrl}/auth/google/callback`;
+  const publicUrl = getPublicApiUrl();
+  const uri = `${publicUrl}/auth/google/callback`;
   console.log('[GoogleAuth] Redirect URI:', uri);
   return uri;
 }
