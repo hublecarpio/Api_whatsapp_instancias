@@ -5,8 +5,10 @@ function getCoreApiUrl(): string {
 }
 
 export async function middleware(request: NextRequest) {
-  // Skip OAuth routes - they need browser redirects, not proxy fetch
-  if (request.nextUrl.pathname.startsWith('/api/auth/google')) {
+  // Skip ONLY the exact OAuth redirect route - it needs browser redirect, not proxy
+  // Note: /api/auth/google/status must still be proxied to backend
+  const path = request.nextUrl.pathname;
+  if (path === '/api/auth/google' || path === '/api/auth/google/') {
     return NextResponse.next();
   }
   
