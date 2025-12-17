@@ -11,14 +11,15 @@ interface StepProductsProps {
 }
 
 interface QuickProduct {
-  name: string;
+  title: string;
   price: string;
   description: string;
+  stock: string;
 }
 
 export default function StepProducts({ businessId, onComplete, onSkip }: StepProductsProps) {
   const [products, setProducts] = useState<QuickProduct[]>([
-    { name: '', price: '', description: '' }
+    { title: '', price: '', description: '', stock: '' }
   ]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,7 @@ export default function StepProducts({ businessId, onComplete, onSkip }: StepPro
 
   const addProduct = () => {
     if (products.length < 5) {
-      setProducts([...products, { name: '', price: '', description: '' }]);
+      setProducts([...products, { title: '', price: '', description: '', stock: '' }]);
     }
   };
 
@@ -43,7 +44,7 @@ export default function StepProducts({ businessId, onComplete, onSkip }: StepPro
   };
 
   const handleSave = async () => {
-    const validProducts = products.filter(p => p.name.trim() && p.price.trim());
+    const validProducts = products.filter(p => p.title.trim() && p.price.trim());
     
     if (validProducts.length === 0) {
       setError('Agrega al menos un producto con nombre y precio');
@@ -57,10 +58,10 @@ export default function StepProducts({ businessId, onComplete, onSkip }: StepPro
       for (const product of validProducts) {
         await productApi.create({
           businessId,
-          name: product.name.trim(),
+          title: product.title.trim(),
           description: product.description.trim() || null,
           price: parseFloat(product.price) || 0,
-          isActive: true
+          stock: parseInt(product.stock) || 0
         });
         setSavedCount(prev => prev + 1);
       }
@@ -101,12 +102,12 @@ export default function StepProducts({ businessId, onComplete, onSkip }: StepPro
                 )}
               </div>
               
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <input
                   type="text"
-                  placeholder="Nombre"
-                  value={product.name}
-                  onChange={(e) => updateProduct(index, 'name', e.target.value)}
+                  placeholder="Nombre del producto"
+                  value={product.title}
+                  onChange={(e) => updateProduct(index, 'title', e.target.value)}
                   className="col-span-2 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-indigo-500 focus:outline-none"
                 />
                 <input
@@ -116,11 +117,18 @@ export default function StepProducts({ businessId, onComplete, onSkip }: StepPro
                   onChange={(e) => updateProduct(index, 'price', e.target.value)}
                   className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-indigo-500 focus:outline-none"
                 />
+                <input
+                  type="number"
+                  placeholder="Stock"
+                  value={product.stock}
+                  onChange={(e) => updateProduct(index, 'stock', e.target.value)}
+                  className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                />
               </div>
               
               <input
                 type="text"
-                placeholder="Descripción breve (opcional)"
+                placeholder="Descripcion breve (opcional)"
                 value={product.description}
                 onChange={(e) => updateProduct(index, 'description', e.target.value)}
                 className="mt-3 w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-indigo-500 focus:outline-none"
@@ -150,7 +158,7 @@ export default function StepProducts({ businessId, onComplete, onSkip }: StepPro
           {saving ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              Guardando ({savedCount}/{products.filter(p => p.name.trim() && p.price.trim()).length})
+              Guardando ({savedCount}/{products.filter(p => p.title.trim() && p.price.trim()).length})
             </>
           ) : (
             'Guardar productos'
