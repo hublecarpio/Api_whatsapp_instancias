@@ -12,6 +12,7 @@ function RegisterContent() {
   const searchParams = useSearchParams();
   const { setAuth } = useAuthStore();
   const [name, setName] = useState('');
+  const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [referralCode, setReferralCode] = useState('');
@@ -32,7 +33,7 @@ function RegisterContent() {
     setLoading(true);
 
     try {
-      const response = await authApi.register({ name, email, password, referralCode: referralCode || undefined });
+      const response = await authApi.register({ name, businessName, email, password, referralCode: referralCode || undefined });
       setAuth(response.data.user, response.data.token);
       setRegistered(true);
     } catch (err: any) {
@@ -105,14 +106,28 @@ function RegisterContent() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Nombre
+                Nombre completo
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="input"
-                placeholder="Tu nombre"
+                placeholder="Juan Perez"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Nombre de tu negocio
+              </label>
+              <input
+                type="text"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                className="input"
+                placeholder="Mi Tienda Online"
                 required
               />
             </div>

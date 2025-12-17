@@ -14,11 +14,13 @@ const RESEND_THROTTLE_MINUTES = 2;
 
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { name, email, password, referralCode } = req.body;
+    const { name, businessName, email, password, referralCode } = req.body;
     
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
     }
+    
+    const finalBusinessName = businessName?.trim() || 'Mi Empresa';
     
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -129,7 +131,7 @@ router.post('/register', async (req: Request, res: Response) => {
       const business = await tx.business.create({
         data: {
           userId: user.id,
-          name: 'Mi Empresa',
+          name: finalBusinessName,
           description: 'Configura los datos de tu empresa',
           botEnabled: true
         }
