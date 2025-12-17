@@ -89,29 +89,28 @@ export async function retrieveRelevantSections(
   const withoutEmbeddings = ragCandidates.filter(s => !s.embedding);
   
   if (withoutEmbeddings.length > 0) {
-    const batchSize = Math.min(withoutEmbeddings.length, 50);
-    console.log(`[RAG] Generating embeddings for ${batchSize}/${withoutEmbeddings.length} sections on-the-fly`);
+    console.log(`[RAG] Generating embeddings for ${withoutEmbeddings.length} sections`);
+    const batchSize = 10;
     
-    const toProcess = withoutEmbeddings.slice(0, batchSize);
-    await Promise.all(toProcess.map(async (section) => {
-      try {
-        const text = `${section.title}\n${section.content}`;
-        const embedding = await generateEmbedding(text);
-        if (embedding) {
-          await prisma.promptSection.update({
-            where: { id: section.id },
-            data: { embedding }
-          });
-          section.embedding = embedding as any;
+    for (let i = 0; i < withoutEmbeddings.length; i += batchSize) {
+      const batch = withoutEmbeddings.slice(i, i + batchSize);
+      await Promise.all(batch.map(async (section) => {
+        try {
+          const text = `${section.title}\n${section.content}`;
+          const embedding = await generateEmbedding(text);
+          if (embedding) {
+            await prisma.promptSection.update({
+              where: { id: section.id },
+              data: { embedding }
+            });
+            section.embedding = embedding as any;
+          }
+        } catch (e) {
+          console.warn(`[RAG] Failed to generate embedding for section ${section.id}:`, e);
         }
-      } catch (e) {
-        console.warn(`[RAG] Failed to generate embedding for section ${section.id}:`, e);
-      }
-    }));
-    
-    if (withoutEmbeddings.length > batchSize) {
-      console.warn(`[RAG] ${withoutEmbeddings.length - batchSize} sections still pending embeddings`);
+      }));
     }
+    console.log(`[RAG] Finished generating embeddings for ${withoutEmbeddings.length} sections`);
   }
   
   let queryEmbedding: number[] | null = null;
