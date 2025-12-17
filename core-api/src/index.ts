@@ -29,6 +29,7 @@ import publicRoutes from './routes/public.js';
 import advisorRoutes from './routes/advisor.js';
 import broadcastsRoutes from './routes/broadcasts.js';
 import promptSectionsRoutes from './routes/promptSections.js';
+import externalApiRoutes from './routes/externalApi.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
 
@@ -110,6 +111,7 @@ app.use('/public', publicRoutes);
 app.use('/advisor', advisorRoutes);
 app.use('/broadcasts', broadcastsRoutes);
 app.use('/prompt-sections', promptSectionsRoutes);
+app.use('/api/v1', externalApiRoutes);
 app.use('/internal/wa', waInternalRouter);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

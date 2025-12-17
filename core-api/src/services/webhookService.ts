@@ -29,7 +29,7 @@ export async function dispatchWebhook(
       }
     });
 
-    if (!business || !business.webhookUrl || business.agentVersion !== 'v2') {
+    if (!business || !business.webhookUrl) {
       return;
     }
 

@@ -2386,10 +2386,6 @@ router.post('/api-key/:businessId', authMiddleware, async (req: AuthRequest, res
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    if (business.agentVersion !== 'v2') {
-      return res.status(400).json({ error: 'API keys are only available for V2 agents' });
-    }
-    
     const apiKey = generateApiKey();
     const apiKeyHash = hashApiKey(apiKey);
     const apiKeyPrefix = apiKey.substring(0, 12);
@@ -2496,10 +2492,6 @@ router.put('/webhook/:businessId', authMiddleware, async (req: AuthRequest, res:
     
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
-    }
-    
-    if (business.agentVersion !== 'v2') {
-      return res.status(400).json({ error: 'Webhooks are only available for V2 agents' });
     }
     
     if (webhookUrl && !webhookUrl.startsWith('https://')) {
