@@ -7,11 +7,113 @@ const router = Router();
 
 router.use(authMiddleware);
 
+const BROADCAST_LIMITS = {
+  BASIC: [30, 40, 50],
+  PRO: [60, 80, 100],
+  ENTERPRISE: [100, 150, 200]
+};
+
 async function checkBusinessAccess(userId: string, businessId: string): Promise<boolean> {
   const business = await prisma.business.findFirst({
     where: { id: businessId, userId }
   });
   return !!business;
+}
+
+async function getDistinctBroadcastDays(businessId: string): Promise<number> {
+  const campaigns = await (prisma as any).broadcastCampaign.findMany({
+    where: { 
+      businessId,
+      status: { in: ['COMPLETED', 'IN_PROGRESS', 'PAUSED'] }
+    },
+    select: { createdAt: true }
+  });
+  
+  const uniqueDays = new Set<string>();
+  for (const campaign of campaigns) {
+    const dateStr = new Date(campaign.createdAt).toISOString().split('T')[0];
+    uniqueDays.add(dateStr);
+  }
+  
+  return uniqueDays.size;
+}
+
+async function getTodayBroadcastCount(businessId: string): Promise<number> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  const logs = await (prisma as any).broadcastLog.findMany({
+    where: {
+      campaign: { businessId },
+      status: { in: ['PENDING', 'SENDING', 'SENT'] },
+      createdAt: { gte: today, lt: tomorrow }
+    }
+  });
+  
+  return logs.length;
+}
+
+async function getBroadcastLimitInfo(businessId: string, userId: string): Promise<{
+  provider: string;
+  tier: string;
+  dailyLimit: number;
+  usedToday: number;
+  remaining: number;
+  trustLevel: number;
+  isUnlimited: boolean;
+  warning?: string;
+}> {
+  const [business, user, instance] = await Promise.all([
+    prisma.business.findUnique({ where: { id: businessId } }),
+    prisma.user.findUnique({ 
+      where: { id: userId }, 
+      select: { subscriptionTier: true } 
+    }),
+    prisma.whatsAppInstance.findFirst({ 
+      where: { businessId, status: 'open' },
+      select: { provider: true }
+    })
+  ]);
+  
+  if (!business || !user) {
+    return { provider: 'UNKNOWN', tier: 'BASIC', dailyLimit: 0, usedToday: 0, remaining: 0, trustLevel: 0, isUnlimited: false };
+  }
+  
+  const provider = instance?.provider || 'BAILEYS';
+  const tier = (user.subscriptionTier || 'BASIC') as keyof typeof BROADCAST_LIMITS;
+  
+  if (provider === 'META_CLOUD') {
+    return {
+      provider,
+      tier,
+      dailyLimit: -1,
+      usedToday: 0,
+      remaining: -1,
+      trustLevel: 3,
+      isUnlimited: true
+    };
+  }
+  
+  const distinctDays = await getDistinctBroadcastDays(businessId);
+  const trustLevel = Math.min(distinctDays, 2);
+  const limits = BROADCAST_LIMITS[tier] || BROADCAST_LIMITS.BASIC;
+  const dailyLimit = limits[trustLevel];
+  
+  const usedToday = await getTodayBroadcastCount(businessId);
+  const remaining = Math.max(0, dailyLimit - usedToday);
+  
+  return {
+    provider,
+    tier,
+    dailyLimit,
+    usedToday,
+    remaining,
+    trustLevel: trustLevel + 1,
+    isUnlimited: false,
+    warning: 'ATENCION: Los envios masivos por WhatsApp Web (Baileys) pueden resultar en baneo temporal o permanente de tu numero. Usa con moderacion y respeta los limites.'
+  };
 }
 
 router.get('/:businessId', async (req: AuthRequest, res: Response) => {
@@ -31,6 +133,27 @@ router.get('/:businessId', async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('List broadcasts error:', error.message);
     res.status(500).json({ error: 'Failed to list broadcasts' });
+  }
+});
+
+router.get('/:businessId/limits', async (req: AuthRequest, res: Response) => {
+  try {
+    const hasAccess = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const limitInfo = await getBroadcastLimitInfo(req.params.businessId, req.userId!);
+    
+    res.json({
+      ...limitInfo,
+      progressInfo: limitInfo.isUnlimited 
+        ? 'Meta Cloud API: Sin limite de envios diarios'
+        : `Nivel ${limitInfo.trustLevel}/3: ${limitInfo.dailyLimit} mensajes/dia. Usa broadcasts en mas dias para aumentar tu limite.`
+    });
+  } catch (error: any) {
+    console.error('Get broadcast limits error:', error.message);
+    res.status(500).json({ error: 'Failed to get broadcast limits' });
   }
 });
 
@@ -160,6 +283,24 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
     const finalContactsWithVars = contactsWithVariables || 
       (contactPhones ? contactPhones.map((phone: string) => ({ phone, variables: [] })) : []);
 
+    const contactCount = finalContactsWithVars.length;
+    const limitInfo = await getBroadcastLimitInfo(req.params.businessId, req.userId!);
+    
+    if (!limitInfo.isUnlimited) {
+      if (contactCount > limitInfo.remaining) {
+        return res.status(429).json({ 
+          error: `Limite de envios diarios excedido. Tienes ${limitInfo.remaining} mensajes restantes de ${limitInfo.dailyLimit} para hoy.`,
+          limit: limitInfo.dailyLimit,
+          used: limitInfo.usedToday,
+          remaining: limitInfo.remaining,
+          requested: contactCount,
+          trustLevel: limitInfo.trustLevel,
+          warning: limitInfo.warning,
+          progressInfo: `Nivel ${limitInfo.trustLevel}/3. Usa broadcasts en mas dias para aumentar tu limite.`
+        });
+      }
+    }
+
     const result = await broadcastService.createBroadcastCampaign({
       businessId: req.params.businessId,
       name,
@@ -177,7 +318,19 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
       useCrmMetadata: useCrmMetadata === true
     });
 
-    res.status(201).json(result);
+    const response: any = { ...result };
+    if (!limitInfo.isUnlimited) {
+      response.limitInfo = {
+        provider: limitInfo.provider,
+        dailyLimit: limitInfo.dailyLimit,
+        usedAfterThis: limitInfo.usedToday + contactCount,
+        remaining: limitInfo.remaining - contactCount,
+        trustLevel: limitInfo.trustLevel,
+        warning: limitInfo.warning
+      };
+    }
+
+    res.status(201).json(response);
   } catch (error: any) {
     console.error('Create broadcast error:', error.message);
     res.status(500).json({ error: 'Failed to create broadcast' });
