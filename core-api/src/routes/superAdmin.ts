@@ -2126,14 +2126,12 @@ router.post('/delegated-agent', superAdminMiddleware, async (req: SuperAdminRequ
       data: { isActive: false, deactivatedAt: new Date() }
     });
     
-    // Use a fixed owner ID for the super admin context
-    const SUPER_ADMIN_OWNER_ID = 'super-admin-system';
-    
     // Create new delegation - upsert to handle the unique constraint
+    // Use userId as ownerId (agent owns their own delegation in super admin context)
     const delegation = await prisma.agentDelegation.upsert({
       where: { agentUserId: userId },
       create: {
-        ownerId: SUPER_ADMIN_OWNER_ID,
+        ownerId: userId,
         agentUserId: userId,
         isActive: true
       },
@@ -2162,7 +2160,10 @@ router.post('/delegated-agent', superAdminMiddleware, async (req: SuperAdminRequ
     });
   } catch (error: any) {
     console.error('Assign delegated agent error:', error);
-    res.status(500).json({ error: 'Failed to assign delegated agent' });
+    res.status(500).json({ 
+      error: 'Failed to assign delegated agent',
+      details: error.message || 'Unknown error'
+    });
   }
 });
 
