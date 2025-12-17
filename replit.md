@@ -57,6 +57,7 @@ The platform employs a microservices-like architecture with a **Frontend (Next.j
 *   **Buffer-to-Worker Lifecycle Management**: AI jobs track `bufferId`, buffers deleted post-AI processing.
 *   **Terminal State Handling**: Failed buffers quarantined with `failedAt`, `failureReason`, `retryCount`.
 *   **Synchronous Processing Fallback**: Falls back to `processAIResponseDirect()` when Redis/BullMQ are unavailable.
+*   **Guided Onboarding with Effi**: New users see a fullscreen onboarding wizard featuring "Effi", an animated mascot character. The 3-step onboarding covers: 1) WhatsApp QR connection, 2) Quick product setup, 3) AI agent prompt configuration. Tracks completion via `onboardingCompleted` field in Business model. Registration now captures business name upfront.
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
