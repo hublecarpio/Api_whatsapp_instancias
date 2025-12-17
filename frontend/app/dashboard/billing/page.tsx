@@ -231,7 +231,7 @@ export default function BillingPage() {
     
     try {
       const response = await authApi.claimReferralCode(normalizedCode);
-      setMyReferralCode({ code: response.data.code, usageCount: 0 });
+      setMyReferralCode({ code: response.data.code, usageCount: 0, commissionRate: 0.10 });
       setClaimMessage({ type: 'success', text: 'Tu codigo de referido ha sido creado exitosamente!' });
       setCustomReferralCode('');
       await loadData();
