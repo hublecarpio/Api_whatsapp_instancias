@@ -956,8 +956,10 @@ async function processWithAgent(
   
   const currencySymbol = business.currencySymbol || 'S/.';
   const productCount = business.products?.length || 0;
+  const isAppointmentMode = business.businessObjective === 'APPOINTMENTS';
   
-  if (productCount > 0 && productCount <= 20) {
+  // Add product catalog info only for SALES mode
+  if (!isAppointmentMode && productCount > 0 && productCount <= 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
     business.products.forEach((product: any) => {
       systemPrompt += `\n- [ID:${product.id}] ${product.title}: ${currencySymbol}${product.price}`;
@@ -978,7 +980,7 @@ async function processWithAgent(
     systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje.`;
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
     systemPrompt += `\n- IMPORTANTE: Para generar enlaces de pago, SIEMPRE usa el ID del producto (el valor después de "ID:"), NO el nombre.`;
-  } else if (productCount > 20) {
+  } else if (!isAppointmentMode && productCount > 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
     systemPrompt += `\nTienes acceso a un catálogo extenso de ${productCount} productos con BÚSQUEDA INTELIGENTE.`;
     systemPrompt += `\nLos precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).`;
@@ -990,6 +992,16 @@ async function processWithAgent(
     systemPrompt += `\n- Para enviar imagen de UN producto específico, incluye SOLO la URL completa (https://...) al final. NO uses sintaxis Markdown.`;
     systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje.`;
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere productos similares del resultado.`;
+  }
+  
+  // Add appointments context for APPOINTMENTS mode
+  if (isAppointmentMode) {
+    systemPrompt += `\n\n## Modo Citas Activo:`;
+    systemPrompt += `\nEres un asistente especializado en agendar citas y consultas.`;
+    systemPrompt += `\n- Usa consultar_disponibilidad para verificar horarios antes de proponer fechas.`;
+    systemPrompt += `\n- Usa agendar_cita cuando el cliente confirme fecha y hora.`;
+    systemPrompt += `\n- Siempre confirma los datos del cliente antes de agendar.`;
+    systemPrompt += `\n- Si no hay horarios disponibles, ofrece fechas alternativas o pregunta qué día prefiere.`;
   }
   
   const contactAssignment = await prisma.tagAssignment.findUnique({
@@ -1144,7 +1156,10 @@ async function processWithAgent(
     };
   });
   
-  if (productCount > 20) {
+  // Sales tools - only for SALES objective (not APPOINTMENTS)
+  const isSalesMode = business.businessObjective !== 'APPOINTMENTS';
+  
+  if (isSalesMode && productCount > 20) {
     openaiTools.push({
       type: 'function' as const,
       function: {
@@ -1164,7 +1179,7 @@ async function processWithAgent(
     });
   }
   
-  if (productCount > 0) {
+  if (isSalesMode && productCount > 0) {
     openaiTools.push({
       type: 'function' as const,
       function: {
@@ -2103,6 +2118,128 @@ router.get('/config', authMiddleware, requireActiveSubscription, async (req: Req
   } catch (error) {
     console.error('Get config error:', error);
     res.status(500).json({ error: 'Failed to get config' });
+  }
+});
+
+router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId },
+      include: {
+        promptMaster: { 
+          include: { 
+            tools: true,
+            files: { select: { id: true, name: true } }
+          } 
+        },
+        products: { select: { id: true } },
+        instances: { select: { status: true, provider: true } },
+        availability: { select: { dayOfWeek: true, isBlocked: true } },
+        policy: true
+      }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const objective = business.businessObjective || 'SALES';
+    const isSalesMode = objective !== 'APPOINTMENTS';
+    const isAppointmentMode = objective === 'APPOINTMENTS';
+    const productCount = business.products?.length || 0;
+    const customTools = business.promptMaster?.tools || [];
+    const agentFiles = business.promptMaster?.files || [];
+    const hasAvailability = business.availability?.some((a: any) => !a.isBlocked) || false;
+    const instanceConnected = business.instances?.some((i: any) => i.status === 'open' || i.status === 'connected') || false;
+    
+    const activeTools: any[] = [];
+    const inactiveTools: any[] = [];
+    const contextItems: any[] = [];
+    const warnings: string[] = [];
+    
+    if (isSalesMode) {
+      if (productCount > 20) {
+        activeTools.push({ name: 'buscar_producto', type: 'builtin', description: 'Busqueda inteligente de productos' });
+      } else if (productCount > 0) {
+        contextItems.push({ name: 'Catalogo en prompt', count: productCount, description: 'Productos incluidos directamente' });
+      }
+      
+      if (productCount > 0) {
+        activeTools.push({ name: 'crear_enlace_pago', type: 'builtin', description: 'Genera enlaces de pago' });
+      } else {
+        inactiveTools.push({ name: 'crear_enlace_pago', reason: 'Sin productos configurados' });
+        warnings.push('Agrega productos para habilitar ventas');
+      }
+      
+      inactiveTools.push({ name: 'consultar_disponibilidad', reason: 'Solo en modo CITAS' });
+      inactiveTools.push({ name: 'agendar_cita', reason: 'Solo en modo CITAS' });
+    }
+    
+    if (isAppointmentMode) {
+      activeTools.push({ name: 'consultar_disponibilidad', type: 'builtin', description: 'Verifica horarios disponibles' });
+      activeTools.push({ name: 'agendar_cita', type: 'builtin', description: 'Agenda citas con clientes' });
+      
+      if (!hasAvailability) {
+        warnings.push('Configura horarios de atencion para que funcionen las citas');
+      } else {
+        contextItems.push({ name: 'Horarios configurados', description: 'Disponibilidad semanal activa' });
+      }
+      
+      inactiveTools.push({ name: 'buscar_producto', reason: 'Solo en modo VENTAS' });
+      inactiveTools.push({ name: 'crear_enlace_pago', reason: 'Solo en modo VENTAS' });
+    }
+    
+    if (agentFiles.length > 0) {
+      activeTools.push({ name: 'enviar_archivo', type: 'builtin', description: 'Envia archivos al cliente' });
+      contextItems.push({ name: 'Archivos disponibles', count: agentFiles.length, files: agentFiles.map((f: any) => f.name) });
+    } else {
+      inactiveTools.push({ name: 'enviar_archivo', reason: 'Sin archivos cargados' });
+    }
+    
+    customTools.forEach((tool: any) => {
+      activeTools.push({ 
+        name: `custom_${tool.name.replace(/[^a-zA-Z0-9_-]/g, '_')}`, 
+        type: 'custom', 
+        description: tool.description,
+        endpoint: tool.endpoint
+      });
+    });
+    
+    if (!instanceConnected) {
+      warnings.push('WhatsApp no conectado - el agente no puede recibir mensajes');
+    }
+    
+    if (!business.promptMaster?.prompt) {
+      warnings.push('Configura el prompt del agente para mejores respuestas');
+    } else {
+      contextItems.push({ name: 'Prompt personalizado', description: 'Instrucciones del negocio configuradas' });
+    }
+    
+    if (business.policy) {
+      contextItems.push({ name: 'Politicas del negocio', description: 'Envios, devoluciones, tono de marca' });
+    }
+    
+    res.json({
+      objective,
+      objectiveLabel: isAppointmentMode ? 'Citas' : 'Ventas',
+      model: business.openaiModel || 'gpt-4o-mini',
+      botEnabled: business.botEnabled ?? true,
+      instanceConnected,
+      activeTools,
+      inactiveTools,
+      contextItems,
+      warnings,
+      stats: {
+        productCount,
+        customToolCount: customTools.length,
+        fileCount: agentFiles.length
+      }
+    });
+  } catch (error: any) {
+    console.error('Get agent health error:', error);
+    res.status(500).json({ error: 'Failed to get agent health' });
   }
 });
 

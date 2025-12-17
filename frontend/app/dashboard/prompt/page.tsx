@@ -5,6 +5,7 @@ import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi } from '@/lib/api';
 import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel, KnowledgePanel } from '@/components/AgentV2';
+import AgentHealthDashboard from '@/components/AgentHealthDashboard';
 
 interface ToolParameter {
   name: string;
@@ -1157,7 +1158,7 @@ export default function PromptPage() {
       </div>
 
       {agentVersion === 'v1' ? (
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap items-center gap-2 mb-6">
           <button
             onClick={() => setActiveTab('prompt')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -1182,6 +1183,9 @@ export default function PromptPage() {
           >
             Archivos
           </button>
+          <div className="ml-auto">
+            {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} />}
+          </div>
         </div>
       ) : (
         <div className="flex flex-wrap gap-2 mb-6">

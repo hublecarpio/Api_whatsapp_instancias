@@ -394,6 +394,11 @@ export const agentFilesApi = {
     api.put(`/agent/files/${businessId}/reorder`, { fileOrders })
 };
 
+export const agentHealthApi = {
+  get: (businessId: string) =>
+    api.get(`/agent/health/${businessId}`)
+};
+
 export const agentApiKeyApi = {
   get: (businessId: string) =>
     api.get(`/agent/api-key/${businessId}`),
