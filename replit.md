@@ -59,6 +59,7 @@ The platform employs a microservices-like architecture with a **Frontend (Next.j
 *   **Synchronous Processing Fallback**: Falls back to `processAIResponseDirect()` when Redis/BullMQ are unavailable.
 *   **Guided Onboarding with Effi**: New users see a fullscreen onboarding wizard featuring "Effi", an animated mascot character. The 3-step onboarding covers: 1) WhatsApp QR connection, 2) Quick product setup, 3) AI agent prompt configuration. Tracks completion via `onboardingCompleted` field in Business model. Registration now captures business name upfront.
 *   **Delegated Agent System**: Super Admin can assign a user account as a "delegated agent" to track and follow up with platform users. Platform users are synced as contacts in the agent's business with a special tag ("Usuario App") and `platformUserId` link. Features: agent assignment/removal, automatic user sync, usage status tracking (active/partial/registered/unverified), and a dedicated Super Admin UI tab for managing the agent and viewing platform user contacts with conversion metrics.
+*   **Phone Verification System**: Users can verify their contact phone numbers via WhatsApp OTP. 6-digit codes are sent through the Super Admin's delegated agent WhatsApp instance (Baileys or Meta Cloud). Features 10-minute code expiry, 2-minute resend throttling, E.164 phone format normalization, and automatic re-verification when phone number changes.
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
