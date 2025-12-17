@@ -233,6 +233,39 @@ export class InstanceManager {
     }
 
     logger.info({ count: this.instances.size }, 'InstanceManager initialized');
+    
+    // Sync state with Core API after a delay to allow instances to connect
+    setTimeout(() => this.syncWithCoreApi(), 10000);
+  }
+
+  private static async syncWithCoreApi(): Promise<void> {
+    const coreApiUrl = process.env.CORE_API_URL;
+    const internalSecret = process.env.INTERNAL_API_SECRET || 'internal-secret-key';
+    
+    if (!coreApiUrl) {
+      logger.warn('CORE_API_URL not set, cannot sync with Core API');
+      return;
+    }
+    
+    try {
+      const instances = Array.from(this.instances.values()).map(inst => ({
+        id: inst.id,
+        status: inst.status
+      }));
+      
+      logger.info({ count: instances.length }, 'Syncing instance states with Core API');
+      
+      const response = await axios.post(`${coreApiUrl}/internal/wa/sync-instances`, {
+        instances
+      }, {
+        headers: { 'x-internal-secret': internalSecret },
+        timeout: 10000
+      });
+      
+      logger.info({ result: response.data }, 'Sync with Core API completed');
+    } catch (error: any) {
+      logger.warn({ error: error.message }, 'Failed to sync with Core API');
+    }
   }
 
   private static loadMetadataFromFile(): InstanceMetadata[] {

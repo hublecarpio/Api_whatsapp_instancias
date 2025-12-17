@@ -800,5 +800,98 @@ internalRouter.get('/baileys-instances', async (req, res) => {
   }
 });
 
+// Map Baileys status to DB status (frontend uses open/closed/pending_qr)
+function mapBaileysStatus(baileysStatus: string): string {
+  const statusMap: Record<string, string> = {
+    'connected': 'open',
+    'disconnected': 'closed',
+    'requires_qr': 'pending_qr',
+    'connecting': 'connecting',
+    'error': 'error'
+  };
+  return statusMap[baileysStatus] || baileysStatus;
+}
+
+// Sync endpoint - WhatsApp API reports its active instances to keep DB in sync
+internalRouter.post('/sync-instances', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    const expectedSecret = process.env.INTERNAL_API_SECRET || 'internal-secret-key';
+    
+    if (internalSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { instances } = req.body;
+    
+    if (!Array.isArray(instances)) {
+      return res.status(400).json({ error: 'instances array required' });
+    }
+    
+    console.log(`[Internal API] Syncing ${instances.length} Baileys instances from WhatsApp API`);
+    
+    const results = {
+      updated: 0,
+      notFound: 0,
+      errors: [] as string[]
+    };
+    
+    for (const inst of instances) {
+      try {
+        const { id, status, phoneNumber } = inst;
+        
+        if (!id) continue;
+        
+        const mappedStatus = mapBaileysStatus(status);
+        
+        const updated = await prisma.whatsAppInstance.updateMany({
+          where: { instanceBackendId: id },
+          data: {
+            status: mappedStatus,
+            isActive: true,
+            lastConnection: mappedStatus === 'open' ? new Date() : undefined,
+            phoneNumber: phoneNumber || undefined
+          }
+        });
+        
+        if (updated.count > 0) {
+          results.updated++;
+          console.log(`[Internal API] Synced instance ${id}: ${status} -> ${mappedStatus}`);
+        } else {
+          results.notFound++;
+          console.log(`[Internal API] Instance ${id} not found in database`);
+        }
+      } catch (err: any) {
+        results.errors.push(`${inst.id}: ${err.message}`);
+      }
+    }
+    
+    // Mark orphaned DB instances (in DB but not reported by WA API) as disconnected
+    const reportedIds = instances.map((i: any) => i.id).filter(Boolean);
+    if (reportedIds.length > 0) {
+      const orphaned = await prisma.whatsAppInstance.updateMany({
+        where: {
+          provider: 'BAILEYS',
+          isActive: true,
+          instanceBackendId: { notIn: reportedIds }
+        },
+        data: { status: 'disconnected' }
+      });
+      
+      if (orphaned.count > 0) {
+        console.log(`[Internal API] Marked ${orphaned.count} orphaned instances as disconnected`);
+      }
+    }
+    
+    res.json({
+      success: true,
+      ...results
+    });
+  } catch (error: any) {
+    console.error('Sync instances error:', error);
+    res.status(500).json({ error: 'Failed to sync instances' });
+  }
+});
+
 export { internalRouter };
 export default router;

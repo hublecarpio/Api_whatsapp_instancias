@@ -81,31 +81,64 @@ router.post('/:businessId', async (req: Request, res: Response) => {
     
     switch (event) {
       case 'connection.open':
-        await prisma.whatsAppInstance.updateMany({
-          where: { businessId },
-          data: { 
-            status: 'open',
-            lastConnection: new Date(),
-            phoneNumber: data?.phoneNumber
-          }
-        });
+        // Update by instanceBackendId if available, otherwise fallback to businessId
+        if (instanceId) {
+          await prisma.whatsAppInstance.updateMany({
+            where: { businessId, instanceBackendId: instanceId },
+            data: { 
+              status: 'open',
+              isActive: true,
+              lastConnection: new Date(),
+              phoneNumber: data?.phoneNumber
+            }
+          });
+          console.log(`[WEBHOOK] Instance ${instanceId} connected for business ${businessId}`);
+        } else {
+          await prisma.whatsAppInstance.updateMany({
+            where: { businessId, provider: 'BAILEYS' },
+            data: { 
+              status: 'open',
+              isActive: true,
+              lastConnection: new Date(),
+              phoneNumber: data?.phoneNumber
+            }
+          });
+        }
         break;
         
       case 'connection.close':
-        await prisma.whatsAppInstance.updateMany({
-          where: { businessId },
-          data: { status: 'closed' }
-        });
+        // Keep isActive true so instance can be restored on restart
+        if (instanceId) {
+          await prisma.whatsAppInstance.updateMany({
+            where: { businessId, instanceBackendId: instanceId },
+            data: { status: 'closed' }
+          });
+        } else {
+          await prisma.whatsAppInstance.updateMany({
+            where: { businessId, provider: 'BAILEYS' },
+            data: { status: 'closed' }
+          });
+        }
         break;
         
       case 'qr.update':
-        await prisma.whatsAppInstance.updateMany({
-          where: { businessId },
-          data: { 
-            status: 'pending_qr',
-            qr: data?.qr
-          }
-        });
+        if (instanceId) {
+          await prisma.whatsAppInstance.updateMany({
+            where: { businessId, instanceBackendId: instanceId },
+            data: { 
+              status: 'pending_qr',
+              qr: data?.qr
+            }
+          });
+        } else {
+          await prisma.whatsAppInstance.updateMany({
+            where: { businessId, provider: 'BAILEYS' },
+            data: { 
+              status: 'pending_qr',
+              qr: data?.qr
+            }
+          });
+        }
         break;
         
       case 'message.received':
