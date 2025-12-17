@@ -86,13 +86,13 @@ export default function BusinessPage() {
       setPhoneVerified((user as any).phoneVerified || false);
       
       if ((user as any).phone) {
-        const userPhone = (user as any).phone;
-        const matchedCode = COUNTRY_CODES.find(c => userPhone?.startsWith(c.code.replace('+', '')));
+        const userPhone = (user as any).phone.replace(/\s+/g, '');
+        const matchedCode = COUNTRY_CODES.find(c => userPhone?.startsWith(c.code));
         if (matchedCode) {
           setPhoneCountryCode(matchedCode.code);
-          setPhoneNumber(userPhone.substring(matchedCode.code.replace('+', '').length).trim());
+          setPhoneNumber(userPhone.substring(matchedCode.code.length));
         } else {
-          setPhoneNumber(userPhone);
+          setPhoneNumber(userPhone.replace(/^\+/, ''));
         }
       }
     }
@@ -148,7 +148,7 @@ export default function BusinessPage() {
     setSuccess('');
 
     try {
-      const fullPhone = phoneNumber ? `${phoneCountryCode} ${phoneNumber.replace(/\D/g, '')}` : undefined;
+      const fullPhone = phoneNumber ? `${phoneCountryCode}${phoneNumber.replace(/\D/g, '')}` : undefined;
       await authApi.updateProfile({ 
         name: userName,
         phone: fullPhone 
@@ -396,32 +396,40 @@ export default function BusinessPage() {
                 <span className="ml-2 text-xs text-accent-success">Verificado</span>
               )}
             </label>
-            <div className="flex gap-2">
-              <select
-                value={phoneCountryCode}
-                onChange={(e) => setPhoneCountryCode(e.target.value)}
-                className="input w-32"
-              >
-                {COUNTRY_CODES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.flag} {c.code}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^\d\s]/g, '');
-                  setPhoneNumber(value);
-                  if (phoneVerified) {
-                    setPhoneVerified(false);
-                  }
-                }}
-                className="input flex-1"
-                placeholder="999 888 777"
-              />
-            </div>
+            {phoneVerified ? (
+              <div className="flex gap-2">
+                <div className="input w-32 bg-dark-surface/50 text-gray-400 cursor-not-allowed flex items-center">
+                  {COUNTRY_CODES.find(c => c.code === phoneCountryCode)?.flag} {phoneCountryCode}
+                </div>
+                <div className="input flex-1 bg-dark-surface/50 text-gray-400 cursor-not-allowed">
+                  {phoneNumber}
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <select
+                  value={phoneCountryCode}
+                  onChange={(e) => setPhoneCountryCode(e.target.value)}
+                  className="input w-32"
+                >
+                  {COUNTRY_CODES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.code}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^\d\s]/g, '');
+                    setPhoneNumber(value);
+                  }}
+                  className="input flex-1"
+                  placeholder="999 888 777"
+                />
+              </div>
+            )}
             <p className="text-xs text-gray-500 mt-1">Para contactarte sobre tu cuenta</p>
             
             {phoneNumber && !phoneVerified && (
@@ -434,15 +442,19 @@ export default function BusinessPage() {
                 )}
                 
                 {!showVerificationInput ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2">
                     <span className="text-xs text-gray-400">Tu numero no esta verificado</span>
-                    <button
-                      onClick={handleSendVerificationCode}
-                      disabled={verificationLoading}
-                      className="btn btn-xs btn-secondary"
-                    >
-                      {verificationLoading ? 'Enviando...' : 'Verificar ahora'}
-                    </button>
+                    {!(user as any)?.phone ? (
+                      <span className="text-xs text-yellow-400">Primero guarda tu perfil para poder verificar</span>
+                    ) : (
+                      <button
+                        onClick={handleSendVerificationCode}
+                        disabled={verificationLoading}
+                        className="btn btn-xs btn-secondary w-fit"
+                      >
+                        {verificationLoading ? 'Enviando...' : 'Verificar ahora'}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">
