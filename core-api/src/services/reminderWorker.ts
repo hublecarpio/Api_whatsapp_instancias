@@ -225,19 +225,71 @@ async function generateFollowUpMessage(
     return templates[Math.min(attemptNumber - 1, templates.length - 1)];
   }
   
-  const recentMessages = await prisma.messageLog.findMany({
-    where: {
-      businessId,
-      OR: [{ sender: contactPhone }, { recipient: contactPhone }]
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 10
-  });
+  // Fetch enriched contact context
+  const [recentMessages, contact, pendingOrders, totalMessageCount] = await Promise.all([
+    prisma.messageLog.findMany({
+      where: {
+        businessId,
+        OR: [{ sender: contactPhone }, { recipient: contactPhone }]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10
+    }),
+    prisma.contact.findFirst({
+      where: { businessId, phone: contactPhone },
+      include: { tags: { include: { tag: true } } }
+    }),
+    prisma.order.count({
+      where: {
+        businessId,
+        customerPhone: contactPhone,
+        status: { in: ['pending', 'confirmed'] }
+      }
+    }),
+    prisma.messageLog.count({
+      where: {
+        businessId,
+        OR: [{ sender: contactPhone }, { recipient: contactPhone }]
+      }
+    })
+  ]);
   
   const conversationContext = recentMessages
     .reverse()
     .map(m => `${m.direction === 'inbound' ? 'Cliente' : 'Agente'}: ${m.message}`)
     .join('\n');
+  
+  // Build enriched context
+  const contactContext: string[] = [];
+  
+  if (contact) {
+    if (contact.leadStage) {
+      contactContext.push(`Etapa del lead: ${contact.leadStage}`);
+    }
+    if (contact.tags && contact.tags.length > 0) {
+      const tagNames = contact.tags.map(t => t.tag?.name).filter(Boolean);
+      if (tagNames.length > 0) {
+        contactContext.push(`Tags: ${tagNames.join(', ')}`);
+      }
+    }
+    if (contact.notes) {
+      contactContext.push(`Notas: ${contact.notes.substring(0, 100)}`);
+    }
+  }
+  
+  if (pendingOrders > 0) {
+    contactContext.push(`Tiene ${pendingOrders} pedido(s) pendiente(s)`);
+  }
+  
+  contactContext.push(`Total de mensajes intercambiados: ${totalMessageCount}`);
+  
+  // Determine engagement level
+  let engagementLevel = 'nuevo';
+  if (totalMessageCount > 50) engagementLevel = 'cliente frecuente';
+  else if (totalMessageCount > 20) engagementLevel = 'cliente regular';
+  else if (totalMessageCount > 5) engagementLevel = 'cliente en desarrollo';
+  
+  contactContext.push(`Nivel de engagement: ${engagementLevel}`);
   
   const pressureDescriptions = [
     'muy sutil y amigable, solo un recordatorio casual',
@@ -251,6 +303,10 @@ async function generateFollowUpMessage(
   
   const modelConfig = await getModelForAgent('v1', business.openaiModel);
   
+  const enrichedContext = contactContext.length > 0 
+    ? `\n\nContexto del cliente:\n${contactContext.join('\n')}`
+    : '';
+  
   const messages: ChatMessage[] = [
     {
       role: 'system',
@@ -259,11 +315,12 @@ Genera un mensaje de seguimiento corto (1-2 oraciones) para un cliente que no ha
 Este es el intento #${attemptNumber} de contacto.
 El tono debe ser: ${pressureDesc}.
 El mensaje debe continuar naturalmente la conversacion anterior.
+Adapta tu enfoque segun el contexto del cliente (etapa del lead, nivel de engagement, pedidos pendientes).
 NO uses saludos largos. NO uses emojis. Maximo 50 palabras.`
     },
     {
       role: 'user',
-      content: `Conversacion reciente:\n${conversationContext || 'Sin mensajes previos'}\n\nGenera el mensaje de seguimiento:`
+      content: `Conversacion reciente:\n${conversationContext || 'Sin mensajes previos'}${enrichedContext}\n\nGenera el mensaje de seguimiento:`
     }
   ];
   
@@ -320,13 +377,25 @@ async function getTodayAttemptCount(businessId: string, contactPhone: string): P
   });
 }
 
+const MAX_RETRY_ATTEMPTS = 3;
+const PROCESSING_TIMEOUT_MS = 120000; // 2 minutes
+
 export async function processReminders(): Promise<void> {
   const now = new Date();
+  const processingTimeout = new Date(now.getTime() - PROCESSING_TIMEOUT_MS);
   
+  // Find reminders that are:
+  // 1. Pending and due (scheduledAt <= now)
+  // 2. Not being processed by another worker (processingAt is null OR timed out)
+  // 3. Ordered by scheduledAt ASC (most urgent first)
   const pendingReminders = await prisma.reminder.findMany({
     where: {
       status: 'pending',
-      scheduledAt: { lte: now }
+      scheduledAt: { lte: now },
+      OR: [
+        { processingAt: null },
+        { processingAt: { lt: processingTimeout } }
+      ]
     },
     include: {
       business: {
@@ -336,17 +405,51 @@ export async function processReminders(): Promise<void> {
         }
       }
     },
+    orderBy: { scheduledAt: 'asc' },
     take: 50
   });
   
+  if (pendingReminders.length > 0) {
+    console.log(`[REMINDER] Found ${pendingReminders.length} pending reminders to process`);
+  }
+  
   for (const reminder of pendingReminders) {
+    // Use fresh timestamp for each reminder claim to prevent timeout during long processing
+    const claimTime = new Date();
+    const claimTimeout = new Date(claimTime.getTime() - PROCESSING_TIMEOUT_MS);
+    
+    // Claim this reminder by setting processingAt (atomic operation to prevent duplicates)
+    const claimed = await prisma.reminder.updateMany({
+      where: {
+        id: reminder.id,
+        status: 'pending',
+        OR: [
+          { processingAt: null },
+          { processingAt: { lt: claimTimeout } }
+        ]
+      },
+      data: { processingAt: claimTime }
+    });
+    
+    // If we couldn't claim it, another worker got it first
+    if (claimed.count === 0) {
+      console.log(`[REMINDER] Reminder ${reminder.id} already claimed by another worker`);
+      continue;
+    }
+    
     try {
+      // Fetch fresh reminder data after claiming (for accurate retryCount)
+      const freshReminder = await prisma.reminder.findUnique({
+        where: { id: reminder.id }
+      });
+      if (!freshReminder) continue;
+      
       const config = reminder.business.followUpConfig;
       
       if (config && !config.enabled && reminder.type === 'auto') {
         await prisma.reminder.update({
           where: { id: reminder.id },
-          data: { status: 'skipped' }
+          data: { status: 'skipped', processingAt: null }
         });
         continue;
       }
@@ -354,14 +457,15 @@ export async function processReminders(): Promise<void> {
       const businessTimezone = reminder.business.timezone || 'America/Lima';
       
       if (config && !(await isWithinAllowedHours(config, businessTimezone))) {
-        const tomorrow = new Date(now);
+        const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(config.allowedStartHour, 0, 0, 0);
         
         await prisma.reminder.update({
           where: { id: reminder.id },
-          data: { scheduledAt: tomorrow }
+          data: { scheduledAt: tomorrow, processingAt: null }
         });
+        console.log(`[REMINDER] Rescheduled ${reminder.id} to ${tomorrow.toISOString()} (outside allowed hours)`);
         continue;
       }
       
@@ -370,7 +474,7 @@ export async function processReminders(): Promise<void> {
         if (todayAttempts >= config.maxDailyAttempts) {
           await prisma.reminder.update({
             where: { id: reminder.id },
-            data: { status: 'max_daily_reached' }
+            data: { status: 'max_daily_reached', processingAt: null }
           });
           continue;
         }
@@ -378,7 +482,13 @@ export async function processReminders(): Promise<void> {
       
       const instance = await getActiveInstance(reminder.businessId);
       if (!instance) {
-        console.log(`[REMINDER] No active WhatsApp instance for business ${reminder.businessId} - skipping reminder ${reminder.id}`);
+        // Release lock and reschedule for later retry
+        const retryAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: { scheduledAt: retryAt, processingAt: null }
+        });
+        console.log(`[REMINDER] No active WhatsApp instance for business ${reminder.businessId} - rescheduled ${reminder.id} for ${retryAt.toISOString()}`);
         continue;
       }
       
@@ -397,7 +507,7 @@ export async function processReminders(): Promise<void> {
           console.log(`[REMINDER] No approved template for Meta Cloud business ${reminder.businessId} - cannot send reminder outside 24h window`);
           await prisma.reminder.update({
             where: { id: reminder.id },
-            data: { status: 'no_template' }
+            data: { status: 'no_template', processingAt: null }
           });
           continue;
         }
@@ -422,7 +532,12 @@ export async function processReminders(): Promise<void> {
         });
         
         if (!metaCred) {
-          console.log(`[REMINDER] No Meta credentials for instance ${instance.id} - skipping`);
+          console.log(`[REMINDER] No Meta credentials for instance ${instance.id} - rescheduling`);
+          const retryAt = new Date(Date.now() + 15 * 60 * 1000);
+          await prisma.reminder.update({
+            where: { id: reminder.id },
+            data: { scheduledAt: retryAt, processingAt: null }
+          });
           continue;
         }
         
@@ -449,7 +564,12 @@ export async function processReminders(): Promise<void> {
         }
       } else {
         if (!instance.instanceBackendId) {
-          console.log(`No Baileys backend ID for instance ${instance.id}`);
+          console.log(`[REMINDER] No Baileys backend ID for instance ${instance.id} - rescheduling`);
+          const retryAt = new Date(Date.now() + 15 * 60 * 1000);
+          await prisma.reminder.update({
+            where: { id: reminder.id },
+            data: { scheduledAt: retryAt, processingAt: null }
+          });
           continue;
         }
         
@@ -482,11 +602,12 @@ export async function processReminders(): Promise<void> {
         data: {
           status: 'executed',
           executedAt: new Date(),
+          processingAt: null,
           generatedMessage: message
         }
       });
       
-      console.log(`Reminder executed: ${reminder.id} to ${cleanPhone} via ${instance.provider}${usedTemplate ? ` (template: ${usedTemplate.name})` : ''}`);
+      console.log(`[REMINDER] Executed: ${reminder.id} to ${cleanPhone} via ${instance.provider}${usedTemplate ? ` (template: ${usedTemplate.name})` : ''}${freshReminder.retryCount > 0 ? ` (after ${freshReminder.retryCount} retries)` : ''}`);
       
     } catch (error: any) {
       let errorMessage = error?.message || 'Unknown error';
@@ -497,18 +618,49 @@ export async function processReminders(): Promise<void> {
         errorMessage = `Meta API Error: ${JSON.stringify(metaErrorDetails)}`;
       }
       
-      console.error(`Failed to process reminder ${reminder.id}:`, {
+      // Use fresh data for retry count
+      const latestReminder = await prisma.reminder.findUnique({ where: { id: reminder.id } });
+      const currentRetryCount = latestReminder?.retryCount || 0;
+      const shouldRetry = currentRetryCount < MAX_RETRY_ATTEMPTS;
+      
+      console.error(`[REMINDER] Failed to process reminder ${reminder.id} (retry ${currentRetryCount + 1}/${MAX_RETRY_ATTEMPTS}):`, {
         error: errorMessage,
         contactPhone: reminder.contactPhone,
         businessId: reminder.businessId,
         provider: reminder.business.instances[0]?.provider,
-        metaError: metaErrorDetails
+        metaError: metaErrorDetails,
+        willRetry: shouldRetry
       });
       
-      await prisma.reminder.update({
-        where: { id: reminder.id },
-        data: { status: 'failed' }
-      });
+      if (shouldRetry) {
+        // Exponential backoff: 2min, 8min, 32min
+        const retryDelayMs = Math.pow(4, currentRetryCount) * 2 * 60 * 1000;
+        const nextRetryAt = new Date(Date.now() + retryDelayMs);
+        
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: { 
+            retryCount: currentRetryCount + 1,
+            lastError: errorMessage,
+            processingAt: null,
+            scheduledAt: nextRetryAt
+          }
+        });
+        
+        console.log(`[REMINDER] Scheduled retry for ${reminder.id} at ${nextRetryAt.toISOString()}`);
+      } else {
+        // Max retries reached, mark as failed
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: { 
+            status: 'failed',
+            lastError: errorMessage,
+            processingAt: null
+          }
+        });
+        
+        console.log(`[REMINDER] Max retries reached for ${reminder.id}, marked as failed`);
+      }
     }
   }
 }
@@ -518,22 +670,117 @@ export async function processReminders(): Promise<void> {
 
 let workerInterval: NodeJS.Timeout | null = null;
 
+export interface ReminderStats {
+  pending: number;
+  executed: number;
+  failed: number;
+  skipped: number;
+  stuckProcessing: number;
+  scheduledToday: number;
+  executedToday: number;
+  failedToday: number;
+  retryPending: number;
+}
+
+export async function getReminderStats(): Promise<ReminderStats> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const processingTimeout = new Date(Date.now() - PROCESSING_TIMEOUT_MS);
+  
+  const [pending, executed, failed, skipped, stuckProcessing, scheduledToday, executedToday, failedToday, retryPending] = await Promise.all([
+    prisma.reminder.count({ where: { status: 'pending' } }),
+    prisma.reminder.count({ where: { status: 'executed' } }),
+    prisma.reminder.count({ where: { status: 'failed' } }),
+    prisma.reminder.count({ where: { status: 'skipped' } }),
+    prisma.reminder.count({
+      where: {
+        status: 'pending',
+        processingAt: { lt: processingTimeout, not: null }
+      }
+    }),
+    prisma.reminder.count({
+      where: { scheduledAt: { gte: today } }
+    }),
+    prisma.reminder.count({
+      where: { status: 'executed', executedAt: { gte: today } }
+    }),
+    prisma.reminder.count({
+      where: { status: 'failed', createdAt: { gte: today } }
+    }),
+    prisma.reminder.count({
+      where: { status: 'pending', retryCount: { gt: 0 } }
+    })
+  ]);
+  
+  return { pending, executed, failed, skipped, stuckProcessing, scheduledToday, executedToday, failedToday, retryPending };
+}
+
+export async function getFailedRemindersDetails(limit: number = 20) {
+  return prisma.reminder.findMany({
+    where: { status: 'failed' },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      contactPhone: true,
+      contactName: true,
+      attemptNumber: true,
+      retryCount: true,
+      lastError: true,
+      scheduledAt: true,
+      createdAt: true,
+      business: { select: { name: true } }
+    }
+  });
+}
+
+export async function retryFailedReminder(reminderId: string): Promise<boolean> {
+  const reminder = await prisma.reminder.findUnique({
+    where: { id: reminderId }
+  });
+  
+  if (!reminder || reminder.status !== 'failed') {
+    return false;
+  }
+  
+  await prisma.reminder.update({
+    where: { id: reminderId },
+    data: {
+      status: 'pending',
+      retryCount: 0,
+      lastError: null,
+      processingAt: null,
+      scheduledAt: new Date()
+    }
+  });
+  
+  console.log(`[REMINDER] Manually retrying failed reminder ${reminderId}`);
+  return true;
+}
+
 export function startReminderWorker(): void {
-  console.log('Starting reminder worker (event-driven mode)...');
+  console.log('[REMINDER] Starting worker (event-driven mode)...');
   
   workerInterval = setInterval(async () => {
+    const startTime = Date.now();
     try {
       await processReminders();
+      const duration = Date.now() - startTime;
+      if (duration > 5000) {
+        console.log(`[REMINDER] Worker cycle completed in ${duration}ms`);
+      }
     } catch (error) {
-      console.error('Reminder worker error:', error);
+      console.error('[REMINDER] Worker error:', error);
     }
   }, 60000);
   
   setTimeout(async () => {
     try {
       await processReminders();
+      const stats = await getReminderStats();
+      console.log(`[REMINDER] Initial check complete. Stats: pending=${stats.pending}, executed=${stats.executed}, failed=${stats.failed}, retryPending=${stats.retryPending}`);
     } catch (error) {
-      console.error('Initial reminder check error:', error);
+      console.error('[REMINDER] Initial check error:', error);
     }
   }, 5000);
 }
@@ -542,6 +789,6 @@ export function stopReminderWorker(): void {
   if (workerInterval) {
     clearInterval(workerInterval);
     workerInterval = null;
-    console.log('Reminder worker stopped');
+    console.log('[REMINDER] Worker stopped');
   }
 }

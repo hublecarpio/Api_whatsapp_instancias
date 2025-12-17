@@ -614,9 +614,12 @@ model Reminder {
   contactName     String?
   scheduledAt     DateTime
   executedAt      DateTime?
+  processingAt    DateTime?
   type            String    @default("auto")
   status          String    @default("pending")
   attemptNumber   Int       @default(1)
+  retryCount      Int       @default(0)
+  lastError       String?
   messageTemplate String?
   generatedMessage String?
   configId        String?
@@ -627,6 +630,7 @@ model Reminder {
 
   @@index([businessId, status, scheduledAt])
   @@index([businessId, contactPhone])
+  @@index([status, scheduledAt, processingAt])
 }
 
 model TokenUsage {
