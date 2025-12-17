@@ -1071,7 +1071,6 @@ async function sendPhoneVerificationCode(userId: string, phone: string): Promise
             businesses: {
               include: {
                 instances: {
-                  where: { status: 'open' },
                   include: { metaCredential: true }
                 }
               }
@@ -1090,10 +1089,21 @@ async function sendPhoneVerificationCode(userId: string, phone: string): Promise
       return { success: false, error: 'El agente delegado no tiene un negocio configurado' };
     }
     
-    const instance = agentBusiness.instances[0];
-    if (!instance) {
+    const connectedInstance = agentBusiness.instances.find(inst => {
+      if (inst.provider === 'META_CLOUD') {
+        return inst.metaCredential && 
+               inst.metaCredential.accessToken && 
+               inst.metaCredential.phoneNumberId;
+      } else {
+        return inst.status === 'open';
+      }
+    });
+    
+    if (!connectedInstance) {
       return { success: false, error: 'El agente delegado no tiene una instancia de WhatsApp conectada' };
     }
+    
+    const instance = connectedInstance;
     
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + PHONE_VERIFICATION_EXPIRY_MINUTES * 60 * 1000);
