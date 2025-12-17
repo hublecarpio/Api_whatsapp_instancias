@@ -1,0 +1,25 @@
+ => [builder 8/9] RUN npx prisma generate                                                                                                                              2.7s 
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             11.7s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.466                                                                                                                                                                       
+0.466 > core-api@1.0.0 build                                                                                                                                                
+0.466 > tsc                                                                                                                                                                 
+0.466                                                                                                                                                                       
+11.58 src/services/reminderWorker.ts(240,18): error TS2353: Object literal may only specify known properties, and 'tags' does not exist in type 'ContactInclude<DefaultArgs>
+'.                                                                                                                                                                          
+11.58 src/services/reminderWorker.ts(246,24): error TS2322: Type '"pending"' is not assignable to type 'OrderStatus'.                                                       
+11.58 src/services/reminderWorker.ts(246,35): error TS2322: Type '"confirmed"' is not assignable to type 'OrderStatus'.
+11.58 src/services/reminderWorker.ts(266,17): error TS2339: Property 'leadStage' does not exist on type '{ name: string | null; id: string; email: string | null; createdAt: Date; businessId: string; metadata: JsonValue; tags: string[]; notes: string | null; updatedAt: Date; ... 7 more ...; remindersPaused: boolean; }'.
+11.58 src/services/reminderWorker.ts(267,54): error TS2339: Property 'leadStage' does not exist on type '{ name: string | null; id: string; email: string | null; createdAt: Date; businessId: string; metadata: JsonValue; tags: string[]; notes: string | null; updatedAt: Date; ... 7 more ...; remindersPaused: boolean; }'.
+11.58 src/services/reminderWorker.ts(270,48): error TS2339: Property 'tag' does not exist on type 'string'.
+------
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2

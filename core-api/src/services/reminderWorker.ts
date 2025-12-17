@@ -236,14 +236,13 @@ async function generateFollowUpMessage(
       take: 10
     }),
     prisma.contact.findFirst({
-      where: { businessId, phone: contactPhone },
-      include: { tags: { include: { tag: true } } }
+      where: { businessId, phone: contactPhone }
     }),
     prisma.order.count({
       where: {
         businessId,
-        customerPhone: contactPhone,
-        status: { in: ['pending', 'confirmed'] }
+        contactPhone: contactPhone,
+        status: { in: ['PENDING_PAYMENT', 'AWAITING_VOUCHER', 'PAID', 'PROCESSING'] }
       }
     }),
     prisma.messageLog.count({
@@ -263,14 +262,8 @@ async function generateFollowUpMessage(
   const contactContext: string[] = [];
   
   if (contact) {
-    if (contact.leadStage) {
-      contactContext.push(`Etapa del lead: ${contact.leadStage}`);
-    }
     if (contact.tags && contact.tags.length > 0) {
-      const tagNames = contact.tags.map(t => t.tag?.name).filter(Boolean);
-      if (tagNames.length > 0) {
-        contactContext.push(`Tags: ${tagNames.join(', ')}`);
-      }
+      contactContext.push(`Tags: ${contact.tags.join(', ')}`);
     }
     if (contact.notes) {
       contactContext.push(`Notas: ${contact.notes.substring(0, 100)}`);
