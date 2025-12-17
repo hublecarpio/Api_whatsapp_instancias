@@ -1,6 +1,7 @@
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import prisma from '../services/prisma.js';
+import { createAppointmentInGoogleCalendar, getGoogleCalendarBusySlots } from '../services/googleCalendar.js';
 
 const router = express.Router();
 
@@ -707,9 +708,33 @@ router.post('/internal/schedule', async (req, res) => {
       reminderMinutes
     );
 
+    const gcalResult = await createAppointmentInGoogleCalendar(
+      businessId,
+      {
+        clientName: contactName || 'Cliente',
+        clientPhone: contactPhone.replace(/\D/g, ''),
+        service,
+        dateTime: scheduledAt,
+        durationMinutes: duration,
+        notes
+      },
+      business?.timezone || 'America/Lima'
+    );
+
+    if (gcalResult.success) {
+      console.log(`[APPOINTMENTS INTERNAL] Created Google Calendar event ${gcalResult.eventId}`);
+      await prisma.appointment.update({
+        where: { id: appointment.id },
+        data: { googleEventId: gcalResult.eventId }
+      });
+    } else if (gcalResult.error !== 'Google Calendar not connected') {
+      console.error(`[APPOINTMENTS INTERNAL] Google Calendar error: ${gcalResult.error}`);
+    }
+
     res.json({
       success: true,
-      appointment
+      appointment,
+      googleCalendarSynced: gcalResult.success
     });
   } catch (error: any) {
     console.error('[APPOINTMENTS INTERNAL] Error scheduling:', error);
@@ -786,6 +811,10 @@ router.get('/internal/availability', async (req, res) => {
       orderBy: { scheduledAt: 'asc' }
     });
 
+    const business = await prisma.business.findUnique({ where: { id: businessId as string } });
+    const gcalBusy = await getGoogleCalendarBusySlots(businessId as string, date as string, business?.timezone || 'America/Lima');
+    const googleBusySlots = gcalBusy.success ? gcalBusy.busySlots || [] : [];
+
     const slots: { time: string; available: boolean }[] = [];
     const startMinutes = timeToMinutes(availability.startTime);
     const endMinutes = timeToMinutes(availability.endTime);
@@ -800,12 +829,18 @@ router.get('/internal/availability', async (req, res) => {
       slotStart.setHours(hours, mins, 0, 0);
       const slotEnd = new Date(slotStart.getTime() + slotDuration * 60000);
 
-      const isOccupied = existingAppointments.some(apt => {
+      const isOccupiedByAppointment = existingAppointments.some(apt => {
         const aptEnd = new Date(apt.scheduledAt.getTime() + apt.durationMinutes * 60000);
         return slotStart < aptEnd && slotEnd > apt.scheduledAt;
       });
 
-      slots.push({ time: timeStr, available: !isOccupied });
+      const isOccupiedByGoogleCalendar = googleBusySlots.some(busy => {
+        const busyStart = new Date(busy.start);
+        const busyEnd = new Date(busy.end);
+        return slotStart < busyEnd && slotEnd > busyStart;
+      });
+
+      slots.push({ time: timeStr, available: !isOccupiedByAppointment && !isOccupiedByGoogleCalendar });
     }
 
     res.json({

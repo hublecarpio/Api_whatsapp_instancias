@@ -48,7 +48,7 @@ const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes
 
 export default function AppointmentsPage() {
   const { currentBusiness } = useBusinessStore();
-  const [activeTab, setActiveTab] = useState<'calendar' | 'list' | 'availability'>('list');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'list' | 'availability' | 'google'>('list');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [availability, setAvailability] = useState<BusinessAvailability[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +58,13 @@ export default function AppointmentsPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [googleCalendarStatus, setGoogleCalendarStatus] = useState<{
+    configured: boolean;
+    connected: boolean;
+    email: string | null;
+    syncEnabled: boolean;
+  } | null>(null);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
 
   const [newAppointment, setNewAppointment] = useState({
     contactPhone: '',
@@ -80,8 +87,17 @@ export default function AppointmentsPage() {
     if (currentBusiness?.id) {
       loadAppointments();
       loadAvailability();
+      loadGoogleCalendarStatus();
     }
   }, [currentBusiness?.id, statusFilter]);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('gcal_success') === 'true') {
+      loadGoogleCalendarStatus();
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   const getAuthHeader = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -130,6 +146,52 @@ export default function AppointmentsPage() {
       }
     } catch (error) {
       console.error('Error loading availability:', error);
+    }
+  };
+
+  const loadGoogleCalendarStatus = async () => {
+    try {
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/google-calendar/status`,
+        { headers: getAuthHeader() }
+      );
+      setGoogleCalendarStatus(response.data);
+    } catch (error) {
+      console.error('Error loading Google Calendar status:', error);
+    }
+  };
+
+  const connectGoogleCalendar = async () => {
+    try {
+      setLoadingGoogle(true);
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/google-calendar/auth-url`,
+        { headers: getAuthHeader() }
+      );
+      window.location.href = response.data.authUrl;
+    } catch (error) {
+      console.error('Error getting auth URL:', error);
+      alert('Error al conectar con Google Calendar');
+    } finally {
+      setLoadingGoogle(false);
+    }
+  };
+
+  const disconnectGoogleCalendar = async () => {
+    if (!confirm('Desconectar Google Calendar? Las citas seguiran en tu calendario pero no se sincronizaran mas.')) return;
+    
+    try {
+      setLoadingGoogle(true);
+      await axios.post(
+        `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/google-calendar/disconnect`,
+        {},
+        { headers: getAuthHeader() }
+      );
+      setGoogleCalendarStatus(prev => prev ? { ...prev, connected: false, email: null } : null);
+    } catch (error) {
+      console.error('Error disconnecting:', error);
+    } finally {
+      setLoadingGoogle(false);
     }
   };
 
@@ -273,6 +335,22 @@ export default function AppointmentsPage() {
           }`}
         >
           Disponibilidad
+        </button>
+        <button
+          onClick={() => setActiveTab('google')}
+          className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
+            activeTab === 'google' 
+              ? 'bg-neon-blue text-white' 
+              : 'bg-dark-surface text-gray-400 hover:text-white'
+          }`}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M22.46 6c-.85.38-1.78.64-2.75.76 1-.6 1.76-1.55 2.12-2.68-.93.55-1.96.95-3.06 1.17-.88-.94-2.13-1.53-3.51-1.53-2.66 0-4.81 2.16-4.81 4.81 0 .38.04.75.13 1.1-4-.2-7.58-2.11-9.96-5.02-.42.72-.66 1.56-.66 2.46 0 1.68.85 3.16 2.14 4.02-.79-.02-1.53-.24-2.18-.6v.06c0 2.35 1.67 4.31 3.88 4.76-.4.1-.83.16-1.27.16-.31 0-.62-.03-.92-.08.63 1.96 2.45 3.39 4.61 3.43-1.69 1.32-3.83 2.1-6.15 2.1-.4 0-.8-.02-1.19-.07 2.19 1.4 4.78 2.22 7.57 2.22 9.07 0 14.02-7.52 14.02-14.02 0-.21 0-.42-.01-.63.96-.69 1.79-1.56 2.45-2.55-.88.39-1.83.65-2.82.77z"/>
+          </svg>
+          Google Calendar
+          {googleCalendarStatus?.connected && (
+            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+          )}
         </button>
       </div>
 
@@ -535,6 +613,105 @@ export default function AppointmentsPage() {
           >
             Guardar Horarios
           </button>
+        </div>
+      )}
+
+      {activeTab === 'google' && (
+        <div className="card max-w-xl">
+          <h3 className="text-lg font-semibold text-white mb-4">Integracion con Google Calendar</h3>
+          
+          {!googleCalendarStatus?.configured ? (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-4">⚙️</div>
+              <p className="text-gray-400 mb-2">Google Calendar no esta configurado</p>
+              <p className="text-sm text-gray-500">
+                Contacta al administrador para habilitar esta integracion.
+              </p>
+            </div>
+          ) : googleCalendarStatus?.connected ? (
+            <div className="space-y-6">
+              <div className="flex items-center gap-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-white font-medium">Conectado</p>
+                  <p className="text-sm text-gray-400">{googleCalendarStatus.email}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-300">Funcionalidades activas:</h4>
+                <ul className="space-y-2 text-sm text-gray-400">
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-400">✓</span>
+                    Las citas se sincronizan automaticamente con tu Google Calendar
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-400">✓</span>
+                    Los horarios ocupados en tu calendario se respetan al consultar disponibilidad
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-green-400">✓</span>
+                    El agente AI puede ver tu calendario para evitar conflictos
+                  </li>
+                </ul>
+              </div>
+
+              <button
+                onClick={disconnectGoogleCalendar}
+                disabled={loadingGoogle}
+                className="btn btn-secondary w-full"
+              >
+                {loadingGoogle ? 'Desconectando...' : 'Desconectar Google Calendar'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="text-center py-4">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-surface flex items-center justify-center">
+                  <svg className="w-8 h-8 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19.5 3h-3V1.5h-1.5V3h-6V1.5H7.5V3h-3C3.675 3 3 3.675 3 4.5v15c0 .825.675 1.5 1.5 1.5h15c.825 0 1.5-.675 1.5-1.5v-15c0-.825-.675-1.5-1.5-1.5zm0 16.5h-15V9h15v10.5zm0-12h-15V4.5h15V7.5z"/>
+                  </svg>
+                </div>
+                <p className="text-gray-400 mb-2">Conecta tu Google Calendar</p>
+                <p className="text-sm text-gray-500">
+                  Sincroniza tus citas automaticamente y deja que el agente AI respete tu agenda.
+                </p>
+              </div>
+
+              <div className="space-y-3 text-sm text-gray-400">
+                <p className="font-medium text-gray-300">Al conectar podras:</p>
+                <ul className="space-y-1">
+                  <li>• Ver tus citas en Google Calendar automaticamente</li>
+                  <li>• Bloquear horarios ocupados de tu calendario personal</li>
+                  <li>• Evitar dobles reservas con tus otros compromisos</li>
+                </ul>
+              </div>
+
+              <button
+                onClick={connectGoogleCalendar}
+                disabled={loadingGoogle}
+                className="btn btn-primary w-full flex items-center justify-center gap-2"
+              >
+                {loadingGoogle ? (
+                  'Conectando...'
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    Conectar con Google
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
