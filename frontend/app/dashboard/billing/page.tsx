@@ -48,7 +48,7 @@ export default function BillingPage() {
   const [creditsMessage, setCreditsMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   
   // Referral program state
-  const [myReferralCode, setMyReferralCode] = useState<{code: string; usageCount: number} | null>(null);
+  const [myReferralCode, setMyReferralCode] = useState<{code: string; usageCount: number; commissionRate: number} | null>(null);
   const [referralStats, setReferralStats] = useState<{
     totalReferrals: number;
     activeSubscribers: number;
@@ -83,7 +83,11 @@ export default function BillingPage() {
           authApi.getReferralStats()
         ]);
         if (codeRes.data.hasCode && codeRes.data.code) {
-          setMyReferralCode({ code: codeRes.data.code, usageCount: codeRes.data.usageCount || 0 });
+          setMyReferralCode({ 
+            code: codeRes.data.code, 
+            usageCount: codeRes.data.usageCount || 0,
+            commissionRate: codeRes.data.commissionRate ?? 0.10
+          });
         }
         setReferralStats(statsRes.data);
       } catch (e) {
@@ -805,12 +809,12 @@ export default function BillingPage() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">Programa de Beneficios</h2>
-            <p className="text-accent-success text-sm">Gana el 20% de comision por cada referido</p>
+            <p className="text-accent-success text-sm">Gana el {myReferralCode ? Math.round(myReferralCode.commissionRate * 100) : 10}% de comision por cada referido</p>
           </div>
         </div>
         
         <p className="text-gray-400 text-sm mb-4">
-          Comparte tu codigo y gana el 20% de cada pago que realicen tus referidos. 
+          Comparte tu codigo y gana el {myReferralCode ? Math.round(myReferralCode.commissionRate * 100) : 10}% de cada pago que realicen tus referidos. 
           Ademas, tus referidos reciben 3 dias extra de demo y 7 dias extra de prueba gratis.
         </p>
 
@@ -887,10 +891,13 @@ export default function BillingPage() {
               </div>
             )}
 
-            <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3">
+            <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 space-y-2">
               <p className="text-accent-success text-sm">
-                <strong>Como funciona:</strong> Por cada referido que se suscriba, recibiras el 20% de su pago mensual 
-                (${(97 * 0.20).toFixed(2)} USD por suscriptor activo). Los pagos se procesan el dia 1 de cada mes.
+                <strong>Como funciona:</strong> Por cada referido que se suscriba, recibiras el {myReferralCode ? Math.round(myReferralCode.commissionRate * 100) : 10}% de su pago mensual 
+                (${(97 * (myReferralCode?.commissionRate ?? 0.10)).toFixed(2)} USD por suscriptor PRO activo). Los pagos se procesan el dia 1 de cada mes.
+              </p>
+              <p className="text-accent-success/80 text-xs">
+                <strong>Metodos de pago:</strong> USDT (via Lemon) o PayPal. Contactanos para configurar tu metodo preferido.
               </p>
             </div>
           </div>
