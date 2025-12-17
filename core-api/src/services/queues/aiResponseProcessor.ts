@@ -11,6 +11,7 @@ import { scheduleFollowUp } from '../followUpService.js';
 import { analyzeAndUpdateLeadStage } from '../leadStageService.js';
 import axios from 'axios';
 import eventLogger from '../eventLogger.js';
+import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -356,6 +357,9 @@ async function processWithAgentV1Worker(
   if (!isOpenAIConfigured()) {
     throw new Error('OpenAI API key not configured');
   }
+  
+  // Track tools executed for webhook dispatch
+  const toolsExecuted: string[] = [];
   
   // Get current lead stage for context
   const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
@@ -963,6 +967,9 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
           
           console.log(`[AI Worker V1] Custom tool ${actualToolName} executed successfully in ${toolDuration}ms`);
           
+          // Track tool for webhook
+          toolsExecuted.push(actualToolName);
+          
           // Log tool execution to database
           try {
             await logCustomToolExecution({
@@ -978,6 +985,16 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
           } catch (logErr) {
             console.error(`[AI Worker V1] Failed to log tool execution:`, logErr);
           }
+          
+          // Dispatch tool_call webhook
+          dispatchToolCall(
+            business.id,
+            contactPhone,
+            actualToolName,
+            requestBody,
+            response.data,
+            true
+          ).catch(err => console.error('[AI Worker V1] Failed to dispatch tool_call webhook:', err.message));
           
         } catch (err: any) {
           const toolDuration = Date.now() - toolStartTime;
@@ -999,6 +1016,16 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
           } catch (logErr) {
             console.error(`[AI Worker V1] Failed to log tool error:`, logErr);
           }
+          
+          // Dispatch tool_call webhook for failed execution
+          dispatchToolCall(
+            business.id,
+            contactPhone,
+            actualToolName,
+            requestBody,
+            { error: err.response?.data?.message || err.message },
+            false
+          ).catch(logErr => console.error('[AI Worker V1] Failed to dispatch tool_call webhook:', logErr));
           
           toolMessages.push({
             role: 'tool',
@@ -1031,6 +1058,17 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   
   if (instanceId && aiResponse) {
     await sendWhatsAppResponse(instanceId, phone, aiResponse, business);
+  }
+  
+  // Dispatch agent_message webhook
+  if (aiResponse) {
+    dispatchAgentMessage(
+      business.id,
+      contactPhone,
+      aiResponse,
+      undefined,
+      toolsExecuted.length > 0 ? toolsExecuted : undefined
+    ).catch(err => console.error('[AI Worker] Failed to dispatch agent_message webhook:', err.message));
   }
   
   return { response: aiResponse, tokensUsed: totalTokens };
