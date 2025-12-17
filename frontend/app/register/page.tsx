@@ -228,7 +228,7 @@ function RegisterContent() {
               </div>
 
               <a
-                href={`${API_URL}/api/auth/google${referralCode ? `?referralCode=${referralCode}` : ''}`}
+                href={`${API_URL}/auth/google${referralCode ? `?referralCode=${referralCode}` : ''}`}
                 className="btn btn-secondary w-full flex items-center justify-center gap-3"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
