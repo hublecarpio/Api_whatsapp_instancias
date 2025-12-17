@@ -2144,22 +2144,28 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
   try {
     const { businessId } = req.params;
     
-    const business = await prisma.business.findFirst({
-      where: { id: businessId, userId: req.userId },
-      include: {
-        promptMaster: { 
-          include: { 
-            tools: true,
-            files: { select: { id: true, name: true } }
-          } 
-        },
-        products: { select: { id: true } },
-        instances: { select: { status: true, provider: true } },
-        availability: { select: { dayOfWeek: true, isBlocked: true } },
-        policy: true,
-        user: { select: { paymentLinkEnabled: true } }
-      }
-    });
+    const [business, promptSections] = await Promise.all([
+      prisma.business.findFirst({
+        where: { id: businessId, userId: req.userId },
+        include: {
+          promptMaster: { 
+            include: { 
+              tools: true,
+              files: { select: { id: true, name: true } }
+            } 
+          },
+          products: { select: { id: true } },
+          instances: { select: { status: true, provider: true } },
+          availability: { select: { dayOfWeek: true, isBlocked: true } },
+          policy: true,
+          user: { select: { paymentLinkEnabled: true } }
+        }
+      }),
+      prisma.promptSection.findMany({
+        where: { businessId, enabled: true },
+        select: { id: true, title: true, type: true, isCore: true }
+      })
+    ]);
     
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
@@ -2248,6 +2254,32 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     
     if (business.policy) {
       contextItems.push({ name: 'Politicas del negocio', description: 'Envios, devoluciones, tono de marca' });
+    }
+    
+    const coreSections = promptSections.filter(s => s.isCore);
+    const ragSections = promptSections.filter(s => !s.isCore);
+    
+    if (coreSections.length > 0) {
+      contextItems.push({ 
+        name: 'Secciones Core', 
+        count: coreSections.length, 
+        description: 'Siempre incluidas en el prompt',
+        files: coreSections.map(s => s.title)
+      });
+    }
+    
+    if (ragSections.length > 0) {
+      activeTools.push({ 
+        name: 'buscar_seccion_rag', 
+        type: 'builtin', 
+        description: `Recupera secciones por contexto (${ragSections.length} disponibles)` 
+      });
+      contextItems.push({ 
+        name: 'Secciones RAG', 
+        count: ragSections.length, 
+        description: 'Recuperadas dinamicamente segun contexto del mensaje',
+        files: ragSections.map(s => s.title)
+      });
     }
     
     res.json({
