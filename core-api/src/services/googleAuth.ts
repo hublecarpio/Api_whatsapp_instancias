@@ -56,7 +56,7 @@ export function getGoogleAuthUrl(state: string): string {
       'https://www.googleapis.com/auth/userinfo.profile'
     ],
     state,
-    prompt: 'select_account'
+    prompt: 'consent select_account'
   });
 }
 
