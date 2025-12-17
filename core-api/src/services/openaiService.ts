@@ -448,7 +448,7 @@ export async function getTokenUsageStats(businessId: string, options?: {
 export const DEMO_TOKEN_LIMIT = 150000;
 export const TRIAL_TOKEN_LIMIT = 500000;
 export const BASIC_TOKEN_LIMIT = 1600000;
-export const PRO_TOKEN_LIMIT = 5000000;
+export const PRO_TOKEN_LIMIT = 7500000;
 export const DEMO_DAYS = 2;
 
 export function getTokenLimitByTier(tier: string, subscriptionStatus: string): number {

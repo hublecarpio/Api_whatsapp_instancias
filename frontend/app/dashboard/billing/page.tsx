@@ -279,10 +279,19 @@ export default function BillingPage() {
   };
 
   const handlePurchaseCredits = async (tier: number) => {
+    // Check if user has active subscription
+    if (!status?.hasSubscription || status?.subscriptionStatus !== 'active') {
+      setCreditsMessage({ 
+        type: 'error', 
+        text: 'Necesitas una suscripcion activa para comprar tokens adicionales. Activa tu prueba gratuita primero.' 
+      });
+      return;
+    }
+
     const tierInfo: Record<number, string> = {
-      5: '$5 USD por 1M tokens',
-      10: '$10 USD por 2M tokens',
-      15: '$15 USD por 3M tokens'
+      5: '$5 USD por 300K tokens',
+      10: '$10 USD por 600K tokens',
+      15: '$15 USD por 1M tokens'
     };
     
     if (!confirm(`Se cobraran ${tierInfo[tier]} adicionales a tu tarjeta guardada. Continuar?`)) {
@@ -603,7 +612,7 @@ export default function BillingPage() {
                   className="bg-dark-card hover:bg-neon-blue/20 border border-gray-600 hover:border-neon-blue/50 rounded-lg p-3 text-center transition-colors disabled:opacity-50"
                 >
                   <div className="text-white font-medium">$5</div>
-                  <div className="text-gray-400 text-xs">1M tokens</div>
+                  <div className="text-gray-400 text-xs">300K tokens</div>
                 </button>
                 <button
                   onClick={() => handlePurchaseCredits(10)}
@@ -611,7 +620,7 @@ export default function BillingPage() {
                   className="bg-dark-card hover:bg-neon-blue/20 border border-gray-600 hover:border-neon-blue/50 rounded-lg p-3 text-center transition-colors disabled:opacity-50"
                 >
                   <div className="text-white font-medium">$10</div>
-                  <div className="text-gray-400 text-xs">2M tokens</div>
+                  <div className="text-gray-400 text-xs">600K tokens</div>
                 </button>
                 <button
                   onClick={() => handlePurchaseCredits(15)}
@@ -619,7 +628,7 @@ export default function BillingPage() {
                   className="bg-dark-card hover:bg-neon-blue/20 border border-gray-600 hover:border-neon-blue/50 rounded-lg p-3 text-center transition-colors disabled:opacity-50"
                 >
                   <div className="text-white font-medium">$15</div>
-                  <div className="text-gray-400 text-xs">3M tokens</div>
+                  <div className="text-gray-400 text-xs">1M tokens</div>
                 </button>
               </div>
               {creditsLoading && (
@@ -762,7 +771,7 @@ export default function BillingPage() {
           <ul className="space-y-2 mb-6">
             {[
               'Todo lo del plan Basic',
-              'Agente IA con 5M tokens/mes',
+              'Agente IA con 7.5M tokens/mes',
               'Webhooks personalizados',
               'API Keys para integraciones',
               'Soporte prioritario'

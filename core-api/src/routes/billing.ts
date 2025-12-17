@@ -714,10 +714,14 @@ router.post('/portal', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
+// Token credits pricing - designed to be slightly more expensive than plan rates
+// so plans remain attractive, but affordable for occasional top-ups
+// BASIC: $29/1.6M = $18.12/M, PRO: $97/7.5M = $12.93/M
+// Credits: ~$16-17/M (premium for convenience)
 const TOKEN_CREDIT_OPTIONS: { [key: number]: { amount: number; tokens: number } } = {
-  5: { amount: 500, tokens: 1000000 },
-  10: { amount: 1000, tokens: 2000000 },
-  15: { amount: 1500, tokens: 3000000 }
+  5: { amount: 500, tokens: 300000 },    // $5 = 300K tokens (~$16.67/M)
+  10: { amount: 1000, tokens: 600000 },  // $10 = 600K tokens (~$16.67/M)
+  15: { amount: 1500, tokens: 1000000 }  // $15 = 1M tokens ($15/M - small volume discount)
 };
 
 const purchaseInProgress: Set<string> = new Set();
