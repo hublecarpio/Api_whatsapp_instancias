@@ -2163,7 +2163,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       }),
       prisma.promptSection.findMany({
         where: { businessId, enabled: true },
-        select: { id: true, title: true, type: true, isCore: true }
+        select: { id: true, title: true, type: true, isCore: true, embedding: true }
       })
     ]);
     
@@ -2258,6 +2258,11 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     
     const coreSections = promptSections.filter(s => s.isCore);
     const ragSections = promptSections.filter(s => !s.isCore);
+    const ragWithoutEmbeddings = ragSections.filter(s => !s.embedding);
+    
+    if (ragWithoutEmbeddings.length > 0) {
+      warnings.push(`${ragWithoutEmbeddings.length} secciones RAG sin embeddings - editalas para generar embeddings`);
+    }
     
     if (coreSections.length > 0) {
       contextItems.push({ 

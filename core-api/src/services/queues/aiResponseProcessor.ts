@@ -12,6 +12,7 @@ import { analyzeAndUpdateLeadStage } from '../leadStageService.js';
 import axios from 'axios';
 import eventLogger from '../eventLogger.js';
 import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
+import { retrieveRelevantSections, formatSectionsForPrompt } from '../ragService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -454,6 +455,19 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
     if (business.policy.brandVoice) {
       systemPrompt += `\n- Tono de marca: ${business.policy.brandVoice}`;
     }
+  }
+  
+  try {
+    const userQuery = messages.join(' ');
+    const ragResult = await retrieveRelevantSections(business.id, userQuery, 5);
+    
+    if (ragResult.coreSections.length > 0 || ragResult.ragSections.length > 0) {
+      const ragContent = formatSectionsForPrompt(ragResult);
+      systemPrompt += `\n\n${ragContent}`;
+      console.log(`[AI] RAG: ${ragResult.coreSections.length} core + ${ragResult.ragSections.length} dynamic sections (~${ragResult.totalTokensEstimate} tokens)`);
+    }
+  } catch (ragError) {
+    console.error('[AI] RAG retrieval failed, continuing without:', ragError);
   }
   
   const currencySymbol = business.currencySymbol || 'S/.';

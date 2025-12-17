@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi } from '@/lib/api';
-import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel, KnowledgePanel } from '@/components/AgentV2';
+import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel } from '@/components/AgentV2';
 import AgentHealthDashboard from '@/components/AgentHealthDashboard';
 
 interface ToolParameter {
@@ -177,7 +177,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'knowledge' | 'tools' | 'files' | 'config' | 'api'>('prompt');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'tools' | 'files' | 'config' | 'api'>('prompt');
   
   const [promptSections, setPromptSections] = useState<PromptSection[]>([]);
   const [loadingSections, setLoadingSections] = useState(false);
@@ -1236,14 +1236,6 @@ export default function PromptPage() {
             </button>
           )}
           <button
-            onClick={() => setActiveV2Tab('knowledge')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'knowledge' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Conocimiento
-          </button>
-          <button
             onClick={() => setActiveV2Tab('tools')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               activeV2Tab === 'tools' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
@@ -1590,10 +1582,6 @@ export default function PromptPage() {
           onDeleteRule={handleDeleteRule}
           onRefresh={handleRefreshRules}
         />
-      )}
-
-      {agentVersion === 'v2' && activeV2Tab === 'knowledge' && (
-        <KnowledgePanel businessId={currentBusiness.id} />
       )}
 
       {agentVersion === 'v1' && activeTab === 'prompt' && (
