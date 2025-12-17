@@ -44,6 +44,25 @@ async function checkAdvisorContactAccess(userId: string, businessId: string, pho
   return !!assignment;
 }
 
+function normalizeArgentinePhone(phone: string): string {
+  const clean = phone.replace(/\D/g, '');
+  
+  if (clean.startsWith('549') && clean.length >= 12) {
+    return clean;
+  }
+  
+  if (clean.startsWith('54') && !clean.startsWith('549') && clean.length >= 11) {
+    const areaAndNumber = clean.substring(2);
+    if (areaAndNumber.startsWith('11') || 
+        areaAndNumber.startsWith('2') || 
+        areaAndNumber.startsWith('3')) {
+      return '549' + areaAndNumber;
+    }
+  }
+  
+  return clean;
+}
+
 router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, webhook, phoneNumber } = req.body;
@@ -448,7 +467,8 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'No WhatsApp instance for this business' });
     }
     
-    const cleanTo = to.replace(/\D/g, '');
+    let cleanTo = to.replace(/\D/g, '');
+    cleanTo = normalizeArgentinePhone(cleanTo);
     let response;
     
     if (instance.provider === 'META_CLOUD') {

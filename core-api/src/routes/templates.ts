@@ -6,6 +6,25 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 const router = Router();
 const META_API_URL = 'https://graph.facebook.com/v18.0';
 
+function normalizeArgentinePhone(phone: string): string {
+  const clean = phone.replace(/\D/g, '');
+  
+  if (clean.startsWith('549') && clean.length >= 12) {
+    return clean;
+  }
+  
+  if (clean.startsWith('54') && !clean.startsWith('549') && clean.length >= 11) {
+    const areaAndNumber = clean.substring(2);
+    if (areaAndNumber.startsWith('11') || 
+        areaAndNumber.startsWith('2') || 
+        areaAndNumber.startsWith('3')) {
+      return '549' + areaAndNumber;
+    }
+  }
+  
+  return clean;
+}
+
 router.use(authMiddleware);
 
 async function getMetaCredentialForBusiness(userId: string, businessId: string) {
@@ -287,7 +306,8 @@ router.post('/:businessId/send-template', async (req: AuthRequest, res: Response
       return res.status(404).json({ error: 'Approved template not found' });
     }
     
-    const cleanTo = to.replace(/\D/g, '');
+    let cleanTo = to.replace(/\D/g, '');
+    cleanTo = normalizeArgentinePhone(cleanTo);
     
     const templateComponents: any[] = [];
     
