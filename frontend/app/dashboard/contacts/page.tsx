@@ -56,6 +56,10 @@ export default function ContactsPage() {
   const [exporting, setExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<{ created: number; updated: number } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importResult, setImportResult] = useState<{ created: number; updated: number; errors?: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<EditForm>({ name: '', email: '', notes: '', tags: [], extractedData: [] });
   const [saving, setSaving] = useState(false);
@@ -293,6 +297,77 @@ export default function ContactsPage() {
     }
   };
 
+  const downloadTemplate = () => {
+    const csvContent = 'nombre,telefono,correo\nJuan Perez,51987654321,juan@email.com\nMaria Garcia,51912345678,maria@email.com';
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'plantilla_contactos.csv');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const parseCSV = (text: string): { name?: string; phone?: string; email?: string }[] => {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return [];
+    
+    const headerLine = lines[0].toLowerCase();
+    const headers = headerLine.split(',').map(h => h.trim().replace(/"/g, ''));
+    
+    const nameIdx = headers.findIndex(h => h.includes('nombre') || h === 'name');
+    const phoneIdx = headers.findIndex(h => h.includes('telefono') || h.includes('phone') || h.includes('numero') || h.includes('celular'));
+    const emailIdx = headers.findIndex(h => h.includes('correo') || h.includes('email') || h.includes('mail'));
+    
+    if (phoneIdx === -1) return [];
+    
+    return lines.slice(1).map(line => {
+      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      return {
+        name: nameIdx >= 0 ? values[nameIdx] : undefined,
+        phone: values[phoneIdx],
+        email: emailIdx >= 0 ? values[emailIdx] : undefined
+      };
+    }).filter(c => c.phone);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentBusiness?.id) return;
+    
+    try {
+      setImporting(true);
+      setImportResult(null);
+      
+      const text = await file.text();
+      const contacts = parseCSV(text);
+      
+      if (contacts.length === 0) {
+        showError('No se encontraron contactos validos. Asegurate que el CSV tenga una columna de telefono.');
+        return;
+      }
+      
+      const response = await axios.post(
+        `${API_URL}/contacts/import/csv`,
+        { businessId: currentBusiness.id, contacts },
+        { headers: getAuthHeader() }
+      );
+      
+      setImportResult({ created: response.data.created, updated: response.data.updated, errors: response.data.errors });
+      setShowImportModal(false);
+      await loadContacts(page, searchQuery);
+      
+      setTimeout(() => setImportResult(null), 8000);
+    } catch (error: any) {
+      console.error('Error importing CSV:', error);
+      showError(error.response?.data?.error || error.message || 'Error al importar CSV');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   useEffect(() => {
     loadContacts(page, searchQuery);
   }, [currentBusiness?.id, page]);
@@ -329,13 +404,20 @@ export default function ContactsPage() {
             {pagination.total} contactos en total
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={refreshContacts}
             disabled={refreshing}
             className="btn btn-primary"
           >
             {refreshing ? 'Sincronizando...' : 'Actualizar Contactos'}
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            disabled={importing}
+            className="btn btn-secondary"
+          >
+            {importing ? 'Importando...' : 'Importar CSV'}
           </button>
           <button
             onClick={exportCSV}
@@ -346,6 +428,50 @@ export default function ContactsPage() {
           </button>
         </div>
       </div>
+
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-white">Importar Contactos</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+            <p className="text-gray-400 text-sm mb-4">
+              Sube un archivo CSV con las columnas: <strong>nombre</strong>, <strong>telefono</strong>, <strong>correo</strong>
+            </p>
+            <div className="space-y-3">
+              <button onClick={downloadTemplate} className="btn btn-secondary w-full text-sm">
+                Descargar plantilla de ejemplo
+              </button>
+              <label className="block">
+                <span className="btn btn-primary w-full cursor-pointer text-center">
+                  {importing ? 'Procesando...' : 'Seleccionar archivo CSV'}
+                </span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelect}
+                  disabled={importing}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importResult && (
+        <div className="mb-4 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-300 text-sm">
+          <div>Importado: {importResult.created} nuevos, {importResult.updated} actualizados</div>
+          {importResult.errors && importResult.errors.length > 0 && (
+            <div className="mt-2 text-yellow-300 text-xs">
+              Errores: {importResult.errors.slice(0, 3).join(', ')}
+              {importResult.errors.length > 3 && ` y ${importResult.errors.length - 3} mas...`}
+            </div>
+          )}
+        </div>
+      )}
 
       {refreshResult && (
         <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300 text-sm">

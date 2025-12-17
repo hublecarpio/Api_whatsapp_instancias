@@ -233,6 +233,88 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/import/csv', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { businessId, contacts: importContacts } = req.body;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    if (!importContacts || !Array.isArray(importContacts)) {
+      return res.status(400).json({ error: 'contacts array es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    let created = 0;
+    let updated = 0;
+    let errors: string[] = [];
+
+    for (const contact of importContacts) {
+      const phone = contact.phone?.toString().replace(/\D/g, '');
+      
+      if (!phone || phone.length < 8) {
+        errors.push(`Telefono invalido: ${contact.phone || 'vacio'}`);
+        continue;
+      }
+
+      try {
+        const now = new Date();
+        const existingContact = await prisma.contact.findUnique({
+          where: { businessId_phone: { businessId: business.id, phone } }
+        });
+
+        if (existingContact) {
+          await prisma.contact.update({
+            where: { id: existingContact.id },
+            data: {
+              name: contact.name || existingContact.name,
+              email: contact.email || existingContact.email,
+              updatedAt: now
+            }
+          });
+          updated++;
+        } else {
+          await prisma.contact.create({
+            data: {
+              businessId: business.id,
+              phone,
+              name: contact.name || null,
+              email: contact.email || null,
+              firstMessageAt: now,
+              lastMessageAt: now,
+              messageCount: 0,
+              source: 'csv_import'
+            }
+          });
+          created++;
+        }
+      } catch (err: any) {
+        errors.push(`Error con ${phone}: ${err.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      created,
+      updated,
+      total: created + updated,
+      errors: errors.length > 0 ? errors.slice(0, 10) : undefined
+    });
+  } catch (error: any) {
+    console.error('[CONTACTS] Error importing CSV:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // IMPORTANT: This route MUST be before any /:phone routes to avoid parameter matching issues
 router.post('/refresh', async (req: AuthRequest, res: Response) => {
   console.log('[CONTACTS REFRESH] Endpoint hit - request received');
