@@ -43,7 +43,10 @@ async function validateApiKey(req: ApiKeyRequest, res: Response, next: NextFunct
             isActive: true,
             status: { in: ['open', 'CONNECTED', 'connected'] }
           },
-          take: 1
+          take: 1,
+          include: {
+            metaCredential: true
+          }
         },
         user: {
           select: {
@@ -204,12 +207,14 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
       });
       
     } else if (instance.provider === 'META_CLOUD') {
-      const metaToken = instance.accessToken;
-      const phoneNumberId = instance.phoneNumberId;
+      const metaCred = instance.metaCredential;
       
-      if (!metaToken || !phoneNumberId) {
+      if (!metaCred || !metaCred.accessToken || !metaCred.phoneNumberId) {
         return res.status(400).json({ error: 'Instancia META no configurada correctamente' });
       }
+      
+      const metaToken = metaCred.accessToken;
+      const phoneNumberId = metaCred.phoneNumberId;
       
       let payload: any;
       
@@ -250,7 +255,7 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
       await prisma.messageLog.create({
         data: {
           businessId: business.id,
-          instanceId: instance.instanceId,
+          instanceId: instance.instanceBackendId || instance.id,
           sender: instance.phoneNumber || business.id,
           recipient: cleanTo,
           message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
