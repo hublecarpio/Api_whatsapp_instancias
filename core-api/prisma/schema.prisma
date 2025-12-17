@@ -16,6 +16,7 @@ model User {
   id                          String              @id @default(uuid())
   name                        String
   email                       String              @unique
+  phone                       String?
   passwordHash                String
   role                        UserRole            @default(ADMIN)
   parentUserId                String?
@@ -51,6 +52,24 @@ model User {
   contactAssignments          ContactAssignment[]
   ownedReferralCodes          ReferralCode[]      @relation("UserReferralCodes")
   referredByCode              ReferralCode?       @relation("ReferredByCode", fields: [referralCodeId], references: [id], onDelete: SetNull)
+  platformUserContacts        Contact[]           @relation("PlatformUserContacts")
+  delegatedAgentFor           AgentDelegation[]   @relation("DelegatedAgent")
+  delegatedAgentsOwned        AgentDelegation[]   @relation("DelegationOwner")
+}
+
+model AgentDelegation {
+  id            String    @id @default(uuid())
+  ownerId       String
+  agentUserId   String    @unique
+  isActive      Boolean   @default(true)
+  assignedAt    DateTime  @default(now())
+  deactivatedAt DateTime?
+
+  owner         User      @relation("DelegationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  agentUser     User      @relation("DelegatedAgent", fields: [agentUserId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([agentUserId])
 }
 
 model AdvisorInvitation {
@@ -97,16 +116,19 @@ model Contact {
   isArchived      Boolean   @default(false)
   botDisabled     Boolean   @default(false)
   remindersPaused Boolean   @default(false)
+  platformUserId  String?
   metadata        Json?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  platformUser    User?     @relation("PlatformUserContacts", fields: [platformUserId], references: [id], onDelete: SetNull)
 
   @@unique([businessId, phone])
   @@index([businessId, isArchived])
   @@index([businessId, lastMessageAt])
   @@index([businessId, tags])
+  @@index([platformUserId])
 }
 
 enum ReferralCodeType {

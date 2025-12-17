@@ -14,11 +14,14 @@ const RESEND_THROTTLE_MINUTES = 2;
 
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { name, businessName, email, password, referralCode } = req.body;
+    const { name, businessName, email, password, phone, referralCode } = req.body;
     
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
     }
+    
+    // Clean phone number if provided
+    const cleanPhone = phone ? phone.replace(/\D/g, '') : null;
     
     const finalBusinessName = businessName?.trim() || 'Mi Empresa';
     
@@ -88,7 +91,8 @@ router.post('/register', async (req: Request, res: Response) => {
       const user = await tx.user.create({
         data: { 
           name, 
-          email, 
+          email,
+          phone: cleanPhone,
           passwordHash,
           emailVerified: false,
           verificationToken: hashedToken,

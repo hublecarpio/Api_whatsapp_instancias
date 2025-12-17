@@ -14,6 +14,7 @@ function RegisterContent() {
   const [name, setName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
@@ -33,7 +34,7 @@ function RegisterContent() {
     setLoading(true);
 
     try {
-      const response = await authApi.register({ name, businessName, email, password, referralCode: referralCode || undefined });
+      const response = await authApi.register({ name, businessName, email, phone: phone || undefined, password, referralCode: referralCode || undefined });
       setAuth(response.data.user, response.data.token);
       setRegistered(true);
     } catch (err: any) {
@@ -144,6 +145,20 @@ function RegisterContent() {
                 placeholder="tu@email.com"
                 required
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Numero de WhatsApp <span className="text-gray-500">(opcional)</span>
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="input"
+                placeholder="+51 999 888 777"
+              />
+              <p className="text-xs text-gray-500 mt-1">Para contactarte sobre tu cuenta</p>
             </div>
 
             <div>

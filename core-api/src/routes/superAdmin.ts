@@ -1988,4 +1988,442 @@ router.get('/tool-logs/businesses', superAdminMiddleware, async (req: SuperAdmin
   }
 });
 
+// ==================== AGENT DELEGATION ====================
+
+// Get current delegated agent
+router.get('/delegated-agent', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const delegation = await prisma.agentDelegation.findFirst({
+      where: { isActive: true },
+      include: {
+        agentUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            createdAt: true,
+            businesses: {
+              select: {
+                id: true,
+                name: true,
+                instances: {
+                  select: {
+                    id: true,
+                    phoneNumber: true,
+                    status: true,
+                    provider: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    res.json({ delegation });
+  } catch (error: any) {
+    console.error('Get delegated agent error:', error);
+    res.status(500).json({ error: 'Failed to get delegated agent' });
+  }
+});
+
+// List users that can be assigned as agents
+router.get('/available-agents', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        emailVerified: true,
+        businesses: {
+          some: {
+            instances: {
+              some: { status: 'open' }
+            }
+          }
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        createdAt: true,
+        subscriptionStatus: true,
+        subscriptionTier: true,
+        delegatedAgentFor: {
+          where: { isActive: true }
+        },
+        businesses: {
+          select: {
+            id: true,
+            name: true,
+            instances: {
+              select: {
+                id: true,
+                phoneNumber: true,
+                status: true,
+                provider: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    const availableUsers = users.map(u => ({
+      ...u,
+      isCurrentAgent: u.delegatedAgentFor.length > 0
+    }));
+    
+    res.json({ users: availableUsers });
+  } catch (error: any) {
+    console.error('Get available agents error:', error);
+    res.status(500).json({ error: 'Failed to get available agents' });
+  }
+});
+
+// Assign a user as delegated agent
+router.post('/delegated-agent', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+    
+    // Check user exists and has WhatsApp instance
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        businesses: {
+          include: {
+            instances: {
+              where: { status: 'open' }
+            }
+          }
+        }
+      }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (user.businesses.length === 0) {
+      return res.status(400).json({ error: 'User must have at least one business' });
+    }
+    
+    const hasConnectedInstance = user.businesses.some(b => b.instances.length > 0);
+    if (!hasConnectedInstance) {
+      return res.status(400).json({ error: 'User must have a connected WhatsApp instance' });
+    }
+    
+    // Deactivate any existing delegation (single super admin system)
+    await prisma.agentDelegation.updateMany({
+      where: { isActive: true },
+      data: { isActive: false, deactivatedAt: new Date() }
+    });
+    
+    // Use a fixed owner ID for the super admin context
+    const SUPER_ADMIN_OWNER_ID = 'super-admin-system';
+    
+    // Create new delegation - upsert to handle the unique constraint
+    const delegation = await prisma.agentDelegation.upsert({
+      where: { agentUserId: userId },
+      create: {
+        ownerId: SUPER_ADMIN_OWNER_ID,
+        agentUserId: userId,
+        isActive: true
+      },
+      update: {
+        isActive: true,
+        deactivatedAt: null,
+        assignedAt: new Date()
+      },
+      include: {
+        agentUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true
+          }
+        }
+      }
+    });
+    
+    res.json({ 
+      success: true, 
+      delegation,
+      businessId: user.businesses[0].id,
+      message: `${user.name} has been assigned as the delegated agent`
+    });
+  } catch (error: any) {
+    console.error('Assign delegated agent error:', error);
+    res.status(500).json({ error: 'Failed to assign delegated agent' });
+  }
+});
+
+// Remove delegated agent
+router.delete('/delegated-agent', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const result = await prisma.agentDelegation.updateMany({
+      where: { isActive: true },
+      data: { isActive: false, deactivatedAt: new Date() }
+    });
+    
+    res.json({ 
+      success: true, 
+      deactivated: result.count,
+      message: 'Delegated agent has been removed'
+    });
+  } catch (error: any) {
+    console.error('Remove delegated agent error:', error);
+    res.status(500).json({ error: 'Failed to remove delegated agent' });
+  }
+});
+
+// Sync platform users as contacts in the agent's business
+router.post('/delegated-agent/sync-users', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    // Get active delegation
+    const delegation = await prisma.agentDelegation.findFirst({
+      where: { isActive: true },
+      include: {
+        agentUser: {
+          include: {
+            businesses: { take: 1 }
+          }
+        }
+      }
+    });
+    
+    if (!delegation) {
+      return res.status(400).json({ error: 'No delegated agent assigned' });
+    }
+    
+    const agentBusiness = delegation.agentUser.businesses[0];
+    if (!agentBusiness) {
+      return res.status(400).json({ error: 'Agent has no business' });
+    }
+    
+    // Get all platform users with phone numbers
+    const platformUsers = await prisma.user.findMany({
+      where: {
+        phone: { not: null },
+        id: { not: delegation.agentUserId } // Exclude the agent itself
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        createdAt: true,
+        subscriptionStatus: true,
+        subscriptionTier: true
+      }
+    });
+    
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    
+    for (const user of platformUsers) {
+      if (!user.phone) {
+        skipped++;
+        continue;
+      }
+      
+      const cleanPhone = user.phone.replace(/\D/g, '');
+      
+      // Check if contact already exists
+      const existingContact = await prisma.contact.findUnique({
+        where: {
+          businessId_phone: {
+            businessId: agentBusiness.id,
+            phone: cleanPhone
+          }
+        }
+      });
+      
+      if (existingContact) {
+        // Update with platformUserId if not set
+        if (!existingContact.platformUserId) {
+          await prisma.contact.update({
+            where: { id: existingContact.id },
+            data: { 
+              platformUserId: user.id,
+              metadata: {
+                ...(existingContact.metadata as any || {}),
+                isPlatformUser: true,
+                platformUserEmail: user.email,
+                subscriptionStatus: user.subscriptionStatus,
+                subscriptionTier: user.subscriptionTier
+              }
+            }
+          });
+          updated++;
+        } else {
+          skipped++;
+        }
+      } else {
+        // Create new contact
+        await prisma.contact.create({
+          data: {
+            businessId: agentBusiness.id,
+            phone: cleanPhone,
+            name: user.name,
+            email: user.email,
+            platformUserId: user.id,
+            source: 'platform_sync',
+            firstMessageAt: new Date(),
+            lastMessageAt: new Date(),
+            messageCount: 0,
+            tags: ['Usuario App'],
+            metadata: {
+              isPlatformUser: true,
+              platformUserEmail: user.email,
+              subscriptionStatus: user.subscriptionStatus,
+              subscriptionTier: user.subscriptionTier,
+              registeredAt: user.createdAt
+            }
+          }
+        });
+        created++;
+      }
+    }
+    
+    res.json({
+      success: true,
+      stats: {
+        total: platformUsers.length,
+        created,
+        updated,
+        skipped
+      },
+      message: `Synced ${created} new contacts, updated ${updated} existing`
+    });
+  } catch (error: any) {
+    console.error('Sync platform users error:', error);
+    res.status(500).json({ error: 'Failed to sync platform users' });
+  }
+});
+
+// Get platform user contacts in agent's business
+router.get('/delegated-agent/contacts', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { status, search } = req.query;
+    
+    const delegation = await prisma.agentDelegation.findFirst({
+      where: { isActive: true },
+      include: {
+        agentUser: {
+          include: { businesses: { take: 1 } }
+        }
+      }
+    });
+    
+    if (!delegation) {
+      return res.status(400).json({ error: 'No delegated agent assigned' });
+    }
+    
+    const agentBusiness = delegation.agentUser.businesses[0];
+    if (!agentBusiness) {
+      return res.status(400).json({ error: 'Agent has no business' });
+    }
+    
+    const whereClause: any = {
+      businessId: agentBusiness.id,
+      platformUserId: { not: null }
+    };
+    
+    if (search) {
+      whereClause.OR = [
+        { name: { contains: search as string, mode: 'insensitive' } },
+        { phone: { contains: search as string } },
+        { email: { contains: search as string, mode: 'insensitive' } }
+      ];
+    }
+    
+    const contacts = await prisma.contact.findMany({
+      where: whereClause,
+      include: {
+        platformUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            subscriptionStatus: true,
+            subscriptionTier: true,
+            createdAt: true,
+            emailVerified: true,
+            businesses: {
+              select: {
+                id: true,
+                name: true,
+                onboardingCompleted: true,
+                instances: {
+                  select: { status: true }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { lastMessageAt: 'desc' }
+    });
+    
+    // Enrich with usage status
+    const enrichedContacts = contacts.map(c => {
+      const platformUser = c.platformUser;
+      let usageStatus = 'unknown';
+      
+      if (platformUser) {
+        const hasConnectedWhatsApp = platformUser.businesses.some(b => 
+          b.instances.some(i => i.status === 'open')
+        );
+        const hasCompletedOnboarding = platformUser.businesses.some(b => b.onboardingCompleted);
+        
+        if (hasConnectedWhatsApp && hasCompletedOnboarding) {
+          usageStatus = 'active';
+        } else if (hasConnectedWhatsApp || hasCompletedOnboarding) {
+          usageStatus = 'partial';
+        } else if (platformUser.emailVerified) {
+          usageStatus = 'registered';
+        } else {
+          usageStatus = 'unverified';
+        }
+      }
+      
+      return {
+        ...c,
+        usageStatus
+      };
+    });
+    
+    // Filter by status if provided
+    let filteredContacts = enrichedContacts;
+    if (status && status !== 'all') {
+      filteredContacts = enrichedContacts.filter(c => c.usageStatus === status);
+    }
+    
+    res.json({
+      contacts: filteredContacts,
+      total: filteredContacts.length,
+      byStatus: {
+        active: enrichedContacts.filter(c => c.usageStatus === 'active').length,
+        partial: enrichedContacts.filter(c => c.usageStatus === 'partial').length,
+        registered: enrichedContacts.filter(c => c.usageStatus === 'registered').length,
+        unverified: enrichedContacts.filter(c => c.usageStatus === 'unverified').length
+      }
+    });
+  } catch (error: any) {
+    console.error('Get delegated agent contacts error:', error);
+    res.status(500).json({ error: 'Failed to get contacts' });
+  }
+});
+
 export default router;

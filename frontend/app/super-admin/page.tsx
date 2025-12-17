@@ -178,6 +178,7 @@ export default function SuperAdminPage() {
             { id: 'tools', label: 'Tools', icon: '🔨' },
             { id: 'agentv2', label: 'V2 Enterprise Pro', icon: '🤖' },
             { id: 'referrals', label: 'Referidos', icon: '🔗' },
+            { id: 'delegated', label: 'Agente', icon: '🎯' },
             { id: 'system', label: 'Sistema', icon: '⚙️' }
           ].map((tab) => (
             <button
@@ -210,6 +211,7 @@ export default function SuperAdminPage() {
         {activeTab === 'tools' && <ToolLogsTab token={token} />}
         {activeTab === 'agentv2' && <AgentV2Tab token={token} />}
         {activeTab === 'referrals' && <ReferralsTab token={token} />}
+        {activeTab === 'delegated' && <DelegatedAgentTab token={token} />}
         {activeTab === 'system' && <SystemTab token={token} />}
       </main>
     </div>
@@ -3098,6 +3100,380 @@ function ToolLogsTab({ token }: { token: string }) {
                     {typeof selectedLog.response === 'string' ? selectedLog.response : JSON.stringify(selectedLog.response, null, 2)}
                   </pre>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DelegatedAgentTab({ token }: { token: string }) {
+  const [loading, setLoading] = useState(true);
+  const [delegation, setDelegation] = useState<any>(null);
+  const [availableAgents, setAvailableAgents] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [contactStats, setContactStats] = useState<any>({});
+  const [syncing, setSyncing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
+  const fetchDelegation = async () => {
+    try {
+      const response = await fetch('/api/super-admin/delegated-agent', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setDelegation(data.delegation);
+    } catch (err) {
+      console.error('Error fetching delegation:', err);
+    }
+  };
+
+  const fetchAvailableAgents = async () => {
+    try {
+      const response = await fetch('/api/super-admin/available-agents', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setAvailableAgents(data.users || []);
+    } catch (err) {
+      console.error('Error fetching available agents:', err);
+    }
+  };
+
+  const fetchContacts = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (searchQuery) params.append('search', searchQuery);
+
+      const response = await fetch(`/api/super-admin/delegated-agent/contacts?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setContacts(data.contacts || []);
+      setContactStats(data.byStatus || {});
+    } catch (err) {
+      console.error('Error fetching contacts:', err);
+    }
+  };
+
+  const assignAgent = async (userId: string) => {
+    try {
+      const response = await fetch('/api/super-admin/delegated-agent', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId })
+      });
+      
+      if (response.ok) {
+        await fetchDelegation();
+        setShowAssignModal(false);
+      }
+    } catch (err) {
+      console.error('Error assigning agent:', err);
+    }
+  };
+
+  const removeAgent = async () => {
+    if (!confirm('Remover el agente delegado actual?')) return;
+    
+    try {
+      await fetch('/api/super-admin/delegated-agent', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setDelegation(null);
+      setContacts([]);
+    } catch (err) {
+      console.error('Error removing agent:', err);
+    }
+  };
+
+  const syncUsers = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch('/api/super-admin/delegated-agent/sync-users', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        alert(`Sincronizacion completa: ${data.stats.created} nuevos, ${data.stats.updated} actualizados`);
+        await fetchContacts();
+      } else {
+        alert(data.error || 'Error en sincronizacion');
+      }
+    } catch (err) {
+      console.error('Error syncing users:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchDelegation(), fetchAvailableAgents()]);
+      setLoading(false);
+    };
+    loadData();
+  }, [token]);
+
+  useEffect(() => {
+    if (delegation) {
+      fetchContacts();
+    }
+  }, [delegation, statusFilter, searchQuery]);
+
+  const statusColors: Record<string, string> = {
+    active: 'text-accent-success bg-accent-success/10',
+    partial: 'text-accent-warning bg-accent-warning/10',
+    registered: 'text-neon-blue bg-neon-blue/10',
+    unverified: 'text-gray-400 bg-gray-500/10'
+  };
+
+  const statusLabels: Record<string, string> = {
+    active: 'Activo',
+    partial: 'Parcial',
+    registered: 'Registrado',
+    unverified: 'Sin Verificar'
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-pulse text-gray-400">Cargando...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-white">Agente Delegado</h2>
+          <p className="text-gray-400 text-sm mt-1">
+            Asigna una cuenta de usuario para dar seguimiento a usuarios de la plataforma
+          </p>
+        </div>
+        {!delegation && (
+          <button
+            onClick={() => setShowAssignModal(true)}
+            className="btn btn-primary"
+          >
+            Asignar Agente
+          </button>
+        )}
+      </div>
+
+      {delegation ? (
+        <>
+          <div className="card">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-neon-blue/20 rounded-full flex items-center justify-center text-neon-blue text-xl font-bold">
+                  {delegation.agentUser?.name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{delegation.agentUser?.name}</h3>
+                  <p className="text-gray-400 text-sm">{delegation.agentUser?.email}</p>
+                  {delegation.agentUser?.phone && (
+                    <p className="text-gray-500 text-xs">{delegation.agentUser.phone}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={syncUsers}
+                  disabled={syncing}
+                  className="btn btn-ghost text-sm"
+                >
+                  {syncing ? 'Sincronizando...' : 'Sincronizar Usuarios'}
+                </button>
+                <button
+                  onClick={removeAgent}
+                  className="btn btn-ghost text-accent-error text-sm"
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+
+            {delegation.agentUser?.businesses?.[0] && (
+              <div className="mt-4 pt-4 border-t border-dark-border">
+                <p className="text-gray-500 text-xs mb-2">Negocio del Agente</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-white">{delegation.agentUser.businesses[0].name}</span>
+                  {delegation.agentUser.businesses[0].instances?.map((inst: any) => (
+                    <span 
+                      key={inst.id}
+                      className={`text-xs px-2 py-0.5 rounded ${
+                        inst.status === 'open' ? 'text-accent-success bg-accent-success/10' : 'text-gray-400 bg-gray-500/10'
+                      }`}
+                    >
+                      {inst.phoneNumber || 'WhatsApp'} ({inst.status})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-4 gap-4">
+            {Object.entries(statusLabels).map(([key, label]) => (
+              <div 
+                key={key}
+                className={`card cursor-pointer transition-all ${statusFilter === key ? 'ring-2 ring-neon-blue' : ''}`}
+                onClick={() => setStatusFilter(statusFilter === key ? 'all' : key)}
+              >
+                <p className="text-gray-500 text-xs">{label}</p>
+                <p className="text-2xl font-bold text-white">{contactStats[key] || 0}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Usuarios de la Plataforma</h3>
+              <input
+                type="text"
+                placeholder="Buscar por nombre, telefono o email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input text-sm w-64"
+              />
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-dark-border">
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Usuario</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Telefono</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Estado App</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Plan</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Mensajes</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Ultimo Contacto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-gray-500">
+                        {delegation ? 'Usa "Sincronizar Usuarios" para importar contactos' : 'No hay contactos'}
+                      </td>
+                    </tr>
+                  ) : (
+                    contacts.map((contact) => (
+                      <tr key={contact.id} className="border-b border-dark-border hover:bg-dark-hover">
+                        <td className="py-3 px-4">
+                          <div>
+                            <p className="text-white font-medium">{contact.name || 'Sin nombre'}</p>
+                            <p className="text-gray-500 text-xs">{contact.email}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-gray-300 font-mono text-sm">{contact.phone}</td>
+                        <td className="py-3 px-4">
+                          <span className={`text-xs px-2 py-1 rounded ${statusColors[contact.usageStatus] || ''}`}>
+                            {statusLabels[contact.usageStatus] || contact.usageStatus}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {contact.platformUser?.subscriptionTier && (
+                            <span className="text-xs text-neon-blue">
+                              {contact.platformUser.subscriptionTier}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-gray-400 text-sm">{contact.messageCount}</td>
+                        <td className="py-3 px-4 text-gray-400 text-sm">
+                          {contact.lastMessageAt 
+                            ? new Date(contact.lastMessageAt).toLocaleDateString('es-PE')
+                            : '-'
+                          }
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="card text-center py-12">
+          <div className="text-6xl mb-4">🎯</div>
+          <h3 className="text-xl font-semibold text-white mb-2">Sin Agente Asignado</h3>
+          <p className="text-gray-400 max-w-md mx-auto mb-6">
+            Asigna una cuenta de usuario con WhatsApp conectado para que puedas dar seguimiento 
+            a los usuarios de la plataforma directamente desde su chat.
+          </p>
+          <button
+            onClick={() => setShowAssignModal(true)}
+            className="btn btn-primary"
+          >
+            Seleccionar Agente
+          </button>
+        </div>
+      )}
+
+      {showAssignModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3">
+          <div className="card w-full max-w-xl max-h-[80vh] overflow-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-white">Seleccionar Agente Delegado</h3>
+              <button onClick={() => setShowAssignModal(false)} className="text-gray-400 hover:text-white text-xl px-2">
+                X
+              </button>
+            </div>
+            
+            <p className="text-gray-400 text-sm mb-4">
+              Solo se muestran usuarios con email verificado y WhatsApp conectado
+            </p>
+
+            <div className="space-y-2">
+              {availableAgents.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No hay usuarios disponibles</p>
+              ) : (
+                availableAgents.map((user) => (
+                  <div 
+                    key={user.id}
+                    className={`p-4 rounded-lg border ${
+                      user.isCurrentAgent 
+                        ? 'border-neon-blue bg-neon-blue/10' 
+                        : 'border-dark-border hover:bg-dark-hover cursor-pointer'
+                    }`}
+                    onClick={() => !user.isCurrentAgent && assignAgent(user.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-white font-medium">{user.name}</p>
+                        <p className="text-gray-400 text-sm">{user.email}</p>
+                        {user.phone && <p className="text-gray-500 text-xs">{user.phone}</p>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {user.isCurrentAgent && (
+                          <span className="text-xs text-neon-blue px-2 py-1 bg-neon-blue/10 rounded">
+                            Actual
+                          </span>
+                        )}
+                        {user.businesses?.[0]?.instances?.some((i: any) => i.status === 'open') && (
+                          <span className="text-xs text-accent-success px-2 py-1 bg-accent-success/10 rounded">
+                            WhatsApp Activo
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
