@@ -1,7 +1,1 @@
-{
-  "/super-admin/page": "app/super-admin/page.js",
-  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
-  "/dashboard/orders/page": "app/dashboard/orders/page.js",
-  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
-  "/dashboard/billing/page": "app/dashboard/billing/page.js"
-}
+{}
