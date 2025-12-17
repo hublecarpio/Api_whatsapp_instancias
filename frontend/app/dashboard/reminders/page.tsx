@@ -34,6 +34,8 @@ interface Reminder {
   type: string;
   status: string;
   attemptNumber: number;
+  retryCount: number;
+  lastError?: string;
   messageTemplate?: string;
   generatedMessage?: string;
 }
@@ -104,14 +106,15 @@ export default function RemindersPage() {
     });
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, retryCount?: number) => {
     const colors: Record<string, string> = {
       pending: 'bg-accent-warning/20 text-accent-warning',
       executed: 'bg-accent-success/20 text-accent-success',
       cancelled: 'bg-dark-hover text-gray-400',
       failed: 'bg-accent-error/20 text-accent-error',
       skipped: 'bg-neon-blue/20 text-neon-blue',
-      max_daily_reached: 'bg-accent-warning/20 text-accent-warning'
+      max_daily_reached: 'bg-accent-warning/20 text-accent-warning',
+      no_template: 'bg-neon-purple/20 text-neon-purple'
     };
     const labels: Record<string, string> = {
       pending: 'Pendiente',
@@ -119,11 +122,13 @@ export default function RemindersPage() {
       cancelled: 'Cancelado',
       failed: 'Fallido',
       skipped: 'Omitido',
-      max_daily_reached: 'Limite diario'
+      max_daily_reached: 'Limite diario',
+      no_template: 'Sin plantilla'
     };
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status] || 'bg-dark-hover text-gray-400'}`}>
         {labels[status] || status}
+        {retryCount && retryCount > 0 && status === 'pending' && ` (reintento ${retryCount})`}
       </span>
     );
   };
@@ -390,6 +395,7 @@ export default function RemindersPage() {
                       </p>
                       <p className="text-sm text-gray-400">
                         Programado: {formatDate(reminder.scheduledAt)} - Intento #{reminder.attemptNumber}
+                        {reminder.retryCount > 0 && ` (reintento ${reminder.retryCount}/3)`}
                       </p>
                       {reminder.messageTemplate && (
                         <p className="text-xs text-gray-500 mt-1 truncate">
@@ -429,10 +435,15 @@ export default function RemindersPage() {
             <div className="divide-y divide-dark-border">
               {reminders.filter(r => r.status !== 'pending').slice(0, 50).map(reminder => (
                 <div key={reminder.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-dark-hover transition-colors">
-                  <div className="min-w-0">
-                    <p className="font-medium text-white truncate">
-                      {reminder.contactName || reminder.contactPhone}
-                    </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-white truncate">
+                        {reminder.contactName || reminder.contactPhone}
+                      </p>
+                      {reminder.retryCount > 0 && reminder.status === 'executed' && (
+                        <span className="text-xs text-gray-500">(despues de {reminder.retryCount} reintentos)</span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-400">
                       {formatDate(reminder.executedAt || reminder.scheduledAt)}
                     </p>
@@ -441,9 +452,14 @@ export default function RemindersPage() {
                         {reminder.generatedMessage}
                       </p>
                     )}
+                    {reminder.status === 'failed' && reminder.lastError && (
+                      <p className="text-xs text-accent-error mt-1 truncate" title={reminder.lastError}>
+                        Error: {reminder.lastError.substring(0, 80)}...
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 justify-end">
-                    {getStatusBadge(reminder.status)}
+                    {getStatusBadge(reminder.status, reminder.retryCount)}
                   </div>
                 </div>
               ))}
