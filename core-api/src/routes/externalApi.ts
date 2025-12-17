@@ -39,7 +39,10 @@ async function validateApiKey(req: ApiKeyRequest, res: Response, next: NextFunct
       where: { apiKeyHash },
       include: {
         instances: {
-          where: { status: 'CONNECTED' },
+          where: { 
+            isActive: true,
+            status: { in: ['open', 'CONNECTED', 'connected'] }
+          },
           take: 1
         },
         user: {
