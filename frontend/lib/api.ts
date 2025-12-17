@@ -51,7 +51,9 @@ export const authApi = {
   getReferralStats: () => api.get('/auth/referral/stats'),
   getAdvisorInvitation: (token: string) => api.get(`/auth/advisor-invitation/${token}`),
   advisorSignup: (data: { token: string; name: string; password: string }) =>
-    api.post('/auth/advisor-signup', data)
+    api.post('/auth/advisor-signup', data),
+  sendPhoneVerification: () => api.post('/auth/phone/send-verification'),
+  verifyPhone: (code: string) => api.post('/auth/phone/verify', { code })
 };
 
 export const businessApi = {

@@ -349,6 +349,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         id: true, 
         name: true, 
         email: true,
+        phone: true,
+        phoneVerified: true,
         emailVerified: true,
         createdAt: true,
         subscriptionStatus: true,
@@ -1017,13 +1019,22 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response) =
     }
     
     const userUpdates: any = {};
+    let phoneChanged = false;
     
     if (name && name.trim()) {
       userUpdates.name = name.trim();
     }
     
-    if (phone) {
-      userUpdates.phone = phone;
+    if (phone !== undefined) {
+      const cleanPhone = phone ? phone.replace(/[^\d+]/g, '').replace(/\s+/g, '') : null;
+      const normalizedPhone = cleanPhone && !cleanPhone.startsWith('+') ? cleanPhone : cleanPhone;
+      if (normalizedPhone !== user.phone) {
+        userUpdates.phone = normalizedPhone;
+        userUpdates.phoneVerified = false;
+        userUpdates.phoneVerificationCode = null;
+        userUpdates.phoneVerificationExpiresAt = null;
+        phoneChanged = true;
+      }
     }
     
     if (Object.keys(userUpdates).length > 0) {
@@ -1040,10 +1051,188 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response) =
       });
     }
     
-    res.json({ success: true });
+    res.json({ success: true, phoneChanged });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+const PHONE_VERIFICATION_EXPIRY_MINUTES = 10;
+const PHONE_RESEND_THROTTLE_MINUTES = 1;
+
+async function sendPhoneVerificationCode(userId: string, phone: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const delegation = await prisma.agentDelegation.findFirst({
+      where: { isActive: true },
+      include: {
+        agentUser: {
+          include: {
+            businesses: {
+              include: {
+                instances: {
+                  where: { status: 'open' },
+                  include: { metaCredential: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    if (!delegation) {
+      return { success: false, error: 'No hay un agente delegado configurado para enviar verificaciones' };
+    }
+    
+    const agentBusiness = delegation.agentUser.businesses[0];
+    if (!agentBusiness) {
+      return { success: false, error: 'El agente delegado no tiene un negocio configurado' };
+    }
+    
+    const instance = agentBusiness.instances[0];
+    if (!instance) {
+      return { success: false, error: 'El agente delegado no tiene una instancia de WhatsApp conectada' };
+    }
+    
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + PHONE_VERIFICATION_EXPIRY_MINUTES * 60 * 1000);
+    
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        phoneVerificationCode: code,
+        phoneVerificationExpiresAt: expiresAt,
+        lastPhoneVerificationSentAt: new Date()
+      }
+    });
+    
+    const message = `Tu codigo de verificacion es: *${code}*\n\nEste codigo expira en ${PHONE_VERIFICATION_EXPIRY_MINUTES} minutos.\n\nSi no solicitaste este codigo, ignora este mensaje.`;
+    
+    const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+    
+    if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
+      const { MetaCloudService } = await import('../services/metaCloud.js');
+      const metaService = new MetaCloudService({
+        accessToken: instance.metaCredential.accessToken,
+        phoneNumberId: instance.metaCredential.phoneNumberId,
+        businessId: instance.metaCredential.businessId
+      });
+      await metaService.sendTextMessage(phone, message);
+    } else {
+      const axios = (await import('axios')).default;
+      await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendMessage`, {
+        phone,
+        message
+      });
+    }
+    
+    console.log(`[PhoneVerification] Code sent to ${phone} for user ${userId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[PhoneVerification] Error sending code:', error);
+    return { success: false, error: error.message || 'Error al enviar el codigo' };
+  }
+}
+
+router.post('/phone/send-verification', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    
+    if (!user.phone) {
+      return res.status(400).json({ error: 'Primero debes agregar un numero de telefono en tu perfil' });
+    }
+    
+    if (user.phoneVerified) {
+      return res.status(400).json({ error: 'Tu numero ya esta verificado' });
+    }
+    
+    if (user.lastPhoneVerificationSentAt) {
+      const timeSinceLastSend = Date.now() - user.lastPhoneVerificationSentAt.getTime();
+      const throttleMs = PHONE_RESEND_THROTTLE_MINUTES * 60 * 1000;
+      if (timeSinceLastSend < throttleMs) {
+        const waitSeconds = Math.ceil((throttleMs - timeSinceLastSend) / 1000);
+        return res.status(429).json({ 
+          error: `Espera ${waitSeconds} segundos antes de solicitar otro codigo`,
+          waitSeconds
+        });
+      }
+    }
+    
+    const result = await sendPhoneVerificationCode(req.userId!, user.phone);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Codigo de verificacion enviado',
+      expiresInMinutes: PHONE_VERIFICATION_EXPIRY_MINUTES
+    });
+  } catch (error) {
+    console.error('Send phone verification error:', error);
+    res.status(500).json({ error: 'Error al enviar el codigo de verificacion' });
+  }
+});
+
+router.post('/phone/verify', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { code } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'El codigo es requerido' });
+    }
+    
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    
+    if (!user.phone) {
+      return res.status(400).json({ error: 'No tienes un numero de telefono registrado' });
+    }
+    
+    if (user.phoneVerified) {
+      return res.status(400).json({ error: 'Tu numero ya esta verificado' });
+    }
+    
+    if (!user.phoneVerificationCode || !user.phoneVerificationExpiresAt) {
+      return res.status(400).json({ error: 'No hay un codigo de verificacion pendiente. Solicita uno nuevo.' });
+    }
+    
+    if (new Date() > user.phoneVerificationExpiresAt) {
+      return res.status(400).json({ error: 'El codigo ha expirado. Solicita uno nuevo.' });
+    }
+    
+    if (code !== user.phoneVerificationCode) {
+      return res.status(400).json({ error: 'Codigo incorrecto' });
+    }
+    
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: {
+        phoneVerified: true,
+        phoneVerificationCode: null,
+        phoneVerificationExpiresAt: null
+      }
+    });
+    
+    console.log(`[PhoneVerification] Phone verified for user ${req.userId}`);
+    
+    res.json({ success: true, message: 'Numero verificado correctamente' });
+  } catch (error) {
+    console.error('Verify phone error:', error);
+    res.status(500).json({ error: 'Error al verificar el codigo' });
   }
 });
 

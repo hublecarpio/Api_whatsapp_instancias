@@ -59,6 +59,12 @@ export default function BusinessPage() {
   const [userEmail, setUserEmail] = useState('');
   const [phoneCountryCode, setPhoneCountryCode] = useState('+51');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [showVerificationInput, setShowVerificationInput] = useState(false);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
+  const [verificationSuccess, setVerificationSuccess] = useState('');
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -77,18 +83,64 @@ export default function BusinessPage() {
     if (user) {
       setUserName(user.name || '');
       setUserEmail(user.email || '');
+      setPhoneVerified((user as any).phoneVerified || false);
       
-      if (user.phone) {
-        const matchedCode = COUNTRY_CODES.find(c => user.phone?.startsWith(c.code));
+      if ((user as any).phone) {
+        const userPhone = (user as any).phone;
+        const matchedCode = COUNTRY_CODES.find(c => userPhone?.startsWith(c.code.replace('+', '')));
         if (matchedCode) {
           setPhoneCountryCode(matchedCode.code);
-          setPhoneNumber(user.phone.substring(matchedCode.code.length).trim());
+          setPhoneNumber(userPhone.substring(matchedCode.code.replace('+', '').length).trim());
         } else {
-          setPhoneNumber(user.phone);
+          setPhoneNumber(userPhone);
         }
       }
     }
   }, [user]);
+
+  const handleSendVerificationCode = async () => {
+    setVerificationLoading(true);
+    setVerificationError('');
+    setVerificationSuccess('');
+    
+    try {
+      await authApi.sendPhoneVerification();
+      setShowVerificationInput(true);
+      setVerificationSuccess('Codigo enviado! Revisa tu WhatsApp');
+    } catch (err: any) {
+      setVerificationError(err.response?.data?.error || 'Error al enviar codigo');
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!verificationCode || verificationCode.length !== 6) {
+      setVerificationError('Ingresa el codigo de 6 digitos');
+      return;
+    }
+    
+    setVerificationLoading(true);
+    setVerificationError('');
+    
+    try {
+      await authApi.verifyPhone(verificationCode);
+      setPhoneVerified(true);
+      setShowVerificationInput(false);
+      setVerificationCode('');
+      setVerificationSuccess('Numero verificado correctamente!');
+      
+      const response = await authApi.getMe();
+      const token = localStorage.getItem('token');
+      if (token) {
+        setAuth(response.data, token);
+      }
+    } catch (err: any) {
+      setVerificationError(err.response?.data?.error || 'Codigo incorrecto');
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     setProfileLoading(true);
@@ -340,6 +392,9 @@ export default function BusinessPage() {
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Telefono de contacto
+              {phoneVerified && (
+                <span className="ml-2 text-xs text-accent-success">Verificado</span>
+              )}
             </label>
             <div className="flex gap-2">
               <select
@@ -359,12 +414,67 @@ export default function BusinessPage() {
                 onChange={(e) => {
                   const value = e.target.value.replace(/[^\d\s]/g, '');
                   setPhoneNumber(value);
+                  if (phoneVerified) {
+                    setPhoneVerified(false);
+                  }
                 }}
                 className="input flex-1"
                 placeholder="999 888 777"
               />
             </div>
             <p className="text-xs text-gray-500 mt-1">Para contactarte sobre tu cuenta</p>
+            
+            {phoneNumber && !phoneVerified && (
+              <div className="mt-3 p-3 bg-dark-surface/50 rounded-lg border border-gray-700">
+                {verificationError && (
+                  <p className="text-xs text-accent-error mb-2">{verificationError}</p>
+                )}
+                {verificationSuccess && (
+                  <p className="text-xs text-accent-success mb-2">{verificationSuccess}</p>
+                )}
+                
+                {!showVerificationInput ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">Tu numero no esta verificado</span>
+                    <button
+                      onClick={handleSendVerificationCode}
+                      disabled={verificationLoading}
+                      className="btn btn-xs btn-secondary"
+                    >
+                      {verificationLoading ? 'Enviando...' : 'Verificar ahora'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-300">Ingresa el codigo de 6 digitos enviado a tu WhatsApp:</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={verificationCode}
+                        onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        className="input w-32 text-center tracking-widest"
+                        placeholder="000000"
+                        maxLength={6}
+                      />
+                      <button
+                        onClick={handleVerifyCode}
+                        disabled={verificationLoading || verificationCode.length !== 6}
+                        className="btn btn-primary btn-sm"
+                      >
+                        {verificationLoading ? 'Verificando...' : 'Confirmar'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleSendVerificationCode}
+                      disabled={verificationLoading}
+                      className="text-xs text-gray-400 hover:text-white"
+                    >
+                      Reenviar codigo
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <button
