@@ -680,14 +680,14 @@ export default function BillingPage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6 mb-6">
         <div className="card border-2 border-gray-600/30">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Plan Basic</h3>
-            <span className="bg-gray-500/20 text-gray-400 px-3 py-1 rounded-full text-sm">Economico</span>
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h3 className="text-base md:text-lg font-semibold text-white">Plan Basic</h3>
+            <span className="bg-gray-500/20 text-gray-400 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm">Economico</span>
           </div>
-          <p className="text-3xl font-bold text-white mb-2">$29 <span className="text-lg text-gray-400 font-normal">USD/mes</span></p>
-          <p className="text-gray-400 text-sm mb-4">Para emprendedores y pequenos negocios</p>
+          <p className="text-2xl md:text-3xl font-bold text-white mb-1 md:mb-2">$29 <span className="text-sm md:text-lg text-gray-400 font-normal">USD/mes</span></p>
+          <p className="text-gray-400 text-xs md:text-sm mb-3 md:mb-4">Para emprendedores y pequenos negocios</p>
           <ul className="space-y-2 mb-6">
             {[
               'Conexion WhatsApp ilimitada',
@@ -725,12 +725,12 @@ export default function BillingPage() {
         </div>
 
         <div className="card border-2 border-neon-blue/30">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Plan Pro</h3>
-            <span className="bg-neon-blue/20 text-neon-blue px-3 py-1 rounded-full text-sm">Recomendado</span>
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h3 className="text-base md:text-lg font-semibold text-white">Plan Pro</h3>
+            <span className="bg-neon-blue/20 text-neon-blue px-2 md:px-3 py-1 rounded-full text-xs md:text-sm">Recomendado</span>
           </div>
-          <p className="text-3xl font-bold text-white mb-2">$97 <span className="text-lg text-gray-400 font-normal">USD/mes</span></p>
-          <p className="text-gray-400 text-sm mb-4">Para negocios en crecimiento</p>
+          <p className="text-2xl md:text-3xl font-bold text-white mb-1 md:mb-2">$97 <span className="text-sm md:text-lg text-gray-400 font-normal">USD/mes</span></p>
+          <p className="text-gray-400 text-xs md:text-sm mb-3 md:mb-4">Para negocios en crecimiento</p>
           <ul className="space-y-2 mb-6">
             {[
               'Todo lo del plan Basic',
@@ -760,12 +760,12 @@ export default function BillingPage() {
         </div>
 
         <div className="card border-2 border-purple-500/30 bg-gradient-to-br from-purple-900/20 to-dark-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Enterprise Pro</h3>
-            <span className="bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full text-sm">Avanzado</span>
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h3 className="text-base md:text-lg font-semibold text-white">Enterprise Pro</h3>
+            <span className="bg-purple-500/20 text-purple-400 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm">Avanzado</span>
           </div>
-          <p className="text-3xl font-bold text-white mb-2">$400 <span className="text-lg text-gray-400 font-normal">USD/mes</span></p>
-          <p className="text-gray-400 text-sm mb-4">Para empresas con alto volumen</p>
+          <p className="text-2xl md:text-3xl font-bold text-white mb-1 md:mb-2">$400 <span className="text-sm md:text-lg text-gray-400 font-normal">USD/mes</span></p>
+          <p className="text-gray-400 text-xs md:text-sm mb-3 md:mb-4">Para empresas con alto volumen</p>
           <ul className="space-y-2 mb-6">
             {[
               'Todo lo del Plan Pro',
@@ -871,21 +871,21 @@ export default function BillingPage() {
             </div>
 
             {referralStats && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-dark-hover rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-white">{referralStats.totalReferrals || 0}</div>
+              <div className="grid grid-cols-2 gap-2 md:gap-3">
+                <div className="bg-dark-hover rounded-lg p-2 md:p-3 text-center">
+                  <div className="text-xl md:text-2xl font-bold text-white">{referralStats.totalReferrals || 0}</div>
                   <div className="text-gray-400 text-xs">Referidos</div>
                 </div>
-                <div className="bg-dark-hover rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-accent-success">{referralStats.activeSubscribers || 0}</div>
+                <div className="bg-dark-hover rounded-lg p-2 md:p-3 text-center">
+                  <div className="text-xl md:text-2xl font-bold text-accent-success">{referralStats.activeSubscribers || 0}</div>
                   <div className="text-gray-400 text-xs">Activos</div>
                 </div>
-                <div className="bg-dark-hover rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-accent-warning">${(referralStats.pendingEarnings || 0).toFixed(2)}</div>
+                <div className="bg-dark-hover rounded-lg p-2 md:p-3 text-center">
+                  <div className="text-xl md:text-2xl font-bold text-accent-warning">${(referralStats.pendingEarnings || 0).toFixed(2)}</div>
                   <div className="text-gray-400 text-xs">Pendiente</div>
                 </div>
-                <div className="bg-dark-hover rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-neon-blue">${(referralStats.totalEarnings || 0).toFixed(2)}</div>
+                <div className="bg-dark-hover rounded-lg p-2 md:p-3 text-center">
+                  <div className="text-xl md:text-2xl font-bold text-neon-blue">${(referralStats.totalEarnings || 0).toFixed(2)}</div>
                   <div className="text-gray-400 text-xs">Total ganado</div>
                 </div>
               </div>
