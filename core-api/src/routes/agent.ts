@@ -846,7 +846,7 @@ async function processWithAgentV2(
       console.log(`[Agent V2] Response sent to ${contactPhone}:`, aiResponse.substring(0, 100));
       
       // Schedule follow-up after sending response
-      await scheduleFollowUp(business.id, contactPhone);
+      await scheduleFollowUp(business.id, contactPhone, 'ai');
     } catch (sendError: any) {
       console.error('Failed to send WhatsApp message (V2):', sendError.response?.data || sendError.message);
     }
@@ -1921,7 +1921,7 @@ async function processWithAgent(
       });
       
       // Schedule follow-up after sending response
-      await scheduleFollowUp(businessId, contactPhone);
+      await scheduleFollowUp(businessId, contactPhone, 'ai');
     } catch (sendError: any) {
       console.error('Failed to send WhatsApp message:', sendError.response?.data || sendError.message);
     }
