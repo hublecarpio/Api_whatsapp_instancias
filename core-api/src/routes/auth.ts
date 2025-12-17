@@ -78,6 +78,11 @@ router.post('/register', async (req: Request, res: Response) => {
       const bonusDemoDays = standardCode?.bonusDemoDays || 0;
       const bonusTrialDays = standardCode?.bonusTrialDays || 0;
       
+      // Trial sin tarjeta: 2 días base + bonusDemoDays del código de referido
+      const baseDemoDays = 2;
+      const totalDemoDays = baseDemoDays + bonusDemoDays;
+      const trialEndAt = enterpriseCode ? null : new Date(Date.now() + totalDemoDays * 24 * 60 * 60 * 1000);
+      
       const user = await tx.user.create({
         data: { 
           name, 
@@ -93,6 +98,8 @@ router.post('/register', async (req: Request, res: Response) => {
           bonusTrialDays,
           isPro,
           subscriptionStatus,
+          subscriptionTier: 'BASIC', // Default tier for trial users
+          trialEndAt, // 2 días + bonus para trial sin tarjeta
           demoStartedAt: enterpriseCode ? null : new Date(),
           demoPhase: enterpriseCode ? 'ACTIVE' : 'DEMO'
         }

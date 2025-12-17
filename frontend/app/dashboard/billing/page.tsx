@@ -6,12 +6,15 @@ import { useAuthStore } from '@/store/auth';
 import HubleFooter from '@/components/HubleFooter';
 
 interface SubscriptionStatus {
-  subscriptionStatus: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled';
+  subscriptionStatus: 'pending' | 'trial' | 'active' | 'past_due' | 'canceled' | 'expired';
   trialEndAt: string | null;
+  daysRemaining: number | null;
+  isTrialExpired: boolean;
   nextPayment: string | null;
   hasSubscription: boolean;
   proBonusExpiresAt?: string | null;
   hasActiveBonus?: boolean;
+  subscriptionTier?: 'BASIC' | 'PRO' | 'ENTERPRISE';
 }
 
 interface TokenUsage {
@@ -93,7 +96,7 @@ export default function BillingPage() {
     }
   };
 
-  const handleSubscribe = async (plan: 'BASIC' | 'PRO' = 'PRO') => {
+  const handleSubscribe = async (plan: 'BASIC' | 'PRO' = 'BASIC') => {
     setActionLoading(true);
     try {
       const res = await billingApi.createCheckoutSession(plan);
@@ -298,10 +301,11 @@ export default function BillingPage() {
 
     const badges: Record<string, { color: string; text: string }> = {
       pending: { color: 'bg-gray-500', text: 'Sin suscripcion' },
-      trial: { color: 'bg-neon-blue', text: 'Periodo de prueba' },
+      trial: { color: 'bg-neon-blue', text: status.daysRemaining !== null ? `Prueba (${status.daysRemaining} dias restantes)` : 'Periodo de prueba' },
       active: { color: 'bg-accent-success', text: 'Activa' },
       past_due: { color: 'bg-accent-warning', text: 'Pago pendiente' },
-      canceled: { color: 'bg-accent-error', text: 'Cancelada' }
+      canceled: { color: 'bg-accent-error', text: 'Cancelada' },
+      expired: { color: 'bg-accent-error', text: 'Prueba expirada' }
     };
 
     const badge = badges[status.subscriptionStatus] || badges.pending;
@@ -604,6 +608,24 @@ export default function BillingPage() {
           </div>
         )}
 
+        {status?.subscriptionStatus === 'trial' && status.daysRemaining !== null && status.daysRemaining <= 1 && !status.hasSubscription && (
+          <div className="bg-accent-warning/10 border border-accent-warning/30 rounded-lg p-4 mb-4">
+            <p className="text-accent-warning font-medium">Tu prueba gratuita esta por expirar</p>
+            <p className="text-accent-warning/70 text-sm mt-1">
+              Te quedan {status.daysRemaining} {status.daysRemaining === 1 ? 'dia' : 'dias'}. Agrega tu tarjeta ahora para continuar usando el servicio sin interrupciones.
+            </p>
+          </div>
+        )}
+
+        {status?.subscriptionStatus === 'expired' && (
+          <div className="bg-accent-error/10 border border-accent-error/30 rounded-lg p-4 mb-4">
+            <p className="text-accent-error font-medium">Tu prueba gratuita ha expirado</p>
+            <p className="text-accent-error/70 text-sm mt-1">
+              Tu periodo de prueba de 2 dias ha terminado. Elige un plan para continuar usando el servicio.
+            </p>
+          </div>
+        )}
+
         {status?.subscriptionStatus === 'past_due' && (
           <div className="bg-accent-warning/10 border border-accent-warning/30 rounded-lg p-4 mb-4">
             <p className="text-accent-warning font-medium">Pago fallido</p>
@@ -686,12 +708,12 @@ export default function BillingPage() {
               Webhooks y API Keys (solo Pro)
             </li>
           </ul>
-          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled') && (
+          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || (status?.subscriptionStatus === 'trial' && !status?.hasSubscription)) && (
             <button onClick={() => handleSubscribe('BASIC')} disabled={actionLoading} className="btn btn-secondary w-full">
-              {actionLoading ? 'Procesando...' : 'Comenzar con Basic'}
+              {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar con tarjeta (5 dias gratis)' : 'Comenzar con Basic'}
             </button>
           )}
-          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && tokenUsage?.subscriptionTier === 'BASIC' && (
+          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && status?.hasSubscription && tokenUsage?.subscriptionTier === 'BASIC' && (
             <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
               <span className="text-accent-success text-sm font-medium">Plan activo</span>
             </div>
@@ -721,12 +743,12 @@ export default function BillingPage() {
               </li>
             ))}
           </ul>
-          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled') && (
+          {(status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || (status?.subscriptionStatus === 'trial' && !status?.hasSubscription)) && (
             <button onClick={() => handleSubscribe('PRO')} disabled={actionLoading} className="btn btn-primary w-full">
-              {actionLoading ? 'Procesando...' : 'Comenzar prueba gratis'}
+              {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar Pro (5 dias gratis)' : 'Comenzar con Pro'}
             </button>
           )}
-          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && tokenUsage?.subscriptionTier === 'PRO' && (
+          {(status?.subscriptionStatus === 'trial' || status?.subscriptionStatus === 'active') && status?.hasSubscription && tokenUsage?.subscriptionTier === 'PRO' && (
             <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
               <span className="text-accent-success text-sm font-medium">Plan activo</span>
             </div>

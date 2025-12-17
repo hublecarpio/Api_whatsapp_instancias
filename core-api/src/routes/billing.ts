@@ -36,7 +36,7 @@ const PLAN_CONFIG: Record<string, { priceId: string; tier: 'BASIC' | 'PRO'; name
 
 router.post('/create-checkout-session', authMiddleware, async (req: any, res) => {
   try {
-    const { plan = 'PRO' } = req.body;
+    const { plan = 'BASIC' } = req.body;
     const planConfig = PLAN_CONFIG[plan.toUpperCase()];
     
     if (!planConfig) {
@@ -320,13 +320,34 @@ router.get('/subscription-status', authMiddleware, async (req: any, res) => {
 
     const hasActiveBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
     
+    // Check if trial without card has expired
+    const now = new Date();
+    const isTrialExpired = user.trialEndAt && user.trialEndAt < now && !user.stripeSubscriptionId;
+    const daysRemaining = user.trialEndAt 
+      ? Math.max(0, Math.ceil((user.trialEndAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      : null;
+    
+    // Determine effective status - if trial expired and no subscription, they're suspended
+    let effectiveStatus = user.subscriptionStatus.toLowerCase();
+    if (isTrialExpired && effectiveStatus === 'trial') {
+      effectiveStatus = 'expired';
+      // Update user status in DB
+      await prisma.user.update({
+        where: { id: userId },
+        data: { subscriptionStatus: 'PENDING' }
+      });
+    }
+    
     res.json({
-      subscriptionStatus: user.subscriptionStatus.toLowerCase(),
+      subscriptionStatus: effectiveStatus,
       trialEndAt: user.trialEndAt,
+      daysRemaining,
+      isTrialExpired,
       nextPayment,
       hasSubscription: !!user.stripeSubscriptionId,
       proBonusExpiresAt: user.proBonusExpiresAt,
-      hasActiveBonus
+      hasActiveBonus,
+      subscriptionTier: user.subscriptionTier
     });
   } catch (error: any) {
     console.error('Error fetching subscription status:', error);
