@@ -7,6 +7,7 @@ import TopBar from '@/components/TopBar';
 import MobileDrawer from '@/components/MobileDrawer';
 import PaymentGate from '@/components/PaymentGate';
 import EmailVerificationBanner from '@/components/EmailVerificationBanner';
+import Starter from '@/components/Starter';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
 import { businessApi, authApi, billingApi } from '@/lib/api';
@@ -40,7 +41,9 @@ export default function DashboardLayout({
   const [emailVerified, setEmailVerified] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState('pending');
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
+  const [showStarter, setShowStarter] = useState(false);
   const initRef = useRef(false);
+  const currentBusiness = useBusinessStore(state => state.currentBusiness);
 
   const initializeDashboard = useCallback(async () => {
     if (initRef.current) return;
@@ -175,6 +178,13 @@ export default function DashboardLayout({
     setMobileDrawerOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (isReady && currentBusiness && emailVerified) {
+      const needsOnboarding = currentBusiness.onboardingCompleted !== true;
+      setShowStarter(needsOnboarding);
+    }
+  }, [isReady, currentBusiness, emailVerified]);
+
   if (!isReady) {
     return (
       <div className="min-h-screen flex bg-dark-bg">
@@ -213,15 +223,24 @@ export default function DashboardLayout({
   const showEmailBanner = user && user.emailVerified === false;
 
   return (
-    <div className="flex min-h-screen bg-dark-bg">
-      <div className="hidden sm:flex flex-shrink-0">
-        <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} transition-all duration-300`}>
-          <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+    <>
+      {showStarter && currentBusiness && (
+        <Starter
+          businessId={currentBusiness.id}
+          businessName={currentBusiness.name}
+          onComplete={() => setShowStarter(false)}
+        />
+      )}
+      
+      <div className="flex min-h-screen bg-dark-bg">
+        <div className="hidden sm:flex flex-shrink-0">
+          <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} transition-all duration-300`}>
+            <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+          </div>
         </div>
-      </div>
 
-      <TopBar onMenuClick={() => setMobileDrawerOpen(true)} />
-      <MobileDrawer isOpen={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} />
+        <TopBar onMenuClick={() => setMobileDrawerOpen(true)} />
+        <MobileDrawer isOpen={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} />
 
       <main className={`flex-1 min-w-0 overflow-auto ${isChatPage ? 'p-0 sm:p-4' : 'p-4 sm:p-8'} pt-[calc(56px+1rem)] sm:pt-8`}>
         {showEmailVerificationRequired ? (
@@ -257,6 +276,7 @@ export default function DashboardLayout({
           </>
         )}
       </main>
-    </div>
+      </div>
+    </>
   );
 }

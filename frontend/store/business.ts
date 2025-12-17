@@ -13,6 +13,7 @@ interface Business {
   currencyCode?: string;
   currencySymbol?: string;
   businessObjective?: 'SALES' | 'APPOINTMENTS';
+  onboardingCompleted?: boolean;
   instances?: any[];
   policy?: any;
   promptMaster?: any;
