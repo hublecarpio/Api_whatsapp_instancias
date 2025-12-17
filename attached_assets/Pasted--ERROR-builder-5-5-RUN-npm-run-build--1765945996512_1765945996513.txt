@@ -1,0 +1,45 @@
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             42.0s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+1.312                                                                                                                                                                       
+1.312 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+1.312 > next build                                                                                                                                                          
+1.312                                                                                                                                                                       
+2.588 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2.590 This information is used to shape Next.js' roadmap and prioritize features.
+2.590 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2.590 https://nextjs.org/telemetry
+2.590 
+2.716   ▲ Next.js 14.2.16
+2.716 
+2.862    Creating an optimized production build ...
+29.83  ✓ Compiled successfully
+29.83    Linting and checking validity of types ...
+41.75 Failed to compile.
+41.75 
+41.75 ./app/register/page.tsx:37:76
+41.75 Type error: Object literal may only specify known properties, and 'phone' does not exist in type '{ name: string; businessName: string; email: string; password: string; referralCode?: string | undefined; }'.
+41.75 
+41.75   35 |
+41.75   36 |     try {
+41.75 > 37 |       const response = await authApi.register({ name, businessName, email, phone: phone || undefined, password, referralCode: referralCode || undefined });
+41.75      |                                                                            ^
+41.75   38 |       setAuth(response.data.user, response.data.token);
+41.75   39 |       setRegistered(true);
+41.75   40 |     } catch (err: any) {
+41.86 npm notice
+41.86 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+41.86 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+41.86 npm notice To update run: npm install -g npm@11.7.0
+41.86 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+[+] Building 8.2s (7/24)                                                                                                       
