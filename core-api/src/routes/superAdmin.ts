@@ -2038,7 +2038,7 @@ router.get('/available-agents', superAdminMiddleware, async (req: SuperAdminRequ
         businesses: {
           some: {
             instances: {
-              some: { status: 'open' }
+              some: { status: { in: ['open', 'connected'] } }
             }
           }
         }
@@ -2093,14 +2093,14 @@ router.post('/delegated-agent', superAdminMiddleware, async (req: SuperAdminRequ
       return res.status(400).json({ error: 'User ID is required' });
     }
     
-    // Check user exists and has WhatsApp instance
+    // Check user exists and has WhatsApp instance (Baileys='open', Cloud='connected')
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
         businesses: {
           include: {
             instances: {
-              where: { status: 'open' }
+              where: { status: { in: ['open', 'connected'] } }
             }
           }
         }
