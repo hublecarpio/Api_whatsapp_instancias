@@ -3,6 +3,40 @@ import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import eventLogger from '../services/eventLogger.js';
 
+async function checkProFeatureAccess(userId: string): Promise<{ allowed: boolean; tier: string; message?: string }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { subscriptionTier: true, subscriptionStatus: true }
+  });
+  
+  if (!user) {
+    return { allowed: false, tier: 'UNKNOWN', message: 'Usuario no encontrado' };
+  }
+  
+  const tier = user.subscriptionTier || 'BASIC';
+  const status = user.subscriptionStatus || 'NONE';
+  const isProOrHigher = tier === 'PRO' || tier === 'ENTERPRISE';
+  const isActiveSubscription = ['ACTIVE', 'TRIAL'].includes(status);
+  
+  if (!isProOrHigher) {
+    return { 
+      allowed: false, 
+      tier, 
+      message: 'Las herramientas personalizadas solo estan disponibles en el plan PRO ($97/mes). Tu plan actual es BASIC ($29/mes).' 
+    };
+  }
+  
+  if (!isActiveSubscription) {
+    return {
+      allowed: false,
+      tier,
+      message: 'Tu suscripcion PRO no esta activa. Reactiva tu suscripcion para usar esta funcion.'
+    };
+  }
+  
+  return { allowed: true, tier };
+}
+
 const router = Router();
 
 router.post('/internal/log', async (req: Request, res: Response) => {
@@ -114,6 +148,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'business_id, name, description, and url are required' });
     }
     
+    const proAccess = await checkProFeatureAccess(req.userId!);
+    if (!proAccess.allowed) {
+      return res.status(403).json({ error: proAccess.message, tier: proAccess.tier, requiresPro: true });
+    }
+    
     const business = await checkBusinessAccess(req.userId!, business_id);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
@@ -157,6 +196,11 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { name, description, url, method, headers, bodyTemplate, parameters, dynamicVariables, enabled } = req.body;
     
+    const proAccess = await checkProFeatureAccess(req.userId!);
+    if (!proAccess.allowed) {
+      return res.status(403).json({ error: proAccess.message, tier: proAccess.tier, requiresPro: true });
+    }
+    
     const existing = await prisma.agentTool.findUnique({
       where: { id: req.params.id },
       include: { prompt: { include: { business: { select: { userId: true } } } } }
@@ -190,6 +234,11 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
+    const proAccess = await checkProFeatureAccess(req.userId!);
+    if (!proAccess.allowed) {
+      return res.status(403).json({ error: proAccess.message, tier: proAccess.tier, requiresPro: true });
+    }
+    
     const existing = await prisma.agentTool.findUnique({
       where: { id: req.params.id },
       include: { prompt: { include: { business: { select: { userId: true } } } } }
