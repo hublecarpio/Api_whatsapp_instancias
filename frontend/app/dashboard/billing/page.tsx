@@ -313,7 +313,11 @@ export default function BillingPage() {
     }
   };
 
-  const isEnterprise = status?.hasActiveBonus || (user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date());
+  const isEnterprise = status?.hasActiveBonus || 
+    (user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) ||
+    user?.isPro === true ||
+    status?.subscriptionTier === 'ENTERPRISE' ||
+    tokenUsage?.subscriptionTier === 'ENTERPRISE';
   
   // Enterprise takes priority over everything - hide demo/trial when Enterprise is active
   const isDemo = !isEnterprise && ((user as any)?.demoPhase === 'DEMO' || (user as any)?.planType === 'demo');
@@ -747,14 +751,14 @@ export default function BillingPage() {
               Webhooks y API Keys (solo Pro)
             </li>
           </ul>
-          {/* Show subscribe button only if no active subscription */}
-          {!status?.hasSubscription && (status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || status?.subscriptionStatus === 'trial') && (
+          {/* Show subscribe button only if no active subscription and not Enterprise */}
+          {!isEnterprise && !status?.hasSubscription && (status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || status?.subscriptionStatus === 'trial') && (
             <button onClick={() => handleSubscribe('BASIC')} disabled={actionLoading} className="btn btn-secondary w-full">
               {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar con tarjeta (5 dias gratis)' : 'Comenzar con Basic'}
             </button>
           )}
-          {/* Show active badge if user has BASIC subscription */}
-          {status?.hasSubscription && (status?.subscriptionTier === 'BASIC' || tokenUsage?.subscriptionTier === 'BASIC') && (
+          {/* Show active badge if user has BASIC subscription and not Enterprise */}
+          {!isEnterprise && status?.hasSubscription && (status?.subscriptionTier === 'BASIC' || tokenUsage?.subscriptionTier === 'BASIC') && (
             <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
               <span className="text-accent-success text-sm font-medium">Plan activo</span>
             </div>
@@ -785,20 +789,20 @@ export default function BillingPage() {
               </li>
             ))}
           </ul>
-          {/* Show subscribe/upgrade button only if no subscription OR has BASIC and wants to upgrade */}
-          {!status?.hasSubscription && (status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || status?.subscriptionStatus === 'trial') && (
+          {/* Show subscribe/upgrade button only if no subscription, not Enterprise */}
+          {!isEnterprise && !status?.hasSubscription && (status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || status?.subscriptionStatus === 'trial') && (
             <button onClick={() => handleSubscribe('PRO')} disabled={actionLoading} className="btn btn-primary w-full">
               {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar Pro (5 dias gratis)' : 'Comenzar con Pro'}
             </button>
           )}
-          {/* Show upgrade button for BASIC users */}
-          {status?.hasSubscription && (status?.subscriptionTier === 'BASIC' || tokenUsage?.subscriptionTier === 'BASIC') && (
+          {/* Show upgrade button for BASIC users only if not Enterprise */}
+          {!isEnterprise && status?.hasSubscription && (status?.subscriptionTier === 'BASIC' || tokenUsage?.subscriptionTier === 'BASIC') && (
             <button onClick={() => handleUpgrade('PRO')} disabled={actionLoading} className="btn btn-primary w-full">
               {actionLoading ? 'Procesando...' : 'Upgrade a Pro'}
             </button>
           )}
-          {/* Show active badge if user has PRO subscription */}
-          {status?.hasSubscription && (status?.subscriptionTier === 'PRO' || tokenUsage?.subscriptionTier === 'PRO') && (
+          {/* Show active badge if user has PRO subscription and not Enterprise */}
+          {!isEnterprise && status?.hasSubscription && (status?.subscriptionTier === 'PRO' || tokenUsage?.subscriptionTier === 'PRO') && (
             <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3 text-center">
               <span className="text-accent-success text-sm font-medium">Plan activo</span>
             </div>
