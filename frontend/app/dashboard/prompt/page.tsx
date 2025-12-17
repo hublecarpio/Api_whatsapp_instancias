@@ -1225,22 +1225,16 @@ export default function PromptPage() {
           >
             Secciones ({promptSections.length})
           </button>
-          <button
-            onClick={() => setActiveV2Tab('memory')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'memory' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Memoria
-          </button>
-          <button
-            onClick={() => setActiveV2Tab('rules')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'rules' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Reglas ({learnedRules.length})
-          </button>
+          {learnedRules.length > 0 && (
+            <button
+              onClick={() => setActiveV2Tab('rules')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeV2Tab === 'rules' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+              }`}
+            >
+              Reglas ({learnedRules.length})
+            </button>
+          )}
           <button
             onClick={() => setActiveV2Tab('knowledge')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${

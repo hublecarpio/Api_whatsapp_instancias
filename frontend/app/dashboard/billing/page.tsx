@@ -772,6 +772,7 @@ export default function BillingPage() {
             {[
               'Todo lo del plan Basic',
               'Agente IA con 7.5M tokens/mes',
+              'Tools personalizadas (APIs externas)',
               'Webhooks personalizados',
               'API Keys para integraciones',
               'Soporte prioritario'
@@ -814,12 +815,12 @@ export default function BillingPage() {
           <ul className="space-y-2 mb-6">
             {[
               'Todo lo del Plan Pro',
-              'Agente V2 Enterprise Pro (IA avanzada)',
+              'Agente V2 Enterprise (IA avanzada)',
               'Sistema multi-agente inteligente',
-              'Memoria de conversaciones',
+              'RAG contextual para mayor contexto',
               'Aprendizaje automatico de reglas',
               'Tokens ilimitados',
-              'Soporte prioritario'
+              'Soporte dedicado'
             ].map((item, i) => (
               <li key={i} className="flex items-center text-gray-300 text-sm">
                 <svg className="w-4 h-4 text-purple-400 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">

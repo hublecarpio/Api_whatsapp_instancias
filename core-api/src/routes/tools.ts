@@ -6,7 +6,7 @@ import eventLogger from '../services/eventLogger.js';
 async function checkProFeatureAccess(userId: string): Promise<{ allowed: boolean; tier: string; message?: string }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { subscriptionTier: true, subscriptionStatus: true }
+    select: { subscriptionTier: true, subscriptionStatus: true, isPro: true, proBonusExpiresAt: true }
   });
   
   if (!user) {
@@ -17,6 +17,12 @@ async function checkProFeatureAccess(userId: string): Promise<{ allowed: boolean
   const status = user.subscriptionStatus || 'NONE';
   const isProOrHigher = tier === 'PRO' || tier === 'ENTERPRISE';
   const isActiveSubscription = ['ACTIVE', 'TRIAL'].includes(status);
+  const hasIsPro = user.isPro === true;
+  const hasValidProBonus = user.proBonusExpiresAt && user.proBonusExpiresAt > new Date();
+  
+  if (hasIsPro || hasValidProBonus) {
+    return { allowed: true, tier: hasIsPro ? 'ENTERPRISE' : tier };
+  }
   
   if (!isProOrHigher) {
     return { 
