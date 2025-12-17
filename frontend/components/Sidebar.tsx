@@ -42,6 +42,7 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     { href: '/dashboard/broadcasts', label: 'Envio Masivo', icon: '📢' },
     { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' },
     { href: '/dashboard/reminders', label: 'Seguimientos', icon: '⏰' },
+    { href: '/dashboard/api-docs', label: 'API & Webhooks', icon: '🔌' },
     { href: '/dashboard/billing', label: 'Facturacion', icon: '💳' }
   ];
   
