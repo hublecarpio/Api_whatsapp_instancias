@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { waApi } from '@/lib/api';
-import { QRCodeSVG } from 'qrcode.react';
 
 interface StepWhatsAppProps {
   businessId: string;
@@ -15,74 +14,51 @@ type ProviderType = 'BAILEYS' | 'META';
 
 export default function StepWhatsApp({ businessId, onComplete, onSkip }: StepWhatsAppProps) {
   const [provider, setProvider] = useState<ProviderType | null>(null);
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [status, setStatus] = useState<'choosing' | 'loading' | 'pending_qr' | 'connected' | 'error'>('choosing');
-  const [instanceId, setInstanceId] = useState<string | null>(null);
+  const [qrCode, setQrCode] = useState<string>('');
+  const [status, setStatus] = useState<'choosing' | 'loading' | 'pending_qr' | 'connected' | 'error' | 'not_created'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  useEffect(() => {
-    checkExistingInstance();
-  }, [businessId]);
-
-  useEffect(() => {
-    if (!instanceId || status === 'connected') return;
-
-    const interval = setInterval(async () => {
-      try {
-        const response = await waApi.instances(businessId);
-        const instance = response.data.find((i: any) => i.id === instanceId);
-        
-        if (instance?.status === 'connected') {
-          setStatus('connected');
-          setPhoneNumber(instance.phoneNumber);
-          clearInterval(interval);
-          setTimeout(onComplete, 1500);
-        } else if (instance?.qr) {
-          setQrCode(instance.qr);
-          setStatus('pending_qr');
-        }
-      } catch (error) {
-        console.error('Error polling instance:', error);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [instanceId, status, onComplete, businessId]);
-
-  const checkExistingInstance = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
-      const existingResponse = await waApi.instances(businessId);
-      const existing = existingResponse.data.find((i: any) => 
-        i.provider === 'BAILEYS' || i.provider === 'META'
-      );
+      const response = await waApi.status(businessId);
+      const newStatus = response.data.status;
       
-      if (existing) {
-        setInstanceId(existing.id);
-        setProvider(existing.provider);
-        
-        if (existing.status === 'connected') {
-          setPhoneNumber(existing.phoneNumber);
-          setStatus('connected');
-          setTimeout(onComplete, 500);
-          return;
-        }
-        
-        if (existing.qr && existing.provider === 'BAILEYS') {
-          setQrCode(existing.qr);
-          setStatus('pending_qr');
-          return;
-        }
-        
-        if (existing.provider === 'META') {
-          setStatus('pending_qr');
-          return;
-        }
+      setStatus(newStatus === 'open' || newStatus === 'connected' ? 'connected' : 
+                newStatus === 'pending_qr' ? 'pending_qr' : 
+                newStatus === 'not_created' ? 'not_created' : 'pending_qr');
+      setProvider(response.data.provider || 'BAILEYS');
+      setPhoneNumber(response.data.phoneNumber || '');
+      
+      if (newStatus === 'open' || newStatus === 'connected') {
+        setTimeout(onComplete, 1500);
+        return;
       }
-    } catch (error) {
-      console.error('Error checking existing instance:', error);
+      
+      if (newStatus === 'pending_qr' && response.data.provider !== 'META_CLOUD') {
+        const qrResponse = await waApi.qr(businessId);
+        setQrCode(qrResponse.data.qr || '');
+      }
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setStatus('choosing');
+      } else {
+        console.error('Error fetching status:', err);
+      }
     }
-  };
+  }, [businessId, onComplete]);
+
+  useEffect(() => {
+    fetchStatus();
+  }, [fetchStatus]);
+
+  useEffect(() => {
+    if (status !== 'pending_qr' && status !== 'connected') return;
+    
+    const interval = setInterval(fetchStatus, 5000);
+    return () => clearInterval(interval);
+  }, [status, fetchStatus]);
 
   const handleProviderSelect = async (selectedProvider: ProviderType) => {
     setProvider(selectedProvider);
@@ -92,21 +68,18 @@ export default function StepWhatsApp({ businessId, onComplete, onSkip }: StepWha
       return;
     }
     
-    await initBaileysInstance();
+    await createBaileysInstance();
   };
 
-  const initBaileysInstance = async () => {
+  const createBaileysInstance = async () => {
     try {
       setStatus('loading');
       setErrorMessage(null);
       
-      const response = await waApi.create(businessId);
+      await waApi.create(businessId);
       
-      setInstanceId(response.data.id);
-      if (response.data.qr) {
-        setQrCode(response.data.qr);
-        setStatus('pending_qr');
-      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await fetchStatus();
     } catch (error: any) {
       console.error('Error creating instance:', error);
       setStatus('error');
@@ -114,42 +87,68 @@ export default function StepWhatsApp({ businessId, onComplete, onSkip }: StepWha
     }
   };
 
-  const handleRestart = async () => {
-    if (!instanceId) {
-      await initBaileysInstance();
-      return;
-    }
+  const handleRefreshQR = async () => {
+    setActionLoading('qr');
+    setErrorMessage(null);
     
     try {
-      setStatus('loading');
-      setQrCode(null);
-      
-      await waApi.restart(instanceId);
-      
-      setTimeout(async () => {
-        try {
-          const response = await waApi.instances(businessId);
-          const instance = response.data.find((i: any) => i.id === instanceId);
-          
-          if (instance?.qr) {
-            setQrCode(instance.qr);
-            setStatus('pending_qr');
-          } else if (instance?.status === 'connected') {
-            setStatus('connected');
-            setPhoneNumber(instance.phoneNumber);
-          }
-        } catch (e) {
-          console.error('Error after restart:', e);
-        }
-      }, 3000);
-    } catch (error: any) {
-      console.error('Error restarting instance:', error);
-      setStatus('error');
-      setErrorMessage('Error al reiniciar. Intenta de nuevo.');
+      const qrResponse = await waApi.qr(businessId);
+      setQrCode(qrResponse.data.qr || '');
+    } catch (err: any) {
+      setErrorMessage(err.response?.data?.error || 'Error al obtener QR');
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  if (status === 'choosing') {
+  const handleRestart = async () => {
+    setActionLoading('restart');
+    setErrorMessage(null);
+    
+    try {
+      await waApi.restart(businessId);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await fetchStatus();
+    } catch (error: any) {
+      console.error('Error restarting instance:', error);
+      setErrorMessage('Error al reiniciar. Intenta de nuevo.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Eliminar conexion de WhatsApp? Tendras que configurar de nuevo.')) return;
+    
+    setActionLoading('delete');
+    setErrorMessage(null);
+    
+    try {
+      await waApi.delete(businessId);
+      setStatus('choosing');
+      setQrCode('');
+      setPhoneNumber('');
+      setProvider(null);
+    } catch (error: any) {
+      console.error('Error deleting instance:', error);
+      setErrorMessage('Error al eliminar. Intenta de nuevo.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  if (status === 'loading') {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-white mx-auto mb-3"></div>
+          <p className="text-gray-400 text-sm">Verificando estado...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'choosing' || status === 'not_created') {
     return (
       <div className="text-center">
         <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">Elige como conectar WhatsApp</h2>
@@ -260,89 +259,128 @@ export default function StepWhatsApp({ businessId, onComplete, onSkip }: StepWha
     );
   }
 
+  if (status === 'error') {
+    return (
+      <div className="text-center py-8">
+        <div className="w-48 h-48 sm:w-64 sm:h-64 mx-auto bg-red-500/10 rounded-xl flex flex-col items-center justify-center p-4">
+          <span className="text-3xl sm:text-4xl mb-3">⚠️</span>
+          <p className="text-red-400 text-xs sm:text-sm text-center mb-3">{errorMessage}</p>
+          <button
+            onClick={createBaileysInstance}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs sm:text-sm hover:bg-indigo-700 transition"
+          >
+            Reintentar
+          </button>
+        </div>
+        <button
+          onClick={() => setStatus('choosing')}
+          className="mt-4 text-gray-400 hover:text-white text-xs sm:text-sm transition"
+        >
+          ← Volver a elegir metodo
+        </button>
+      </div>
+    );
+  }
+
+  if (status === 'connected') {
+    return (
+      <div className="text-center py-4">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-48 h-48 sm:w-64 sm:h-64 mx-auto bg-[#25D366]/20 rounded-xl flex flex-col items-center justify-center"
+        >
+          <span className="text-5xl sm:text-6xl mb-3">✅</span>
+          <p className="text-[#25D366] font-semibold text-sm sm:text-base">¡WhatsApp conectado!</p>
+          {phoneNumber && (
+            <p className="text-gray-400 text-xs mt-1">+{phoneNumber}</p>
+          )}
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="text-center">
-      <h2 className="text-lg sm:text-xl font-semibold text-white mb-1">Conecta tu WhatsApp</h2>
-      <p className="text-gray-400 text-xs sm:text-sm mb-4">Escanea el codigo QR con tu telefono</p>
+      <h2 className="text-lg sm:text-xl font-semibold text-white mb-1">Escanea el codigo QR</h2>
+      <p className="text-gray-400 text-xs sm:text-sm mb-4">Abre WhatsApp en tu telefono y escanea</p>
+
+      {errorMessage && (
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-2 rounded-lg mb-4 text-xs sm:text-sm">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="flex justify-center mb-4">
-        {status === 'loading' && (
-          <div className="w-48 h-48 sm:w-64 sm:h-64 bg-gray-800 rounded-xl flex items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-white mx-auto mb-3"></div>
-              <p className="text-gray-400 text-xs sm:text-sm">Generando codigo...</p>
-            </div>
-          </div>
-        )}
-
-        {status === 'pending_qr' && qrCode && (
+        {qrCode ? (
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white p-3 sm:p-4 rounded-xl"
+            className="relative p-2 bg-white rounded-xl"
           >
-            <QRCodeSVG value={qrCode} size={180} className="sm:w-[220px] sm:h-[220px]" />
-          </motion.div>
-        )}
-
-        {status === 'connected' && (
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="w-48 h-48 sm:w-64 sm:h-64 bg-[#25D366]/20 rounded-xl flex flex-col items-center justify-center"
-          >
-            <span className="text-5xl sm:text-6xl mb-3">✅</span>
-            <p className="text-[#25D366] font-semibold text-sm sm:text-base">¡WhatsApp conectado!</p>
-            {phoneNumber && (
-              <p className="text-gray-400 text-xs mt-1">{phoneNumber}</p>
+            <img src={qrCode} alt="QR Code" className="w-44 h-44 sm:w-52 sm:h-52" />
+            {actionLoading === 'qr' && (
+              <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              </div>
             )}
           </motion.div>
-        )}
-
-        {status === 'error' && (
-          <div className="w-48 h-48 sm:w-64 sm:h-64 bg-red-500/10 rounded-xl flex flex-col items-center justify-center p-4">
-            <span className="text-3xl sm:text-4xl mb-3">⚠️</span>
-            <p className="text-red-400 text-xs sm:text-sm text-center mb-3">{errorMessage}</p>
-            <button
-              onClick={handleRestart}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs sm:text-sm hover:bg-indigo-700 transition"
-            >
-              Reintentar
-            </button>
+        ) : (
+          <div className="w-44 h-44 sm:w-52 sm:h-52 bg-gray-800 rounded-xl flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+              <p className="text-gray-400 text-xs">Generando QR...</p>
+            </div>
           </div>
         )}
       </div>
 
-      {status === 'pending_qr' && (
-        <>
-          <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4 max-w-sm mx-auto mb-4">
-            <p className="text-white text-xs sm:text-sm font-medium mb-2">Como escanear:</p>
-            <ol className="text-gray-400 text-[10px] sm:text-xs text-left space-y-1">
-              <li>1. Abre WhatsApp en tu telefono</li>
-              <li>2. Toca Menu → Dispositivos vinculados</li>
-              <li>3. Toca "Vincular dispositivo" y escanea</li>
-            </ol>
-          </div>
+      <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4 max-w-sm mx-auto mb-4">
+        <p className="text-white text-xs sm:text-sm font-medium mb-2">Como escanear:</p>
+        <ol className="text-gray-400 text-[10px] sm:text-xs text-left space-y-1">
+          <li>1. Abre WhatsApp en tu telefono</li>
+          <li>2. Toca Menu → Dispositivos vinculados</li>
+          <li>3. Toca "Vincular dispositivo" y escanea</li>
+        </ol>
+      </div>
 
-          <div className="flex justify-center gap-3">
-            <button
-              onClick={handleRestart}
-              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-xs sm:text-sm transition flex items-center gap-1"
-            >
-              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Nuevo QR
-            </button>
-            <button
-              onClick={() => setStatus('choosing')}
-              className="px-3 py-1.5 text-gray-400 hover:text-white text-xs sm:text-sm transition"
-            >
-              Cambiar metodo
-            </button>
-          </div>
-        </>
-      )}
+      <div className="flex flex-wrap justify-center gap-2">
+        <button
+          onClick={handleRefreshQR}
+          disabled={actionLoading !== null}
+          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-xs sm:text-sm transition flex items-center gap-1 disabled:opacity-50"
+        >
+          {actionLoading === 'qr' ? (
+            <span className="animate-spin">↻</span>
+          ) : (
+            <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          )}
+          Refrescar QR
+        </button>
+        <button
+          onClick={handleRestart}
+          disabled={actionLoading !== null}
+          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-xs sm:text-sm transition disabled:opacity-50"
+        >
+          {actionLoading === 'restart' ? '...' : 'Reiniciar'}
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={actionLoading !== null}
+          className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-xs sm:text-sm transition disabled:opacity-50"
+        >
+          {actionLoading === 'delete' ? '...' : 'Eliminar'}
+        </button>
+      </div>
+
+      <button
+        onClick={() => setStatus('choosing')}
+        className="mt-4 text-gray-500 hover:text-gray-300 text-xs transition"
+      >
+        Cambiar metodo de conexion
+      </button>
     </div>
   );
 }
