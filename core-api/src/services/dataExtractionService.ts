@@ -151,14 +151,27 @@ export async function saveExtractedData(
         }
       });
 
-      if (existing && (existing as any).source === 'manual') {
-        console.log(`[DataExtraction] Skipping ${data.fieldKey} - has manual value`);
-        continue;
-      }
-
-      if (existing && (existing as any).confidence && (existing as any).confidence >= data.confidence) {
-        console.log(`[DataExtraction] Skipping ${data.fieldKey} - existing has higher confidence`);
-        continue;
+      if (existing) {
+        const existingSource = (existing as any).source || 'unknown';
+        
+        // Priority: manual (highest) > tool > ai (lowest)
+        // Never overwrite manual values
+        if (existingSource === 'manual') {
+          console.log(`[DataExtraction] Skipping ${data.fieldKey} - has manual value`);
+          continue;
+        }
+        
+        // Don't overwrite tool values with AI values
+        if (existingSource === 'tool' && data.confidence < 1.0) {
+          console.log(`[DataExtraction] Skipping ${data.fieldKey} - tool value has higher priority`);
+          continue;
+        }
+        
+        // Skip if value is the same (no need to update)
+        if (existing.fieldValue === data.value) {
+          console.log(`[DataExtraction] Skipping ${data.fieldKey} - value unchanged`);
+          continue;
+        }
       }
 
       await (prisma.contactExtractedData as any).upsert({
