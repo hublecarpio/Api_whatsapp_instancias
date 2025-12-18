@@ -536,8 +536,32 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
     
     res.json(response);
   } catch (error: any) {
-    console.error('Send message error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to send message' });
+    const errorDetails = error.response?.data || error.message;
+    console.error('Send message error:', errorDetails);
+    
+    // Extract meaningful error message for the user
+    let userMessage = 'Failed to send message';
+    let technicalDetails = '';
+    
+    if (error.response?.data) {
+      const data = error.response.data;
+      if (data.error) {
+        userMessage = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      }
+      if (data.message) {
+        technicalDetails = data.message;
+      }
+      if (data.details) {
+        technicalDetails = data.details;
+      }
+    } else if (error.message) {
+      technicalDetails = error.message;
+    }
+    
+    res.status(error.response?.status || 500).json({ 
+      error: userMessage,
+      details: technicalDetails || undefined
+    });
   }
 });
 

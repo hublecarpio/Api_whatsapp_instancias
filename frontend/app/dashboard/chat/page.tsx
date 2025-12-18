@@ -609,8 +609,10 @@ export default function ChatPage() {
       fetchWindowStatus(cleanPhone);
     } catch (err: any) {
       console.error('Failed to send new chat:', err);
-      setError(err.response?.data?.error || 'Error al enviar mensaje');
-      setTimeout(() => setError(null), 5000);
+      const errorMsg = err.response?.data?.error || 'Error al enviar mensaje';
+      const errorDetails = err.response?.data?.details;
+      setError(errorDetails ? `${errorMsg}: ${errorDetails}` : errorMsg);
+      setTimeout(() => setError(null), 8000);
     } finally {
       setNewChatSending(false);
     }
@@ -716,8 +718,10 @@ export default function ChatPage() {
       setMessages(prev => prev.filter(m => m.id !== tempId));
       setNewMessage(messageCopy);
       if (fileCopy) setPreviewFile(fileCopy);
-      setError(err.response?.data?.error || 'Error al enviar mensaje');
-      setTimeout(() => setError(null), 5000);
+      const errorMsg = err.response?.data?.error || 'Error al enviar mensaje';
+      const errorDetails = err.response?.data?.details;
+      setError(errorDetails ? `${errorMsg}: ${errorDetails}` : errorMsg);
+      setTimeout(() => setError(null), 8000);
     } finally {
       setSending(false);
       setUploading(false);
