@@ -34,6 +34,7 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   
   const appointmentLinks = [
     { href: '/dashboard/appointments', label: 'Citas', icon: '📅' },
+    { href: '/dashboard/extraction', label: 'Datos Personalizados', icon: '📝' },
   ];
   
   const commonLinks = [

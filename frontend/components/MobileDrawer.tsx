@@ -51,6 +51,7 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
   
   const appointmentLinks = [
     { href: '/dashboard/appointments', label: 'Citas', icon: '📅' },
+    { href: '/dashboard/extraction', label: 'Datos Personalizados', icon: '📝' },
   ];
   
   const commonLinks = [

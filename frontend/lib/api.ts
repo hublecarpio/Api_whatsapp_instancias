@@ -318,9 +318,24 @@ export const ordersApi = {
 export const extractionApi = {
   getFields: (businessId: string) =>
     api.get(`/extraction/fields/${businessId}`),
-  createField: (businessId: string, data: { fieldKey: string; fieldLabel: string; fieldType?: string; required?: boolean }) =>
+  createField: (businessId: string, data: { 
+    fieldKey: string; 
+    fieldLabel: string; 
+    fieldType?: string; 
+    description?: string;
+    required?: boolean;
+    useForAppointment?: boolean;
+  }) =>
     api.post(`/extraction/fields/${businessId}`, data),
-  updateField: (businessId: string, fieldId: string, data: { fieldLabel?: string; required?: boolean; enabled?: boolean; order?: number }) =>
+  updateField: (businessId: string, fieldId: string, data: { 
+    fieldLabel?: string; 
+    fieldType?: string;
+    description?: string;
+    required?: boolean; 
+    useForAppointment?: boolean;
+    enabled?: boolean; 
+    order?: number;
+  }) =>
     api.patch(`/extraction/fields/${businessId}/${fieldId}`, data),
   deleteField: (businessId: string, fieldId: string) =>
     api.delete(`/extraction/fields/${businessId}/${fieldId}`),
