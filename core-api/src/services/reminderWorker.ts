@@ -5,8 +5,6 @@ import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage } from '.
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
-const AUTO_TEMPLATE_SENDING_ENABLED = false;
-
 function cleanMarkdownForWhatsApp(text: string): string {
   let cleaned = text;
   cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$2');
@@ -133,6 +131,126 @@ interface ExplicitTemplateConfig {
   templateId: string;
   templateName: string;
   variables: Record<string, string>;
+}
+
+interface FollowUpTemplateVariable {
+  position: number;
+  fieldMapping: string;
+}
+
+function resolveContactField(contact: any, business: any, fieldMapping: string): string {
+  if (!contact && !business) return '';
+  
+  switch (fieldMapping) {
+    case 'name':
+      return contact?.name || 'Cliente';
+    case 'phone':
+      return contact?.phone || '';
+    case 'email':
+      return contact?.email || '';
+    case 'businessName':
+      return business?.name || 'Negocio';
+    case 'tags':
+      if (contact?.tags && Array.isArray(contact.tags) && contact.tags.length > 0) {
+        return contact.tags[0];
+      }
+      return '';
+    case 'leadStage':
+      return contact?.leadStage || 'nuevo';
+    case 'pendingOrderTotal':
+      return '';
+    default:
+      return contact?.name || 'Cliente';
+  }
+}
+
+async function getTemplateFromFollowUpConfig(
+  config: any,
+  contact: any,
+  business: any
+): Promise<{ template: TemplateData; isValid: boolean } | null> {
+  if (!config?.templateEnabled || !config?.metaTemplateId) {
+    return null;
+  }
+  
+  const template = await prisma.metaTemplate.findUnique({
+    where: { id: config.metaTemplateId }
+  });
+  
+  if (!template || template.status !== 'APPROVED') {
+    console.log(`[REMINDER] FollowUpConfig template ${config.metaTemplateId} not found or not approved`);
+    return null;
+  }
+  
+  let storedComponents: any[] = [];
+  if (template.components) {
+    if (typeof template.components === 'string') {
+      try {
+        storedComponents = JSON.parse(template.components);
+      } catch {
+        storedComponents = [];
+      }
+    } else if (Array.isArray(template.components)) {
+      storedComponents = template.components;
+    }
+  }
+  
+  const templateVariables = (config.templateVariables || []) as FollowUpTemplateVariable[];
+  const components: TemplateData['components'] = [];
+  let allVariablesResolved = true;
+  
+  for (const comp of storedComponents) {
+    const compType = comp.type?.toUpperCase();
+    
+    if ((compType === 'HEADER' || compType === 'BODY') && comp.text) {
+      const matches = comp.text.match(/\{\{(\d+)\}\}/g) || [];
+      
+      if (matches.length > 0) {
+        const parameters: Array<{ type: string; text: string }> = [];
+        
+        for (const match of matches) {
+          const position = parseInt(match.replace(/[{}]/g, ''));
+          const varConfig = templateVariables.find(v => v.position === position);
+          
+          let value = '';
+          if (varConfig) {
+            value = resolveContactField(contact, business, varConfig.fieldMapping);
+          }
+          
+          if (!value) {
+            value = contact?.name || 'Cliente';
+          }
+          
+          if (!value || value.trim() === '') {
+            console.log(`[REMINDER] Could not resolve variable {{${position}}} for template ${template.name}`);
+            allVariablesResolved = false;
+            value = 'Cliente';
+          }
+          
+          parameters.push({ type: 'text', text: value });
+        }
+        
+        components.push({
+          type: compType.toLowerCase() as 'header' | 'body',
+          parameters
+        });
+      }
+    }
+  }
+  
+  console.log(`[REMINDER] Resolved template ${template.name} with variables:`, 
+    components.map(c => c.parameters?.map(p => p.text))
+  );
+  
+  return {
+    template: {
+      name: template.name,
+      language: template.language,
+      components: components.length > 0 ? components : undefined,
+      bodyText: template.bodyText || undefined
+    },
+    isValid: allVariablesResolved
+  };
 }
 
 async function getExplicitlyConfiguredTemplate(
@@ -519,68 +637,64 @@ export async function processReminders(): Promise<void> {
       console.log(`[REMINDER] Window status for ${reminder.contactPhone}: requiresTemplate=${windowStatus.requiresTemplate}, provider=${windowStatus.provider}, hours=${windowStatus.hoursSinceLastMessage}`);
       
       if (windowStatus.requiresTemplate && windowStatus.provider === 'META_CLOUD') {
-        if (!AUTO_TEMPLATE_SENDING_ENABLED) {
-          console.log(`[REMINDER] AUTO_TEMPLATE_SENDING is DISABLED - skipping reminder ${reminder.id} that requires template (24h window closed)`);
-          await prisma.reminder.update({
-            where: { id: reminder.id },
-            data: { 
-              status: 'skipped',
-              lastError: 'Auto template sending disabled - 24h window closed, requires explicit template configuration',
-              processingAt: null 
-            }
-          });
-          continue;
-        }
-        
         const contact = await prisma.contact.findFirst({
           where: { businessId: reminder.businessId, phone: reminder.contactPhone }
         });
         
-        const explicitTemplate = await getExplicitlyConfiguredTemplate(reminder, contact);
+        const configTemplate = await getTemplateFromFollowUpConfig(config, contact, reminder.business);
         
-        if (!explicitTemplate) {
-          console.log(`[REMINDER] No explicitly configured template for reminder ${reminder.id} - cannot send outside 24h window`);
-          await prisma.reminder.update({
-            where: { id: reminder.id },
-            data: { 
-              status: 'no_template',
-              lastError: 'No template configured for this reminder - 24h window closed',
-              processingAt: null 
+        if (configTemplate) {
+          const validation = validateTemplateBeforeSend(configTemplate.template);
+          if (!validation.valid) {
+            console.log(`[REMINDER] FollowUpConfig template validation failed for reminder ${reminder.id}: ${validation.reason}`);
+            await prisma.reminder.update({
+              where: { id: reminder.id },
+              data: { 
+                status: 'template_error',
+                lastError: `Template validation failed: ${validation.reason}`,
+                processingAt: null 
+              }
+            });
+            continue;
+          }
+          
+          usedTemplate = configTemplate.template;
+          message = usedTemplate.bodyText || `[Template: ${usedTemplate.name}]`;
+          console.log(`[REMINDER] Using FollowUpConfig template: ${usedTemplate.name}`);
+        } else {
+          const explicitTemplate = await getExplicitlyConfiguredTemplate(reminder, contact);
+          
+          if (explicitTemplate) {
+            const validation = validateTemplateBeforeSend(explicitTemplate.template);
+            if (!validation.valid) {
+              console.log(`[REMINDER] Template validation failed for reminder ${reminder.id}: ${validation.reason}`);
+              await prisma.reminder.update({
+                where: { id: reminder.id },
+                data: { 
+                  status: 'template_error',
+                  lastError: `Template validation failed: ${validation.reason}`,
+                  processingAt: null 
+                }
+              });
+              continue;
             }
-          });
-          continue;
+            
+            usedTemplate = explicitTemplate.template;
+            message = usedTemplate.bodyText || `[Template: ${usedTemplate.name}]`;
+            console.log(`[REMINDER] Using explicitly configured template: ${usedTemplate.name}`);
+          } else {
+            console.log(`[REMINDER] No template configured for reminder ${reminder.id} - cannot send outside 24h window`);
+            await prisma.reminder.update({
+              where: { id: reminder.id },
+              data: { 
+                status: 'no_template',
+                lastError: 'No template configured - 24h window closed. Configure a template in Seguimientos > Plantilla Meta',
+                processingAt: null 
+              }
+            });
+            continue;
+          }
         }
-        
-        if (!explicitTemplate.isValid) {
-          console.log(`[REMINDER] Template variables not fully resolved for reminder ${reminder.id}`);
-          await prisma.reminder.update({
-            where: { id: reminder.id },
-            data: { 
-              status: 'template_error',
-              lastError: 'Template has unresolved variables - cannot send',
-              processingAt: null 
-            }
-          });
-          continue;
-        }
-        
-        const validation = validateTemplateBeforeSend(explicitTemplate.template);
-        if (!validation.valid) {
-          console.log(`[REMINDER] Template validation failed for reminder ${reminder.id}: ${validation.reason}`);
-          await prisma.reminder.update({
-            where: { id: reminder.id },
-            data: { 
-              status: 'template_error',
-              lastError: `Template validation failed: ${validation.reason}`,
-              processingAt: null 
-            }
-          });
-          continue;
-        }
-        
-        usedTemplate = explicitTemplate.template;
-        message = usedTemplate.bodyText || `[Template: ${usedTemplate.name}]`;
-        console.log(`[REMINDER] Using explicitly configured template: ${usedTemplate.name}`);
         
       } else if (!message) {
         message = await generateFollowUpMessage(

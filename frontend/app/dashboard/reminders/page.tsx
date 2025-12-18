@@ -2,11 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { remindersApi } from '@/lib/api';
+import { remindersApi, templatesApi } from '@/lib/api';
 
 interface FollowUpStep {
   delayMinutes: number;
   pressureLevel?: number;
+}
+
+interface TemplateVariable {
+  position: number;
+  fieldMapping: string;
+}
+
+interface MetaTemplate {
+  id: string;
+  name: string;
+  status: string;
+  bodyText: string | null;
+  components: any[];
 }
 
 interface FollowUpConfig {
@@ -23,6 +36,9 @@ interface FollowUpConfig {
   triggerMode: 'user' | 'agent' | 'any';
   stopOnReply: boolean;
   followUpSteps: FollowUpStep[] | null;
+  metaTemplateId: string | null;
+  templateVariables: TemplateVariable[] | null;
+  templateEnabled: boolean;
 }
 
 interface Reminder {
@@ -40,13 +56,31 @@ interface Reminder {
   generatedMessage?: string;
 }
 
+const CONTACT_FIELDS = [
+  { value: 'name', label: 'Nombre del contacto' },
+  { value: 'phone', label: 'Telefono' },
+  { value: 'email', label: 'Email' },
+  { value: 'businessName', label: 'Nombre del negocio' },
+  { value: 'tags', label: 'Etiquetas (primera)' },
+  { value: 'leadStage', label: 'Etapa del lead' },
+  { value: 'pendingOrderTotal', label: 'Total pedido pendiente' }
+];
+
+function extractTemplateVariables(bodyText: string | null): number[] {
+  if (!bodyText) return [];
+  const matches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
+  return matches.map(m => parseInt(m.replace(/[{}]/g, '')));
+}
+
 export default function RemindersPage() {
   const { currentBusiness } = useBusinessStore();
   const [config, setConfig] = useState<FollowUpConfig | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [templates, setTemplates] = useState<MetaTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'config' | 'pending' | 'history'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'template' | 'pending' | 'history'>('config');
+  const [syncingTemplates, setSyncingTemplates] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -66,13 +100,37 @@ export default function RemindersPage() {
         ...configRes.data,
         triggerMode: configRes.data.triggerMode || 'user',
         stopOnReply: configRes.data.stopOnReply !== false,
-        followUpSteps: configRes.data.followUpSteps || null
+        followUpSteps: configRes.data.followUpSteps || null,
+        metaTemplateId: configRes.data.metaTemplateId || null,
+        templateVariables: configRes.data.templateVariables || null,
+        templateEnabled: configRes.data.templateEnabled || false
       });
       setReminders(remindersRes.data);
+      
+      try {
+        const templatesRes = await templatesApi.list(currentBusiness.id);
+        setTemplates(templatesRes.data.filter((t: MetaTemplate) => t.status === 'APPROVED'));
+      } catch {
+        setTemplates([]);
+      }
     } catch (err) {
       console.error('Error loading data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncTemplates = async () => {
+    if (!currentBusiness) return;
+    setSyncingTemplates(true);
+    try {
+      await templatesApi.sync(currentBusiness.id);
+      const templatesRes = await templatesApi.list(currentBusiness.id);
+      setTemplates(templatesRes.data.filter((t: MetaTemplate) => t.status === 'APPROVED'));
+    } catch (err) {
+      console.error('Error syncing templates:', err);
+    } finally {
+      setSyncingTemplates(false);
     }
   };
 
@@ -96,6 +154,41 @@ export default function RemindersPage() {
       console.error('Error cancelling reminder:', err);
     }
   };
+
+  const handleTemplateChange = (templateId: string) => {
+    if (!config) return;
+    
+    const template = templates.find(t => t.id === templateId);
+    const variables = template ? extractTemplateVariables(template.bodyText) : [];
+    
+    const newVariables: TemplateVariable[] = variables.map(pos => ({
+      position: pos,
+      fieldMapping: 'name'
+    }));
+    
+    setConfig({
+      ...config,
+      metaTemplateId: templateId || null,
+      templateVariables: newVariables.length > 0 ? newVariables : null
+    });
+  };
+
+  const handleVariableMapping = (position: number, fieldMapping: string) => {
+    if (!config) return;
+    
+    const currentVars = config.templateVariables || [];
+    const updatedVars = currentVars.map(v => 
+      v.position === position ? { ...v, fieldMapping } : v
+    );
+    
+    setConfig({
+      ...config,
+      templateVariables: updatedVars
+    });
+  };
+
+  const selectedTemplate = templates.find(t => t.id === config?.metaTemplateId);
+  const templateVariables = selectedTemplate ? extractTemplateVariables(selectedTemplate.bodyText) : [];
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString('es-MX', {
@@ -159,7 +252,7 @@ export default function RemindersPage() {
       </div>
 
       <div className="flex gap-2 mb-6 overflow-x-auto hide-scrollbar">
-        {(['config', 'pending', 'history'] as const).map(tab => (
+        {(['config', 'template', 'pending', 'history'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -169,7 +262,7 @@ export default function RemindersPage() {
                 : 'bg-dark-card text-gray-400 hover:bg-dark-hover'
             }`}
           >
-            {tab === 'config' ? 'Configuracion' : tab === 'pending' ? 'Pendientes' : 'Historial'}
+            {tab === 'config' ? 'Configuracion' : tab === 'template' ? 'Plantilla Meta' : tab === 'pending' ? 'Pendientes' : 'Historial'}
           </button>
         ))}
       </div>
@@ -366,6 +459,139 @@ export default function RemindersPage() {
             >
               {saving ? 'Guardando...' : 'Guardar configuracion'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'template' && config && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="font-semibold text-lg text-white">Plantilla de Meta Cloud</h3>
+              <p className="text-sm text-gray-400">Configura el template de WhatsApp para seguimientos automaticos</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.templateEnabled}
+                onChange={(e) => setConfig({ ...config, templateEnabled: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-dark-hover rounded-full peer peer-checked:bg-accent-success peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            </label>
+          </div>
+
+          {!config.templateEnabled && (
+            <div className="mb-6 p-4 bg-accent-warning/10 rounded-lg border border-accent-warning/30">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-accent-warning flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <p className="text-sm text-accent-warning font-medium">Template deshabilitado</p>
+                  <p className="text-xs text-gray-400 mt-1">Los recordatorios se marcaran como "Sin plantilla" hasta que configures y habilites un template.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-300">
+                Seleccionar plantilla aprobada
+              </label>
+              <button
+                onClick={handleSyncTemplates}
+                disabled={syncingTemplates}
+                className="text-xs text-neon-blue hover:underline flex items-center gap-1"
+              >
+                <svg className={`w-3 h-3 ${syncingTemplates ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {syncingTemplates ? 'Sincronizando...' : 'Sincronizar desde Meta'}
+              </button>
+            </div>
+            
+            {templates.length === 0 ? (
+              <div className="p-6 bg-dark-bg rounded-lg border border-dark-border text-center">
+                <svg className="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-gray-400 text-sm">No hay plantillas aprobadas disponibles</p>
+                <p className="text-gray-500 text-xs mt-1">Sincroniza tus plantillas de Meta Cloud o crea una nueva</p>
+              </div>
+            ) : (
+              <select
+                value={config.metaTemplateId || ''}
+                onChange={(e) => handleTemplateChange(e.target.value)}
+                className="input"
+              >
+                <option value="">Seleccionar plantilla...</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {selectedTemplate && (
+            <>
+              <div className="mb-6 p-4 bg-dark-bg rounded-lg border border-dark-border">
+                <h4 className="text-sm font-medium text-white mb-2">Vista previa del mensaje</h4>
+                <p className="text-sm text-gray-300 whitespace-pre-wrap">{selectedTemplate.bodyText}</p>
+              </div>
+
+              {templateVariables.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-white mb-3">Mapeo de variables</h4>
+                  <p className="text-xs text-gray-400 mb-4">Asigna cada variable del template a un campo del contacto</p>
+                  
+                  <div className="space-y-3">
+                    {templateVariables.map(pos => {
+                      const currentMapping = config.templateVariables?.find(v => v.position === pos);
+                      return (
+                        <div key={pos} className="flex items-center gap-4 p-3 bg-dark-bg rounded-lg border border-dark-border">
+                          <div className="w-16 text-center">
+                            <span className="text-neon-blue font-mono text-sm">{`{{${pos}}}`}</span>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                          </svg>
+                          <select
+                            value={currentMapping?.fieldMapping || 'name'}
+                            onChange={(e) => handleVariableMapping(pos, e.target.value)}
+                            className="input flex-1"
+                          >
+                            {CONTACT_FIELDS.map(field => (
+                              <option key={field.value} value={field.value}>{field.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="mt-8 flex justify-end">
+            <button
+              onClick={handleSaveConfig}
+              disabled={saving}
+              className="btn btn-primary"
+            >
+              {saving ? 'Guardando...' : 'Guardar configuracion'}
+            </button>
+          </div>
+
+          <div className="mt-6 p-4 bg-neon-blue/10 rounded-xl border border-neon-blue/20">
+            <h4 className="font-medium text-neon-blue mb-2">Importante</h4>
+            <ul className="text-sm text-gray-300 space-y-1">
+              <li>Solo se enviaran mensajes con plantillas aprobadas por Meta</li>
+              <li>Las variables se reemplazan automaticamente con datos del contacto</li>
+              <li>Si no hay instancia de Meta Cloud, se usara mensaje generado por IA</li>
+            </ul>
           </div>
         </div>
       )}
