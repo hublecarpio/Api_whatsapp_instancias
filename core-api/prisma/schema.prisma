@@ -646,6 +646,9 @@ model FollowUpConfig {
   triggerMode         String   @default("user")
   stopOnReply         Boolean  @default(true)
   followUpSteps       Json?
+  metaTemplateId      String?
+  templateVariables   Json?
+  templateEnabled     Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
