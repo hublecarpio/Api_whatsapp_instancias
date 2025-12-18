@@ -81,12 +81,49 @@ export default function RemindersPage() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'config' | 'template' | 'pending' | 'history'>('config');
   const [syncingTemplates, setSyncingTemplates] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
       fetchData();
     }
   }, [currentBusiness]);
+
+  // Auto-refresh reminders every 5 seconds when on pending or history tab
+  useEffect(() => {
+    if (!currentBusiness || (activeTab !== 'pending' && activeTab !== 'history')) return;
+    
+    const refreshReminders = async () => {
+      try {
+        const res = await remindersApi.list(currentBusiness.id);
+        setReminders(res.data);
+        setLastRefresh(new Date());
+      } catch (err) {
+        console.error('Error refreshing reminders:', err);
+      }
+    };
+    
+    // Refresh immediately when switching to these tabs
+    refreshReminders();
+    
+    const interval = setInterval(refreshReminders, 5000);
+    return () => clearInterval(interval);
+  }, [currentBusiness, activeTab]);
+
+  const handleManualRefresh = async () => {
+    if (!currentBusiness || refreshing) return;
+    setRefreshing(true);
+    try {
+      const res = await remindersApi.list(currentBusiness.id);
+      setReminders(res.data);
+      setLastRefresh(new Date());
+    } catch (err) {
+      console.error('Error refreshing reminders:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const fetchData = async () => {
     if (!currentBusiness) return;
@@ -598,8 +635,25 @@ export default function RemindersPage() {
 
       {activeTab === 'pending' && (
         <div className="card overflow-hidden p-0">
-          <div className="p-4 border-b border-dark-border">
-            <h3 className="font-semibold text-white">Recordatorios pendientes</h3>
+          <div className="p-4 border-b border-dark-border flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-white">Recordatorios pendientes</h3>
+              {lastRefresh && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Actualizado: {lastRefresh.toLocaleTimeString()} (auto-refresh cada 5s)
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="p-2 hover:bg-dark-hover rounded-lg transition-colors"
+              title="Actualizar ahora"
+            >
+              <svg className={`w-5 h-5 text-gray-400 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
           </div>
           {reminders.filter(r => r.status === 'pending').length === 0 ? (
             <div className="p-8 text-center text-gray-500">
@@ -650,8 +704,25 @@ export default function RemindersPage() {
 
       {activeTab === 'history' && (
         <div className="card overflow-hidden p-0">
-          <div className="p-4 border-b border-dark-border">
-            <h3 className="font-semibold text-white">Historial de seguimientos</h3>
+          <div className="p-4 border-b border-dark-border flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-white">Historial de seguimientos</h3>
+              {lastRefresh && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Actualizado: {lastRefresh.toLocaleTimeString()} (auto-refresh cada 5s)
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="p-2 hover:bg-dark-hover rounded-lg transition-colors"
+              title="Actualizar ahora"
+            >
+              <svg className={`w-5 h-5 text-gray-400 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
           </div>
           {reminders.filter(r => r.status !== 'pending').length === 0 ? (
             <div className="p-8 text-center text-gray-500">
