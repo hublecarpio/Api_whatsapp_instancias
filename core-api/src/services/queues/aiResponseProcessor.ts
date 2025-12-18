@@ -13,6 +13,7 @@ import axios from 'axios';
 import eventLogger from '../eventLogger.js';
 import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
 import { retrieveRelevantSections, formatSectionsForPrompt } from '../ragService.js';
+import { processDataExtraction, getExtractedDataForContact, getAppointmentFieldsData } from '../dataExtractionService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -244,6 +245,17 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
         }
       } catch (err: any) {
         console.error('[AI Worker] Post-response lead stage update failed:', err.message);
+      }
+    });
+    
+    // Extract custom data from conversation asynchronously
+    setImmediate(async () => {
+      try {
+        const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+        console.log(`[AI Worker] Extracting custom data for ${normalizedPhone}`);
+        await processDataExtraction(businessId, normalizedPhone);
+      } catch (err: any) {
+        console.error('[AI Worker] Data extraction failed:', err.message);
       }
     });
   }
@@ -573,7 +585,30 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   }
   
   // Add appointment tools for APPOINTMENTS mode
+  let appointmentExtractionFields: any[] = [];
+  let extractedContactData: Record<string, string> = {};
+  
   if (businessObjective === 'APPOINTMENTS') {
+    // Get custom extraction fields configured for appointments
+    appointmentExtractionFields = await (prisma.extractionField as any).findMany({
+      where: { businessId: business.id, enabled: true, useForAppointment: true },
+      orderBy: { order: 'asc' }
+    });
+    
+    // Get already extracted data for this contact
+    extractedContactData = await getExtractedDataForContact(business.id, contactPhone.replace(/\D/g, ''));
+    
+    // Build context about available extracted data
+    let extractedDataContext = '';
+    if (Object.keys(extractedContactData).length > 0) {
+      extractedDataContext = '\n\nDATOS YA CONOCIDOS DEL CLIENTE (no preguntes por estos):';
+      for (const [key, value] of Object.entries(extractedContactData)) {
+        extractedDataContext += `\n- ${key}: ${value}`;
+      }
+    }
+    
+    systemPrompt += extractedDataContext;
+    
     openaiTools.push({
       type: 'function',
       function: {
@@ -592,39 +627,59 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
       }
     });
     
+    // Build dynamic appointment tool with custom fields
+    const appointmentProperties: Record<string, any> = {
+      fecha_hora: {
+        type: 'string',
+        description: 'Fecha y hora de la cita en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss)'
+      },
+      servicio: {
+        type: 'string',
+        description: 'Tipo de servicio o cita'
+      },
+      duracion_minutos: {
+        type: 'number',
+        description: 'Duración de la cita en minutos (default: 60)'
+      },
+      notas: {
+        type: 'string',
+        description: 'Notas adicionales para la cita'
+      }
+    };
+    
+    // Add custom fields from extraction configuration
+    const appointmentRequired: string[] = ['fecha_hora'];
+    
+    for (const field of appointmentExtractionFields) {
+      // Skip if data already extracted
+      if (extractedContactData[field.fieldKey]) {
+        continue;
+      }
+      
+      appointmentProperties[field.fieldKey] = {
+        type: field.fieldType === 'number' ? 'number' : 'string',
+        description: field.description || field.fieldLabel
+      };
+      
+      if (field.required) {
+        appointmentRequired.push(field.fieldKey);
+      }
+    }
+    
     openaiTools.push({
       type: 'function',
       function: {
         name: 'agendar_cita',
-        description: 'Agenda una cita con el cliente en la fecha y hora especificada. Usa esta función cuando el cliente confirme que quiere agendar una cita y hayas verificado disponibilidad.',
+        description: 'Agenda una cita con el cliente. El teléfono del cliente ya está disponible automáticamente, NO lo pidas. Solo solicita los datos que realmente necesitas según la descripción de cada campo.',
         parameters: {
           type: 'object',
-          properties: {
-            fecha_hora: {
-              type: 'string',
-              description: 'Fecha y hora de la cita en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss)'
-            },
-            nombre_cliente: {
-              type: 'string',
-              description: 'Nombre del cliente'
-            },
-            servicio: {
-              type: 'string',
-              description: 'Tipo de servicio o cita'
-            },
-            duracion_minutos: {
-              type: 'number',
-              description: 'Duración de la cita en minutos (default: 60)'
-            },
-            notas: {
-              type: 'string',
-              description: 'Notas adicionales para la cita'
-            }
-          },
-          required: ['fecha_hora', 'nombre_cliente']
+          properties: appointmentProperties,
+          required: appointmentRequired
         }
       }
     });
+    
+    console.log(`[AI Worker V1] Appointment tool configured with ${appointmentExtractionFields.length} custom fields, ${Object.keys(extractedContactData).length} already extracted`);
   }
   
   // Add custom tools from business configuration
@@ -810,12 +865,57 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
       } else if (toolName === 'agendar_cita') {
         const args = JSON.parse(fn.arguments);
         const fechaHora = args.fecha_hora;
-        const nombreCliente = args.nombre_cliente;
         const servicio = args.servicio || '';
         const duracion = args.duracion_minutos || 60;
         const notas = args.notas || '';
+        const normalizedPhone = contactPhone.replace(/\D/g, '');
+        
+        // Use extracted name if not provided in args, or fall back to contact name
+        const nombreCliente = args.nombre || extractedContactData['nombre'] || 
+                              extractedContactData['nombre_cliente'] || contactName || 'Cliente';
         
         console.log(`[AI Worker] Scheduling appointment for ${fechaHora}, client: ${nombreCliente}`);
+        
+        // Save any new extracted data from the tool call
+        const newDataToSave: Record<string, string> = {};
+        for (const [key, value] of Object.entries(args)) {
+          if (value && typeof value === 'string' && 
+              !['fecha_hora', 'servicio', 'duracion_minutos', 'notas'].includes(key)) {
+            newDataToSave[key] = value;
+          }
+        }
+        
+        if (Object.keys(newDataToSave).length > 0) {
+          try {
+            for (const [key, value] of Object.entries(newDataToSave)) {
+              await (prisma.contactExtractedData as any).upsert({
+                where: {
+                  businessId_contactPhone_fieldKey: {
+                    businessId: business.id,
+                    contactPhone: normalizedPhone,
+                    fieldKey: key
+                  }
+                },
+                create: {
+                  businessId: business.id,
+                  contactPhone: normalizedPhone,
+                  fieldKey: key,
+                  fieldValue: value,
+                  confidence: 1.0,
+                  source: 'tool'
+                },
+                update: {
+                  fieldValue: value,
+                  confidence: 1.0,
+                  source: 'tool'
+                }
+              });
+            }
+            console.log(`[AI Worker] Saved ${Object.keys(newDataToSave).length} extracted fields from appointment tool`);
+          } catch (saveErr: any) {
+            console.error('[AI Worker] Failed to save extracted data:', saveErr.message);
+          }
+        }
         
         try {
           const response = await axios.post(
@@ -824,7 +924,7 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
               businessId: business.id,
               dateTime: fechaHora,
               clientName: nombreCliente,
-              clientPhone: contactPhone.replace(/\D/g, ''),
+              clientPhone: normalizedPhone,
               service: servicio,
               durationMinutes: duracion,
               notes: notas

@@ -66,7 +66,7 @@ router.get('/fields/:businessId', async (req: AuthRequest, res: Response) => {
 router.post('/fields/:businessId', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { fieldKey, fieldLabel, fieldType = 'text', required = false } = req.body;
+    const { fieldKey, fieldLabel, fieldType = 'text', description, required = false, useForAppointment = false } = req.body;
     
     const business = await checkBusinessAccess(req.userId!, businessId);
     if (!business) {
@@ -92,13 +92,15 @@ router.post('/fields/:businessId', async (req: AuthRequest, res: Response) => {
       _max: { order: true }
     });
 
-    const field = await prisma.extractionField.create({
+    const field = await (prisma.extractionField as any).create({
       data: {
         businessId,
         fieldKey: fieldKey.toLowerCase().replace(/\s+/g, '_'),
         fieldLabel,
         fieldType,
+        description,
         required,
+        useForAppointment,
         order: (maxOrder._max.order || 0) + 1,
         enabled: true
       }
@@ -114,7 +116,7 @@ router.post('/fields/:businessId', async (req: AuthRequest, res: Response) => {
 router.patch('/fields/:businessId/:fieldId', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, fieldId } = req.params;
-    const { fieldLabel, required, enabled, order } = req.body;
+    const { fieldLabel, description, required, useForAppointment, enabled, order } = req.body;
     
     const business = await checkBusinessAccess(req.userId!, businessId);
     if (!business) {
@@ -133,7 +135,9 @@ router.patch('/fields/:businessId/:fieldId', async (req: AuthRequest, res: Respo
       where: { id: fieldId },
       data: {
         ...(fieldLabel !== undefined && { fieldLabel }),
+        ...(description !== undefined && { description }),
         ...(required !== undefined && { required }),
+        ...(useForAppointment !== undefined && { useForAppointment }),
         ...(enabled !== undefined && { enabled }),
         ...(order !== undefined && { order })
       }
@@ -237,17 +241,25 @@ router.get('/contact/:businessId/:contactPhone', async (req: AuthRequest, res: R
       orderBy: { order: 'asc' }
     });
 
-    const dataMap: Record<string, string | null> = {};
-    extractedData.forEach(d => {
-      dataMap[d.fieldKey] = d.fieldValue;
+    const extractedDataMap: Record<string, { value: string | null; confidence: number; source: string }> = {};
+    extractedData.forEach((d: any) => {
+      extractedDataMap[d.fieldKey] = {
+        value: d.fieldValue,
+        confidence: d.confidence || 1.0,
+        source: d.source || 'unknown'
+      };
     });
 
-    const result = fields.map(field => ({
+    const result = fields.map((field: any) => ({
       fieldKey: field.fieldKey,
       fieldLabel: field.fieldLabel,
       fieldType: field.fieldType,
+      description: field.description || null,
       required: field.required,
-      value: dataMap[field.fieldKey] || null
+      useForAppointment: field.useForAppointment || false,
+      value: extractedDataMap[field.fieldKey]?.value || null,
+      confidence: extractedDataMap[field.fieldKey]?.confidence || null,
+      source: extractedDataMap[field.fieldKey]?.source || null
     }));
 
     res.json(result);
@@ -274,7 +286,7 @@ router.patch('/contact/:businessId/:contactPhone', async (req: AuthRequest, res:
     const cleanPhone = contactPhone.replace(/\D/g, '');
 
     const updates = Object.entries(data).map(([fieldKey, fieldValue]) =>
-      prisma.contactExtractedData.upsert({
+      (prisma.contactExtractedData as any).upsert({
         where: {
           businessId_contactPhone_fieldKey: {
             businessId,
@@ -286,11 +298,14 @@ router.patch('/contact/:businessId/:contactPhone', async (req: AuthRequest, res:
           businessId,
           contactPhone: cleanPhone,
           fieldKey,
-          fieldValue: fieldValue as string
+          fieldValue: fieldValue as string,
+          confidence: 1.0,
+          source: 'manual'
         },
         update: {
           fieldValue: fieldValue as string,
-          updatedAt: new Date()
+          confidence: 1.0,
+          source: 'manual'
         }
       })
     );

@@ -805,18 +805,22 @@ model PaymentSession {
 }
 
 model ExtractionField {
-  id           String   @id @default(uuid())
-  businessId   String
-  fieldKey     String
-  fieldLabel   String
-  fieldType    String   @default("text")
-  required     Boolean  @default(false)
-  order        Int      @default(0)
-  enabled      Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id                String   @id @default(uuid())
+  businessId        String
+  fieldKey          String
+  fieldLabel        String
+  fieldType         String   @default("text")
+  description       String?
+  required          Boolean  @default(false)
+  useForAppointment Boolean  @default(false)
+  order             Int      @default(0)
+  enabled           Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
 
   @@unique([businessId, fieldKey])
   @@index([businessId])
+  @@index([businessId, useForAppointment])
 }
 
 model ContactExtractedData {
@@ -825,11 +829,14 @@ model ContactExtractedData {
   contactPhone String
   fieldKey     String
   fieldValue   String?
+  confidence   Float    @default(1.0)
+  source       String   @default("ai")
   extractedAt  DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([businessId, contactPhone, fieldKey])
   @@index([businessId, contactPhone])
+  @@index([businessId, fieldKey])
 }
 
 model PaymentLinkRequest {
