@@ -8,7 +8,7 @@ import { recordInstanceEvent, getInstanceHistory, cleanupOrphanedInstance, valid
 import { scheduleFollowUp } from '../services/followUpService.js';
 
 const router = Router();
-const WA_API_URL = process.env.WA_API_URL || 'http://localhost:5000';
+const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
 
 function getPublicWebhookUrl(path: string): string {
@@ -543,7 +543,21 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
     let userMessage = 'Failed to send message';
     let technicalDetails = '';
     
-    if (error.response?.data) {
+    if (error.response?.status === 404) {
+      // Instance not found in WhatsApp backend - needs reconnection
+      userMessage = 'WhatsApp no esta conectado';
+      technicalDetails = 'La sesion de WhatsApp expiro o el servicio se reinicio. Por favor ve a la configuracion de WhatsApp y vuelve a escanear el codigo QR para reconectar.';
+      
+      // Update instance status to reflect disconnection
+      try {
+        await prisma.whatsAppInstance.updateMany({
+          where: { businessId: req.params.businessId },
+          data: { status: 'disconnected', qr: null }
+        });
+      } catch (updateErr) {
+        console.error('Failed to update instance status:', updateErr);
+      }
+    } else if (error.response?.data) {
       const data = error.response.data;
       if (data.error) {
         userMessage = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
