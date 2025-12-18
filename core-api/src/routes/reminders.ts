@@ -44,7 +44,10 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
       weekendsEnabled,
       triggerMode,
       stopOnReply,
-      followUpSteps
+      followUpSteps,
+      metaTemplateId,
+      templateVariables,
+      templateEnabled
     } = req.body;
     
     if (triggerMode && !['user', 'agent', 'any'].includes(triggerMode)) {
@@ -65,7 +68,10 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
         weekendsEnabled: weekendsEnabled ?? undefined,
         triggerMode: triggerMode ?? undefined,
         stopOnReply: stopOnReply ?? undefined,
-        followUpSteps: followUpSteps !== undefined ? followUpSteps : undefined
+        followUpSteps: followUpSteps !== undefined ? followUpSteps : undefined,
+        metaTemplateId: metaTemplateId !== undefined ? metaTemplateId : undefined,
+        templateVariables: templateVariables !== undefined ? templateVariables : undefined,
+        templateEnabled: templateEnabled !== undefined ? templateEnabled : undefined
       },
       create: {
         businessId,
@@ -80,7 +86,10 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
         weekendsEnabled: weekendsEnabled ?? false,
         triggerMode: triggerMode ?? 'user',
         stopOnReply: stopOnReply ?? true,
-        followUpSteps: followUpSteps ?? null
+        followUpSteps: followUpSteps ?? null,
+        metaTemplateId: metaTemplateId ?? null,
+        templateVariables: templateVariables ?? null,
+        templateEnabled: templateEnabled ?? false
       }
     });
     
