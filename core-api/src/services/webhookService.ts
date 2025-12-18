@@ -9,8 +9,52 @@ interface WebhookPayload {
   data: Record<string, any>;
 }
 
+const DEFAULT_WEBHOOK_EVENTS = ['user_message', 'agent_message', 'stage_change', 'state_change', 'tool_call'];
+
 function generateSignature(payload: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(payload).digest('hex');
+}
+
+async function sendWithRetry(
+  url: string,
+  payload: WebhookPayload,
+  headers: Record<string, string>,
+  maxRetries: number = 3
+): Promise<boolean> {
+  const delays = [0, 2000, 5000, 10000];
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+        console.log(`[Webhook] Retry attempt ${attempt} for ${payload.event}`);
+      }
+      
+      await axios.post(url, payload, {
+        headers,
+        timeout: 10000
+      });
+      
+      return true;
+    } catch (error: any) {
+      const isLastAttempt = attempt === maxRetries;
+      const statusCode = error.response?.status;
+      
+      if (statusCode && statusCode >= 400 && statusCode < 500 && statusCode !== 429) {
+        console.error(`[Webhook] Client error ${statusCode}, not retrying: ${error.message}`);
+        return false;
+      }
+      
+      if (isLastAttempt) {
+        console.error(`[Webhook] All ${maxRetries + 1} attempts failed for ${payload.event}: ${error.message}`);
+        return false;
+      }
+      
+      console.warn(`[Webhook] Attempt ${attempt + 1} failed: ${error.message}`);
+    }
+  }
+  
+  return false;
 }
 
 export async function dispatchWebhook(
@@ -25,7 +69,7 @@ export async function dispatchWebhook(
         webhookUrl: true,
         webhookEvents: true,
         webhookSecret: true,
-        agentVersion: true
+        userId: true
       }
     });
 
@@ -33,7 +77,20 @@ export async function dispatchWebhook(
       return;
     }
 
-    if (!business.webhookEvents.includes(event)) {
+    const user = await prisma.user.findUnique({
+      where: { id: business.userId },
+      select: { subscriptionTier: true }
+    });
+
+    if (!user || (user.subscriptionTier !== 'PRO' && user.subscriptionTier !== 'ENTERPRISE')) {
+      return;
+    }
+
+    const allowedEvents = business.webhookEvents.length > 0 
+      ? business.webhookEvents 
+      : DEFAULT_WEBHOOK_EVENTS;
+    
+    if (!allowedEvents.includes(event)) {
       return;
     }
 
@@ -47,18 +104,21 @@ export async function dispatchWebhook(
     const payloadString = JSON.stringify(payload);
     const signature = generateSignature(payloadString, business.webhookSecret || '');
 
-    await axios.post(business.webhookUrl, payload, {
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Signature': signature,
-        'X-Webhook-Event': event
-      },
-      timeout: 5000
-    });
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Webhook-Signature': signature,
+      'X-Webhook-Event': event
+    };
 
-    console.log(`[Webhook] Dispatched ${event} to ${business.webhookUrl}`);
+    const success = await sendWithRetry(business.webhookUrl, payload, headers, 3);
+    
+    if (success) {
+      console.log(`[Webhook] Successfully dispatched ${event} to ${business.webhookUrl}`);
+    } else {
+      console.error(`[Webhook] Failed to deliver ${event} to ${business.webhookUrl} after all retries`);
+    }
   } catch (error: any) {
-    console.error(`[Webhook] Failed to dispatch ${event}:`, error.message);
+    console.error(`[Webhook] Critical error dispatching ${event}:`, error.message);
   }
 }
 
