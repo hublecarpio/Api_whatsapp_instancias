@@ -51,13 +51,23 @@ export default function ExtractionPage() {
     }
   }, [currentBusiness?.id]);
 
+  useEffect(() => {
+    if (success || error) {
+      const timer = setTimeout(() => {
+        setSuccess('');
+        setError('');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, error]);
+
   const loadFields = async () => {
     try {
       setLoading(true);
       const response = await extractionApi.getFields(currentBusiness!.id);
       setFields(response.data);
     } catch (err: any) {
-      setError('Error loading extraction fields');
+      setError('Error al cargar campos');
     } finally {
       setLoading(false);
     }
@@ -88,7 +98,7 @@ export default function ExtractionPage() {
         useForAppointment: formData.useForAppointment,
       });
 
-      setSuccess('Campo creado exitosamente');
+      setSuccess('Campo creado');
       setShowAddModal(false);
       resetForm();
       loadFields();
@@ -119,7 +129,7 @@ export default function ExtractionPage() {
       resetForm();
       loadFields();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al actualizar campo');
+      setError(err.response?.data?.error || 'Error al actualizar');
     } finally {
       setSaving(false);
     }
@@ -133,7 +143,7 @@ export default function ExtractionPage() {
       setSuccess('Campo eliminado');
       loadFields();
     } catch (err: any) {
-      setError('Error al eliminar campo');
+      setError('Error al eliminar');
     }
   };
 
@@ -144,7 +154,7 @@ export default function ExtractionPage() {
       });
       loadFields();
     } catch (err: any) {
-      setError('Error al actualizar campo');
+      setError('Error al actualizar');
     }
   };
 
@@ -174,23 +184,23 @@ export default function ExtractionPage() {
   if (!currentBusiness) {
     return (
       <div className="p-6">
-        <p className="text-gray-500">Selecciona un negocio primero</p>
+        <p className="text-gray-400">Selecciona un negocio primero</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Campos de Extraccion</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-white">Datos Personalizados</h1>
+          <p className="text-gray-400 mt-1">
             Configura que datos extraer automaticamente de las conversaciones
           </p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+          className="btn btn-primary flex items-center gap-2"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -200,78 +210,78 @@ export default function ExtractionPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <div className="mb-4 p-3 bg-accent-error/20 border border-accent-error/50 text-accent-error rounded-lg">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg">
+        <div className="mb-4 p-3 bg-accent-success/20 border border-accent-success/50 text-accent-success rounded-lg">
           {success}
         </div>
       )}
 
-      <div className="bg-white rounded-lg border shadow-sm">
-        <div className="p-4 border-b bg-gray-50">
-          <div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-600">
+      <div className="bg-dark-card rounded-xl border border-dark-border overflow-hidden">
+        <div className="p-4 border-b border-dark-border bg-dark-surface">
+          <div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-400">
             <div className="col-span-3">Campo</div>
             <div className="col-span-2">Tipo</div>
             <div className="col-span-3">Descripcion</div>
             <div className="col-span-1 text-center">Requerido</div>
-            <div className="col-span-1 text-center">Para Citas</div>
+            <div className="col-span-1 text-center">Citas</div>
             <div className="col-span-2 text-center">Acciones</div>
           </div>
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-gray-500">Cargando campos...</div>
+          <div className="p-8 text-center text-gray-500">Cargando...</div>
         ) : fields.length === 0 ? (
-          <div className="p-8 text-center">
-            <svg className="w-12 h-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="p-12 text-center">
+            <svg className="w-12 h-12 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="text-gray-600 mb-2">No hay campos configurados</p>
+            <p className="text-gray-300 mb-2">No hay campos configurados</p>
             <p className="text-gray-500 text-sm">
               Agrega campos como email, direccion, motivo de consulta, etc.
             </p>
           </div>
         ) : (
-          <div className="divide-y">
+          <div className="divide-y divide-dark-border">
             {fields.map((field) => (
               <div 
                 key={field.id} 
-                className={`p-4 grid grid-cols-12 gap-4 items-center ${!field.enabled ? 'opacity-50 bg-gray-50' : ''}`}
+                className={`p-4 grid grid-cols-12 gap-4 items-center hover:bg-dark-hover transition-colors ${!field.enabled ? 'opacity-50' : ''}`}
               >
                 <div className="col-span-3">
-                  <div className="font-medium text-gray-900">{field.fieldLabel}</div>
+                  <div className="font-medium text-white">{field.fieldLabel}</div>
                   <div className="text-xs text-gray-500 font-mono">{field.fieldKey}</div>
                 </div>
                 <div className="col-span-2">
-                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm">
+                  <span className="px-2 py-1 bg-dark-surface text-gray-300 rounded text-sm border border-dark-border">
                     {FIELD_TYPES.find(t => t.value === field.fieldType)?.label || field.fieldType}
                   </span>
                 </div>
-                <div className="col-span-3 text-sm text-gray-600 truncate">
+                <div className="col-span-3 text-sm text-gray-400 truncate">
                   {field.description || '-'}
                 </div>
                 <div className="col-span-1 text-center">
                   {field.required ? (
-                    <span className="text-green-600">Si</span>
+                    <span className="text-neon-blue">Si</span>
                   ) : (
-                    <span className="text-gray-400">No</span>
+                    <span className="text-gray-600">No</span>
                   )}
                 </div>
                 <div className="col-span-1 text-center">
                   {field.useForAppointment ? (
-                    <span className="text-blue-600">Si</span>
+                    <span className="text-accent-purple">Si</span>
                   ) : (
-                    <span className="text-gray-400">No</span>
+                    <span className="text-gray-600">No</span>
                   )}
                 </div>
                 <div className="col-span-2 flex items-center justify-center gap-2">
                   <button
                     onClick={() => handleToggleEnabled(field)}
-                    className={`p-1.5 rounded ${field.enabled ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-100'}`}
+                    className={`p-1.5 rounded transition-colors ${field.enabled ? 'text-accent-success hover:bg-accent-success/20' : 'text-gray-500 hover:bg-dark-hover'}`}
                     title={field.enabled ? 'Desactivar' : 'Activar'}
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -280,7 +290,7 @@ export default function ExtractionPage() {
                   </button>
                   <button
                     onClick={() => openEditModal(field)}
-                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                    className="p-1.5 text-neon-blue hover:bg-neon-blue/20 rounded transition-colors"
                     title="Editar"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -289,7 +299,7 @@ export default function ExtractionPage() {
                   </button>
                   <button
                     onClick={() => handleDeleteField(field.id)}
-                    className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                    className="p-1.5 text-accent-error hover:bg-accent-error/20 rounded transition-colors"
                     title="Eliminar"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -303,26 +313,26 @@ export default function ExtractionPage() {
         )}
       </div>
 
-      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <h3 className="font-medium text-blue-900 mb-2">Como funciona</h3>
-        <ul className="text-sm text-blue-800 space-y-1">
-          <li>La IA extrae automaticamente estos datos de las conversaciones con clientes</li>
-          <li>Los campos marcados como "Para Citas" se usan en la herramienta de agendar citas</li>
-          <li>Puedes ver y editar los datos extraidos en el perfil de cada contacto</li>
-          <li>Los datos con fuente "manual" tienen prioridad y no se sobreescriben</li>
+      <div className="mt-6 p-4 bg-neon-blue/10 border border-neon-blue/30 rounded-xl">
+        <h3 className="font-medium text-neon-blue mb-2">Como funciona</h3>
+        <ul className="text-sm text-gray-300 space-y-1">
+          <li>La IA extrae automaticamente estos datos de las conversaciones</li>
+          <li>Los campos marcados como "Citas" se usan en la herramienta de agendar</li>
+          <li>Puedes ver y editar los datos en el panel de chat de cada contacto</li>
+          <li>Las ediciones manuales tienen prioridad y no se sobreescriben</li>
         </ul>
       </div>
 
       {(showAddModal || editingField) && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
-            <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
-                {editingField ? 'Editar Campo' : 'Nuevo Campo de Extraccion'}
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card rounded-xl border border-dark-border shadow-2xl max-w-lg w-full">
+            <div className="p-4 border-b border-dark-border flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white">
+                {editingField ? 'Editar Campo' : 'Nuevo Campo'}
               </h2>
               <button
                 onClick={() => { setShowAddModal(false); setEditingField(null); resetForm(); }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-white transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -332,41 +342,41 @@ export default function ExtractionPage() {
 
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Nombre del Campo *
                 </label>
                 <input
                   type="text"
                   value={formData.fieldLabel}
                   onChange={(e) => setFormData({ ...formData, fieldLabel: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className="input"
                   placeholder="Ej: Email, Direccion, Motivo de Consulta"
                 />
               </div>
 
               {!editingField && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
                     Clave (opcional)
                   </label>
                   <input
                     type="text"
                     value={formData.fieldKey}
                     onChange={(e) => setFormData({ ...formData, fieldKey: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 font-mono text-sm"
-                    placeholder="Se genera automaticamente del nombre"
+                    className="input font-mono text-sm"
+                    placeholder="Se genera del nombre"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Tipo de Dato
                 </label>
                 <select
                   value={formData.fieldType}
                   onChange={(e) => setFormData({ ...formData, fieldType: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className="input"
                 >
                   {FIELD_TYPES.map((type) => (
                     <option key={type.value} value={type.value}>{type.label}</option>
@@ -375,15 +385,15 @@ export default function ExtractionPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Descripcion para la IA
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className="input resize-none"
                   rows={2}
-                  placeholder="Describe que dato debe extraer la IA. Ej: 'El motivo de la consulta o problema que tiene el cliente'"
+                  placeholder="Describe que dato debe extraer. Ej: 'El motivo de la consulta del cliente'"
                 />
               </div>
 
@@ -393,9 +403,9 @@ export default function ExtractionPage() {
                     type="checkbox"
                     checked={formData.required}
                     onChange={(e) => setFormData({ ...formData, required: e.target.checked })}
-                    className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                    className="w-4 h-4 rounded bg-dark-surface border-dark-border text-neon-blue focus:ring-neon-blue/50"
                   />
-                  <span className="text-sm text-gray-700">Requerido</span>
+                  <span className="text-sm text-gray-300">Requerido</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -403,26 +413,26 @@ export default function ExtractionPage() {
                     type="checkbox"
                     checked={formData.useForAppointment}
                     onChange={(e) => setFormData({ ...formData, useForAppointment: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    className="w-4 h-4 rounded bg-dark-surface border-dark-border text-accent-purple focus:ring-accent-purple/50"
                   />
-                  <span className="text-sm text-gray-700">Usar para Citas</span>
+                  <span className="text-sm text-gray-300">Usar para Citas</span>
                 </label>
               </div>
             </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3 rounded-b-xl">
+            <div className="p-4 border-t border-dark-border flex justify-end gap-3">
               <button
                 onClick={() => { setShowAddModal(false); setEditingField(null); resetForm(); }}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg"
+                className="btn btn-secondary"
               >
                 Cancelar
               </button>
               <button
                 onClick={editingField ? handleUpdateField : handleAddField}
                 disabled={saving || !formData.fieldLabel.trim()}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                className="btn btn-primary"
               >
-                {saving ? 'Guardando...' : (editingField ? 'Actualizar' : 'Crear Campo')}
+                {saving ? 'Guardando...' : (editingField ? 'Actualizar' : 'Crear')}
               </button>
             </div>
           </div>

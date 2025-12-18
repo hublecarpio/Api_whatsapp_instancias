@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
@@ -130,6 +130,17 @@ export default function ChatPage() {
   const [templateVariables, setTemplateVariables] = useState<string[]>([]);
   const [newChatTemplateVariables, setNewChatTemplateVariables] = useState<string[]>([]);
   const [contactData, setContactData] = useState<Record<string, any>>({});
+  const [extractedFields, setExtractedFields] = useState<Array<{
+    fieldKey: string;
+    fieldLabel: string;
+    fieldType: string;
+    value: string | null;
+    confidence: number | null;
+    source: string | null;
+  }>>([]);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [savingField, setSavingField] = useState(false);
   const [currentStage, setCurrentStage] = useState<{id: string; name: string; color: string} | null>(null);
   const [showContactPanel, setShowContactPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
@@ -414,12 +425,36 @@ export default function ChatPage() {
   const fetchContactExtractedData = async (phone: string) => {
     if (!currentBusiness) return;
     try {
-      const response = await tagsApi.getContactExtractedData(currentBusiness.id, phone);
-      setContactData(response.data.extractedData || {});
-      setCurrentStage(response.data.currentStage || null);
+      const [extractionRes, stageRes] = await Promise.all([
+        extractionApi.getContactData(currentBusiness.id, phone),
+        tagsApi.getContactExtractedData(currentBusiness.id, phone)
+      ]);
+      setExtractedFields(extractionRes.data || []);
+      const dataMap: Record<string, any> = {};
+      (extractionRes.data || []).forEach((f: any) => {
+        if (f.value) dataMap[f.fieldKey] = f.value;
+      });
+      setContactData(dataMap);
+      setCurrentStage(stageRes.data.currentStage || null);
     } catch (err) {
       console.error('Failed to fetch contact extracted data:', err);
       setContactData({});
+      setExtractedFields([]);
+    }
+  };
+
+  const handleSaveExtractedField = async (fieldKey: string, value: string) => {
+    if (!currentBusiness || !selectedPhone) return;
+    setSavingField(true);
+    try {
+      await extractionApi.updateContactData(currentBusiness.id, selectedPhone, { [fieldKey]: value });
+      await fetchContactExtractedData(selectedPhone);
+      setEditingField(null);
+      setEditingValue('');
+    } catch (err) {
+      console.error('Failed to save extracted field:', err);
+    } finally {
+      setSavingField(false);
     }
   };
 
@@ -1144,7 +1179,7 @@ export default function ChatPage() {
 
               {showContactPanel && (
                 <div className="px-4 py-3 border-b border-dark-border bg-dark-surface">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-3">
                     <h4 className="text-sm font-medium text-white">Datos del Contacto</h4>
                     {currentStage && (
                       <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${currentStage.color}20`, color: currentStage.color }}>
@@ -1152,32 +1187,57 @@ export default function ChatPage() {
                       </span>
                     )}
                   </div>
-                  {Object.keys(contactData).length > 0 ? (
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {contactData.nombre && (
-                        <div><span className="text-gray-500">Nombre:</span> <span className="text-white">{contactData.nombre}</span></div>
-                      )}
-                      {contactData.email && (
-                        <div><span className="text-gray-500">Email:</span> <span className="text-white">{contactData.email}</span></div>
-                      )}
-                      {contactData.direccion && (
-                        <div className="col-span-2"><span className="text-gray-500">Dirección:</span> <span className="text-white">{contactData.direccion}</span></div>
-                      )}
-                      {contactData.ciudad && (
-                        <div><span className="text-gray-500">Ciudad:</span> <span className="text-white">{contactData.ciudad}</span></div>
-                      )}
-                      {contactData.codigo_postal && (
-                        <div><span className="text-gray-500">C.P.:</span> <span className="text-white">{contactData.codigo_postal}</span></div>
-                      )}
-                      {contactData.documento && (
-                        <div><span className="text-gray-500">Documento:</span> <span className="text-white">{contactData.documento}</span></div>
-                      )}
-                      {contactData.notas && (
-                        <div className="col-span-2"><span className="text-gray-500">Notas:</span> <span className="text-gray-400">{contactData.notas}</span></div>
-                      )}
+                  {extractedFields.length > 0 ? (
+                    <div className="space-y-2">
+                      {extractedFields.map((field) => (
+                        <div key={field.fieldKey} className="flex items-center gap-2 text-xs">
+                          <span className="text-gray-500 min-w-[80px]">{field.fieldLabel}:</span>
+                          {editingField === field.fieldKey ? (
+                            <div className="flex-1 flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                className="flex-1 px-2 py-1 bg-dark-card border border-dark-border rounded text-white text-xs focus:outline-none focus:border-neon-blue"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveExtractedField(field.fieldKey, editingValue);
+                                  if (e.key === 'Escape') { setEditingField(null); setEditingValue(''); }
+                                }}
+                              />
+                              <button
+                                onClick={() => handleSaveExtractedField(field.fieldKey, editingValue)}
+                                disabled={savingField}
+                                className="p-1 text-accent-success hover:bg-accent-success/20 rounded"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              </button>
+                              <button
+                                onClick={() => { setEditingField(null); setEditingValue(''); }}
+                                className="p-1 text-gray-400 hover:bg-dark-hover rounded"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex items-center gap-1 group">
+                              <span className={field.value ? 'text-white' : 'text-gray-600 italic'}>{field.value || 'Sin datos'}</span>
+                              {field.source === 'manual' && <span className="text-[9px] text-accent-success">manual</span>}
+                              {field.source === 'tool' && <span className="text-[9px] text-purple-400">tool</span>}
+                              <button
+                                onClick={() => { setEditingField(field.fieldKey); setEditingValue(field.value || ''); }}
+                                className="ml-auto p-1 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-neon-blue transition-all"
+                                title="Editar"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-gray-500">Sin datos extraídos aún. Los datos se extraen automáticamente de las conversaciones.</p>
+                    <p className="text-xs text-gray-500">Sin campos configurados. Configura campos en Datos Personalizados.</p>
                   )}
                 </div>
               )}
