@@ -5,6 +5,8 @@ import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage } from '.
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
+const AUTO_TEMPLATE_SENDING_ENABLED = false;
+
 function cleanMarkdownForWhatsApp(text: string): string {
   let cleaned = text;
   cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$2');
@@ -19,7 +21,6 @@ function cleanMarkdownForWhatsApp(text: string): string {
 }
 
 async function getActiveInstance(businessId: string) {
-  // First try: active and connected
   const connectedInstance = await prisma.whatsAppInstance.findFirst({
     where: { 
       businessId,
@@ -32,7 +33,6 @@ async function getActiveInstance(businessId: string) {
   
   if (connectedInstance) return connectedInstance;
   
-  // Second try: just active
   const activeInstance = await prisma.whatsAppInstance.findFirst({
     where: { 
       businessId,
@@ -44,7 +44,6 @@ async function getActiveInstance(businessId: string) {
   
   if (activeInstance) return activeInstance;
   
-  // Third try: any instance for this business (regardless of isActive/status)
   const anyInstance = await prisma.whatsAppInstance.findFirst({
     where: { businessId },
     include: { metaCredential: true },
@@ -56,13 +55,11 @@ async function getActiveInstance(businessId: string) {
     return anyInstance;
   }
   
-  // Final fallback: query WhatsApp API directly for Baileys instances
   try {
     const response = await axios.get(`${WA_API_URL}/instances`, { timeout: 5000 });
     const rawData = response.data?.instances || response.data;
     const instances = Array.isArray(rawData) ? rawData : [];
     
-    // Find instance that matches this business (by backendId pattern)
     const businessPrefix = `biz_${businessId.substring(0, 8)}`;
     const waInstance = instances.find((inst: any) => 
       inst.id?.startsWith(businessPrefix) || inst.businessId === businessId
@@ -132,30 +129,33 @@ interface TemplateData {
   bodyText?: string;
 }
 
-async function getDefaultTemplate(businessId: string): Promise<TemplateData | null> {
-  const instance = await getActiveInstance(businessId);
+interface ExplicitTemplateConfig {
+  templateId: string;
+  templateName: string;
+  variables: Record<string, string>;
+}
+
+async function getExplicitlyConfiguredTemplate(
+  reminder: any,
+  contact: any
+): Promise<{ template: TemplateData; isValid: boolean } | null> {
+  const templateConfig = reminder.templateConfig as ExplicitTemplateConfig | null;
   
-  if (!instance || instance.provider !== 'META_CLOUD' || !instance.metaCredential) {
-    console.log(`[REMINDER] No Meta Cloud instance with credentials for business ${businessId}`);
+  if (!templateConfig || !templateConfig.templateId) {
     return null;
   }
   
-  const template = await prisma.metaTemplate.findFirst({
-    where: { 
-      credentialId: instance.metaCredential.id,
-      status: 'APPROVED',
-      category: { in: ['MARKETING', 'UTILITY'] }
-    },
-    orderBy: [{ category: 'asc' }, { updatedAt: 'desc' }]
+  const template = await prisma.metaTemplate.findUnique({
+    where: { id: templateConfig.templateId }
   });
   
-  if (!template) return null;
+  if (!template || template.status !== 'APPROVED') {
+    console.log(`[REMINDER] Configured template ${templateConfig.templateId} not found or not approved`);
+    return null;
+  }
   
-  let components: TemplateData['components'] = undefined;
-  
+  let storedComponents: any[] = [];
   if (template.components) {
-    let storedComponents: any[];
-    
     if (typeof template.components === 'string') {
       try {
         storedComponents = JSON.parse(template.components);
@@ -164,45 +164,81 @@ async function getDefaultTemplate(businessId: string): Promise<TemplateData | nu
       }
     } else if (Array.isArray(template.components)) {
       storedComponents = template.components;
-    } else {
-      storedComponents = [];
-    }
-    
-    const parsedComponents: TemplateData['components'] = [];
-    
-    for (const comp of storedComponents) {
-      const compType = comp.type?.toUpperCase();
-      
-      if (compType === 'HEADER' && comp.format === 'TEXT' && comp.text) {
-        const matches = comp.text.match(/\{\{(\d+)\}\}/g) || [];
-        if (matches.length > 0) {
-          parsedComponents.push({
-            type: 'header',
-            parameters: matches.map(() => ({ type: 'text', text: 'Estimado cliente' }))
-          });
-        }
-      } else if (compType === 'BODY' && comp.text) {
-        const matches = comp.text.match(/\{\{(\d+)\}\}/g) || [];
-        if (matches.length > 0) {
-          parsedComponents.push({
-            type: 'body',
-            parameters: matches.map(() => ({ type: 'text', text: 'Cliente' }))
-          });
-        }
-      }
-    }
-    
-    if (parsedComponents.length > 0) {
-      components = parsedComponents;
     }
   }
   
-  return { 
-    name: template.name, 
-    language: template.language,
-    components: components && components.length > 0 ? components : undefined,
-    bodyText: template.bodyText || undefined
+  const components: TemplateData['components'] = [];
+  let allVariablesResolved = true;
+  
+  for (const comp of storedComponents) {
+    const compType = comp.type?.toUpperCase();
+    
+    if ((compType === 'HEADER' || compType === 'BODY') && comp.text) {
+      const matches = comp.text.match(/\{\{(\d+)\}\}/g) || [];
+      
+      if (matches.length > 0) {
+        const parameters: Array<{ type: string; text: string }> = [];
+        
+        for (let i = 0; i < matches.length; i++) {
+          const varKey = `${compType.toLowerCase()}_${i + 1}`;
+          let value = templateConfig.variables?.[varKey];
+          
+          if (!value && contact) {
+            if (varKey.includes('1')) {
+              value = contact.name || contact.phone;
+            }
+          }
+          
+          if (!value) {
+            console.log(`[REMINDER] Missing variable ${varKey} for template ${template.name}`);
+            allVariablesResolved = false;
+            value = '';
+          }
+          
+          parameters.push({ type: 'text', text: value });
+        }
+        
+        components.push({
+          type: compType.toLowerCase() as 'header' | 'body',
+          parameters
+        });
+      }
+    }
+  }
+  
+  return {
+    template: {
+      name: template.name,
+      language: template.language,
+      components: components.length > 0 ? components : undefined,
+      bodyText: template.bodyText || undefined
+    },
+    isValid: allVariablesResolved
   };
+}
+
+function validateTemplateBeforeSend(template: TemplateData): { valid: boolean; reason?: string } {
+  if (!template.name || !template.language) {
+    return { valid: false, reason: 'Template missing name or language' };
+  }
+  
+  if (template.components) {
+    for (const comp of template.components) {
+      if (comp.parameters) {
+        for (const param of comp.parameters) {
+          if (!param.text || param.text.trim() === '') {
+            return { valid: false, reason: `Empty parameter in ${comp.type} component` };
+          }
+          
+          if (param.text.includes('{{') && param.text.includes('}}')) {
+            return { valid: false, reason: `Unresolved placeholder in ${comp.type}: ${param.text}` };
+          }
+        }
+      }
+    }
+  }
+  
+  return { valid: true };
 }
 
 async function generateFollowUpMessage(
@@ -225,7 +261,6 @@ async function generateFollowUpMessage(
     return templates[Math.min(attemptNumber - 1, templates.length - 1)];
   }
   
-  // Fetch enriched contact context
   const [recentMessages, contact, pendingOrders, totalMessageCount] = await Promise.all([
     prisma.messageLog.findMany({
       where: {
@@ -258,7 +293,6 @@ async function generateFollowUpMessage(
     .map(m => `${m.direction === 'inbound' ? 'Cliente' : 'Agente'}: ${m.message}`)
     .join('\n');
   
-  // Build enriched context
   const contactContext: string[] = [];
   
   if (contact) {
@@ -276,7 +310,6 @@ async function generateFollowUpMessage(
   
   contactContext.push(`Total de mensajes intercambiados: ${totalMessageCount}`);
   
-  // Determine engagement level
   let engagementLevel = 'nuevo';
   if (totalMessageCount > 50) engagementLevel = 'cliente frecuente';
   else if (totalMessageCount > 20) engagementLevel = 'cliente regular';
@@ -371,16 +404,12 @@ async function getTodayAttemptCount(businessId: string, contactPhone: string): P
 }
 
 const MAX_RETRY_ATTEMPTS = 3;
-const PROCESSING_TIMEOUT_MS = 120000; // 2 minutes
+const PROCESSING_TIMEOUT_MS = 120000;
 
 export async function processReminders(): Promise<void> {
   const now = new Date();
   const processingTimeout = new Date(now.getTime() - PROCESSING_TIMEOUT_MS);
   
-  // Find reminders that are:
-  // 1. Pending and due (scheduledAt <= now)
-  // 2. Not being processed by another worker (processingAt is null OR timed out)
-  // 3. Ordered by scheduledAt ASC (most urgent first)
   const pendingReminders = await prisma.reminder.findMany({
     where: {
       status: 'pending',
@@ -407,11 +436,9 @@ export async function processReminders(): Promise<void> {
   }
   
   for (const reminder of pendingReminders) {
-    // Use fresh timestamp for each reminder claim to prevent timeout during long processing
     const claimTime = new Date();
     const claimTimeout = new Date(claimTime.getTime() - PROCESSING_TIMEOUT_MS);
     
-    // Claim this reminder by setting processingAt (atomic operation to prevent duplicates)
     const claimed = await prisma.reminder.updateMany({
       where: {
         id: reminder.id,
@@ -424,14 +451,12 @@ export async function processReminders(): Promise<void> {
       data: { processingAt: claimTime }
     });
     
-    // If we couldn't claim it, another worker got it first
     if (claimed.count === 0) {
       console.log(`[REMINDER] Reminder ${reminder.id} already claimed by another worker`);
       continue;
     }
     
     try {
-      // Fetch fresh reminder data after claiming (for accurate retryCount)
       const freshReminder = await prisma.reminder.findUnique({
         where: { id: reminder.id }
       });
@@ -475,8 +500,7 @@ export async function processReminders(): Promise<void> {
       
       const instance = await getActiveInstance(reminder.businessId);
       if (!instance) {
-        // Release lock and reschedule for later retry
-        const retryAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+        const retryAt = new Date(Date.now() + 15 * 60 * 1000);
         await prisma.reminder.update({
           where: { id: reminder.id },
           data: { scheduledAt: retryAt, processingAt: null }
@@ -495,18 +519,69 @@ export async function processReminders(): Promise<void> {
       console.log(`[REMINDER] Window status for ${reminder.contactPhone}: requiresTemplate=${windowStatus.requiresTemplate}, provider=${windowStatus.provider}, hours=${windowStatus.hoursSinceLastMessage}`);
       
       if (windowStatus.requiresTemplate && windowStatus.provider === 'META_CLOUD') {
-        const templateData = await getDefaultTemplate(reminder.businessId);
-        if (!templateData) {
-          console.log(`[REMINDER] No approved template for Meta Cloud business ${reminder.businessId} - cannot send reminder outside 24h window`);
+        if (!AUTO_TEMPLATE_SENDING_ENABLED) {
+          console.log(`[REMINDER] AUTO_TEMPLATE_SENDING is DISABLED - skipping reminder ${reminder.id} that requires template (24h window closed)`);
           await prisma.reminder.update({
             where: { id: reminder.id },
-            data: { status: 'no_template', processingAt: null }
+            data: { 
+              status: 'skipped',
+              lastError: 'Auto template sending disabled - 24h window closed, requires explicit template configuration',
+              processingAt: null 
+            }
           });
           continue;
         }
-        usedTemplate = templateData;
-        message = templateData.bodyText || `[Template: ${templateData.name}]`;
-        console.log(`[REMINDER] Using template: ${templateData.name}`);
+        
+        const contact = await prisma.contact.findFirst({
+          where: { businessId: reminder.businessId, phone: reminder.contactPhone }
+        });
+        
+        const explicitTemplate = await getExplicitlyConfiguredTemplate(reminder, contact);
+        
+        if (!explicitTemplate) {
+          console.log(`[REMINDER] No explicitly configured template for reminder ${reminder.id} - cannot send outside 24h window`);
+          await prisma.reminder.update({
+            where: { id: reminder.id },
+            data: { 
+              status: 'no_template',
+              lastError: 'No template configured for this reminder - 24h window closed',
+              processingAt: null 
+            }
+          });
+          continue;
+        }
+        
+        if (!explicitTemplate.isValid) {
+          console.log(`[REMINDER] Template variables not fully resolved for reminder ${reminder.id}`);
+          await prisma.reminder.update({
+            where: { id: reminder.id },
+            data: { 
+              status: 'template_error',
+              lastError: 'Template has unresolved variables - cannot send',
+              processingAt: null 
+            }
+          });
+          continue;
+        }
+        
+        const validation = validateTemplateBeforeSend(explicitTemplate.template);
+        if (!validation.valid) {
+          console.log(`[REMINDER] Template validation failed for reminder ${reminder.id}: ${validation.reason}`);
+          await prisma.reminder.update({
+            where: { id: reminder.id },
+            data: { 
+              status: 'template_error',
+              lastError: `Template validation failed: ${validation.reason}`,
+              processingAt: null 
+            }
+          });
+          continue;
+        }
+        
+        usedTemplate = explicitTemplate.template;
+        message = usedTemplate.bodyText || `[Template: ${usedTemplate.name}]`;
+        console.log(`[REMINDER] Using explicitly configured template: ${usedTemplate.name}`);
+        
       } else if (!message) {
         message = await generateFollowUpMessage(
           reminder.businessId,
@@ -543,6 +618,20 @@ export async function processReminders(): Promise<void> {
         });
         
         if (usedTemplate) {
+          const finalValidation = validateTemplateBeforeSend(usedTemplate);
+          if (!finalValidation.valid) {
+            console.error(`[REMINDER] BLOCKED: Template failed final validation: ${finalValidation.reason}`);
+            await prisma.reminder.update({
+              where: { id: reminder.id },
+              data: { 
+                status: 'template_error',
+                lastError: `Final validation failed: ${finalValidation.reason}`,
+                processingAt: null 
+              }
+            });
+            continue;
+          }
+          
           await metaService.sendTemplate({
             to: cleanPhone,
             templateName: usedTemplate.name,
@@ -611,7 +700,6 @@ export async function processReminders(): Promise<void> {
         errorMessage = `Meta API Error: ${JSON.stringify(metaErrorDetails)}`;
       }
       
-      // Use fresh data for retry count
       const latestReminder = await prisma.reminder.findUnique({ where: { id: reminder.id } });
       const currentRetryCount = latestReminder?.retryCount || 0;
       const shouldRetry = currentRetryCount < MAX_RETRY_ATTEMPTS;
@@ -626,7 +714,6 @@ export async function processReminders(): Promise<void> {
       });
       
       if (shouldRetry) {
-        // Exponential backoff: 2min, 8min, 32min
         const retryDelayMs = Math.pow(4, currentRetryCount) * 2 * 60 * 1000;
         const nextRetryAt = new Date(Date.now() + retryDelayMs);
         
@@ -642,88 +729,81 @@ export async function processReminders(): Promise<void> {
         
         console.log(`[REMINDER] Scheduled retry for ${reminder.id} at ${nextRetryAt.toISOString()}`);
       } else {
-        // Max retries reached, mark as failed
         await prisma.reminder.update({
           where: { id: reminder.id },
-          data: { 
+          data: {
             status: 'failed',
+            executedAt: new Date(),
             lastError: errorMessage,
             processingAt: null
           }
         });
-        
-        console.log(`[REMINDER] Max retries reached for ${reminder.id}, marked as failed`);
+        console.log(`[REMINDER] Max retries reached for ${reminder.id} - marked as failed`);
       }
     }
   }
 }
 
-// Note: getDelayForAttempt, getMaxAttempts, checkInactiveContacts removed
-// Follow-ups are now scheduled event-driven via scheduleFollowUp() in followUpService.ts
-
 let workerInterval: NodeJS.Timeout | null = null;
 
-export interface ReminderStats {
-  pending: number;
-  executed: number;
-  failed: number;
-  skipped: number;
-  stuckProcessing: number;
-  scheduledToday: number;
-  executedToday: number;
-  failedToday: number;
-  retryPending: number;
+export function startReminderWorker(intervalMs: number = 30000): void {
+  if (workerInterval) {
+    console.log('[REMINDER] Worker already running');
+    return;
+  }
+  
+  console.log(`[REMINDER] Starting worker (event-driven mode)...`);
+  
+  processReminders().then(() => {
+    console.log('[REMINDER] Initial check complete. Stats:', getReminderStats());
+  }).catch(err => {
+    console.error('[REMINDER] Initial check failed:', err);
+  });
+  
+  workerInterval = setInterval(async () => {
+    try {
+      await processReminders();
+    } catch (error) {
+      console.error('[REMINDER] Worker error:', error);
+    }
+  }, intervalMs);
 }
 
-export async function getReminderStats(): Promise<ReminderStats> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const processingTimeout = new Date(Date.now() - PROCESSING_TIMEOUT_MS);
-  
-  const [pending, executed, failed, skipped, stuckProcessing, scheduledToday, executedToday, failedToday, retryPending] = await Promise.all([
+export function stopReminderWorker(): void {
+  if (workerInterval) {
+    clearInterval(workerInterval);
+    workerInterval = null;
+    console.log('[REMINDER] Worker stopped');
+  }
+}
+
+async function getReminderStats() {
+  const [pending, executed, failed, retryPending] = await Promise.all([
     prisma.reminder.count({ where: { status: 'pending' } }),
     prisma.reminder.count({ where: { status: 'executed' } }),
     prisma.reminder.count({ where: { status: 'failed' } }),
-    prisma.reminder.count({ where: { status: 'skipped' } }),
-    prisma.reminder.count({
-      where: {
-        status: 'pending',
-        processingAt: { lt: processingTimeout, not: null }
-      }
-    }),
-    prisma.reminder.count({
-      where: { scheduledAt: { gte: today } }
-    }),
-    prisma.reminder.count({
-      where: { status: 'executed', executedAt: { gte: today } }
-    }),
-    prisma.reminder.count({
-      where: { status: 'failed', createdAt: { gte: today } }
-    }),
-    prisma.reminder.count({
-      where: { status: 'pending', retryCount: { gt: 0 } }
-    })
+    prisma.reminder.count({ where: { status: 'pending', retryCount: { gt: 0 } } })
   ]);
   
-  return { pending, executed, failed, skipped, stuckProcessing, scheduledToday, executedToday, failedToday, retryPending };
+  return { pending, executed, failed, retryPending };
 }
 
-export async function getFailedRemindersDetails(limit: number = 20) {
+export async function getReminderStatsForBusiness(businessId: string) {
+  const [pending, executed, failed, skipped] = await Promise.all([
+    prisma.reminder.count({ where: { businessId, status: 'pending' } }),
+    prisma.reminder.count({ where: { businessId, status: 'executed' } }),
+    prisma.reminder.count({ where: { businessId, status: 'failed' } }),
+    prisma.reminder.count({ where: { businessId, status: 'skipped' } })
+  ]);
+  
+  return { pending, executed, failed, skipped };
+}
+
+export async function getFailedRemindersDetails(businessId: string) {
   return prisma.reminder.findMany({
-    where: { status: 'failed' },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    select: {
-      id: true,
-      contactPhone: true,
-      contactName: true,
-      attemptNumber: true,
-      retryCount: true,
-      lastError: true,
-      scheduledAt: true,
-      createdAt: true,
-      business: { select: { name: true } }
-    }
+    where: { businessId, status: 'failed' },
+    orderBy: { executedAt: 'desc' },
+    take: 50
   });
 }
 
@@ -740,48 +820,13 @@ export async function retryFailedReminder(reminderId: string): Promise<boolean> 
     where: { id: reminderId },
     data: {
       status: 'pending',
+      scheduledAt: new Date(),
       retryCount: 0,
+      executedAt: null,
       lastError: null,
-      processingAt: null,
-      scheduledAt: new Date()
+      processingAt: null
     }
   });
   
-  console.log(`[REMINDER] Manually retrying failed reminder ${reminderId}`);
   return true;
-}
-
-export function startReminderWorker(): void {
-  console.log('[REMINDER] Starting worker (event-driven mode)...');
-  
-  workerInterval = setInterval(async () => {
-    const startTime = Date.now();
-    try {
-      await processReminders();
-      const duration = Date.now() - startTime;
-      if (duration > 5000) {
-        console.log(`[REMINDER] Worker cycle completed in ${duration}ms`);
-      }
-    } catch (error) {
-      console.error('[REMINDER] Worker error:', error);
-    }
-  }, 60000);
-  
-  setTimeout(async () => {
-    try {
-      await processReminders();
-      const stats = await getReminderStats();
-      console.log(`[REMINDER] Initial check complete. Stats: pending=${stats.pending}, executed=${stats.executed}, failed=${stats.failed}, retryPending=${stats.retryPending}`);
-    } catch (error) {
-      console.error('[REMINDER] Initial check error:', error);
-    }
-  }, 5000);
-}
-
-export function stopReminderWorker(): void {
-  if (workerInterval) {
-    clearInterval(workerInterval);
-    workerInterval = null;
-    console.log('[REMINDER] Worker stopped');
-  }
 }
