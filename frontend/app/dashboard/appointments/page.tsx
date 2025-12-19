@@ -75,12 +75,14 @@ export default function AppointmentsPage() {
     notes: ''
   });
 
-  const [newAvailability, setNewAvailability] = useState<{ dayOfWeek: number; startTime: string; endTime: string }[]>([
-    { dayOfWeek: 1, startTime: '09:00', endTime: '18:00' },
-    { dayOfWeek: 2, startTime: '09:00', endTime: '18:00' },
-    { dayOfWeek: 3, startTime: '09:00', endTime: '18:00' },
-    { dayOfWeek: 4, startTime: '09:00', endTime: '18:00' },
-    { dayOfWeek: 5, startTime: '09:00', endTime: '18:00' },
+  const [newAvailability, setNewAvailability] = useState<{ dayOfWeek: number; startTime: string; endTime: string; enabled: boolean }[]>([
+    { dayOfWeek: 0, startTime: '09:00', endTime: '18:00', enabled: false },
+    { dayOfWeek: 1, startTime: '09:00', endTime: '18:00', enabled: true },
+    { dayOfWeek: 2, startTime: '09:00', endTime: '18:00', enabled: true },
+    { dayOfWeek: 3, startTime: '09:00', endTime: '18:00', enabled: true },
+    { dayOfWeek: 4, startTime: '09:00', endTime: '18:00', enabled: true },
+    { dayOfWeek: 5, startTime: '09:00', endTime: '18:00', enabled: true },
+    { dayOfWeek: 6, startTime: '09:00', endTime: '18:00', enabled: false },
   ]);
 
   useEffect(() => {
@@ -132,18 +134,19 @@ export default function AppointmentsPage() {
       );
       setAvailability(response.data);
       
-      if (response.data.length > 0) {
-        const scheduleMap = response.data.reduce((acc: any, slot: BusinessAvailability) => {
-          acc[slot.dayOfWeek] = { startTime: slot.startTime, endTime: slot.endTime };
-          return acc;
-        }, {});
-        
-        setNewAvailability(prev => prev.map(slot => ({
-          ...slot,
-          startTime: scheduleMap[slot.dayOfWeek]?.startTime || slot.startTime,
-          endTime: scheduleMap[slot.dayOfWeek]?.endTime || slot.endTime
-        })));
-      }
+      const scheduleMap = response.data.reduce((acc: any, slot: BusinessAvailability) => {
+        acc[slot.dayOfWeek] = { startTime: slot.startTime, endTime: slot.endTime };
+        return acc;
+      }, {});
+      
+      const enabledDays = new Set(response.data.map((slot: BusinessAvailability) => slot.dayOfWeek));
+      
+      setNewAvailability(prev => prev.map(slot => ({
+        ...slot,
+        startTime: scheduleMap[slot.dayOfWeek]?.startTime || slot.startTime,
+        endTime: scheduleMap[slot.dayOfWeek]?.endTime || slot.endTime,
+        enabled: enabledDays.has(slot.dayOfWeek)
+      })));
     } catch (error) {
       console.error('Error loading availability:', error);
     }
@@ -245,9 +248,13 @@ export default function AppointmentsPage() {
 
   const saveAvailability = async () => {
     try {
+      const enabledSchedule = newAvailability
+        .filter(slot => slot.enabled)
+        .map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime }));
+      
       await axios.post(
         `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/appointments/availability/config`,
-        { schedule: newAvailability },
+        { schedule: enabledSchedule },
         { headers: getAuthHeader() }
       );
       alert('Horarios guardados correctamente');
@@ -579,30 +586,45 @@ export default function AppointmentsPage() {
       {activeTab === 'availability' && (
         <div className="card">
           <h2 className="text-lg font-semibold text-white mb-4">Horarios de Atencion</h2>
-          <div className="space-y-4">
+          <p className="text-sm text-gray-400 mb-4">Configura los dias y horarios en que atiendes clientes. Los dias desactivados no estaran disponibles para agendar citas.</p>
+          <div className="space-y-3">
             {newAvailability.map((slot, index) => (
-              <div key={slot.dayOfWeek} className="flex items-center gap-4">
-                <div className="w-24 text-gray-300">{DAY_NAMES[slot.dayOfWeek]}</div>
+              <div key={slot.dayOfWeek} className={`flex items-center gap-4 p-3 rounded-lg transition-colors ${slot.enabled ? 'bg-dark-surface' : 'bg-dark-surface/50'}`}>
+                <button
+                  onClick={() => {
+                    const updated = [...newAvailability];
+                    updated[index].enabled = !updated[index].enabled;
+                    setNewAvailability(updated);
+                  }}
+                  className={`w-12 h-6 rounded-full relative transition-colors ${slot.enabled ? 'bg-neon-blue' : 'bg-gray-600'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${slot.enabled ? 'left-7' : 'left-1'}`} />
+                </button>
+                <div className={`w-24 font-medium ${slot.enabled ? 'text-white' : 'text-gray-500'}`}>
+                  {DAY_NAMES[slot.dayOfWeek]}
+                </div>
                 <input
                   type="time"
                   value={slot.startTime}
+                  disabled={!slot.enabled}
                   onChange={(e) => {
                     const updated = [...newAvailability];
                     updated[index].startTime = e.target.value;
                     setNewAvailability(updated);
                   }}
-                  className="input w-32"
+                  className={`input w-32 ${!slot.enabled && 'opacity-50 cursor-not-allowed'}`}
                 />
-                <span className="text-gray-500">a</span>
+                <span className={`${slot.enabled ? 'text-gray-400' : 'text-gray-600'}`}>a</span>
                 <input
                   type="time"
                   value={slot.endTime}
+                  disabled={!slot.enabled}
                   onChange={(e) => {
                     const updated = [...newAvailability];
                     updated[index].endTime = e.target.value;
                     setNewAvailability(updated);
                   }}
-                  className="input w-32"
+                  className={`input w-32 ${!slot.enabled && 'opacity-50 cursor-not-allowed'}`}
                 />
               </div>
             ))}

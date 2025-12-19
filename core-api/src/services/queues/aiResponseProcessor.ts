@@ -922,9 +922,9 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
             `${process.env.CORE_API_URL || 'http://localhost:3001'}/appointments/internal/schedule`,
             {
               businessId: business.id,
-              dateTime: fechaHora,
-              clientName: nombreCliente,
-              clientPhone: normalizedPhone,
+              scheduledAt: fechaHora,
+              contactName: nombreCliente,
+              contactPhone: normalizedPhone,
               service: servicio,
               durationMinutes: duracion,
               notes: notas
@@ -936,10 +936,25 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
           
           if (response.data.success) {
             const apt = response.data.appointment;
+            const aptDate = new Date(apt.scheduledAt);
+            const businessTimezone = business.timezone || 'America/Lima';
+            const fechaFormateada = aptDate.toLocaleDateString('es-PE', { 
+              weekday: 'long', 
+              day: 'numeric', 
+              month: 'long', 
+              year: 'numeric',
+              timeZone: businessTimezone
+            });
+            const horaFormateada = aptDate.toLocaleTimeString('es-PE', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: businessTimezone
+            });
+            
             toolMessages.push({
               role: 'tool',
               tool_call_id: toolCall.id,
-              content: `Cita agendada exitosamente:\n- Fecha: ${apt.date}\n- Hora: ${apt.time}\n- Cliente: ${nombreCliente}\n- Servicio: ${servicio || 'General'}`
+              content: `Cita agendada exitosamente:\n- Fecha: ${fechaFormateada}\n- Hora: ${horaFormateada}\n- Cliente: ${nombreCliente}\n- Servicio: ${servicio || 'General'}`
             });
           } else {
             toolMessages.push({
