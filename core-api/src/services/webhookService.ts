@@ -61,29 +61,44 @@ export async function dispatchWebhook(
   businessId: string,
   event: string,
   data: Record<string, any>
-): Promise<void> {
+): Promise<{ success: boolean; reason?: string; [key: string]: any }> {
   try {
+    console.log(`[Webhook] Attempting dispatch for business ${businessId}, event: ${event}`);
+    
     const business = await prisma.business.findUnique({
       where: { id: businessId },
       select: {
         webhookUrl: true,
         webhookEvents: true,
         webhookSecret: true,
-        userId: true
+        userId: true,
+        name: true
       }
     });
 
-    if (!business || !business.webhookUrl) {
-      return;
+    if (!business) {
+      console.log(`[Webhook] Business ${businessId} not found`);
+      return { success: false, reason: 'business_not_found' };
+    }
+    
+    if (!business.webhookUrl) {
+      console.log(`[Webhook] No webhookUrl configured for business ${business.name} (${businessId})`);
+      return { success: false, reason: 'no_webhook_url' };
     }
 
     const user = await prisma.user.findUnique({
       where: { id: business.userId },
-      select: { subscriptionTier: true }
+      select: { subscriptionTier: true, email: true }
     });
 
-    if (!user || (user.subscriptionTier !== 'PRO' && user.subscriptionTier !== 'ENTERPRISE')) {
-      return;
+    if (!user) {
+      console.log(`[Webhook] User not found for business ${businessId}`);
+      return { success: false, reason: 'user_not_found' };
+    }
+    
+    if (user.subscriptionTier !== 'PRO' && user.subscriptionTier !== 'ENTERPRISE') {
+      console.log(`[Webhook] User ${user.email} has tier ${user.subscriptionTier}, webhooks require PRO/ENTERPRISE`);
+      return { success: false, reason: 'tier_not_eligible', tier: user.subscriptionTier };
     }
 
     const allowedEvents = business.webhookEvents.length > 0 
@@ -91,7 +106,8 @@ export async function dispatchWebhook(
       : DEFAULT_WEBHOOK_EVENTS;
     
     if (!allowedEvents.includes(event)) {
-      return;
+      console.log(`[Webhook] Event ${event} not in allowed events: ${allowedEvents.join(', ')}`);
+      return { success: false, reason: 'event_not_allowed', allowedEvents };
     }
 
     const payload: WebhookPayload = {
@@ -110,15 +126,19 @@ export async function dispatchWebhook(
       'X-Webhook-Event': event
     };
 
+    console.log(`[Webhook] Sending to ${business.webhookUrl}...`);
     const success = await sendWithRetry(business.webhookUrl, payload, headers, 3);
     
     if (success) {
       console.log(`[Webhook] Successfully dispatched ${event} to ${business.webhookUrl}`);
+      return { success: true };
     } else {
       console.error(`[Webhook] Failed to deliver ${event} to ${business.webhookUrl} after all retries`);
+      return { success: false, reason: 'delivery_failed' };
     }
   } catch (error: any) {
     console.error(`[Webhook] Critical error dispatching ${event}:`, error.message);
+    return { success: false, reason: 'exception', error: error.message };
   }
 }
 

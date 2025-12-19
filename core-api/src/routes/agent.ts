@@ -13,7 +13,7 @@ import { searchProductsIntelligent } from '../services/productSearch.js';
 import { queueAIResponse, getAIQueueStats } from '../services/queues/aiResponseProcessor.js';
 import { getAIResponseQueue } from '../services/queues/index.js';
 import { scheduleFollowUp } from '../services/followUpService.js';
-import { dispatchAgentMessage } from '../services/webhookService.js';
+import { dispatchAgentMessage, dispatchWebhook } from '../services/webhookService.js';
 
 const router = Router();
 
@@ -2606,6 +2606,54 @@ router.get('/webhook/:businessId', authMiddleware, async (req: AuthRequest, res:
     });
   } catch (error: any) {
     console.error('Get webhook error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/webhook/:businessId/test', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId },
+      select: {
+        id: true,
+        name: true,
+        webhookUrl: true,
+        webhookEvents: true,
+        userId: true
+      }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: business.userId },
+      select: { subscriptionTier: true, email: true }
+    });
+
+    const testData = {
+      contactPhone: '+1234567890',
+      contactName: 'Test Contact',
+      message: 'This is a test webhook message',
+      messageType: 'text',
+      test: true
+    };
+
+    const result = await dispatchWebhook(businessId, 'user_message', testData);
+
+    res.json({
+      ...result,
+      businessName: business.name,
+      webhookUrl: business.webhookUrl,
+      webhookEvents: business.webhookEvents,
+      userTier: user?.subscriptionTier,
+      testPayload: testData
+    });
+  } catch (error: any) {
+    console.error('Test webhook error:', error);
     res.status(500).json({ error: error.message });
   }
 });
