@@ -3,6 +3,7 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
+import SuperAdminV2 from '@/components/SuperAdminV2';
 
 interface OverviewData {
   users: { total: number; bySubscription: Record<string, number> };
@@ -24,6 +25,7 @@ export default function SuperAdminPage() {
   const [loading, setLoading] = useState(false);
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [activeTab, setActiveTab] = useState('command');
+  const [useV2, setUseV2] = useState(false);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('superAdminToken');
@@ -158,62 +160,85 @@ export default function SuperAdminPage() {
             <Logo size="sm" />
             <h1 className="text-base sm:text-xl font-bold text-white">Super Admin</h1>
           </div>
-          <button onClick={handleLogout} className="btn btn-ghost text-xs sm:text-sm px-2 sm:px-4">
-            Salir
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setUseV2(!useV2)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                useV2 
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' 
+                  : 'bg-dark-hover text-gray-400 hover:text-white'
+              }`}
+            >
+              <span>{useV2 ? 'V2' : 'V1'}</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </button>
+            <button onClick={handleLogout} className="btn btn-ghost text-xs sm:text-sm px-2 sm:px-4">
+              Salir
+            </button>
+          </div>
         </div>
       </header>
 
-      <nav className="bg-dark-surface/80 backdrop-blur-sm border-b border-dark-border/50 px-2 sm:px-6 sticky top-0 z-10">
-        <div className="flex gap-1 sm:gap-2 -mb-px overflow-x-auto scrollbar-hide py-1">
-          {[
-            { id: 'command', label: 'Comando', icon: '⚡' },
-            { id: 'devconsole', label: 'Console', icon: '🔧' },
-            { id: 'users', label: 'Usuarios', icon: '👥' },
-            { id: 'businesses', label: 'Negocios', icon: '🏢' },
-            { id: 'whatsapp', label: 'WhatsApp', icon: '📱' },
-            { id: 'analytics', label: 'Ventas', icon: '📊' },
-            { id: 'billing', label: 'Billing', icon: '💳' },
-            { id: 'tokens', label: 'Tokens', icon: '🎯' },
-            { id: 'tools', label: 'Tools', icon: '🔨' },
-            { id: 'agentv2', label: 'V2 Enterprise Pro', icon: '🤖' },
-            { id: 'referrals', label: 'Referidos', icon: '🔗' },
-            { id: 'delegated', label: 'Agente', icon: '🎯' },
-            { id: 'system', label: 'Sistema', icon: '⚙️' }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-medium rounded-t-lg transition-all duration-200 whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === tab.id
-                  ? 'bg-gradient-to-b from-neon-blue/20 to-transparent border-b-2 border-neon-blue text-neon-blue shadow-lg shadow-neon-blue/10'
-                  : 'border-b-2 border-transparent text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <span className="text-sm sm:text-base">{tab.icon}</span>
-              <span className="hidden sm:inline">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      {useV2 ? (
+        <main className="p-3 sm:p-6">
+          <SuperAdminV2 token={token} />
+        </main>
+      ) : (
+        <>
+          <nav className="bg-dark-surface/80 backdrop-blur-sm border-b border-dark-border/50 px-2 sm:px-6 sticky top-0 z-10">
+            <div className="flex gap-1 sm:gap-2 -mb-px overflow-x-auto scrollbar-hide py-1">
+              {[
+                { id: 'command', label: 'Comando', icon: '⚡' },
+                { id: 'devconsole', label: 'Console', icon: '🔧' },
+                { id: 'users', label: 'Usuarios', icon: '👥' },
+                { id: 'businesses', label: 'Negocios', icon: '🏢' },
+                { id: 'whatsapp', label: 'WhatsApp', icon: '📱' },
+                { id: 'analytics', label: 'Ventas', icon: '📊' },
+                { id: 'billing', label: 'Billing', icon: '💳' },
+                { id: 'tokens', label: 'Tokens', icon: '🎯' },
+                { id: 'tools', label: 'Tools', icon: '🔨' },
+                { id: 'agentv2', label: 'V2 Enterprise Pro', icon: '🤖' },
+                { id: 'referrals', label: 'Referidos', icon: '🔗' },
+                { id: 'delegated', label: 'Agente', icon: '🎯' },
+                { id: 'system', label: 'Sistema', icon: '⚙️' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-medium rounded-t-lg transition-all duration-200 whitespace-nowrap flex items-center gap-1.5 ${
+                    activeTab === tab.id
+                      ? 'bg-gradient-to-b from-neon-blue/20 to-transparent border-b-2 border-neon-blue text-neon-blue shadow-lg shadow-neon-blue/10'
+                      : 'border-b-2 border-transparent text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <span className="text-sm sm:text-base">{tab.icon}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
 
-      <main className="p-3 sm:p-6">
-        {activeTab === 'command' && <CommandCenterTab token={token} />}
-        {activeTab === 'devconsole' && <DevConsoleTab token={token} />}
-        {activeTab === 'overview' && overview && <OverviewTab data={overview} />}
-        {activeTab === 'analytics' && <AnalyticsTab token={token} />}
-        {activeTab === 'users' && <UsersTab token={token} />}
-        {activeTab === 'businesses' && <BusinessesTab token={token} />}
-        {activeTab === 'whatsapp' && <WhatsAppTab token={token} />}
-        {activeTab === 'tokens' && <TokenUsageTab token={token} />}
-        {activeTab === 'messages' && <MessagesTab token={token} />}
-        {activeTab === 'billing' && <BillingTab token={token} />}
-        {activeTab === 'tools' && <ToolLogsTab token={token} />}
-        {activeTab === 'agentv2' && <AgentV2Tab token={token} />}
-        {activeTab === 'referrals' && <ReferralsTab token={token} />}
-        {activeTab === 'delegated' && <DelegatedAgentTab token={token} />}
-        {activeTab === 'system' && <SystemTab token={token} />}
-      </main>
+          <main className="p-3 sm:p-6">
+            {activeTab === 'command' && <CommandCenterTab token={token} />}
+            {activeTab === 'devconsole' && <DevConsoleTab token={token} />}
+            {activeTab === 'overview' && overview && <OverviewTab data={overview} />}
+            {activeTab === 'analytics' && <AnalyticsTab token={token} />}
+            {activeTab === 'users' && <UsersTab token={token} />}
+            {activeTab === 'businesses' && <BusinessesTab token={token} />}
+            {activeTab === 'whatsapp' && <WhatsAppTab token={token} />}
+            {activeTab === 'tokens' && <TokenUsageTab token={token} />}
+            {activeTab === 'messages' && <MessagesTab token={token} />}
+            {activeTab === 'billing' && <BillingTab token={token} />}
+            {activeTab === 'tools' && <ToolLogsTab token={token} />}
+            {activeTab === 'agentv2' && <AgentV2Tab token={token} />}
+            {activeTab === 'referrals' && <ReferralsTab token={token} />}
+            {activeTab === 'delegated' && <DelegatedAgentTab token={token} />}
+            {activeTab === 'system' && <SystemTab token={token} />}
+          </main>
+        </>
+      )}
     </div>
   );
 }

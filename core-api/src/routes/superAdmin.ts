@@ -2445,4 +2445,555 @@ router.get('/delegated-agent/contacts', superAdminMiddleware, async (req: SuperA
   }
 });
 
+// =====================================================
+// SUPER ADMIN V2 - ENHANCED DASHBOARD ENDPOINTS
+// =====================================================
+
+router.get('/v2/dashboard-kpis', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const last7Days = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const last30Days = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      totalUsers,
+      usersToday,
+      usersThisMonth,
+      activeSubscriptions,
+      trialUsers,
+      suspendedUsers,
+      totalBusinesses,
+      businessesWithWA,
+      totalInstances,
+      connectedInstances,
+      disconnectedInstances,
+      totalContacts,
+      contactsToday,
+      totalOrders,
+      ordersThisMonth,
+      totalAppointments,
+      appointmentsThisMonth,
+      tokenUsageToday,
+      tokenUsageThisMonth,
+      messagesLast7Days,
+      remindersActive,
+      remindersFailed,
+      broadcastsThisMonth
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { createdAt: { gte: today } } }),
+      prisma.user.count({ where: { createdAt: { gte: thisMonth } } }),
+      prisma.user.count({ where: { subscriptionStatus: 'ACTIVE' } }),
+      prisma.user.count({ where: { subscriptionStatus: 'TRIAL' } }),
+      prisma.user.count({ where: { subscriptionStatus: { in: ['PAST_DUE', 'CANCELED'] } } }),
+      prisma.business.count(),
+      prisma.business.count({ where: { instances: { some: {} } } }),
+      prisma.whatsAppInstance.count(),
+      prisma.whatsAppInstance.count({ where: { status: { in: ['open', 'connected'] } } }),
+      prisma.whatsAppInstance.count({ where: { status: { notIn: ['open', 'connected'] } } }),
+      prisma.contact.count(),
+      prisma.contact.count({ where: { createdAt: { gte: today } } }),
+      prisma.order.count(),
+      prisma.order.count({ where: { createdAt: { gte: thisMonth } } }),
+      prisma.appointment.count(),
+      prisma.appointment.count({ where: { createdAt: { gte: thisMonth } } }),
+      prisma.tokenUsage.aggregate({ where: { createdAt: { gte: today } }, _sum: { totalTokens: true, costUsd: true } }),
+      prisma.tokenUsage.aggregate({ where: { createdAt: { gte: thisMonth } }, _sum: { totalTokens: true, costUsd: true } }),
+      prisma.messageLog.count({ where: { createdAt: { gte: last7Days } } }),
+      prisma.reminder.count({ where: { status: { in: ['pending', 'scheduled'] } } }),
+      prisma.reminder.count({ where: { status: 'failed' } }),
+      prisma.broadcastCampaign.count({ where: { createdAt: { gte: thisMonth } } })
+    ]);
+
+    // Calculate MRR from active subscriptions
+    const subscriptionPrices: Record<string, number> = {
+      'BASIC': 29,
+      'PRO': 97,
+      'ENTERPRISE': 197
+    };
+    
+    const subscriptionsByTier = await prisma.user.groupBy({
+      by: ['subscriptionTier'],
+      where: { subscriptionStatus: 'ACTIVE' },
+      _count: true
+    });
+    
+    const mrr = subscriptionsByTier.reduce((acc, tier) => {
+      const price = subscriptionPrices[tier.subscriptionTier || ''] || 0;
+      return acc + (price * tier._count);
+    }, 0);
+
+    res.json({
+      users: {
+        total: totalUsers,
+        today: usersToday,
+        thisMonth: usersThisMonth,
+        active: activeSubscriptions,
+        trial: trialUsers,
+        suspended: suspendedUsers
+      },
+      businesses: {
+        total: totalBusinesses,
+        withWhatsApp: businessesWithWA
+      },
+      whatsapp: {
+        total: totalInstances,
+        connected: connectedInstances,
+        disconnected: disconnectedInstances,
+        healthPercent: totalInstances > 0 ? Math.round((connectedInstances / totalInstances) * 100) : 0
+      },
+      contacts: {
+        total: totalContacts,
+        today: contactsToday
+      },
+      orders: {
+        total: totalOrders,
+        thisMonth: ordersThisMonth
+      },
+      appointments: {
+        total: totalAppointments,
+        thisMonth: appointmentsThisMonth
+      },
+      tokens: {
+        today: { tokens: tokenUsageToday._sum?.totalTokens || 0, cost: tokenUsageToday._sum?.costUsd || 0 },
+        thisMonth: { tokens: tokenUsageThisMonth._sum?.totalTokens || 0, cost: tokenUsageThisMonth._sum?.costUsd || 0 }
+      },
+      messaging: {
+        last7Days: messagesLast7Days
+      },
+      reminders: {
+        active: remindersActive,
+        failed: remindersFailed
+      },
+      broadcasts: {
+        thisMonth: broadcastsThisMonth
+      },
+      revenue: {
+        mrr,
+        subscriptionsByTier: subscriptionsByTier.reduce((acc, t) => {
+          acc[t.subscriptionTier || 'UNKNOWN'] = t._count;
+          return acc;
+        }, {} as Record<string, number>)
+      }
+    });
+  } catch (error: any) {
+    console.error('V2 Dashboard KPIs error:', error);
+    res.status(500).json({ error: 'Failed to get dashboard KPIs' });
+  }
+});
+
+router.get('/v2/global-search', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || typeof q !== 'string' || q.length < 2) {
+      return res.json({ results: [], total: 0 });
+    }
+    
+    const searchTerm = q.toLowerCase();
+    const limit = 10;
+    
+    const [users, businesses, contacts, instances] = await Promise.all([
+      prisma.user.findMany({
+        where: {
+          OR: [
+            { email: { contains: searchTerm, mode: 'insensitive' } },
+            { name: { contains: searchTerm, mode: 'insensitive' } },
+            { phone: { contains: searchTerm } }
+          ]
+        },
+        select: { id: true, email: true, name: true, phone: true, subscriptionStatus: true, subscriptionTier: true },
+        take: limit
+      }),
+      prisma.business.findMany({
+        where: {
+          OR: [
+            { name: { contains: searchTerm, mode: 'insensitive' } }
+          ]
+        },
+        select: { id: true, name: true, user: { select: { email: true } } },
+        take: limit
+      }),
+      prisma.contact.findMany({
+        where: {
+          OR: [
+            { phone: { contains: searchTerm } },
+            { name: { contains: searchTerm, mode: 'insensitive' } },
+            { email: { contains: searchTerm, mode: 'insensitive' } }
+          ]
+        },
+        select: { id: true, phone: true, name: true, email: true, business: { select: { name: true } } },
+        take: limit
+      }),
+      prisma.whatsAppInstance.findMany({
+        where: {
+          OR: [
+            { phoneNumber: { contains: searchTerm } },
+            { instanceBackendId: { contains: searchTerm } }
+          ]
+        },
+        select: { id: true, phoneNumber: true, status: true, provider: true, business: { select: { name: true } } },
+        take: limit
+      })
+    ]);
+    
+    const results = [
+      ...users.map(u => ({ type: 'user', id: u.id, label: u.email, sublabel: u.name || u.phone, meta: { status: u.subscriptionStatus, tier: u.subscriptionTier } })),
+      ...businesses.map(b => ({ type: 'business', id: b.id, label: b.name, sublabel: b.user?.email, meta: {} })),
+      ...contacts.map(c => ({ type: 'contact', id: c.id, label: c.name || c.phone, sublabel: c.business?.name, meta: { email: c.email } })),
+      ...instances.map(i => ({ type: 'instance', id: i.id, label: i.phoneNumber || i.id, sublabel: i.business?.name, meta: { status: i.status, provider: i.provider } }))
+    ];
+    
+    res.json({
+      results,
+      total: results.length,
+      counts: {
+        users: users.length,
+        businesses: businesses.length,
+        contacts: contacts.length,
+        instances: instances.length
+      }
+    });
+  } catch (error: any) {
+    console.error('V2 Global search error:', error);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+router.get('/v2/tenant-details/:userId', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        businesses: {
+          select: {
+            id: true,
+            name: true,
+            businessObjective: true,
+            onboardingCompleted: true,
+            instances: {
+              select: {
+                id: true,
+                phoneNumber: true,
+                status: true,
+                provider: true,
+                lastConnection: true
+              }
+            },
+            _count: {
+              select: { contacts: true, appointments: true, reminders: true }
+            }
+          }
+        }
+      }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Get token usage summary
+    const tokenUsage = await prisma.tokenUsage.aggregate({
+      where: { userId },
+      _sum: { totalTokens: true, costUsd: true }
+    });
+    
+    // Get recent activity
+    const recentMessages = await prisma.messageLog.count({
+      where: { 
+        businessId: { in: user.businesses.map(b => b.id) },
+        createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+      }
+    });
+    
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
+        emailVerified: user.emailVerified,
+        subscriptionStatus: user.subscriptionStatus,
+        subscriptionTier: user.subscriptionTier,
+        trialEndAt: user.trialEndAt,
+        stripeCustomerId: user.stripeCustomerId,
+        createdAt: user.createdAt
+      },
+      businesses: user.businesses.map(b => ({
+        id: b.id,
+        name: b.name,
+        objective: b.businessObjective || 'SALES',
+        onboardingCompleted: b.onboardingCompleted,
+        instances: b.instances,
+        counts: b._count
+      })),
+      usage: {
+        totalTokens: tokenUsage._sum?.totalTokens || 0,
+        totalCost: tokenUsage._sum?.costUsd || 0,
+        messagesLast7Days: recentMessages
+      }
+    });
+  } catch (error: any) {
+    console.error('V2 Tenant details error:', error);
+    res.status(500).json({ error: 'Failed to get tenant details' });
+  }
+});
+
+router.get('/v2/conversion-funnel', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const [
+      totalUsers,
+      usersWithBusiness,
+      usersWithWhatsApp,
+      usersWithContacts,
+      usersWithOrders,
+      usersWithAppointments,
+      activeSubscribers
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { businesses: { some: {} } } }),
+      prisma.user.count({ where: { businesses: { some: { instances: { some: { status: { in: ['open', 'connected'] } } } } } } }),
+      prisma.user.count({ where: { businesses: { some: { contacts: { some: {} } } } } }),
+      prisma.business.count({ where: { contacts: { some: {} } } }),
+      prisma.user.count({ where: { businesses: { some: { appointments: { some: {} } } } } }),
+      prisma.user.count({ where: { subscriptionStatus: 'ACTIVE' } })
+    ]);
+    
+    res.json({
+      funnel: [
+        { stage: 'Registrados', count: totalUsers, percent: 100 },
+        { stage: 'Con Negocio', count: usersWithBusiness, percent: Math.round((usersWithBusiness / totalUsers) * 100) || 0 },
+        { stage: 'WhatsApp Conectado', count: usersWithWhatsApp, percent: Math.round((usersWithWhatsApp / totalUsers) * 100) || 0 },
+        { stage: 'Con Contactos', count: usersWithContacts, percent: Math.round((usersWithContacts / totalUsers) * 100) || 0 },
+        { stage: 'Con Ordenes', count: usersWithOrders, percent: Math.round((usersWithOrders / totalUsers) * 100) || 0 },
+        { stage: 'Con Citas', count: usersWithAppointments, percent: Math.round((usersWithAppointments / totalUsers) * 100) || 0 },
+        { stage: 'Suscriptores', count: activeSubscribers, percent: Math.round((activeSubscribers / totalUsers) * 100) || 0 }
+      ]
+    });
+  } catch (error: any) {
+    console.error('V2 Conversion funnel error:', error);
+    res.status(500).json({ error: 'Failed to get conversion funnel' });
+  }
+});
+
+router.get('/v2/token-analytics', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
+    // Get usage by feature
+    const usageByFeature = await prisma.tokenUsage.groupBy({
+      by: ['feature'],
+      where: { createdAt: { gte: last30Days } },
+      _sum: { totalTokens: true, costUsd: true },
+      _count: true
+    });
+    
+    // Get usage by provider
+    const usageByProvider = await prisma.tokenUsage.groupBy({
+      by: ['provider'],
+      where: { createdAt: { gte: last30Days } },
+      _sum: { totalTokens: true, costUsd: true },
+      _count: true
+    });
+    
+    // Get usage by model
+    const usageByModel = await prisma.tokenUsage.groupBy({
+      by: ['model'],
+      where: { createdAt: { gte: last30Days } },
+      _sum: { totalTokens: true, costUsd: true },
+      _count: true
+    });
+    
+    // Get top users by token consumption
+    const topUsers = await prisma.tokenUsage.groupBy({
+      by: ['userId'],
+      where: { createdAt: { gte: last30Days } },
+      _sum: { totalTokens: true, costUsd: true },
+      orderBy: { _sum: { totalTokens: 'desc' } },
+      take: 10
+    });
+    
+    // Get user details for top users
+    const userIds = topUsers.map(u => u.userId).filter((id): id is string => id !== null);
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, email: true, name: true, subscriptionTier: true }
+    });
+    const userMap = new Map(users.map(u => [u.id, u]));
+    
+    res.json({
+      byFeature: usageByFeature.map(f => ({
+        feature: f.feature,
+        tokens: f._sum?.totalTokens || 0,
+        cost: f._sum?.costUsd || 0,
+        count: f._count
+      })),
+      byProvider: usageByProvider.map(p => ({
+        provider: p.provider,
+        tokens: p._sum?.totalTokens || 0,
+        cost: p._sum?.costUsd || 0,
+        count: p._count
+      })),
+      byModel: usageByModel.map(m => ({
+        model: m.model,
+        tokens: m._sum?.totalTokens || 0,
+        cost: m._sum?.costUsd || 0,
+        count: m._count
+      })),
+      topUsers: topUsers.map(u => ({
+        userId: u.userId,
+        email: userMap.get(u.userId || '')?.email || 'Unknown',
+        name: userMap.get(u.userId || '')?.name,
+        tier: userMap.get(u.userId || '')?.subscriptionTier,
+        tokens: u._sum?.totalTokens || 0,
+        cost: u._sum?.costUsd || 0
+      }))
+    });
+  } catch (error: any) {
+    console.error('V2 Token analytics error:', error);
+    res.status(500).json({ error: 'Failed to get token analytics' });
+  }
+});
+
+router.get('/v2/whatsapp-health', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const instances = await prisma.whatsAppInstance.findMany({
+      include: {
+        business: {
+          select: { id: true, name: true, user: { select: { email: true } } }
+        }
+      },
+      orderBy: { lastConnection: 'desc' }
+    });
+    
+    const byStatus = instances.reduce((acc, i) => {
+      const status = i.status || 'unknown';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const byProvider = instances.reduce((acc, i) => {
+      const provider = i.provider || 'unknown';
+      acc[provider] = (acc[provider] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    // Find instances that need attention (disconnected or requiring QR)
+    const needsAttention = instances.filter(i => 
+      !['open', 'connected'].includes(i.status)
+    );
+    
+    res.json({
+      summary: {
+        total: instances.length,
+        healthy: instances.filter(i => ['open', 'connected'].includes(i.status)).length,
+        unhealthy: needsAttention.length,
+        byStatus,
+        byProvider
+      },
+      instances: instances.map(i => ({
+        id: i.id,
+        instanceBackendId: i.instanceBackendId,
+        phoneNumber: i.phoneNumber,
+        status: i.status,
+        provider: i.provider,
+        lastConnection: i.lastConnection,
+        businessId: i.businessId,
+        businessName: i.business?.name,
+        userEmail: i.business?.user?.email
+      })),
+      needsAttention: needsAttention.map(i => ({
+        id: i.id,
+        phoneNumber: i.phoneNumber,
+        status: i.status,
+        provider: i.provider,
+        businessName: i.business?.name,
+        userEmail: i.business?.user?.email,
+        lastConnection: i.lastConnection
+      }))
+    });
+  } catch (error: any) {
+    console.error('V2 WhatsApp health error:', error);
+    res.status(500).json({ error: 'Failed to get WhatsApp health' });
+  }
+});
+
+router.get('/v2/revenue-analytics', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    // Get subscription distribution
+    const subscriptionsByTier = await prisma.user.groupBy({
+      by: ['subscriptionTier'],
+      where: { subscriptionStatus: 'ACTIVE' },
+      _count: true
+    });
+    
+    const subscriptionsByStatus = await prisma.user.groupBy({
+      by: ['subscriptionStatus'],
+      _count: true
+    });
+    
+    // Get referral performance
+    const referralStats = await prisma.referralCode.findMany({
+      select: {
+        id: true,
+        code: true,
+        usageCount: true,
+        bonusDemoDays: true,
+        bonusTrialDays: true,
+        commissionRate: true,
+        isActive: true
+      },
+      orderBy: { usageCount: 'desc' },
+      take: 10
+    });
+    
+    // Calculate MRR
+    const prices: Record<string, number> = { 'BASIC': 29, 'PRO': 97, 'ENTERPRISE': 197 };
+    const mrr = subscriptionsByTier.reduce((acc, t) => acc + (prices[t.subscriptionTier || ''] || 0) * t._count, 0);
+    
+    // Get trial conversions (users who went from TRIAL/DEMO to ACTIVE)
+    const trialEndingSoon = await prisma.user.count({
+      where: {
+        subscriptionStatus: 'TRIAL',
+        trialEndAt: { lte: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), gte: now }
+      }
+    });
+    
+    res.json({
+      revenue: {
+        mrr,
+        arr: mrr * 12
+      },
+      subscriptions: {
+        byTier: subscriptionsByTier.reduce((acc, t) => {
+          acc[t.subscriptionTier || 'UNKNOWN'] = t._count;
+          return acc;
+        }, {} as Record<string, number>),
+        byStatus: subscriptionsByStatus.reduce((acc, s) => {
+          acc[s.subscriptionStatus || 'UNKNOWN'] = s._count;
+          return acc;
+        }, {} as Record<string, number>)
+      },
+      trials: {
+        endingSoon: trialEndingSoon
+      },
+      referrals: {
+        topCodes: referralStats
+      }
+    });
+  } catch (error: any) {
+    console.error('V2 Revenue analytics error:', error);
+    res.status(500).json({ error: 'Failed to get revenue analytics' });
+  }
+});
+
 export default router;
