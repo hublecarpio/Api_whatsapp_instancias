@@ -49,7 +49,7 @@ export async function extractDataFromConversation(
     }
 
     const conversationText = conversationHistory
-      .slice(-10)
+      .slice(-6)
       .map(m => `${m.role === 'user' ? 'Cliente' : 'Agente'}: ${m.content}`)
       .join('\n');
 
@@ -281,7 +281,7 @@ export async function processDataExtraction(
         ]
       },
       orderBy: { createdAt: 'desc' },
-      take: 20
+      take: 6
     });
 
     if (recentMessages.length === 0) {
