@@ -332,8 +332,21 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
 
     res.status(201).json(response);
   } catch (error: any) {
-    console.error('Create broadcast error:', error.message);
-    res.status(500).json({ error: 'Failed to create broadcast' });
+    console.error('Create broadcast error:', error.message, error.stack);
+    
+    // Propagate specific error messages from the service
+    const errorMessage = error.message || 'Failed to create broadcast';
+    
+    // Check for known validation errors and return 400
+    if (
+      errorMessage.includes('No valid phone numbers') ||
+      errorMessage.includes('no tienen los datos requeridos') ||
+      errorMessage.includes('contacto(s)')
+    ) {
+      return res.status(400).json({ error: errorMessage });
+    }
+    
+    res.status(500).json({ error: errorMessage });
   }
 });
 

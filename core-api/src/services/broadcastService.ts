@@ -420,22 +420,47 @@ export async function createBroadcastCampaign(params: {
   createdBy?: string;
   useCrmMetadata?: boolean;
 }): Promise<{ campaignId: string; totalContacts: number }> {
+  console.log(`[BROADCAST] Creating campaign "${params.name}" for business ${params.businessId}`);
+  console.log(`[BROADCAST] Message type: ${params.messageType}, Contacts received: ${params.contactsWithVariables?.length || 0}`);
+  console.log(`[BROADCAST] MediaUrl: ${params.mediaUrl ? 'present' : 'none'}, Content: ${params.content ? 'present' : 'none'}`);
+  console.log(`[BROADCAST] UseCrmMetadata: ${params.useCrmMetadata}`);
+  
+  if (!params.contactsWithVariables || params.contactsWithVariables.length === 0) {
+    throw new Error('No se proporcionaron contactos para la campana');
+  }
+  
   const phoneToVars: Record<string, string[]> = {};
   const allPhones: string[] = [];
   const seenPhones = new Set<string>();
+  const invalidPhones: string[] = [];
+  const duplicatePhones: string[] = [];
   
   for (const c of params.contactsWithVariables) {
+    if (!c.phone) {
+      console.log(`[BROADCAST] Skipping contact with no phone`);
+      continue;
+    }
     const normalizedPhone = c.phone.replace(/\D/g, '');
-    if (normalizedPhone.length < 10 || seenPhones.has(normalizedPhone)) {
+    if (normalizedPhone.length < 10) {
+      invalidPhones.push(c.phone);
+      continue;
+    }
+    if (seenPhones.has(normalizedPhone)) {
+      duplicatePhones.push(c.phone);
       continue;
     }
     seenPhones.add(normalizedPhone);
-    phoneToVars[normalizedPhone] = c.variables;
+    phoneToVars[normalizedPhone] = c.variables || [];
     allPhones.push(normalizedPhone);
   }
   
+  console.log(`[BROADCAST] Valid phones: ${allPhones.length}, Invalid: ${invalidPhones.length}, Duplicates: ${duplicatePhones.length}`);
+  
   if (allPhones.length === 0) {
-    throw new Error('No valid phone numbers provided');
+    const details = invalidPhones.length > 0 
+      ? ` (${invalidPhones.length} numeros invalidos: ${invalidPhones.slice(0, 3).join(', ')}${invalidPhones.length > 3 ? '...' : ''})`
+      : '';
+    throw new Error(`No hay numeros de telefono validos${details}. Los numeros deben tener al menos 10 digitos.`);
   }
 
   const existingContacts = await prisma.contact.findMany({
@@ -501,20 +526,27 @@ export async function createBroadcastCampaign(params: {
     }
     
     if (requiredVariables.length > 0) {
-      const contactsMissingVars: string[] = [];
+      console.log(`[BROADCAST] Required variables from message: ${requiredVariables.join(', ')}`);
+      const contactsMissingVars: { phone: string; missing: string[] }[] = [];
       for (const contact of allContacts) {
         const namedVars = phoneToNamedVars[contact.phone] || {};
+        const missingVars: string[] = [];
         for (const varName of requiredVariables) {
           if (!namedVars[varName]) {
-            contactsMissingVars.push(contact.phone);
-            break;
+            missingVars.push(varName);
           }
+        }
+        if (missingVars.length > 0) {
+          contactsMissingVars.push({ phone: contact.phone, missing: missingVars });
         }
       }
       
       if (contactsMissingVars.length > 0) {
-        throw new Error(`${contactsMissingVars.length} contacto(s) no tienen los datos requeridos: ${requiredVariables.join(', ')}. Elimina estos contactos o usa solo variables que todos tengan.`);
+        console.log(`[BROADCAST] ${contactsMissingVars.length} contacts missing required variables`);
+        const sampleContacts = contactsMissingVars.slice(0, 3).map(c => `${c.phone} (falta: ${c.missing.join(', ')})`);
+        throw new Error(`${contactsMissingVars.length} contacto(s) no tienen los datos requeridos: ${requiredVariables.join(', ')}. Ejemplos: ${sampleContacts.join('; ')}. Elimina estos contactos o usa solo variables que todos tengan.`);
       }
+      console.log(`[BROADCAST] All contacts have required variables`);
     }
   }
 
@@ -551,6 +583,7 @@ export async function createBroadcastCampaign(params: {
 
   await prisma.broadcastLog.createMany({ data: logs });
 
+  console.log(`[BROADCAST] Campaign ${campaign.id} created successfully with ${allContacts.length} contacts`);
   return { campaignId: campaign.id, totalContacts: allContacts.length };
 }
 
