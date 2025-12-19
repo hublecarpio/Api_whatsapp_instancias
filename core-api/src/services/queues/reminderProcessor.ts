@@ -314,11 +314,21 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
     usedTemplate = templateData;
     message = templateData.bodyText || `[Template: ${templateData.name}]`;
   } else if (!message) {
+    let pressureLevel = config?.pressureLevel || 1;
+    
+    if (config && Array.isArray(config.followUpSteps)) {
+      const stepIndex = attemptNumber - 1;
+      const step = (config.followUpSteps as any[])[stepIndex];
+      if (step && typeof step.pressureLevel === 'number') {
+        pressureLevel = step.pressureLevel;
+      }
+    }
+    
     message = await generateFollowUpMessage(
       businessId,
       contactPhone,
       attemptNumber,
-      config?.pressureLevel || 1
+      pressureLevel
     );
   }
   

@@ -697,13 +697,23 @@ export async function processReminders(): Promise<void> {
         }
         
       } else if (!message) {
+        let pressureLevel = config?.pressureLevel || 1;
+        
+        if (config && Array.isArray(config.followUpSteps)) {
+          const stepIndex = reminder.attemptNumber - 1;
+          const step = (config.followUpSteps as any[])[stepIndex];
+          if (step && typeof step.pressureLevel === 'number') {
+            pressureLevel = step.pressureLevel;
+          }
+        }
+        
         message = await generateFollowUpMessage(
           reminder.businessId,
           reminder.contactPhone,
           reminder.attemptNumber,
-          config?.pressureLevel || 1
+          pressureLevel
         );
-        console.log(`[REMINDER] Generated follow-up message for attempt #${reminder.attemptNumber}`);
+        console.log(`[REMINDER] Generated follow-up message for attempt #${reminder.attemptNumber} with pressure ${pressureLevel}`);
       }
       
       const cleanPhone = reminder.contactPhone.replace(/\D/g, '');

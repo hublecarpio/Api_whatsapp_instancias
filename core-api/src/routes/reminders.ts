@@ -189,4 +189,41 @@ router.get('/pending/count/:businessId', async (req: Request, res: Response) => 
   }
 });
 
+router.post('/:id/retry', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const reminder = await prisma.reminder.findUnique({
+      where: { id }
+    });
+    
+    if (!reminder) {
+      return res.status(404).json({ error: 'Reminder not found' });
+    }
+    
+    if (!['failed', 'template_error', 'no_template'].includes(reminder.status)) {
+      return res.status(400).json({ error: 'Only failed reminders can be retried' });
+    }
+    
+    const retryDelay = Math.pow(2, reminder.retryCount + 1) * 60 * 1000;
+    const newScheduledAt = new Date(Date.now() + retryDelay);
+    
+    await prisma.reminder.update({
+      where: { id },
+      data: {
+        status: 'pending',
+        scheduledAt: newScheduledAt,
+        retryCount: reminder.retryCount + 1,
+        lastError: null,
+        processingAt: null
+      }
+    });
+    
+    res.json({ success: true, scheduledAt: newScheduledAt });
+  } catch (error) {
+    console.error('Error retrying reminder:', error);
+    res.status(500).json({ error: 'Failed to retry reminder' });
+  }
+});
+
 export default router;

@@ -209,6 +209,7 @@ export const remindersApi = {
     type?: string;
   }) => api.post('/reminders', data),
   cancel: (id: string) => api.delete(`/reminders/${id}`),
+  retry: (id: string) => api.post(`/reminders/${id}/retry`),
   pendingCount: (businessId: string) => api.get(`/reminders/pending/count/${businessId}`)
 };
 
