@@ -757,7 +757,23 @@ router.get('/wa-instances', superAdminMiddleware, async (req: SuperAdminRequest,
         lastConnection: inst.lastConnection
       }));
     
-    const allInstances = [...enrichedBaileysInstances, ...metaCloudInstances];
+    // Add Baileys instances from DB that are NOT in WA API (disconnected/orphaned from backend)
+    const orphanedBaileysInstances = dbInstances
+      .filter(inst => inst.provider === 'BAILEYS' && inst.instanceBackendId && !processedBackendIds.has(inst.instanceBackendId))
+      .map(inst => ({
+        id: inst.instanceBackendId,
+        status: 'disconnected',
+        businessId: inst.businessId,
+        businessName: inst.business?.name || null,
+        userEmail: inst.business?.user?.email || null,
+        phoneNumber: inst.phoneNumber,
+        provider: 'BAILEYS',
+        inDatabase: true,
+        lastConnection: inst.lastConnection,
+        dbStatus: inst.status
+      }));
+    
+    const allInstances = [...enrichedBaileysInstances, ...orphanedBaileysInstances, ...metaCloudInstances];
     const orphanedInstances = allInstances.filter((i: any) => !i.inDatabase);
     
     res.json({
@@ -766,8 +782,9 @@ router.get('/wa-instances', superAdminMiddleware, async (req: SuperAdminRequest,
         total: allInstances.length,
         connected: allInstances.filter((i: any) => i.status === 'connected').length,
         requiresQr: allInstances.filter((i: any) => i.status === 'requires_qr').length,
+        disconnected: allInstances.filter((i: any) => i.status === 'disconnected').length,
         orphaned: orphanedInstances.length,
-        baileys: enrichedBaileysInstances.length,
+        baileys: enrichedBaileysInstances.length + orphanedBaileysInstances.length,
         metaCloud: metaCloudInstances.length
       }
     });
