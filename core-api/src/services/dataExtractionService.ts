@@ -288,8 +288,8 @@ export async function processDataExtraction(
       return;
     }
 
-    const conversationHistory = recentMessages.reverse().map(msg => ({
-      role: msg.direction === 'inbound' ? 'user' : 'assistant' as const,
+    const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = recentMessages.reverse().map(msg => ({
+      role: (msg.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: msg.message || ''
     }));
 
