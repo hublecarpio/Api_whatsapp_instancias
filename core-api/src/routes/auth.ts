@@ -658,8 +658,11 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
     }
     
     const grantDays = refCode.grantDurationDays || 7;
+    // Use grantTier from code, default to PRO for STANDARD codes with grantDurationDays
+    const grantTier = refCode.grantTier || (refCode.type === 'ENTERPRISE' ? 'ENTERPRISE' : 'PRO');
+    const tierLabel = grantTier === 'ENTERPRISE' ? 'Enterprise' : 'PRO';
     
-    // Accumulate days: if user already has active Enterprise, add days to existing expiration
+    // Accumulate days: if user already has active PRO bonus, add days to existing expiration
     // Otherwise, start from now
     let proBonusExpiresAt: Date;
     const now = new Date();
@@ -669,7 +672,7 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
       // Add days to existing expiration date
       proBonusExpiresAt = new Date(user.proBonusExpiresAt!);
       proBonusExpiresAt.setDate(proBonusExpiresAt.getDate() + grantDays);
-      console.log(`[ENTERPRISE] Accumulating ${grantDays} days to existing bonus for user ${user.id}`);
+      console.log(`[REFERRAL] Accumulating ${grantDays} days to existing ${tierLabel} bonus for user ${user.id}`);
     } else {
       // Start fresh from now
       proBonusExpiresAt = new Date();
@@ -679,12 +682,22 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
     if (user.stripeSubscriptionId) {
       const pauseResult = await pauseStripeSubscription(user.id);
       if (pauseResult.success) {
-        console.log(`[ENTERPRISE] Paused Stripe subscription for user ${user.id} while Enterprise is active`);
+        console.log(`[REFERRAL] Paused Stripe subscription for user ${user.id} while ${tierLabel} is active`);
       } else {
-        console.log(`[ENTERPRISE] Could not pause Stripe subscription: ${pauseResult.error}`);
+        console.log(`[REFERRAL] Could not pause Stripe subscription: ${pauseResult.error}`);
       }
     }
     
+    // Calculate commission if the referral code has an owner and commissionRate
+    let commissionAmount = 0;
+    if (refCode.ownerUserId && refCode.commissionRate && refCode.commissionRate > 0) {
+      const tierPrices: Record<string, number> = { 'BASIC': 29, 'PRO': 97, 'ENTERPRISE': 197 };
+      const basePrice = tierPrices[grantTier] || 97;
+      commissionAmount = basePrice * refCode.commissionRate;
+      console.log(`[REFERRAL] Commission calculated: ${(refCode.commissionRate * 100).toFixed(0)}% of ${basePrice} = ${commissionAmount.toFixed(2)} for owner ${refCode.ownerUserId}`);
+    }
+    
+    // Build transaction operations
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.id },
@@ -692,7 +705,8 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
           proBonusExpiresAt,
           isPro: true,
           paymentLinkEnabled: true,
-          subscriptionStatus: 'ACTIVE'
+          subscriptionStatus: 'ACTIVE',
+          subscriptionTier: grantTier // Set correct tier (PRO or ENTERPRISE)
         }
       }),
       prisma.referralCode.update({
@@ -702,18 +716,19 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
     ]);
     
     const actionType = hasActiveBonus ? 'accumulated' : 'activated';
-    console.log(`[ENTERPRISE] User ${user.id} ${actionType} referral code ${refCode.code}, +${grantDays} days, Pro bonus expires at ${proBonusExpiresAt}`);
+    console.log(`[REFERRAL] User ${user.id} ${actionType} referral code ${refCode.code}, +${grantDays} days ${tierLabel}, expires at ${proBonusExpiresAt}`);
     
     const message = hasActiveBonus 
-      ? `Se agregaron ${grantDays} días a tu plan Enterprise`
-      : `Plan Enterprise activado por ${grantDays} días`;
+      ? `Se agregaron ${grantDays} días a tu plan ${tierLabel}`
+      : `Plan ${tierLabel} activado por ${grantDays} días`;
     
     res.json({ 
       success: true, 
       message,
       proBonusExpiresAt,
       daysAdded: grantDays,
-      accumulated: hasActiveBonus
+      accumulated: hasActiveBonus,
+      tier: grantTier
     });
   } catch (error) {
     console.error('Apply referral error:', error);
