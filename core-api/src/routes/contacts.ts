@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { dispatchStateChange } from '../services/webhookService.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -668,6 +669,16 @@ router.put('/:phone', async (req: AuthRequest, res: Response) => {
       extractedDataMap[d.fieldKey] = d.fieldValue || '';
     });
 
+    // Dispatch state_change webhook for contact updates
+    if (tags !== undefined && JSON.stringify(existing.tags) !== JSON.stringify(tags)) {
+      dispatchStateChange(business.id, phone, 'tag', existing.tags, tags)
+        .catch(err => console.error('[CONTACTS] Failed to dispatch state_change webhook:', err.message));
+    }
+    if (extractedData && typeof extractedData === 'object') {
+      dispatchStateChange(business.id, phone, 'data', null, extractedData)
+        .catch(err => console.error('[CONTACTS] Failed to dispatch state_change webhook:', err.message));
+    }
+
     res.json({ ...contact, extractedData: extractedDataMap });
   } catch (error: any) {
     console.error('[CONTACTS] Error updating contact:', error);
@@ -711,6 +722,10 @@ router.post('/:phone/tags', async (req: AuthRequest, res: Response) => {
       data: { tags: currentTags }
     });
 
+    // Dispatch state_change webhook for tag addition
+    dispatchStateChange(business.id, phone, 'tag', existing.tags, currentTags)
+      .catch(err => console.error('[CONTACTS] Failed to dispatch state_change webhook:', err.message));
+
     res.json(contact);
   } catch (error: any) {
     console.error('[CONTACTS] Error adding tag:', error);
@@ -750,6 +765,10 @@ router.delete('/:phone/tags/:tag', async (req: AuthRequest, res: Response) => {
       where: { id: existing.id },
       data: { tags: currentTags }
     });
+
+    // Dispatch state_change webhook for tag removal
+    dispatchStateChange(business.id, phone, 'tag', existing.tags, currentTags)
+      .catch(err => console.error('[CONTACTS] Failed to dispatch state_change webhook:', err.message));
 
     res.json(contact);
   } catch (error: any) {

@@ -106,11 +106,12 @@ export async function dispatchWebhook(
         userId: business.userId,
         status: 'ACTIVE'
       },
-      select: { tier: true, source: true }
+      select: { tier: true }
     });
     
     // Use subscription tier if active, otherwise fall back to user.subscriptionTier
-    const effectiveTier = activeSubscription?.source || activeSubscription?.tier || user.subscriptionTier;
+    // Note: subscription.source is metadata (STRIPE/MANUAL), tier is the actual plan (PRO/ENTERPRISE)
+    const effectiveTier = activeSubscription?.tier || user.subscriptionTier;
     
     if (effectiveTier !== 'PRO' && effectiveTier !== 'ENTERPRISE') {
       console.log(`[Webhook] User ${user.email} has tier ${effectiveTier}, webhooks require PRO/ENTERPRISE`);

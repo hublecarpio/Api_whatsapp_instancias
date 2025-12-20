@@ -1,5 +1,6 @@
 import prisma from './prisma.js';
 import { callOpenAI, ChatMessage, isOpenAIConfigured, logTokenUsage } from './openaiService.js';
+import { dispatchStateChange } from './webhookService.js';
 
 interface ExtractionResult {
   fieldKey: string;
@@ -174,6 +175,8 @@ export async function saveExtractedData(
         }
       }
 
+      const oldValue = existing?.fieldValue || null;
+      
       await (prisma.contactExtractedData as any).upsert({
         where: {
           businessId_contactPhone_fieldKey: {
@@ -198,6 +201,12 @@ export async function saveExtractedData(
       });
 
       console.log(`[DataExtraction] Saved ${data.fieldKey}=${data.value} for ${contactPhone}`);
+      
+      // Dispatch state_change webhook for extracted data
+      dispatchStateChange(businessId, contactPhone, 'data', 
+        { [data.fieldKey]: oldValue }, 
+        { [data.fieldKey]: data.value }
+      ).catch(err => console.error('[DataExtraction] Failed to dispatch state_change webhook:', err.message));
     }
   } catch (error: any) {
     console.error('[DataExtraction] Error saving extracted data:', error.message);
