@@ -698,13 +698,13 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
     }
     
     // Build transaction operations
+    // NOTE: paymentLinkEnabled is NOT set here - only Super Admin can enable it
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.id },
         data: {
           proBonusExpiresAt,
           isPro: true,
-          paymentLinkEnabled: true,
           subscriptionStatus: 'ACTIVE',
           subscriptionTier: grantTier // Set correct tier (PRO or ENTERPRISE)
         }
