@@ -1341,25 +1341,9 @@ async function sendWhatsAppResponse(
       return;
     }
     
+    // Parse message to detect text and media URLs (no auto-matching by product names)
     const events = parseAgentOutputToWhatsAppEvents(message);
     console.log(`[AI Worker] Parsed ${events.length} events for ${cleanPhone}:`, events.map(e => e.type));
-    
-    // Auto-extract product images from response
-    const productsWithImages = (business.products || []).map((p: any) => ({
-      id: p.id,
-      name: p.title || p.name,
-      imageUrl: p.imageUrl
-    }));
-    const productImages = extractProductImagesFromResponseWorker(message, productsWithImages);
-    
-    // Add product images to events (avoiding duplicates)
-    const existingUrls = new Set(events.filter(e => e.url).map(e => e.url));
-    for (const img of productImages) {
-      if (!existingUrls.has(img.url)) {
-        events.push(img);
-        existingUrls.add(img.url);
-      }
-    }
     
     const sentMedia: Array<{ type: string; url?: string }> = [];
     

@@ -880,23 +880,8 @@ async function processWithAgentV2(
         const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
         const finalText = cleanMarkdownForWhatsApp(cleanedText);
         
-        // Auto-attach product images for products mentioned in the response
-        const productsWithImages = (business.products || []).map((p: any) => ({
-          id: p.id,
-          name: p.title || p.name,
-          imageUrl: p.imageUrl
-        }));
-        const productImages = extractProductImagesFromResponse(aiResponse, productsWithImages);
-        
-        // Combine: first media from text, then product images (avoiding duplicates)
-        const existingUrls = new Set(mediaItems.map(m => m.url));
+        // Use only media URLs explicitly included in the AI response (no auto-matching)
         const allMedia = [...mediaItems];
-        for (const img of productImages) {
-          if (!existingUrls.has(img.url)) {
-            allMedia.push(img);
-            existingUrls.add(img.url);
-          }
-        }
         
         if (finalText) {
           if (splitMessages) {
@@ -939,30 +924,9 @@ async function processWithAgentV2(
           console.log('Could not mark messages as read:', readError.message);
         }
         
-        // Send the message
+        // Send the message (media URLs in the response are detected and sent automatically)
         const result = await sendMessageInParts(backendId, phone, aiResponse, splitMessages);
         sentMedia = result.sentMedia;
-        
-        // Auto-attach product images for products mentioned in the response
-        const productsWithImages = (business.products || []).map((p: any) => ({
-          id: p.id,
-          name: p.title || p.name,
-          imageUrl: p.imageUrl
-        }));
-        const productImages = extractProductImagesFromResponse(aiResponse, productsWithImages);
-        
-        // Send product images (avoiding duplicates already sent)
-        const existingUrls = new Set(sentMedia.map((m: any) => m.url));
-        for (const img of productImages) {
-          if (!existingUrls.has(img.url)) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            const sent = await sendMedia(backendId, phone, img);
-            if (sent) {
-              sentMedia.push(img);
-              existingUrls.add(img.url);
-            }
-          }
-        }
       }
       
       // Log the outbound message
@@ -2009,23 +1973,8 @@ async function processWithAgent(
         const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
         const finalText = cleanMarkdownForWhatsApp(cleanedText);
         
-        // Auto-attach product images for products mentioned in the response
-        const productsWithImages = (business.products || []).map((p: any) => ({
-          id: p.id,
-          name: p.title || p.name,
-          imageUrl: p.imageUrl
-        }));
-        const productImages = extractProductImagesFromResponse(aiResponse, productsWithImages);
-        
-        // Combine: first media from text, then product images (avoiding duplicates)
-        const existingUrls = new Set(mediaItems.map(m => m.url));
+        // Use only media URLs explicitly included in the AI response (no auto-matching)
         const allMedia = [...mediaItems];
-        for (const img of productImages) {
-          if (!existingUrls.has(img.url)) {
-            allMedia.push(img);
-            existingUrls.add(img.url);
-          }
-        }
         
         if (finalText) {
           if (splitMessages) {
@@ -2067,29 +2016,9 @@ async function processWithAgent(
           console.log('Could not mark messages as read:', readError.message);
         }
         
+        // Send the message (media URLs in the response are detected and sent automatically)
         const result = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
         sentMedia = result.sentMedia;
-        
-        // Auto-attach product images for products mentioned in the response
-        const productsWithImagesB = (business.products || []).map((p: any) => ({
-          id: p.id,
-          name: p.title || p.name,
-          imageUrl: p.imageUrl
-        }));
-        const productImagesB = extractProductImagesFromResponse(aiResponse, productsWithImagesB);
-        
-        // Send product images (avoiding duplicates already sent)
-        const existingUrlsB = new Set(sentMedia.map((m: any) => m.url));
-        for (const img of productImagesB) {
-          if (!existingUrlsB.has(img.url)) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            const sent = await sendMedia(instance.instanceBackendId, phone, img);
-            if (sent) {
-              sentMedia.push(img);
-              existingUrlsB.add(img.url);
-            }
-          }
-        }
       }
       
       await prisma.messageLog.create({
