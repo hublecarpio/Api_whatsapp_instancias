@@ -253,6 +253,9 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                     });
                     console.log(`[WEBHOOK] Valid voucher attached to order ${pendingVoucherOrder.id}: brand=${voucherValidation.brand}, amount=${voucherValidation.amount}, code=${voucherValidation.operationCode}`);
                     
+                    // Add context for agent to confirm voucher received
+                    mediaAnalysis = `[COMPROBANTE DE PAGO RECIBIDO Y VALIDADO] Se ha recibido un comprobante de pago válido para el pedido #${pendingVoucherOrder.id.slice(-6).toUpperCase()}. Banco/App: ${voucherValidation.brand || 'detectado'}, Monto: ${voucherValidation.currency || ''}${voucherValidation.amount || 'detectado'}. El equipo verificará el pago y procesará el pedido.`;
+                    
                     await logTokenUsage({
                       userId: business.userId,
                       businessId,
@@ -264,6 +267,13 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                     });
                   } else {
                     console.log(`[WEBHOOK] Image rejected as voucher for order ${pendingVoucherOrder.id}: isPaymentProof=${voucherValidation.isPaymentProof}, isValid=${voucherValidation.isValid}, reason=${voucherValidation.reason}`);
+                    
+                    // Add context for agent to request a valid voucher
+                    if (!voucherValidation.isPaymentProof) {
+                      mediaAnalysis = `[IMAGEN RECIBIDA - NO ES COMPROBANTE DE PAGO] El cliente tiene un pedido pendiente #${pendingVoucherOrder.id.slice(-6).toUpperCase()} por ${pendingVoucherOrder.currencySymbol}${pendingVoucherOrder.totalAmount} esperando comprobante de pago. La imagen enviada NO es un comprobante de pago válido (${voucherValidation.reason || 'no se detecta transferencia bancaria o recibo'}). Debes pedirle amablemente que envíe el comprobante de su transferencia o pago.`;
+                    } else {
+                      mediaAnalysis = `[COMPROBANTE DE PAGO DUDOSO] El cliente envió lo que parece ser un comprobante de pago, pero no se pudo validar correctamente (${voucherValidation.reason || 'imagen poco clara o datos incompletos'}). Confianza: ${Math.round((voucherValidation.confidence || 0) * 100)}%. Pídele que envíe una imagen más clara del comprobante donde se vea el monto, banco y código de operación.`;
+                    }
                   }
                 } else {
                   await prisma.order.update({

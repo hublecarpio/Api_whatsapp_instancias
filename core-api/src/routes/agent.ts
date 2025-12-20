@@ -2143,27 +2143,49 @@ router.get('/config', authMiddleware, requireActiveSubscription, async (req: Req
 router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
+    const { contactPhone } = req.query;
     
-    const [business, promptSections] = await Promise.all([
+    const [business, promptSections, leadStages, extractionFields, reminders, products] = await Promise.all([
       prisma.business.findFirst({
         where: { id: businessId, userId: req.userId },
         include: {
           promptMaster: { 
             include: { 
               tools: true,
-              files: { select: { id: true, name: true } }
+              files: { select: { id: true, name: true, fileUrl: true } }
             } 
           },
-          products: { select: { id: true } },
-          instances: { select: { status: true, provider: true } },
-          availability: { select: { dayOfWeek: true, isBlocked: true } },
+          instances: { select: { status: true, provider: true, phoneNumber: true } },
+          availability: { select: { dayOfWeek: true, isBlocked: true, startTime: true, endTime: true } },
           policy: true,
-          user: { select: { paymentLinkEnabled: true } }
+          user: { select: { paymentLinkEnabled: true, subscriptionTier: true, subscriptionStatus: true } }
         }
       }),
       prisma.promptSection.findMany({
         where: { businessId, enabled: true },
-        select: { id: true, title: true, type: true, isCore: true, embedding: true }
+        select: { id: true, title: true, type: true, isCore: true, embedding: true, content: true }
+      }),
+      prisma.tag.findMany({
+        where: { businessId },
+        select: { id: true, name: true, description: true, color: true },
+        orderBy: { createdAt: 'asc' }
+      }),
+      prisma.extractionField.findMany({
+        where: { businessId, enabled: true },
+        select: { id: true, fieldKey: true, fieldLabel: true, description: true, fieldType: true }
+      }),
+      prisma.reminder.findMany({
+        where: { 
+          businessId,
+          status: 'PENDING'
+        },
+        select: { id: true, contactPhone: true, scheduledAt: true },
+        orderBy: { scheduledAt: 'asc' },
+        take: 10
+      }),
+      prisma.product.findMany({
+        where: { businessId },
+        select: { id: true, title: true, price: true, stock: true, imageUrl: true }
       })
     ]);
     
@@ -2174,7 +2196,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     const objective = business.businessObjective || 'SALES';
     const isSalesMode = objective !== 'APPOINTMENTS';
     const isAppointmentMode = objective === 'APPOINTMENTS';
-    const productCount = business.products?.length || 0;
+    const productCount = products.length;
     const customTools = business.promptMaster?.tools || [];
     const agentFiles = business.promptMaster?.files || [];
     const hasAvailability = business.availability?.some((a: any) => !a.isBlocked) || false;
@@ -2287,11 +2309,109 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       });
     }
     
+    // Build the complete context network
+    const promptContext = {
+      masterPrompt: business.promptMaster?.prompt ? {
+        enabled: true,
+        length: business.promptMaster.prompt.length,
+        preview: business.promptMaster.prompt.substring(0, 200) + (business.promptMaster.prompt.length > 200 ? '...' : '')
+      } : null,
+      bufferSeconds: business.promptMaster?.bufferSeconds || 0,
+      historyLimit: business.promptMaster?.historyLimit || 10,
+      splitMessages: business.promptMaster?.splitMessages ?? true
+    };
+    
+    const policyContext = business.policy ? {
+      enabled: true,
+      sections: {
+        shippingPolicy: !!business.policy.shippingPolicy,
+        refundPolicy: !!business.policy.refundPolicy,
+        brandVoice: !!business.policy.brandVoice,
+        allowedHours: !!business.policy.allowedHours
+      }
+    } : null;
+    
+    const catalogContext = {
+      mode: productCount > 20 ? 'search_tool' : productCount > 0 ? 'in_prompt' : 'empty',
+      count: productCount,
+      products: products.slice(0, 5).map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        price: p.price,
+        stock: p.stock,
+        hasImage: !!p.imageUrl
+      })),
+      hasMore: productCount > 5
+    };
+    
+    const leadStagesContext = {
+      enabled: leadStages.length > 0,
+      count: leadStages.length,
+      stages: leadStages.map((s: any) => ({
+        name: s.name,
+        color: s.color,
+        description: s.description
+      }))
+    };
+    
+    const dataExtractionContext = {
+      enabled: extractionFields.length > 0,
+      count: extractionFields.length,
+      fields: extractionFields.map((f: any) => ({
+        key: f.fieldKey,
+        label: f.fieldLabel,
+        type: f.fieldType,
+        description: f.description
+      }))
+    };
+    
+    const remindersContext = {
+      pendingCount: reminders.length,
+      nextReminders: reminders.slice(0, 3).map((r: any) => ({
+        phone: r.contactPhone,
+        scheduledAt: r.scheduledAt
+      }))
+    };
+    
+    const availabilityContext = business.availability && hasAvailability ? {
+      enabled: true,
+      days: business.availability.filter((a: any) => !a.isBlocked).map((a: any) => ({
+        day: a.dayOfWeek,
+        start: a.startTime,
+        end: a.endTime
+      }))
+    } : null;
+    
+    const filesContext = agentFiles.length > 0 ? {
+      enabled: true,
+      count: agentFiles.length,
+      files: agentFiles.map((f: any) => ({
+        name: f.name,
+        url: f.fileUrl
+      }))
+    } : null;
+    
+    const instanceContext = business.instances?.[0] ? {
+      connected: instanceConnected,
+      provider: business.instances[0].provider,
+      phoneNumber: business.instances[0].phoneNumber,
+      status: business.instances[0].status
+    } : null;
+    
+    const subscriptionContext = {
+      tier: business.user?.subscriptionTier || 'BASIC',
+      status: business.user?.subscriptionStatus || 'PENDING',
+      paymentLinkEnabled
+    };
+    
     res.json({
       objective,
       objectiveLabel: isAppointmentMode ? 'Citas' : 'Ventas',
       model: business.openaiModel || 'gpt-4o-mini',
       botEnabled: business.botEnabled ?? true,
+      timezone: business.timezone || 'America/Lima',
+      currencyCode: business.currencyCode || 'PEN',
+      currencySymbol: business.currencySymbol || 'S/.',
       instanceConnected,
       paymentLinkEnabled,
       paymentMode: paymentLinkEnabled ? 'Link de Pago (Stripe)' : 'Voucher/Comprobante',
@@ -2302,7 +2422,44 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       stats: {
         productCount,
         customToolCount: customTools.length,
-        fileCount: agentFiles.length
+        fileCount: agentFiles.length,
+        ragSectionCount: ragSections.length,
+        coreSectionCount: coreSections.length,
+        leadStageCount: leadStages.length,
+        extractionFieldCount: extractionFields.length,
+        pendingReminderCount: reminders.length
+      },
+      // Detailed context network
+      contextNetwork: {
+        prompt: promptContext,
+        policy: policyContext,
+        catalog: catalogContext,
+        leadStages: leadStagesContext,
+        dataExtraction: dataExtractionContext,
+        reminders: remindersContext,
+        availability: availabilityContext,
+        files: filesContext,
+        instance: instanceContext,
+        subscription: subscriptionContext,
+        sections: {
+          core: coreSections.map((s: any) => ({
+            title: s.title,
+            type: s.type,
+            contentPreview: s.content?.substring(0, 100) + (s.content?.length > 100 ? '...' : '')
+          })),
+          rag: ragSections.map((s: any) => ({
+            title: s.title,
+            type: s.type,
+            hasEmbedding: !!s.embedding,
+            contentPreview: s.content?.substring(0, 100) + (s.content?.length > 100 ? '...' : '')
+          }))
+        },
+        customTools: customTools.map((t: any) => ({
+          name: t.name,
+          description: t.description,
+          endpoint: t.endpoint,
+          method: t.method
+        }))
       }
     });
   } catch (error: any) {
