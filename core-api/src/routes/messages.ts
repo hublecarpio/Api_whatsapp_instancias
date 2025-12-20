@@ -129,11 +129,20 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       }
       if (phone === 'unknown' || phone === 'bot' || phone === 'system') return;
       
-      // Normalize phone: remove @s.whatsapp.net, @lid suffixes and keep only digits
-      phone = phone.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
-      if (!phone || phone.length < 8) return; // Skip invalid phones
-      
       const metadata = msg.metadata as any;
+      
+      // Priority: use contactPhone from metadata (already resolved), then clean sender/recipient
+      // This handles cases where the original sender was @lid but we have the resolved phone
+      if (metadata?.contactPhone) {
+        phone = metadata.contactPhone.toString().replace(/\D/g, '');
+      } else {
+        // Normalize phone: remove @s.whatsapp.net, @lid suffixes and keep only digits
+        phone = phone.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
+      }
+      
+      // Skip invalid phones (too short) or @lid numbers that weren't resolved (too long, typically 15+ digits)
+      if (!phone || phone.length < 8 || phone.length > 15) return;
+      
       const contactName = metadata?.contactName || metadata?.pushName || '';
       
       if (!conversationsMap.has(phone)) {

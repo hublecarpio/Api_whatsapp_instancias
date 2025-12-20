@@ -177,20 +177,42 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           // Extract phone number - handle both standard @s.whatsapp.net and LID @lid formats
           // Priority: phoneNumber (resolved) > sender cleaned > from cleaned
           let contactPhone = data.phoneNumber;
-          if (!contactPhone && data.sender) {
-            // Clean both @s.whatsapp.net and @lid suffixes
-            contactPhone = data.sender.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '');
+          const isLidMessage = data.isLid || data.sender?.endsWith('@lid') || data.from?.endsWith('@lid');
+          const originalLid = isLidMessage ? (data.sender || data.from)?.replace(/@lid$/, '') : null;
+          
+          // If we have a resolved phoneNumber from the WhatsApp API, use it
+          // Otherwise, only use sender/from if it's NOT a @lid (to avoid creating duplicate conversations)
+          if (!contactPhone && data.sender && !data.sender.endsWith('@lid')) {
+            contactPhone = data.sender.replace(/@s\.whatsapp\.net$/, '');
           }
-          if (!contactPhone && data.from) {
-            contactPhone = data.from.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '');
+          if (!contactPhone && data.from && !data.from.endsWith('@lid')) {
+            contactPhone = data.from.replace(/@s\.whatsapp\.net$/, '');
           }
           // Final cleanup - ensure only digits
           contactPhone = contactPhone?.replace(/\D/g, '') || '';
           
           // Skip if we couldn't resolve a valid phone number (LID not mapped)
+          // This prevents creating duplicate conversations for unresolved @lid messages
           if (!contactPhone || contactPhone.length < 8) {
-            console.log(`[WEBHOOK] Skipping message - could not resolve phone number from LID: sender=${data.sender}, from=${data.from}`);
-            return res.json({ received: true, ignored: 'unresolved_lid' });
+            console.log(`[WEBHOOK] Skipping message - unresolved LID without phone mapping: sender=${data.sender}, from=${data.from}, lid=${originalLid}`);
+            return res.json({ received: true, ignored: 'unresolved_lid', lid: originalLid });
+          }
+          
+          // If this message resolved a LID to a phone number, update any pending messages with this LID
+          if (isLidMessage && contactPhone && originalLid) {
+            const updatedCount = await prisma.messageLog.updateMany({
+              where: {
+                businessId,
+                metadata: { path: ['originalLid'], equals: originalLid }
+              },
+              data: {
+                sender: contactPhone,
+                metadata: { set: { lidResolved: true, resolvedPhone: contactPhone } }
+              }
+            });
+            if (updatedCount.count > 0) {
+              console.log(`[WEBHOOK] Resolved LID ${originalLid} -> ${contactPhone}, updated ${updatedCount.count} pending messages`);
+            }
           }
           
           const contactJid = data.from;
@@ -312,6 +334,8 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                 contactName,
                 contactJid,
                 isFromMe,
+                isLidMessage: isLidMessage || undefined,
+                originalLid: originalLid || undefined,
                 mediaAnalysis: mediaAnalysis || undefined,
                 mediaType: mediaType || undefined
               }
