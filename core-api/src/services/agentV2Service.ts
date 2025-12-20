@@ -11,6 +11,7 @@ interface Product {
   category?: string;
   stock?: number;
   attributes?: Record<string, any>;
+  imageUrl?: string;
 }
 
 interface BusinessContext {
@@ -134,7 +135,8 @@ export function buildBusinessContext(
     price: p.price,
     currency: 'USD',
     category: p.category,
-    stock: p.stock
+    stock: p.stock,
+    imageUrl: p.imageUrl || undefined
   }));
   
   const enabledTools = (tools || []).filter(t => t.enabled);

@@ -405,6 +405,78 @@ function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedT
   return { mediaItems, cleanedText };
 }
 
+interface ProductWithImage {
+  id: string;
+  name: string;
+  imageUrl?: string;
+}
+
+function extractProductImagesFromResponse(
+  responseText: string,
+  products: ProductWithImage[],
+  maxImages: number = 3
+): MediaItem[] {
+  const mediaItems: MediaItem[] = [];
+  const mentionedProducts: ProductWithImage[] = [];
+  const responseLower = responseText.toLowerCase();
+  
+  // Find products mentioned in the response by name
+  for (const product of products) {
+    if (!product.imageUrl) continue;
+    
+    const productName = (product.name || '').toLowerCase();
+    if (!productName) continue;
+    
+    // Check if product name appears in response (with some fuzzy matching)
+    // Split name into words and check if most words appear
+    const nameWords = productName.split(/\s+/).filter(w => w.length > 2);
+    if (nameWords.length === 0) continue;
+    
+    const matchedWords = nameWords.filter(word => responseLower.includes(word));
+    const matchRatio = matchedWords.length / nameWords.length;
+    
+    // If 70%+ of significant words match, consider it mentioned
+    if (matchRatio >= 0.7 || (nameWords.length <= 2 && matchRatio >= 0.5)) {
+      mentionedProducts.push(product);
+    }
+  }
+  
+  // Also check for product IDs in the response (some agents might reference by ID)
+  for (const product of products) {
+    if (!product.imageUrl) continue;
+    if (mentionedProducts.includes(product)) continue;
+    
+    const shortId = product.id.slice(-6).toLowerCase();
+    if (responseLower.includes(shortId)) {
+      mentionedProducts.push(product);
+    }
+  }
+  
+  // Limit to maxImages products to avoid overwhelming the chat
+  const productsToShow = mentionedProducts.slice(0, maxImages);
+  
+  for (const product of productsToShow) {
+    if (!product.imageUrl) continue;
+    
+    // Determine file extension from URL
+    const urlParts = product.imageUrl.split('.');
+    const ext = urlParts[urlParts.length - 1]?.toLowerCase().split('?')[0] || 'jpg';
+    const validExt = IMAGE_EXTENSIONS.includes(ext) ? ext : 'jpg';
+    
+    mediaItems.push({
+      type: 'image',
+      url: product.imageUrl,
+      fileName: `${product.name.replace(/\s+/g, '_').substring(0, 30)}.${validExt}`,
+      mimeType: MIME_TYPES[validExt] || 'image/jpeg',
+      originalMatch: `[product:${product.id}]`
+    });
+    
+    console.log(`[Agent] Auto-attached product image for "${product.name}": ${product.imageUrl}`);
+  }
+  
+  return mediaItems;
+}
+
 async function sendMedia(
   instanceBackendId: string,
   to: string,
@@ -778,6 +850,24 @@ async function processWithAgentV2(
         const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
         const finalText = cleanMarkdownForWhatsApp(cleanedText);
         
+        // Auto-attach product images for products mentioned in the response
+        const productsWithImages = (business.products || []).map((p: any) => ({
+          id: p.id,
+          name: p.title || p.name,
+          imageUrl: p.imageUrl
+        }));
+        const productImages = extractProductImagesFromResponse(aiResponse, productsWithImages);
+        
+        // Combine: first media from text, then product images (avoiding duplicates)
+        const existingUrls = new Set(mediaItems.map(m => m.url));
+        const allMedia = [...mediaItems];
+        for (const img of productImages) {
+          if (!existingUrls.has(img.url)) {
+            allMedia.push(img);
+            existingUrls.add(img.url);
+          }
+        }
+        
         if (finalText) {
           if (splitMessages) {
             const parts = smartSplitMessage(finalText);
@@ -793,7 +883,7 @@ async function processWithAgentV2(
           }
         }
         
-        for (const media of mediaItems) {
+        for (const media of allMedia) {
           try {
             await new Promise(resolve => setTimeout(resolve, 500));
             if (media.type === 'image') {
@@ -822,6 +912,27 @@ async function processWithAgentV2(
         // Send the message
         const result = await sendMessageInParts(backendId, phone, aiResponse, splitMessages);
         sentMedia = result.sentMedia;
+        
+        // Auto-attach product images for products mentioned in the response
+        const productsWithImages = (business.products || []).map((p: any) => ({
+          id: p.id,
+          name: p.title || p.name,
+          imageUrl: p.imageUrl
+        }));
+        const productImages = extractProductImagesFromResponse(aiResponse, productsWithImages);
+        
+        // Send product images (avoiding duplicates already sent)
+        const existingUrls = new Set(sentMedia.map((m: any) => m.url));
+        for (const img of productImages) {
+          if (!existingUrls.has(img.url)) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const sent = await sendMedia(backendId, phone, img);
+            if (sent) {
+              sentMedia.push(img);
+              existingUrls.add(img.url);
+            }
+          }
+        }
       }
       
       // Log the outbound message
@@ -1868,6 +1979,24 @@ async function processWithAgent(
         const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
         const finalText = cleanMarkdownForWhatsApp(cleanedText);
         
+        // Auto-attach product images for products mentioned in the response
+        const productsWithImages = (business.products || []).map((p: any) => ({
+          id: p.id,
+          name: p.title || p.name,
+          imageUrl: p.imageUrl
+        }));
+        const productImages = extractProductImagesFromResponse(aiResponse, productsWithImages);
+        
+        // Combine: first media from text, then product images (avoiding duplicates)
+        const existingUrls = new Set(mediaItems.map(m => m.url));
+        const allMedia = [...mediaItems];
+        for (const img of productImages) {
+          if (!existingUrls.has(img.url)) {
+            allMedia.push(img);
+            existingUrls.add(img.url);
+          }
+        }
+        
         if (finalText) {
           if (splitMessages) {
             const parts = smartSplitMessage(finalText);
@@ -1883,7 +2012,7 @@ async function processWithAgent(
           }
         }
         
-        for (const media of mediaItems) {
+        for (const media of allMedia) {
           try {
             await new Promise(resolve => setTimeout(resolve, 500));
             if (media.type === 'image') {
@@ -1910,6 +2039,27 @@ async function processWithAgent(
         
         const result = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
         sentMedia = result.sentMedia;
+        
+        // Auto-attach product images for products mentioned in the response
+        const productsWithImagesB = (business.products || []).map((p: any) => ({
+          id: p.id,
+          name: p.title || p.name,
+          imageUrl: p.imageUrl
+        }));
+        const productImagesB = extractProductImagesFromResponse(aiResponse, productsWithImagesB);
+        
+        // Send product images (avoiding duplicates already sent)
+        const existingUrlsB = new Set(sentMedia.map((m: any) => m.url));
+        for (const img of productImagesB) {
+          if (!existingUrlsB.has(img.url)) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const sent = await sendMedia(instance.instanceBackendId, phone, img);
+            if (sent) {
+              sentMedia.push(img);
+              existingUrlsB.add(img.url);
+            }
+          }
+        }
       }
       
       await prisma.messageLog.create({
