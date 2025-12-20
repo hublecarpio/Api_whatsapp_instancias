@@ -792,16 +792,38 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
         const args = JSON.parse(fn.arguments);
         const searchResult = await searchProductsIntelligent(business.id, args.consulta || '', 5);
         
+        const productResults = searchResult.products.map((p: any) => ({
+          id: p.id,
+          nombre: p.title,
+          precio: `${currencySymbol}${p.price}`,
+          stock: p.stock,
+          disponible: p.available,
+          descripcion: p.description?.substring(0, 100),
+          imagen_url: p.imageUrl || null
+        }));
+        
+        const result: any = {
+          productos_encontrados: productResults,
+          coincidencia_exacta: searchResult.exactMatch,
+          mejor_coincidencia: searchResult.bestMatch ? {
+            nombre: searchResult.bestMatch.title,
+            similitud: Math.round(searchResult.bestMatch.similarity * 100) + '%'
+          } : null
+        };
+        
+        // Add instruction for sending image if best match has image (same format as enviar_archivo)
+        if (searchResult.bestMatch?.imageUrl) {
+          result.instruccion = `IMPORTANTE: Incluye esta URL en tu respuesta para enviar la foto del producto: ${searchResult.bestMatch.imageUrl}`;
+          result.imagen_producto = {
+            url: searchResult.bestMatch.imageUrl,
+            nombre: searchResult.bestMatch.title
+          };
+        }
+        
         toolMessages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: JSON.stringify(searchResult.products.map((p: any) => ({
-            id: p.id,
-            title: p.title,
-            price: `${currencySymbol}${p.price}`,
-            stock: p.stock,
-            description: p.description?.substring(0, 100)
-          })))
+          content: JSON.stringify(result)
         });
       } else if (toolName === 'enviar_archivo') {
         const args = JSON.parse(fn.arguments);

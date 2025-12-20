@@ -992,7 +992,8 @@ async function processWithAgent(
     systemPrompt += `\n\n## Reglas para responder sobre productos:`;
     systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué KTM tienen"), PRIMERO pregunta qué modelo específico le interesa.`;
     systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto, muestra los detalles de ese producto.`;
-    systemPrompt += `\n- ENVÍO DE IMÁGENES: Cuando buscar_producto devuelve "instruccion_imagen", sigue esa instrucción para mostrar la foto del producto.`;
+    systemPrompt += `\n- ENVÍO DE IMÁGENES: SIEMPRE sigue la "instruccion" que devuelve buscar_producto para enviar la foto del producto.`;
+    systemPrompt += `\n- OBLIGATORIO: Si buscar_producto devuelve "imagen_producto", DEBES incluir la URL al final de tu mensaje.`;
     systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
     systemPrompt += `\n- Para generar pedidos, usa el ID del producto (el valor después de "ID:").`;
@@ -1004,7 +1005,8 @@ async function processWithAgent(
     systemPrompt += `\n- Cuando el cliente mencione un producto, usa buscar_producto inmediatamente.`;
     systemPrompt += `\n- La búsqueda es inteligente: encontrará productos aunque el cliente escriba con errores.`;
     systemPrompt += `\n- CONFÍA en "mejor_coincidencia" - es el producto más parecido a lo que busca el cliente.`;
-    systemPrompt += `\n- ENVÍO DE IMÁGENES: Cuando buscar_producto devuelve "instruccion_imagen", sigue esa instrucción para mostrar la foto.`;
+    systemPrompt += `\n- ENVÍO DE IMÁGENES: SIEMPRE sigue la "instruccion" que devuelve buscar_producto para enviar la foto del producto.`;
+    systemPrompt += `\n- OBLIGATORIO: Si buscar_producto devuelve "imagen_producto", DEBES incluir la URL al final de tu mensaje.`;
     systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere alternativas.`;
   }
@@ -1386,9 +1388,13 @@ async function processWithAgent(
               : 'Se muestran los productos más similares a la búsqueda'
           };
           
-          // Add instruction for sending image if best match has image
+          // Add instruction for sending image if best match has image (same direct format as enviar_archivo)
           if (bestMatch?.imageUrl) {
-            result.instruccion_imagen = `Si quieres mostrar la imagen de "${bestMatch.title}", incluye esta URL al final de tu respuesta: ${bestMatch.imageUrl}`;
+            result.instruccion = `IMPORTANTE: Incluye esta URL en tu respuesta para enviar la foto del producto: ${bestMatch.imageUrl}`;
+            result.imagen_producto = {
+              url: bestMatch.imageUrl,
+              nombre: bestMatch.title
+            };
           }
           
           resultContent = JSON.stringify(result);
