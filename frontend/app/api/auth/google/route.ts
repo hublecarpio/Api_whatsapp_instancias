@@ -1,22 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 function getPublicBackendUrl(request: NextRequest): string {
-  // For production, use the public API URL based on the request host
-  const host = request.headers.get('host') || '';
-  
-  // If we're on app.efficore.es, redirect to api.efficore.es
-  if (host.includes('efficore.es')) {
-    return 'https://api.efficore.es';
-  }
-  
-  // Check for explicit public backend URL
+  // Check for explicit public backend URL first (highest priority)
   if (process.env.NEXT_PUBLIC_BACKEND_URL) {
     return process.env.NEXT_PUBLIC_BACKEND_URL;
   }
   
-  // For development, construct URL from current host
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
+  // Dynamically derive API URL from current host
+  // Pattern: app.domain.com -> api.domain.com
+  // Pattern: domain.com -> api.domain.com
+  const host = request.headers.get('host') || '';
+  const protocol = request.headers.get('x-forwarded-proto') || 'https';
+  
+  if (host && !host.includes('localhost')) {
+    // Replace 'app.' prefix with 'api.' or add 'api.' if no prefix
+    let apiHost = host;
+    if (host.startsWith('app.')) {
+      apiHost = host.replace('app.', 'api.');
+    } else {
+      // Add api. prefix to the domain
+      apiHost = `api.${host}`;
+    }
+    return `${protocol}://${apiHost}`;
   }
   
   // Fallback for local development
