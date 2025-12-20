@@ -174,7 +174,25 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           const resolvedBackendId = instance?.instanceBackendId || `biz_${businessId.substring(0, 8)}`;
           console.log(`[WEBHOOK] Instance for business ${businessId}: id=${instance?.id}, backendId=${resolvedBackendId}, provider=${instance?.provider || 'BAILEYS'}`);
           
-          const contactPhone = data.phoneNumber || data.sender?.replace('@s.whatsapp.net', '') || data.from;
+          // Extract phone number - handle both standard @s.whatsapp.net and LID @lid formats
+          // Priority: phoneNumber (resolved) > sender cleaned > from cleaned
+          let contactPhone = data.phoneNumber;
+          if (!contactPhone && data.sender) {
+            // Clean both @s.whatsapp.net and @lid suffixes
+            contactPhone = data.sender.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '');
+          }
+          if (!contactPhone && data.from) {
+            contactPhone = data.from.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '');
+          }
+          // Final cleanup - ensure only digits
+          contactPhone = contactPhone?.replace(/\D/g, '') || '';
+          
+          // Skip if we couldn't resolve a valid phone number (LID not mapped)
+          if (!contactPhone || contactPhone.length < 8) {
+            console.log(`[WEBHOOK] Skipping message - could not resolve phone number from LID: sender=${data.sender}, from=${data.from}`);
+            return res.json({ received: true, ignored: 'unresolved_lid' });
+          }
+          
           const contactJid = data.from;
           const isFromMe = data.isFromMe || false;
           const contactName = isFromMe ? '' : (data.pushName || '');
