@@ -292,6 +292,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           
           // Dispatch user_message webhook for incoming messages
           if (!isFromMe) {
+            console.log(`[WEBHOOK] Dispatching user_message webhook for business ${businessId}, contact ${contactPhone}`);
             dispatchUserMessage(
               businessId,
               contactPhone,
