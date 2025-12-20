@@ -24,7 +24,7 @@ async function getDistinctBroadcastDays(businessId: string): Promise<number> {
   const campaigns = await (prisma as any).broadcastCampaign.findMany({
     where: { 
       businessId,
-      status: { in: ['COMPLETED', 'IN_PROGRESS', 'PAUSED'] }
+      status: { in: ['COMPLETED', 'RUNNING', 'PAUSED'] }
     },
     select: { createdAt: true }
   });
