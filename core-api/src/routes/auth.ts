@@ -633,24 +633,28 @@ router.post('/apply-referral', authMiddleware, async (req: AuthRequest, res: Res
       return res.status(404).json({ error: 'User not found' });
     }
     
+    // Accept ENTERPRISE codes OR STANDARD codes with grantDurationDays
     const refCode = await prisma.referralCode.findFirst({
       where: { 
         code: code.toUpperCase(),
         isActive: true,
-        type: 'ENTERPRISE'
+        OR: [
+          { type: 'ENTERPRISE' },
+          { type: 'STANDARD', grantDurationDays: { gt: 0 } }
+        ]
       }
     });
     
     if (!refCode) {
-      return res.status(400).json({ error: 'Invalid or inactive referral code' });
+      return res.status(400).json({ error: 'Codigo invalido o sin beneficios PRO. Solo codigos con tiempo PRO pueden canjearse.' });
     }
     
     if (refCode.expiresAt && refCode.expiresAt < new Date()) {
-      return res.status(400).json({ error: 'This referral code has expired' });
+      return res.status(400).json({ error: 'Este codigo ha expirado' });
     }
     
     if (refCode.maxUses && refCode.usageCount >= refCode.maxUses) {
-      return res.status(400).json({ error: 'This referral code has reached its maximum uses' });
+      return res.status(400).json({ error: 'Este codigo ha alcanzado el limite de usos' });
     }
     
     const grantDays = refCode.grantDurationDays || 7;
@@ -1603,134 +1607,6 @@ router.post('/google/exchange', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('[GoogleAuth Exchange] Error:', error);
     res.status(500).json({ error: 'Failed to exchange authorization code' });
-  }
-});
-
-// POST /auth/redeem-referral - Allow users to redeem a referral code after registration
-router.post('/redeem-referral', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const { code } = req.body;
-    
-    if (!code) {
-      return res.status(400).json({ error: 'Referral code is required' });
-    }
-    
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        subscriptions: {
-          where: { status: 'ACTIVE' },
-          orderBy: { endsAt: 'desc' }
-        }
-      }
-    });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Check if user already used a referral code with PRO benefits
-    if (user.referralCode) {
-      const previousCode = await prisma.referralCode.findUnique({
-        where: { code: user.referralCode }
-      });
-      if (previousCode?.grantDurationDays) {
-        return res.status(400).json({ 
-          error: 'Ya has canjeado un código de referido con beneficios PRO anteriormente' 
-        });
-      }
-    }
-    
-    const refCode = await prisma.referralCode.findUnique({
-      where: { code: code.toUpperCase() }
-    });
-    
-    if (!refCode) {
-      return res.status(404).json({ error: 'Código de referido no encontrado' });
-    }
-    
-    if (!refCode.isActive) {
-      return res.status(400).json({ error: 'Este código está desactivado' });
-    }
-    
-    if (refCode.expiresAt && refCode.expiresAt < new Date()) {
-      return res.status(400).json({ error: 'Este código ha expirado' });
-    }
-    
-    if (refCode.maxUses && refCode.usageCount >= refCode.maxUses) {
-      return res.status(400).json({ error: 'Este código ha alcanzado el límite de usos' });
-    }
-    
-    // Check if this code grants PRO time
-    if (!refCode.grantDurationDays || refCode.grantDurationDays <= 0) {
-      return res.status(400).json({ 
-        error: 'Este código no otorga tiempo PRO. Solo es válido para nuevos registros.' 
-      });
-    }
-    
-    const grantTier = refCode.grantTier || 'PRO';
-    const grantDays = refCode.grantDurationDays;
-    
-    await prisma.$transaction(async (tx) => {
-      // Increment usage count
-      await tx.referralCode.update({
-        where: { id: refCode.id },
-        data: { usageCount: { increment: 1 } }
-      });
-      
-      // Update user with referral code reference
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          referralCode: refCode.code,
-          referralCodeId: refCode.id,
-          isPro: true,
-          subscriptionStatus: 'ACTIVE',
-          subscriptionTier: grantTier,
-          demoPhase: 'ACTIVE'
-        }
-      });
-      
-      // Calculate subscription dates - extend from existing active subscription or start now
-      const now = new Date();
-      let startsAt = now;
-      
-      // Check for existing active subscription to extend
-      const existingActive = user.subscriptions.find(s => s.status === 'ACTIVE' && s.endsAt && s.endsAt > now);
-      if (existingActive && existingActive.endsAt) {
-        startsAt = existingActive.endsAt;
-      }
-      
-      const endsAt = new Date(startsAt.getTime() + grantDays * 24 * 60 * 60 * 1000);
-      
-      // Create subscription record (use ENTERPRISE source for referral-granted subscriptions)
-      await tx.subscription.create({
-        data: {
-          userId: userId,
-          source: 'ENTERPRISE',
-          tier: grantTier,
-          status: 'ACTIVE',
-          startsAt,
-          endsAt,
-          referralCodeId: refCode.id,
-          activatedBy: 'referral_code',
-          notes: `Canjeado post-registro via código: ${refCode.code} (${grantDays} días ${grantTier})`
-        }
-      });
-      
-      console.log(`[REDEEM] User ${userId} redeemed code ${refCode.code}: ${grantDays} days of ${grantTier}`);
-    });
-    
-    res.json({
-      success: true,
-      message: `Código canjeado exitosamente. Tienes ${grantDays} días de ${grantTier}.`,
-      grantedDays: grantDays,
-      grantedTier: grantTier
-    });
-  } catch (error: any) {
-    console.error('[REDEEM] Error:', error);
-    res.status(500).json({ error: 'Error al canjear el código' });
   }
 });
 

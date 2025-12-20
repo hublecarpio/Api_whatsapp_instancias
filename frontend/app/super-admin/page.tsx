@@ -1987,8 +1987,8 @@ function ReferralsTab({ token }: { token: string }) {
           description: newDescription || null,
           expiresAt: newExpiresAt || null,
           type: newType,
-          grantTier: newType === 'ENTERPRISE' ? 'PRO' : null,
-          grantDurationDays: newType === 'ENTERPRISE' ? parseInt(newGrantDurationDays) : null,
+          grantTier: (newGrantDurationDays && parseInt(newGrantDurationDays) > 0) ? 'PRO' : null,
+          grantDurationDays: (newGrantDurationDays && parseInt(newGrantDurationDays) > 0) ? parseInt(newGrantDurationDays) : null,
           maxUses: newMaxUses ? parseInt(newMaxUses) : null,
           bonusDemoDays: newBonusDemoDays ? parseInt(newBonusDemoDays) : null,
           bonusTrialDays: newBonusTrialDays ? parseInt(newBonusTrialDays) : null,
@@ -2148,6 +2148,15 @@ function ReferralsTab({ token }: { token: string }) {
                           PRO x {code.grantDurationDays} dias
                         </span>
                       </div>
+                    ) : code.grantDurationDays ? (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs px-2 py-0.5 rounded bg-neon-blue/20 text-neon-blue font-medium w-fit">
+                          STANDARD + PRO
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {code.grantDurationDays} dias PRO
+                        </span>
+                      </div>
                     ) : (
                       <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400">
                         STANDARD
@@ -2261,35 +2270,42 @@ function ReferralsTab({ token }: { token: string }) {
                   placeholder="Cliente enterprise - Acme Corp"
                 />
               </div>
-              {newType === 'ENTERPRISE' && (
-                <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4 space-y-4">
-                  <p className="text-purple-400 text-sm font-medium">Configuracion Enterprise</p>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Duracion PRO (dias) *</label>
-                    <input
-                      type="number"
-                      value={newGrantDurationDays}
-                      onChange={e => setNewGrantDurationDays(e.target.value)}
-                      className="input w-full"
-                      placeholder="30"
-                      min="1"
-                      required={newType === 'ENTERPRISE'}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Limite de usos</label>
-                    <input
-                      type="number"
-                      value={newMaxUses}
-                      onChange={e => setNewMaxUses(e.target.value)}
-                      className="input w-full"
-                      placeholder="Ilimitado"
-                      min="1"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Dejar vacio para usos ilimitados</p>
-                  </div>
+              <div className={`${newType === 'ENTERPRISE' ? 'bg-purple-500/10 border-purple-500/20' : 'bg-neon-blue/10 border-neon-blue/20'} border rounded-lg p-4 space-y-4`}>
+                <p className={`${newType === 'ENTERPRISE' ? 'text-purple-400' : 'text-neon-blue'} text-sm font-medium`}>
+                  {newType === 'ENTERPRISE' ? 'Configuracion Enterprise' : 'Configuracion PRO (opcional)'}
+                </p>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">
+                    Duracion PRO (dias) {newType === 'ENTERPRISE' ? '*' : ''}
+                  </label>
+                  <input
+                    type="number"
+                    value={newGrantDurationDays}
+                    onChange={e => setNewGrantDurationDays(e.target.value)}
+                    className="input w-full"
+                    placeholder={newType === 'ENTERPRISE' ? '30' : '0 = sin tiempo PRO'}
+                    min="0"
+                    required={newType === 'ENTERPRISE'}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {newType === 'ENTERPRISE' 
+                      ? 'Se activa automaticamente al registrarse'
+                      : 'Si > 0, el usuario puede canjear el codigo post-registro para obtener PRO'}
+                  </p>
                 </div>
-              )}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Limite de usos</label>
+                  <input
+                    type="number"
+                    value={newMaxUses}
+                    onChange={e => setNewMaxUses(e.target.value)}
+                    className="input w-full"
+                    placeholder="Ilimitado"
+                    min="1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Dejar vacio para usos ilimitados</p>
+                </div>
+              </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Fecha de expiracion</label>
                 <input
