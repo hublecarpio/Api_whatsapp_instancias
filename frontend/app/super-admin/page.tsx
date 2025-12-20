@@ -2237,7 +2237,7 @@ function ReferralsTab({ token }: { token: string }) {
                 <p className="text-xs text-gray-500 mt-1">
                   {newType === 'ENTERPRISE' 
                     ? 'Activa PRO automaticamente al registrarse' 
-                    : 'Solo tracking de marketing'}
+                    : 'Tracking de marketing + opcion de otorgar tiempo PRO'}
                 </p>
               </div>
               <div>
