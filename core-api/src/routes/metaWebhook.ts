@@ -3,6 +3,7 @@ import prisma from '../services/prisma.js';
 import { MetaCloudService, MetaWebhookPayload } from '../services/metaCloud.js';
 import { processIncomingMessage } from '../services/messageIngest.js';
 import { uploadBuffer, isS3Configured } from '../services/storage.js';
+import { dispatchUserMessage } from '../services/webhookService.js';
 
 const router = Router();
 
@@ -147,6 +148,17 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
         filename: msg.filename,
         location: msg.location
       });
+      
+      // Dispatch user_message webhook for Meta Cloud incoming messages
+      console.log(`[META WEBHOOK] Dispatching user_message webhook for business ${instance.businessId}, contact ${msg.from}`);
+      dispatchUserMessage(
+        instance.businessId,
+        msg.from,
+        msg.pushName || '',
+        msg.caption || msg.text || '',
+        msg.type,
+        mediaUrl
+      ).catch(err => console.error('[META WEBHOOK] Failed to dispatch user_message webhook:', err.message));
     }
   } catch (error: any) {
     console.error('Meta webhook processing error:', error);
