@@ -2018,11 +2018,23 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
           businessId: business_id,
           contactPhone,
           instanceId: instanceId || null,
-          messages: { texts: currentMessages, providerMessageIds: currentProviderMessageIds },
+          messages: { 
+            texts: currentMessages, 
+            providerMessageIds: currentProviderMessageIds,
+            contactJid: phone,
+            contactName: contactName || '',
+            provider: provider || undefined
+          },
           expiresAt: new Date(Date.now() + bufferSeconds * 1000)
         },
         update: {
-          messages: { texts: currentMessages, providerMessageIds: currentProviderMessageIds },
+          messages: { 
+            texts: currentMessages, 
+            providerMessageIds: currentProviderMessageIds,
+            contactJid: phone,
+            contactName: contactName || '',
+            provider: provider || undefined
+          },
           instanceId: instanceId || undefined,
           expiresAt: new Date(Date.now() + bufferSeconds * 1000)
         }

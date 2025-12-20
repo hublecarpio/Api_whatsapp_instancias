@@ -62,6 +62,11 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
         const messages = bufferData?.texts || (Array.isArray(bufferData) ? bufferData : []);
         const storedMessageIds = bufferData?.providerMessageIds || [];
         
+        // Extract stored contact JID and name from buffer data
+        const storedContactJid = bufferData?.contactJid;
+        const storedContactName = bufferData?.contactName || '';
+        const storedProvider = bufferData?.provider;
+        
         const business = await prisma.business.findUnique({
           where: { id: buffer.businessId }
         });
@@ -89,6 +94,13 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
           }
         });
         
+        // Use stored contactJid if available, otherwise construct from contactPhone
+        // This ensures we send to the correct WhatsApp ID (including @lid if that was the original)
+        const contactJid = storedContactJid || `${buffer.contactPhone}@s.whatsapp.net`;
+        const contactName = storedContactName || contactSettings?.contactName || '';
+        
+        console.log(`[ExpiredBuffer] Using contactJid: ${contactJid} (stored: ${!!storedContactJid})`);
+        
         const aiQueue = getAIResponseQueue();
         let queued = false;
         
@@ -96,15 +108,15 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
           const job = await queueAIResponse({
             businessId: buffer.businessId,
             contactPhone: buffer.contactPhone,
-            contactName: contactSettings?.contactName || '',
+            contactName,
             messages,
-            phone: instance.phoneNumber || '',
+            phone: contactJid,
             instanceId: instance.id,
             instanceBackendId: instance.instanceBackendId || undefined,
             priority: 'normal',
             bufferId: buffer.id,
             providerMessageIds: storedMessageIds,
-            provider: instance.provider
+            provider: storedProvider || instance.provider
           });
           queued = !!job;
         }
@@ -118,9 +130,9 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
             await processAIResponseDirect({
               businessId: buffer.businessId,
               contactPhone: buffer.contactPhone,
-              contactName: contactSettings?.contactName || '',
+              contactName,
               messages,
-              phone: instance.phoneNumber || '',
+              phone: contactJid,
               instanceId: instance.id,
               instanceBackendId: instance.instanceBackendId || undefined,
               priority: 'normal'
