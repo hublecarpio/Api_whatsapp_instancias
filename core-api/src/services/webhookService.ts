@@ -100,9 +100,21 @@ export async function dispatchWebhook(
       return { success: false, reason: 'user_not_found' };
     }
     
-    if (user.subscriptionTier !== 'PRO' && user.subscriptionTier !== 'ENTERPRISE') {
-      console.log(`[Webhook] User ${user.email} has tier ${user.subscriptionTier}, webhooks require PRO/ENTERPRISE`);
-      return { success: false, reason: 'tier_not_eligible', tier: user.subscriptionTier };
+    // Check active subscription from Subscription table (source of truth)
+    const activeSubscription = await prisma.subscription.findFirst({
+      where: { 
+        userId: business.userId,
+        status: 'ACTIVE'
+      },
+      select: { tier: true, source: true }
+    });
+    
+    // Use subscription tier if active, otherwise fall back to user.subscriptionTier
+    const effectiveTier = activeSubscription?.source || activeSubscription?.tier || user.subscriptionTier;
+    
+    if (effectiveTier !== 'PRO' && effectiveTier !== 'ENTERPRISE') {
+      console.log(`[Webhook] User ${user.email} has tier ${effectiveTier}, webhooks require PRO/ENTERPRISE`);
+      return { success: false, reason: 'tier_not_eligible', tier: effectiveTier };
     }
 
     const normalizedEvent = normalizeEventName(event);
