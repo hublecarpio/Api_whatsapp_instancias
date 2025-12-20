@@ -129,6 +129,10 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       }
       if (phone === 'unknown' || phone === 'bot' || phone === 'system') return;
       
+      // Normalize phone: remove @s.whatsapp.net, @lid suffixes and keep only digits
+      phone = phone.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
+      if (!phone || phone.length < 8) return; // Skip invalid phones
+      
       const metadata = msg.metadata as any;
       const contactName = metadata?.contactName || metadata?.pushName || '';
       
@@ -189,13 +193,23 @@ router.get('/conversation/:phone', async (req: AuthRequest, res: Response) => {
       }
     }
     
+    // Normalize phone to digits only
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    // Search for all possible formats of this phone number
+    const phoneVariants = [
+      cleanPhone,
+      `${cleanPhone}@s.whatsapp.net`,
+      `${cleanPhone}@lid`
+    ];
+    
     const messages = await prisma.messageLog.findMany({
       where: {
         businessId: business_id as string,
-        OR: [
-          { sender: phone },
-          { recipient: phone }
-        ]
+        OR: phoneVariants.flatMap(p => [
+          { sender: p },
+          { recipient: p }
+        ])
       },
       orderBy: { createdAt: 'asc' }
     });
