@@ -11,6 +11,10 @@ interface WebhookPayload {
 
 const DEFAULT_WEBHOOK_EVENTS = ['user_message', 'agent_message', 'stage_change', 'state_change', 'tool_call'];
 
+function normalizeEventName(event: string): string {
+  return event.toLowerCase().replace(/\s+/g, '_');
+}
+
 function generateSignature(payload: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(payload).digest('hex');
 }
@@ -101,12 +105,13 @@ export async function dispatchWebhook(
       return { success: false, reason: 'tier_not_eligible', tier: user.subscriptionTier };
     }
 
+    const normalizedEvent = normalizeEventName(event);
     const allowedEvents = business.webhookEvents.length > 0 
-      ? business.webhookEvents 
+      ? business.webhookEvents.map(normalizeEventName)
       : DEFAULT_WEBHOOK_EVENTS;
     
-    if (!allowedEvents.includes(event)) {
-      console.log(`[Webhook] Event ${event} not in allowed events: ${allowedEvents.join(', ')}`);
+    if (!allowedEvents.includes(normalizedEvent)) {
+      console.log(`[Webhook] Event ${normalizedEvent} not in allowed events: ${allowedEvents.join(', ')}`);
       return { success: false, reason: 'event_not_allowed', allowedEvents };
     }
 
