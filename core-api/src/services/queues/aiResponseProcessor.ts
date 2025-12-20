@@ -1252,79 +1252,8 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   return { response: aiResponse, tokensUsed: totalTokens };
 }
 
-// Helper function to extract product images from response text
-function extractProductImagesFromResponseWorker(
-  responseText: string,
-  products: Array<{ id: string; name: string; imageUrl?: string }>,
-  maxImages: number = 3
-): Array<{ type: 'image'; url: string; caption?: string }> {
-  const mediaItems: Array<{ type: 'image'; url: string; caption?: string }> = [];
-  const mentionedProducts: { product: { id: string; name: string; imageUrl?: string }; score: number }[] = [];
-  const responseLower = responseText.toLowerCase();
-  
-  console.log(`[AI Worker Product Matching] Checking ${products.length} products against response`);
-  
-  for (const product of products) {
-    if (!product.imageUrl) continue;
-    
-    const productName = (product.name || '').toLowerCase();
-    if (!productName) continue;
-    
-    // Method 1: Exact full name match
-    if (responseLower.includes(productName)) {
-      mentionedProducts.push({ product, score: 100 });
-      console.log(`[AI Worker Product Matching] EXACT match: "${product.name}"`);
-      continue;
-    }
-    
-    // Method 2: Check key model words
-    const modelWords = productName.split(/\s+/).filter(w => 
-      /\d/.test(w) || w.length >= 4
-    );
-    
-    if (modelWords.length > 0) {
-      const matchedModelWords = modelWords.filter(word => responseLower.includes(word));
-      if (matchedModelWords.length >= Math.ceil(modelWords.length * 0.5)) {
-        const score = (matchedModelWords.length / modelWords.length) * 80;
-        mentionedProducts.push({ product, score });
-        console.log(`[AI Worker Product Matching] MODEL match (${matchedModelWords.join(', ')}): "${product.name}"`);
-        continue;
-      }
-    }
-    
-    // Method 3: General word matching
-    const nameWords = productName.split(/\s+/).filter(w => w.length > 2);
-    if (nameWords.length > 0) {
-      const matchedWords = nameWords.filter(word => responseLower.includes(word));
-      const matchRatio = matchedWords.length / nameWords.length;
-      
-      if (matchRatio >= 0.4) {
-        const score = matchRatio * 60;
-        mentionedProducts.push({ product, score });
-        console.log(`[AI Worker Product Matching] WORD match (${matchedWords.join(', ')}): "${product.name}"`);
-      }
-    }
-  }
-  
-  mentionedProducts.sort((a, b) => b.score - a.score);
-  const productsToShow = mentionedProducts.slice(0, maxImages).map(m => m.product);
-  
-  console.log(`[AI Worker Product Matching] Found ${mentionedProducts.length} matches, showing ${productsToShow.length}`);
-  
-  for (const product of productsToShow) {
-    if (!product.imageUrl) continue;
-    
-    mediaItems.push({
-      type: 'image',
-      url: product.imageUrl,
-      caption: product.name
-    });
-    
-    console.log(`[AI Worker] Auto-attached product image for "${product.name}": ${product.imageUrl}`);
-  }
-  
-  return mediaItems;
-}
+// Product images are now sent explicitly when the agent includes the URL from buscar_producto results
+// (following the same pattern as enviar_archivo)
 
 async function sendWhatsAppResponse(
   instanceId: string,

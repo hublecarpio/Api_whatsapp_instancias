@@ -405,107 +405,8 @@ function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedT
   return { mediaItems, cleanedText };
 }
 
-interface ProductWithImage {
-  id: string;
-  name: string;
-  imageUrl?: string;
-}
-
-function extractProductImagesFromResponse(
-  responseText: string,
-  products: ProductWithImage[],
-  maxImages: number = 3
-): MediaItem[] {
-  const mediaItems: MediaItem[] = [];
-  const mentionedProducts: { product: ProductWithImage; score: number }[] = [];
-  const responseLower = responseText.toLowerCase();
-  
-  console.log(`[Product Image Matching] Checking ${products.length} products against response (${responseText.length} chars)`);
-  
-  // Find products mentioned in the response by name
-  for (const product of products) {
-    if (!product.imageUrl) continue;
-    
-    const productName = (product.name || '').toLowerCase();
-    if (!productName) continue;
-    
-    // Method 1: Exact full name match
-    if (responseLower.includes(productName)) {
-      mentionedProducts.push({ product, score: 100 });
-      console.log(`[Product Image Matching] EXACT match: "${product.name}"`);
-      continue;
-    }
-    
-    // Method 2: Check key model words (alphanumeric identifiers like "RTR 200", "BATLO 5")
-    const modelWords = productName.split(/\s+/).filter(w => 
-      /\d/.test(w) || // Contains numbers (model identifiers)
-      w.length >= 4   // Or significant words 4+ chars
-    );
-    
-    if (modelWords.length > 0) {
-      const matchedModelWords = modelWords.filter(word => responseLower.includes(word));
-      if (matchedModelWords.length >= Math.ceil(modelWords.length * 0.5)) {
-        const score = (matchedModelWords.length / modelWords.length) * 80;
-        mentionedProducts.push({ product, score });
-        console.log(`[Product Image Matching] MODEL match (${matchedModelWords.join(', ')}): "${product.name}" score=${score.toFixed(0)}`);
-        continue;
-      }
-    }
-    
-    // Method 3: General word matching with lower threshold
-    const nameWords = productName.split(/\s+/).filter(w => w.length > 2);
-    if (nameWords.length > 0) {
-      const matchedWords = nameWords.filter(word => responseLower.includes(word));
-      const matchRatio = matchedWords.length / nameWords.length;
-      
-      // If 40%+ of words match, consider it a potential match
-      if (matchRatio >= 0.4) {
-        const score = matchRatio * 60;
-        mentionedProducts.push({ product, score });
-        console.log(`[Product Image Matching] WORD match (${matchedWords.join(', ')}): "${product.name}" ratio=${matchRatio.toFixed(2)} score=${score.toFixed(0)}`);
-      }
-    }
-  }
-  
-  // Also check for product IDs in the response (some agents might reference by ID)
-  for (const product of products) {
-    if (!product.imageUrl) continue;
-    if (mentionedProducts.some(m => m.product.id === product.id)) continue;
-    
-    const shortId = product.id.slice(-6).toLowerCase();
-    if (responseLower.includes(shortId)) {
-      mentionedProducts.push({ product, score: 90 });
-      console.log(`[Product Image Matching] ID match: "${product.name}"`);
-    }
-  }
-  
-  // Sort by score and take top matches
-  mentionedProducts.sort((a, b) => b.score - a.score);
-  const productsToShow = mentionedProducts.slice(0, maxImages).map(m => m.product);
-  
-  console.log(`[Product Image Matching] Found ${mentionedProducts.length} matches, showing ${productsToShow.length}`);
-  
-  for (const product of productsToShow) {
-    if (!product.imageUrl) continue;
-    
-    // Determine file extension from URL
-    const urlParts = product.imageUrl.split('.');
-    const ext = urlParts[urlParts.length - 1]?.toLowerCase().split('?')[0] || 'jpg';
-    const validExt = IMAGE_EXTENSIONS.includes(ext) ? ext : 'jpg';
-    
-    mediaItems.push({
-      type: 'image',
-      url: product.imageUrl,
-      fileName: `${product.name.replace(/\s+/g, '_').substring(0, 30)}.${validExt}`,
-      mimeType: MIME_TYPES[validExt] || 'image/jpeg',
-      originalMatch: `[product:${product.id}]`
-    });
-    
-    console.log(`[Agent] Auto-attached product image for "${product.name}": ${product.imageUrl}`);
-  }
-  
-  return mediaItems;
-}
+// Product images are now sent explicitly when the agent includes the URL from buscar_producto results
+// (following the same pattern as enviar_archivo)
 
 async function sendMedia(
   instanceBackendId: string,
@@ -1089,24 +990,23 @@ async function processWithAgent(
       }
     });
     systemPrompt += `\n\n## Reglas para responder sobre productos:`;
-    systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué KTM tienen"), PRIMERO pregunta qué modelo específico le interesa antes de mostrar todo el catálogo.`;
+    systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué KTM tienen"), PRIMERO pregunta qué modelo específico le interesa.`;
     systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto, muestra los detalles de ese producto.`;
-    systemPrompt += `\n- Para enviar imagen de UN producto específico, incluye SOLO la URL completa (https://...) al final de tu mensaje. NO uses sintaxis Markdown como ![texto](url).`;
-    systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje.`;
+    systemPrompt += `\n- ENVÍO DE IMÁGENES: Cuando buscar_producto devuelve "instruccion_imagen", sigue esa instrucción para mostrar la foto del producto.`;
+    systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
-    systemPrompt += `\n- IMPORTANTE: Para generar enlaces de pago, SIEMPRE usa el ID del producto (el valor después de "ID:"), NO el nombre.`;
+    systemPrompt += `\n- Para generar pedidos, usa el ID del producto (el valor después de "ID:").`;
   } else if (!isAppointmentMode && productCount > 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
-    systemPrompt += `\nTienes acceso a un catálogo extenso de ${productCount} productos con BÚSQUEDA INTELIGENTE.`;
+    systemPrompt += `\nTienes acceso a un catálogo de ${productCount} productos con BÚSQUEDA INTELIGENTE.`;
     systemPrompt += `\nLos precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).`;
     systemPrompt += `\n\n## Reglas para responder sobre productos:`;
-    systemPrompt += `\n- Cuando el cliente mencione un producto (aunque no sea exactamente igual), usa buscar_producto inmediatamente.`;
-    systemPrompt += `\n- La búsqueda es inteligente: encontrará productos similares aunque el cliente escriba con errores o use términos parciales.`;
-    systemPrompt += `\n- CONFÍA en el resultado "mejor_coincidencia" - es el producto más parecido a lo que busca el cliente.`;
-    systemPrompt += `\n- Si la similitud es alta (>70%), puedes asumir que es el producto correcto.`;
-    systemPrompt += `\n- Para enviar imagen de UN producto específico, incluye SOLO la URL completa (https://...) al final. NO uses sintaxis Markdown.`;
-    systemPrompt += `\n- NUNCA incluyas más de UNA URL de imagen por mensaje.`;
-    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere productos similares del resultado.`;
+    systemPrompt += `\n- Cuando el cliente mencione un producto, usa buscar_producto inmediatamente.`;
+    systemPrompt += `\n- La búsqueda es inteligente: encontrará productos aunque el cliente escriba con errores.`;
+    systemPrompt += `\n- CONFÍA en "mejor_coincidencia" - es el producto más parecido a lo que busca el cliente.`;
+    systemPrompt += `\n- ENVÍO DE IMÁGENES: Cuando buscar_producto devuelve "instruccion_imagen", sigue esa instrucción para mostrar la foto.`;
+    systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
+    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere alternativas.`;
   }
   
   // Add appointments context for APPOINTMENTS mode
@@ -1460,24 +1360,38 @@ async function processWithAgent(
           stock: p.stock,
           disponible: p.available,
           descripcion: p.description || 'Sin descripción',
-          imagen: p.imageUrl || null,
+          imagen_url: p.imageUrl || null,
           similitud: Math.round(p.similarity * 100)
         }));
         
         let resultContent: string;
         if (productResults.length > 0) {
           const bestMatch = searchResult.bestMatch;
-          resultContent = JSON.stringify({
+          const bestMatchWithImage = bestMatch?.imageUrl ? {
+            nombre: bestMatch.title,
+            similitud: Math.round(bestMatch.similarity * 100) + '%',
+            imagen_url: bestMatch.imageUrl
+          } : bestMatch ? {
+            nombre: bestMatch.title,
+            similitud: Math.round(bestMatch.similarity * 100) + '%'
+          } : null;
+          
+          // Build result with instruction for sending image (same pattern as enviar_archivo)
+          const result: any = {
             productos_encontrados: productResults,
             coincidencia_exacta: searchResult.exactMatch,
-            mejor_coincidencia: bestMatch ? {
-              nombre: bestMatch.title,
-              similitud: Math.round(bestMatch.similarity * 100) + '%'
-            } : null,
+            mejor_coincidencia: bestMatchWithImage,
             nota: searchResult.exactMatch 
               ? 'Se encontró una coincidencia exacta' 
               : 'Se muestran los productos más similares a la búsqueda'
-          });
+          };
+          
+          // Add instruction for sending image if best match has image
+          if (bestMatch?.imageUrl) {
+            result.instruccion_imagen = `Si quieres mostrar la imagen de "${bestMatch.title}", incluye esta URL al final de tu respuesta: ${bestMatch.imageUrl}`;
+          }
+          
+          resultContent = JSON.stringify(result);
         } else {
           resultContent = JSON.stringify({ 
             mensaje: `No se encontraron productos similares a "${searchQuery}"`,
