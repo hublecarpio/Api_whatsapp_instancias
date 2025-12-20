@@ -189,6 +189,16 @@ export const mediaApi = {
   }
 };
 
+export const productMediaApi = {
+  uploadImage: (businessId: string, file: File, productName: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('businessId', businessId);
+    formData.append('productName', productName);
+    return api.post('/products/upload-image', formData);
+  }
+};
+
 export const remindersApi = {
   getConfig: (businessId: string) => api.get(`/reminders/config/${businessId}`),
   updateConfig: (businessId: string, data: any) => api.put(`/reminders/config/${businessId}`, data),

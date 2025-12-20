@@ -1,7 +1,76 @@
 import { Router, Response } from 'express';
+import multer from 'multer';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { searchProductsIntelligent, findBestProductMatch } from '../services/productSearch.js';
+
+// S3/MinIO configuration for product images
+let s3Client: S3Client | null = null;
+let bucketName: string | null = null;
+let publicBaseUrl: string | null = null;
+
+function initializeS3() {
+  if (s3Client) return true;
+  
+  const endpoint = process.env.MINIO_ENDPOINT;
+  const accessKey = process.env.MINIO_ACCESS_KEY;
+  const secretKey = process.env.MINIO_SECRET_KEY;
+  const bucket = process.env.MINIO_BUCKET;
+
+  if (!endpoint || !accessKey || !secretKey || !bucket) {
+    return false;
+  }
+
+  s3Client = new S3Client({
+    endpoint: endpoint,
+    region: 'us-east-1',
+    credentials: {
+      accessKeyId: accessKey,
+      secretAccessKey: secretKey,
+    },
+    forcePathStyle: true,
+  });
+
+  bucketName = bucket;
+  publicBaseUrl = process.env.MINIO_PUBLIC_URL || endpoint;
+  return true;
+}
+
+function getExtension(mimetype: string): string {
+  const map: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+  };
+  return map[mimetype] || '.jpg';
+}
+
+function normalizeProductName(name: string): string {
+  const normalized = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .replace(/[^a-z0-9]+/g, '_') // Replace non-alphanumeric with underscores
+    .replace(/^_+|_+$/g, '') // Trim underscores
+    .substring(0, 50); // Limit length
+  
+  return normalized || 'producto'; // Fallback for non-Latin names
+}
+
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB for product images
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten imagenes'));
+    }
+  }
+});
 
 const router = Router();
 
@@ -13,6 +82,62 @@ async function checkBusinessAccess(userId: string, businessId: string) {
   });
   return business;
 }
+
+// Upload product image with normalized filename based on product name
+router.post('/upload-image', upload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, productName } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se proporciono imagen' });
+    }
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+    
+    if (!productName || !productName.trim()) {
+      return res.status(400).json({ error: 'productName es requerido para generar el nombre del archivo' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+    
+    if (!initializeS3()) {
+      return res.status(500).json({ error: 'Almacenamiento de medios no configurado' });
+    }
+    
+    const extension = getExtension(req.file.mimetype);
+    const normalizedName = normalizeProductName(productName.trim());
+    const timestamp = Date.now().toString(36); // Short timestamp to avoid collisions
+    const fileName = `${normalizedName}_${timestamp}${extension}`;
+    const objectPath = `products/${businessId}/${fileName}`;
+    
+    await s3Client!.send(new PutObjectCommand({
+      Bucket: bucketName!,
+      Key: objectPath,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+      ACL: 'public-read',
+    }));
+    
+    const publicUrl = `${publicBaseUrl}/${bucketName}/${objectPath}`;
+    
+    console.log(`[Products] Image uploaded: ${fileName} -> ${publicUrl}`);
+    
+    res.json({
+      url: publicUrl,
+      path: objectPath,
+      fileName: fileName,
+      normalizedName: normalizedName
+    });
+  } catch (error: any) {
+    console.error('[Products] Image upload error:', error);
+    res.status(500).json({ error: 'Error al subir imagen' });
+  }
+});
 
 router.post('/search', async (req: AuthRequest, res: Response) => {
   try {

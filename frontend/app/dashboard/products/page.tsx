@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { productApi, mediaApi } from '@/lib/api';
+import { productApi, productMediaApi } from '@/lib/api';
 
 interface Product {
   id: string;
@@ -29,6 +29,8 @@ export default function ProductsPage() {
   const [imageUrl, setImageUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
@@ -78,6 +80,8 @@ export default function ProductsPage() {
     setPrice('');
     setStock('0');
     setImageUrl('');
+    setPendingFile(null);
+    setImagePreview('');
     setEditingProduct(null);
     setShowForm(false);
     setCopied(false);
@@ -90,17 +94,14 @@ export default function ProductsPage() {
       return;
     }
     
-    setUploading(true);
-    setError('');
+    setPendingFile(file);
+    setImageUrl('');
     
-    try {
-      const response = await mediaApi.upload(currentBusiness.id, file);
-      setImageUrl(response.data.url);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al subir imagen');
-    } finally {
-      setUploading(false);
-    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -235,6 +236,8 @@ export default function ProductsPage() {
     setPrice(product.price.toString());
     setStock(product.stock?.toString() || '0');
     setImageUrl(product.imageUrl || '');
+    setImagePreview(product.imageUrl || '');
+    setPendingFile(null);
     setEditingProduct(product);
     setShowForm(true);
   };
@@ -244,15 +247,27 @@ export default function ProductsPage() {
     if (!currentBusiness) return;
 
     setError('');
+    setUploading(true);
 
     try {
+      let finalImageUrl = imageUrl;
+      
+      if (pendingFile && title.trim()) {
+        const response = await productMediaApi.uploadImage(
+          currentBusiness.id,
+          pendingFile,
+          title.trim()
+        );
+        finalImageUrl = response.data.url;
+      }
+
       if (editingProduct) {
         await productApi.update(editingProduct.id, {
           title,
           description,
           price: parseFloat(price),
           stock: parseInt(stock),
-          imageUrl
+          imageUrl: finalImageUrl
         });
       } else {
         await productApi.create({
@@ -261,7 +276,7 @@ export default function ProductsPage() {
           description,
           price: parseFloat(price),
           stock: parseInt(stock),
-          imageUrl
+          imageUrl: finalImageUrl
         });
       }
       
@@ -269,6 +284,8 @@ export default function ProductsPage() {
       resetForm();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al guardar producto');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -464,16 +481,18 @@ export default function ProductsPage() {
                 {uploading ? (
                   <div className="flex items-center justify-center gap-2">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-neon-blue"></div>
-                    <span className="text-gray-400">Subiendo...</span>
+                    <span className="text-gray-400">Guardando...</span>
                   </div>
-                ) : imageUrl ? (
+                ) : (imagePreview || imageUrl) ? (
                   <div className="space-y-3">
                     <img 
-                      src={imageUrl} 
+                      src={imagePreview || imageUrl} 
                       alt="Preview" 
                       className="w-full max-h-40 object-contain rounded"
                     />
-                    <p className="text-xs text-gray-500">Arrastra otra imagen para reemplazar</p>
+                    <p className="text-xs text-gray-500">
+                      {pendingFile ? 'Imagen lista para subir al guardar' : 'Arrastra otra imagen para reemplazar'}
+                    </p>
                   </div>
                 ) : (
                   <div className="text-gray-400">
