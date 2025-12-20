@@ -433,7 +433,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       subscriptionStatus: effectiveStatus.toLowerCase(),
       needsSubscription: effectiveStatus === 'PENDING' || effectiveStatus === 'CANCELED',
       isPro: user.isPro || hasActiveBonus,
-      paymentLinkEnabled: user.paymentLinkEnabled || hasActiveBonus,
+      paymentLinkEnabled: user.paymentLinkEnabled, // ONLY Super Admin controls this - no automatic activation
       proBonusExpiresAt: user.proBonusExpiresAt,
       hasActiveBonus,
       hasStripeSubscription,
