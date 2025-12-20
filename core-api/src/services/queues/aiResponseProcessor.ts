@@ -1252,6 +1252,80 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   return { response: aiResponse, tokensUsed: totalTokens };
 }
 
+// Helper function to extract product images from response text
+function extractProductImagesFromResponseWorker(
+  responseText: string,
+  products: Array<{ id: string; name: string; imageUrl?: string }>,
+  maxImages: number = 3
+): Array<{ type: 'image'; url: string; caption?: string }> {
+  const mediaItems: Array<{ type: 'image'; url: string; caption?: string }> = [];
+  const mentionedProducts: { product: { id: string; name: string; imageUrl?: string }; score: number }[] = [];
+  const responseLower = responseText.toLowerCase();
+  
+  console.log(`[AI Worker Product Matching] Checking ${products.length} products against response`);
+  
+  for (const product of products) {
+    if (!product.imageUrl) continue;
+    
+    const productName = (product.name || '').toLowerCase();
+    if (!productName) continue;
+    
+    // Method 1: Exact full name match
+    if (responseLower.includes(productName)) {
+      mentionedProducts.push({ product, score: 100 });
+      console.log(`[AI Worker Product Matching] EXACT match: "${product.name}"`);
+      continue;
+    }
+    
+    // Method 2: Check key model words
+    const modelWords = productName.split(/\s+/).filter(w => 
+      /\d/.test(w) || w.length >= 4
+    );
+    
+    if (modelWords.length > 0) {
+      const matchedModelWords = modelWords.filter(word => responseLower.includes(word));
+      if (matchedModelWords.length >= Math.ceil(modelWords.length * 0.5)) {
+        const score = (matchedModelWords.length / modelWords.length) * 80;
+        mentionedProducts.push({ product, score });
+        console.log(`[AI Worker Product Matching] MODEL match (${matchedModelWords.join(', ')}): "${product.name}"`);
+        continue;
+      }
+    }
+    
+    // Method 3: General word matching
+    const nameWords = productName.split(/\s+/).filter(w => w.length > 2);
+    if (nameWords.length > 0) {
+      const matchedWords = nameWords.filter(word => responseLower.includes(word));
+      const matchRatio = matchedWords.length / nameWords.length;
+      
+      if (matchRatio >= 0.4) {
+        const score = matchRatio * 60;
+        mentionedProducts.push({ product, score });
+        console.log(`[AI Worker Product Matching] WORD match (${matchedWords.join(', ')}): "${product.name}"`);
+      }
+    }
+  }
+  
+  mentionedProducts.sort((a, b) => b.score - a.score);
+  const productsToShow = mentionedProducts.slice(0, maxImages).map(m => m.product);
+  
+  console.log(`[AI Worker Product Matching] Found ${mentionedProducts.length} matches, showing ${productsToShow.length}`);
+  
+  for (const product of productsToShow) {
+    if (!product.imageUrl) continue;
+    
+    mediaItems.push({
+      type: 'image',
+      url: product.imageUrl,
+      caption: product.name
+    });
+    
+    console.log(`[AI Worker] Auto-attached product image for "${product.name}": ${product.imageUrl}`);
+  }
+  
+  return mediaItems;
+}
+
 async function sendWhatsAppResponse(
   instanceId: string,
   phone: string,
@@ -1269,6 +1343,23 @@ async function sendWhatsAppResponse(
     
     const events = parseAgentOutputToWhatsAppEvents(message);
     console.log(`[AI Worker] Parsed ${events.length} events for ${cleanPhone}:`, events.map(e => e.type));
+    
+    // Auto-extract product images from response
+    const productsWithImages = (business.products || []).map((p: any) => ({
+      id: p.id,
+      name: p.title || p.name,
+      imageUrl: p.imageUrl
+    }));
+    const productImages = extractProductImagesFromResponseWorker(message, productsWithImages);
+    
+    // Add product images to events (avoiding duplicates)
+    const existingUrls = new Set(events.filter(e => e.url).map(e => e.url));
+    for (const img of productImages) {
+      if (!existingUrls.has(img.url)) {
+        events.push(img);
+        existingUrls.add(img.url);
+      }
+    }
     
     const sentMedia: Array<{ type: string; url?: string }> = [];
     

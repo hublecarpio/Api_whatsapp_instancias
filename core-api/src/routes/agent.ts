@@ -417,8 +417,10 @@ function extractProductImagesFromResponse(
   maxImages: number = 3
 ): MediaItem[] {
   const mediaItems: MediaItem[] = [];
-  const mentionedProducts: ProductWithImage[] = [];
+  const mentionedProducts: { product: ProductWithImage; score: number }[] = [];
   const responseLower = responseText.toLowerCase();
+  
+  console.log(`[Product Image Matching] Checking ${products.length} products against response (${responseText.length} chars)`);
   
   // Find products mentioned in the response by name
   for (const product of products) {
@@ -427,33 +429,61 @@ function extractProductImagesFromResponse(
     const productName = (product.name || '').toLowerCase();
     if (!productName) continue;
     
-    // Check if product name appears in response (with some fuzzy matching)
-    // Split name into words and check if most words appear
+    // Method 1: Exact full name match
+    if (responseLower.includes(productName)) {
+      mentionedProducts.push({ product, score: 100 });
+      console.log(`[Product Image Matching] EXACT match: "${product.name}"`);
+      continue;
+    }
+    
+    // Method 2: Check key model words (alphanumeric identifiers like "RTR 200", "BATLO 5")
+    const modelWords = productName.split(/\s+/).filter(w => 
+      /\d/.test(w) || // Contains numbers (model identifiers)
+      w.length >= 4   // Or significant words 4+ chars
+    );
+    
+    if (modelWords.length > 0) {
+      const matchedModelWords = modelWords.filter(word => responseLower.includes(word));
+      if (matchedModelWords.length >= Math.ceil(modelWords.length * 0.5)) {
+        const score = (matchedModelWords.length / modelWords.length) * 80;
+        mentionedProducts.push({ product, score });
+        console.log(`[Product Image Matching] MODEL match (${matchedModelWords.join(', ')}): "${product.name}" score=${score.toFixed(0)}`);
+        continue;
+      }
+    }
+    
+    // Method 3: General word matching with lower threshold
     const nameWords = productName.split(/\s+/).filter(w => w.length > 2);
-    if (nameWords.length === 0) continue;
-    
-    const matchedWords = nameWords.filter(word => responseLower.includes(word));
-    const matchRatio = matchedWords.length / nameWords.length;
-    
-    // If 70%+ of significant words match, consider it mentioned
-    if (matchRatio >= 0.7 || (nameWords.length <= 2 && matchRatio >= 0.5)) {
-      mentionedProducts.push(product);
+    if (nameWords.length > 0) {
+      const matchedWords = nameWords.filter(word => responseLower.includes(word));
+      const matchRatio = matchedWords.length / nameWords.length;
+      
+      // If 40%+ of words match, consider it a potential match
+      if (matchRatio >= 0.4) {
+        const score = matchRatio * 60;
+        mentionedProducts.push({ product, score });
+        console.log(`[Product Image Matching] WORD match (${matchedWords.join(', ')}): "${product.name}" ratio=${matchRatio.toFixed(2)} score=${score.toFixed(0)}`);
+      }
     }
   }
   
   // Also check for product IDs in the response (some agents might reference by ID)
   for (const product of products) {
     if (!product.imageUrl) continue;
-    if (mentionedProducts.includes(product)) continue;
+    if (mentionedProducts.some(m => m.product.id === product.id)) continue;
     
     const shortId = product.id.slice(-6).toLowerCase();
     if (responseLower.includes(shortId)) {
-      mentionedProducts.push(product);
+      mentionedProducts.push({ product, score: 90 });
+      console.log(`[Product Image Matching] ID match: "${product.name}"`);
     }
   }
   
-  // Limit to maxImages products to avoid overwhelming the chat
-  const productsToShow = mentionedProducts.slice(0, maxImages);
+  // Sort by score and take top matches
+  mentionedProducts.sort((a, b) => b.score - a.score);
+  const productsToShow = mentionedProducts.slice(0, maxImages).map(m => m.product);
+  
+  console.log(`[Product Image Matching] Found ${mentionedProducts.length} matches, showing ${productsToShow.length}`);
   
   for (const product of productsToShow) {
     if (!product.imageUrl) continue;
