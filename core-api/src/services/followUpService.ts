@@ -1,4 +1,5 @@
 import prisma from './prisma.js';
+import { getReminderQueue, ReminderJobData } from './queues/index.js';
 
 export type TriggerSource = 'ai' | 'user';
 
@@ -132,7 +133,31 @@ export async function scheduleFollowUp(
       }
     });
     
-    console.log(`[FOLLOW-UP] ✓ Created reminder ${reminder.id} for ${cleanPhone} scheduled at ${scheduledAt.toISOString()} (attempt ${todayAttempts + 1}, delay: ${delayMinutes}min)`);
+    // Add to BullMQ queue if available
+    const reminderQueue = getReminderQueue();
+    if (reminderQueue) {
+      const delay = Math.max(0, scheduledAt.getTime() - Date.now());
+      const jobData: ReminderJobData = {
+        reminderId: reminder.id,
+        businessId,
+        contactPhone: cleanPhone,
+        attemptNumber: todayAttempts + 1,
+        type: 'auto'
+      };
+      
+      await reminderQueue.add(
+        `reminder-${reminder.id}`,
+        jobData,
+        { 
+          jobId: `reminder-${reminder.id}`,
+          delay 
+        }
+      );
+      console.log(`[FOLLOW-UP] ✓ Created reminder ${reminder.id} and added to queue for ${cleanPhone} scheduled at ${scheduledAt.toISOString()} (attempt ${todayAttempts + 1}, delay: ${delayMinutes}min, queueDelay: ${Math.round(delay/1000)}s)`);
+    } else {
+      // Legacy mode - reminder will be picked up by setInterval worker
+      console.log(`[FOLLOW-UP] ✓ Created reminder ${reminder.id} for ${cleanPhone} scheduled at ${scheduledAt.toISOString()} (attempt ${todayAttempts + 1}, delay: ${delayMinutes}min) [legacy mode]`);
+    }
   } catch (err) {
     console.error('[FOLLOW-UP] Failed to schedule follow-up:', err);
   }

@@ -410,14 +410,26 @@ export function startReminderWorker(): Worker<ReminderJobData> {
     QUEUE_NAMES.REMINDERS,
     async (job) => {
       try {
+        // Handle the repeatable checker job
+        if (job.name === 'reminder-checker') {
+          const added = await checkAndSchedulePendingReminders();
+          if (added > 0) {
+            console.log(`[REMINDER] Checker found and scheduled ${added} pending reminders`);
+          }
+          return;
+        }
+        
+        // Handle regular reminder jobs
         await processReminderJob(job);
       } catch (error: any) {
-        console.error(`Failed to process reminder ${job.data.reminderId}:`, error.message);
-        
-        await prisma.reminder.update({
-          where: { id: job.data.reminderId },
-          data: { status: 'failed' }
-        });
+        if (job.data.reminderId) {
+          console.error(`Failed to process reminder ${job.data.reminderId}:`, error.message);
+          
+          await prisma.reminder.update({
+            where: { id: job.data.reminderId },
+            data: { status: 'failed' }
+          });
+        }
         
         throw error;
       }
@@ -459,6 +471,32 @@ export async function schedulePendingReminders(): Promise<void> {
     return;
   }
   
+  // Schedule immediate pending reminders
+  await checkAndSchedulePendingReminders();
+  
+  // Add a repeatable job that checks for pending reminders every minute (backup mechanism)
+  const existingRepeatable = await queue.getRepeatableJobs();
+  const hasChecker = existingRepeatable.some(j => j.name === 'reminder-checker');
+  
+  if (!hasChecker) {
+    await queue.add(
+      'reminder-checker',
+      { type: 'check' } as any,
+      {
+        repeat: {
+          every: 60000 // Every 60 seconds
+        },
+        jobId: 'reminder-checker-repeatable'
+      }
+    );
+    console.log('[REMINDER] Added repeatable reminder checker job (every 60s)');
+  }
+}
+
+async function checkAndSchedulePendingReminders(): Promise<number> {
+  const queue = getReminderQueue();
+  if (!queue) return 0;
+  
   const pendingReminders = await prisma.reminder.findMany({
     where: {
       status: 'pending',
@@ -467,6 +505,7 @@ export async function schedulePendingReminders(): Promise<void> {
     take: 100
   });
   
+  let added = 0;
   for (const reminder of pendingReminders) {
     const existingJob = await queue.getJob(`reminder-${reminder.id}`);
     if (!existingJob) {
@@ -481,8 +520,12 @@ export async function schedulePendingReminders(): Promise<void> {
         },
         { jobId: `reminder-${reminder.id}` }
       );
+      added++;
     }
   }
   
-  console.log(`Scheduled ${pendingReminders.length} pending reminders to queue`);
+  if (added > 0) {
+    console.log(`[REMINDER] Scheduled ${added} pending reminders to queue`);
+  }
+  return added;
 }
