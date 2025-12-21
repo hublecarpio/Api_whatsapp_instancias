@@ -3142,6 +3142,11 @@ input, textarea, select {
   border-color: rgb(0 212 255 / 0.5);
 }
 
+.hover\:bg-\[\#22c55e\]:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(34 197 94 / var(--tw-bg-opacity, 1));
+}
+
 .hover\:bg-\[\#252525\]:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(37 37 37 / var(--tw-bg-opacity, 1));
@@ -3460,6 +3465,10 @@ input, textarea, select {
   border-color: rgb(168 85 247 / var(--tw-border-opacity, 1));
 }
 
+.focus\:border-transparent:focus {
+  border-color: transparent;
+}
+
 .focus\:outline-none:focus {
   outline: 2px solid transparent;
   outline-offset: 2px;
@@ -3491,6 +3500,11 @@ input, textarea, select {
   --tw-ring-color: rgb(34 197 94 / var(--tw-ring-opacity, 1));
 }
 
+.focus\:ring-indigo-500:focus {
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(99 102 241 / var(--tw-ring-opacity, 1));
+}
+
 .focus\:ring-neon-blue:focus {
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(0 212 255 / var(--tw-ring-opacity, 1));
@@ -3506,6 +3520,11 @@ input, textarea, select {
 
 .disabled\:cursor-not-allowed:disabled {
   cursor: not-allowed;
+}
+
+.disabled\:bg-gray-600:disabled {
+  --tw-bg-opacity: 1;
+  background-color: rgb(75 85 99 / var(--tw-bg-opacity, 1));
 }
 
 .disabled\:bg-green-800:disabled {

@@ -12,12 +12,31 @@ interface StepWhatsAppProps {
 
 type ProviderType = 'BAILEYS' | 'META';
 
+const COUNTRY_CODES = [
+  { code: '51', country: 'Peru', flag: '🇵🇪' },
+  { code: '52', country: 'Mexico', flag: '🇲🇽' },
+  { code: '54', country: 'Argentina', flag: '🇦🇷' },
+  { code: '55', country: 'Brasil', flag: '🇧🇷' },
+  { code: '56', country: 'Chile', flag: '🇨🇱' },
+  { code: '57', country: 'Colombia', flag: '🇨🇴' },
+  { code: '58', country: 'Venezuela', flag: '🇻🇪' },
+  { code: '593', country: 'Ecuador', flag: '🇪🇨' },
+  { code: '591', country: 'Bolivia', flag: '🇧🇴' },
+  { code: '595', country: 'Paraguay', flag: '🇵🇾' },
+  { code: '598', country: 'Uruguay', flag: '🇺🇾' },
+  { code: '34', country: 'Espana', flag: '🇪🇸' },
+  { code: '1', country: 'USA/Canada', flag: '🇺🇸' },
+  { code: '44', country: 'UK', flag: '🇬🇧' },
+];
+
 export default function StepWhatsApp({ businessId, onComplete, onSkip }: StepWhatsAppProps) {
   const [provider, setProvider] = useState<ProviderType | null>(null);
   const [qrCode, setQrCode] = useState<string>('');
-  const [status, setStatus] = useState<'choosing' | 'loading' | 'pending_qr' | 'connected' | 'error' | 'not_created'>('loading');
+  const [status, setStatus] = useState<'choosing' | 'loading' | 'entering_phone' | 'pending_qr' | 'connected' | 'error' | 'not_created'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [countryCode, setCountryCode] = useState<string>('51');
+  const [localPhone, setLocalPhone] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
@@ -68,15 +87,27 @@ export default function StepWhatsApp({ businessId, onComplete, onSkip }: StepWha
       return;
     }
     
-    await createBaileysInstance();
+    setStatus('entering_phone');
   };
 
-  const createBaileysInstance = async () => {
+  const handlePhoneSubmit = async () => {
+    const cleanPhone = localPhone.replace(/\D/g, '');
+    
+    if (cleanPhone.length < 8 || cleanPhone.length > 12) {
+      setErrorMessage('Ingresa un numero valido (8-12 digitos sin el codigo de pais)');
+      return;
+    }
+    
+    const fullPhone = `${countryCode}${cleanPhone}`;
+    await createBaileysInstance(fullPhone);
+  };
+
+  const createBaileysInstance = async (phone?: string) => {
     try {
       setStatus('loading');
       setErrorMessage(null);
       
-      await waApi.create(businessId);
+      await waApi.create(businessId, phone);
       
       await new Promise(resolve => setTimeout(resolve, 2000));
       await fetchStatus();
@@ -209,6 +240,80 @@ export default function StepWhatsApp({ businessId, onComplete, onSkip }: StepWha
     );
   }
 
+  if (status === 'entering_phone') {
+    return (
+      <div className="text-center">
+        <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">Tu numero de WhatsApp</h2>
+        <p className="text-gray-400 text-xs sm:text-sm mb-6">
+          Ingresa el numero que vas a conectar para poder identificarlo
+        </p>
+
+        {errorMessage && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-2 rounded-lg mb-4 text-xs sm:text-sm max-w-sm mx-auto">
+            {errorMessage}
+          </div>
+        )}
+
+        <div className="max-w-sm mx-auto">
+          <div className="flex gap-2 mb-4">
+            <select
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              {COUNTRY_CODES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.flag} +{c.code}
+                </option>
+              ))}
+            </select>
+            <input
+              type="tel"
+              value={localPhone}
+              onChange={(e) => {
+                setLocalPhone(e.target.value.replace(/\D/g, ''));
+                setErrorMessage(null);
+              }}
+              placeholder="912345678"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              maxLength={12}
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-3 mb-4 text-left">
+            <p className="text-gray-400 text-xs mb-1">Tu numero completo:</p>
+            <p className="text-white font-mono text-lg">
+              +{countryCode} {localPhone || '---'}
+            </p>
+          </div>
+
+          <button
+            onClick={handlePhoneSubmit}
+            disabled={localPhone.length < 8}
+            className="w-full bg-[#25D366] hover:bg-[#22c55e] disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg py-3 text-sm font-medium transition"
+          >
+            Continuar y generar QR
+          </button>
+
+          <p className="text-gray-500 text-[10px] mt-3">
+            Este numero debe coincidir con el WhatsApp que vas a escanear
+          </p>
+        </div>
+
+        <button
+          onClick={() => {
+            setStatus('choosing');
+            setErrorMessage(null);
+            setLocalPhone('');
+          }}
+          className="mt-4 text-gray-400 hover:text-white text-xs sm:text-sm transition"
+        >
+          ← Volver a elegir metodo
+        </button>
+      </div>
+    );
+  }
+
   if (provider === 'META' && status === 'pending_qr') {
     return (
       <div className="text-center">
@@ -266,7 +371,7 @@ export default function StepWhatsApp({ businessId, onComplete, onSkip }: StepWha
           <span className="text-3xl sm:text-4xl mb-3">⚠️</span>
           <p className="text-red-400 text-xs sm:text-sm text-center mb-3">{errorMessage}</p>
           <button
-            onClick={createBaileysInstance}
+            onClick={() => setStatus('entering_phone')}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs sm:text-sm hover:bg-indigo-700 transition"
           >
             Reintentar
