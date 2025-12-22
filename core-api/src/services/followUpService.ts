@@ -13,12 +13,15 @@ export async function scheduleFollowUp(
     
     console.log(`[FOLLOW-UP] scheduleFollowUp called - business: ${businessId}, phone: ${cleanPhone}, source: ${source}`);
     
-    const [config, contact] = await Promise.all([
+    const [config, contact, business] = await Promise.all([
       prisma.followUpConfig.findUnique({ where: { businessId } }),
       prisma.contact.findUnique({
         where: { businessId_phone: { businessId, phone: cleanPhone } }
-      })
+      }),
+      prisma.business.findUnique({ where: { id: businessId }, select: { timezone: true } })
     ]);
+    
+    const timezone = business?.timezone || 'America/Lima';
     
     if (!config) {
       console.log(`[FOLLOW-UP] No config found for business ${businessId}`);
@@ -97,12 +100,25 @@ export async function scheduleFollowUp(
     const allowedEndHour = config.allowedEndHour ?? 21;
     const weekendsEnabled = config.weekendsEnabled ?? false;
     
+    const getHourInTimezone = (date: Date, tz: string): { hour: number; weekday: string } => {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hour: 'numeric',
+        hour12: false,
+        weekday: 'short'
+      });
+      const parts = formatter.formatToParts(date);
+      const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+      const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+      return { hour, weekday };
+    };
+    
     const checkAndAdjustSchedule = (date: Date): Date => {
-      const hour = date.getHours();
-      const dayOfWeek = date.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const { hour, weekday } = getHourInTimezone(date, timezone);
+      const isWeekend = weekday === 'Sat' || weekday === 'Sun';
       
       if (!weekendsEnabled && isWeekend) {
+        const dayOfWeek = date.getDay();
         const daysUntilMonday = dayOfWeek === 0 ? 1 : 2;
         date.setDate(date.getDate() + daysUntilMonday);
         date.setHours(allowedStartHour, 0, 0, 0);
@@ -110,10 +126,13 @@ export async function scheduleFollowUp(
       }
       
       if (hour < allowedStartHour) {
-        date.setHours(allowedStartHour, 0, 0, 0);
+        const hoursToAdd = allowedStartHour - hour;
+        date.setTime(date.getTime() + hoursToAdd * 60 * 60 * 1000);
+        date.setMinutes(0, 0, 0);
       } else if (hour >= allowedEndHour) {
-        date.setDate(date.getDate() + 1);
-        date.setHours(allowedStartHour, 0, 0, 0);
+        const hoursUntilNextDay = 24 - hour + allowedStartHour;
+        date.setTime(date.getTime() + hoursUntilNextDay * 60 * 60 * 1000);
+        date.setMinutes(0, 0, 0);
         return checkAndAdjustSchedule(date);
       }
       
@@ -121,6 +140,7 @@ export async function scheduleFollowUp(
     };
     
     scheduledAt = checkAndAdjustSchedule(scheduledAt);
+    console.log(`[FOLLOW-UP] Scheduled time: ${scheduledAt.toISOString()} (timezone: ${timezone})`);
     
     const reminder = await prisma.reminder.create({
       data: {

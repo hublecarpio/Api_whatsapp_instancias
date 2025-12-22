@@ -31,21 +31,26 @@ async function checkWindowStatus(businessId: string, contactPhone: string): Prom
     return { requiresTemplate: false, provider: instance?.provider || null, hoursSinceLastMessage: null };
   }
   
+  const cleanPhone = contactPhone.replace(/\D/g, '');
+  
   const lastInboundMessage = await prisma.messageLog.findFirst({
     where: {
       businessId,
-      sender: contactPhone,
+      sender: cleanPhone,
       direction: 'inbound'
     },
     orderBy: { createdAt: 'desc' }
   });
   
   if (!lastInboundMessage) {
+    console.log(`[REMINDER] No inbound message found for ${cleanPhone} - requiresTemplate=true`);
     return { requiresTemplate: true, provider: 'META_CLOUD', hoursSinceLastMessage: null };
   }
   
   const hoursSinceLastMessage = (Date.now() - lastInboundMessage.createdAt.getTime()) / (1000 * 60 * 60);
   const requiresTemplate = hoursSinceLastMessage >= 24;
+  
+  console.log(`[REMINDER] Window check for ${cleanPhone}: ${hoursSinceLastMessage.toFixed(2)}h since last inbound, requiresTemplate=${requiresTemplate}`);
   
   return { requiresTemplate, provider: 'META_CLOUD', hoursSinceLastMessage };
 }
