@@ -1,5 +1,7 @@
 import prisma from './prisma.js';
 import { getReminderQueue, ReminderJobData } from './queues/index.js';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { getDay, getHours, getMinutes, setHours, setMinutes, setSeconds, setMilliseconds, addDays } from 'date-fns';
 
 export type TriggerSource = 'ai' | 'user';
 
@@ -100,47 +102,48 @@ export async function scheduleFollowUp(
     const allowedEndHour = config.allowedEndHour ?? 21;
     const weekendsEnabled = config.weekendsEnabled ?? false;
     
-    const getHourInTimezone = (date: Date, tz: string): { hour: number; weekday: string } => {
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: tz,
-        hour: 'numeric',
-        hour12: false,
-        weekday: 'short'
-      });
-      const parts = formatter.formatToParts(date);
-      const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-      const weekday = parts.find(p => p.type === 'weekday')?.value || '';
-      return { hour, weekday };
-    };
-    
-    const checkAndAdjustSchedule = (date: Date): Date => {
-      const { hour, weekday } = getHourInTimezone(date, timezone);
-      const isWeekend = weekday === 'Sat' || weekday === 'Sun';
+    const checkAndAdjustSchedule = (utcDate: Date, depth: number = 0): Date => {
+      if (depth > 10) return utcDate;
+      
+      const zonedDate = toZonedTime(utcDate, timezone);
+      const hour = getHours(zonedDate);
+      const dayOfWeek = getDay(zonedDate);
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       
       if (!weekendsEnabled && isWeekend) {
-        const dayOfWeek = date.getDay();
         const daysUntilMonday = dayOfWeek === 0 ? 1 : 2;
-        date.setDate(date.getDate() + daysUntilMonday);
-        date.setHours(allowedStartHour, 0, 0, 0);
-        return checkAndAdjustSchedule(date);
+        let adjustedZoned = addDays(zonedDate, daysUntilMonday);
+        adjustedZoned = setHours(adjustedZoned, allowedStartHour);
+        adjustedZoned = setMinutes(adjustedZoned, 0);
+        adjustedZoned = setSeconds(adjustedZoned, 0);
+        adjustedZoned = setMilliseconds(adjustedZoned, 0);
+        const newUtc = fromZonedTime(adjustedZoned, timezone);
+        return checkAndAdjustSchedule(newUtc, depth + 1);
       }
       
       if (hour < allowedStartHour) {
-        const hoursToAdd = allowedStartHour - hour;
-        date.setTime(date.getTime() + hoursToAdd * 60 * 60 * 1000);
-        date.setMinutes(0, 0, 0);
+        let adjustedZoned = setHours(zonedDate, allowedStartHour);
+        adjustedZoned = setMinutes(adjustedZoned, 0);
+        adjustedZoned = setSeconds(adjustedZoned, 0);
+        adjustedZoned = setMilliseconds(adjustedZoned, 0);
+        return fromZonedTime(adjustedZoned, timezone);
       } else if (hour >= allowedEndHour) {
-        const hoursUntilNextDay = 24 - hour + allowedStartHour;
-        date.setTime(date.getTime() + hoursUntilNextDay * 60 * 60 * 1000);
-        date.setMinutes(0, 0, 0);
-        return checkAndAdjustSchedule(date);
+        let adjustedZoned = addDays(zonedDate, 1);
+        adjustedZoned = setHours(adjustedZoned, allowedStartHour);
+        adjustedZoned = setMinutes(adjustedZoned, 0);
+        adjustedZoned = setSeconds(adjustedZoned, 0);
+        adjustedZoned = setMilliseconds(adjustedZoned, 0);
+        const newUtc = fromZonedTime(adjustedZoned, timezone);
+        return checkAndAdjustSchedule(newUtc, depth + 1);
       }
       
-      return date;
+      return utcDate;
     };
     
     scheduledAt = checkAndAdjustSchedule(scheduledAt);
-    console.log(`[FOLLOW-UP] Scheduled time: ${scheduledAt.toISOString()} (timezone: ${timezone})`);
+    const finalZoned = toZonedTime(scheduledAt, timezone);
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    console.log(`[FOLLOW-UP] Scheduled time: ${scheduledAt.toISOString()} (timezone: ${timezone}, local hour: ${getHours(finalZoned)}:${String(getMinutes(finalZoned)).padStart(2, '0')}, day: ${dayNames[getDay(finalZoned)]})`);
     
     const reminder = await prisma.reminder.create({
       data: {

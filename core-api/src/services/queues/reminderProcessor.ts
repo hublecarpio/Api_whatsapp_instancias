@@ -4,6 +4,8 @@ import prisma from '../prisma.js';
 import axios from 'axios';
 import { MetaCloudService } from '../metaCloud.js';
 import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage } from '../openaiService.js';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { getDay, getHours, setHours, setMinutes, setSeconds, setMilliseconds, addDays } from 'date-fns';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -207,16 +209,54 @@ NO uses saludos largos. NO uses emojis. Maximo 50 palabras.`
   return result.content || 'Hola! Tienes alguna pregunta?';
 }
 
-async function isWithinAllowedHours(config: any): Promise<boolean> {
+async function isWithinAllowedHours(config: any, timezone: string = 'America/Lima'): Promise<boolean> {
   const now = new Date();
-  const hour = now.getHours();
-  const day = now.getDay();
+  const zonedNow = toZonedTime(now, timezone);
+  const hour = getHours(zonedNow);
+  const day = getDay(zonedNow);
   
   if (!config.weekendsEnabled && (day === 0 || day === 6)) {
     return false;
   }
   
   return hour >= config.allowedStartHour && hour < config.allowedEndHour;
+}
+
+function getNextAllowedTime(config: any, timezone: string = 'America/Lima'): Date {
+  const now = new Date();
+  let zonedNow = toZonedTime(now, timezone);
+  const hour = getHours(zonedNow);
+  const day = getDay(zonedNow);
+  const isWeekend = day === 0 || day === 6;
+  
+  if (!config.weekendsEnabled && isWeekend) {
+    const daysUntilMonday = day === 0 ? 1 : 2;
+    let adjustedZoned = addDays(zonedNow, daysUntilMonday);
+    adjustedZoned = setHours(adjustedZoned, config.allowedStartHour);
+    adjustedZoned = setMinutes(adjustedZoned, 0);
+    adjustedZoned = setSeconds(adjustedZoned, 0);
+    adjustedZoned = setMilliseconds(adjustedZoned, 0);
+    return fromZonedTime(adjustedZoned, timezone);
+  }
+  
+  if (hour < config.allowedStartHour) {
+    let adjustedZoned = setHours(zonedNow, config.allowedStartHour);
+    adjustedZoned = setMinutes(adjustedZoned, 0);
+    adjustedZoned = setSeconds(adjustedZoned, 0);
+    adjustedZoned = setMilliseconds(adjustedZoned, 0);
+    return fromZonedTime(adjustedZoned, timezone);
+  }
+  
+  if (hour >= config.allowedEndHour) {
+    let adjustedZoned = addDays(zonedNow, 1);
+    adjustedZoned = setHours(adjustedZoned, config.allowedStartHour);
+    adjustedZoned = setMinutes(adjustedZoned, 0);
+    adjustedZoned = setSeconds(adjustedZoned, 0);
+    adjustedZoned = setMilliseconds(adjustedZoned, 0);
+    return fromZonedTime(adjustedZoned, timezone);
+  }
+  
+  return now;
 }
 
 async function getTodayAttemptCount(businessId: string, contactPhone: string): Promise<number> {
@@ -263,14 +303,14 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
     return;
   }
   
-  if (config && !(await isWithinAllowedHours(config))) {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(config.allowedStartHour, 0, 0, 0);
+  const businessTimezone = reminder.business.timezone || 'America/Lima';
+  
+  if (config && !(await isWithinAllowedHours(config, businessTimezone))) {
+    const nextAllowed = getNextAllowedTime(config, businessTimezone);
     
     await prisma.reminder.update({
       where: { id: reminderId },
-      data: { scheduledAt: tomorrow }
+      data: { scheduledAt: nextAllowed }
     });
     
     const queue = getReminderQueue();
@@ -278,9 +318,10 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
       await queue.add(
         `reminder-${reminderId}`,
         job.data,
-        { delay: tomorrow.getTime() - Date.now() }
+        { delay: Math.max(0, nextAllowed.getTime() - Date.now()) }
       );
     }
+    console.log(`[REMINDER] Rescheduled ${reminderId} to ${nextAllowed.toISOString()} (outside allowed hours in ${businessTimezone})`);
     return;
   }
   
