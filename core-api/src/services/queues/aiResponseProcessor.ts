@@ -143,7 +143,7 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     where: { id: businessId },
     include: {
       policy: true,
-      promptMaster: { include: { tools: { where: { enabled: true } } } },
+      agentPrompts: { include: { tools: { where: { enabled: true } } } },
       products: true,
       instances: { include: { metaCredential: true } },
       user: { select: { isPro: true, id: true, subscriptionStatus: true } }
@@ -271,7 +271,7 @@ async function processWithAgentV2Worker(
   phone: string,
   instanceId: string | undefined
 ): Promise<{ response: string; tokensUsed?: number }> {
-  const historyLimit = business.promptMaster?.historyLimit || 10;
+  const historyLimit = business.agentPrompts?.[0]?.historyLimit || 10;
   
   // Get current lead stage for context
   const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
@@ -298,7 +298,7 @@ async function processWithAgentV2Worker(
     take: historyLimit
   });
   
-  const userTools = business.promptMaster?.tools || [];
+  const userTools = business.agentPrompts?.[0]?.tools || [];
   const toolsConfig = userTools.map((t: any) => ({
     name: t.name,
     description: t.description,
@@ -314,7 +314,7 @@ async function processWithAgentV2Worker(
   const conversationHistory = buildConversationHistory(recentMessages.reverse());
   const businessContext = buildBusinessContext(
     business, 
-    business.promptMaster?.prompt,
+    business.agentPrompts?.[0]?.prompt,
     toolsConfig
   );
   
@@ -387,7 +387,7 @@ async function processWithAgentV1Worker(
   });
   const currentLeadStage = currentTagAssignment?.tag?.name || null;
   
-  const promptConfig = business.promptMaster;
+  const promptConfig = business.agentPrompts?.[0];
   const historyLimit = promptConfig?.historyLimit || 10;
   const userTools = promptConfig?.tools || [];
   
@@ -1576,7 +1576,7 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
     where: { id: businessId },
     include: {
       policy: true,
-      promptMaster: { include: { tools: { where: { enabled: true } } } },
+      agentPrompts: { include: { tools: { where: { enabled: true } } } },
       products: true,
       instances: { include: { metaCredential: true } },
       user: { select: { isPro: true, id: true, subscriptionStatus: true } }

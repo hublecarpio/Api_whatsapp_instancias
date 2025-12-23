@@ -668,8 +668,8 @@ async function processWithAgentV2(
   instanceBackendId?: string,
   providerMessageId?: string
 ): Promise<{ response: string; tokensUsed?: number }> {
-  const historyLimit = business.promptMaster?.historyLimit || 10;
-  const splitMessages = business.promptMaster?.splitMessages ?? true;
+  const historyLimit = business.agentPrompts?.[0]?.historyLimit || 10;
+  const splitMessages = business.agentPrompts?.[0]?.splitMessages ?? true;
   
   const recentMessages = await prisma.messageLog.findMany({
     where: { 
@@ -683,7 +683,7 @@ async function processWithAgentV2(
     take: historyLimit
   });
   
-  const userTools = business.promptMaster?.tools || [];
+  const userTools = business.agentPrompts?.[0]?.tools || [];
   const toolsConfig = userTools.map((t: any) => ({
     name: t.name,
     description: t.description,
@@ -699,7 +699,7 @@ async function processWithAgentV2(
   const conversationHistory = buildConversationHistory(recentMessages.reverse());
   const businessContext = buildBusinessContext(
     business, 
-    business.promptMaster?.prompt,
+    business.agentPrompts?.[0]?.prompt,
     toolsConfig
   );
   
@@ -889,7 +889,7 @@ async function processWithAgent(
     where: { id: businessId },
     include: {
       policy: true,
-      promptMaster: { include: { tools: { where: { enabled: true } } } },
+      agentPrompts: { include: { tools: { where: { enabled: true } } } },
       products: true,
       instances: { include: { metaCredential: true } },
       user: { select: { isPro: true, paymentLinkEnabled: true } }
@@ -950,7 +950,7 @@ async function processWithAgent(
   }
   
   const openai = getOpenAIClient();
-  const promptConfig = business.promptMaster;
+  const promptConfig = business.agentPrompts?.[0];
   const historyLimit = promptConfig?.historyLimit || 10;
   const splitMessages = promptConfig?.splitMessages ?? true;
   const tools = promptConfig?.tools || [];
@@ -1990,7 +1990,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     
     const business = await prisma.business.findUnique({
       where: { id: business_id },
-      include: { promptMaster: true }
+      include: { agentPrompts: true }
     });
     
     if (!business) {
@@ -2005,7 +2005,8 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       });
     }
     
-    const bufferSeconds = business.promptMaster?.bufferSeconds || 0;
+    const promptConfig = business.agentPrompts?.[0];
+    const bufferSeconds = promptConfig?.bufferSeconds || 0;
     const bufferKey = `${business_id}:${contactPhone}`;
     
     if (bufferSeconds > 0) {
@@ -2163,9 +2164,10 @@ router.get('/config', authMiddleware, requireActiveSubscription, async (req: Req
       return res.status(400).json({ error: 'business_id is required' });
     }
     
-    const prompt = await prisma.agentPrompt.findUnique({
+    const prompt = await prisma.agentPrompt.findFirst({
       where: { businessId: business_id as string },
-      include: { tools: true }
+      include: { tools: true },
+      orderBy: { updatedAt: 'desc' }
     });
     
     res.json({
@@ -2190,7 +2192,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       prisma.business.findFirst({
         where: { id: businessId, userId: req.userId },
         include: {
-          promptMaster: { 
+          agentPrompts: { 
             include: { 
               tools: true,
               files: { select: { id: true, name: true, fileUrl: true } }
@@ -2238,8 +2240,8 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     const isSalesMode = objective !== 'APPOINTMENTS';
     const isAppointmentMode = objective === 'APPOINTMENTS';
     const productCount = products.length;
-    const customTools = business.promptMaster?.tools || [];
-    const agentFiles = business.promptMaster?.files || [];
+    const customTools = business.agentPrompts?.[0]?.tools || [];
+    const agentFiles = business.agentPrompts?.[0]?.files || [];
     const hasAvailability = business.availability?.some((a: any) => !a.isBlocked) || false;
     const instanceConnected = business.instances?.some((i: any) => i.status === 'open' || i.status === 'connected') || false;
     const paymentLinkEnabled = business.user?.paymentLinkEnabled ?? false;
@@ -2309,7 +2311,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       warnings.push('WhatsApp no conectado - el agente no puede recibir mensajes');
     }
     
-    if (!business.promptMaster?.prompt) {
+    if (!business.agentPrompts?.[0]?.prompt) {
       warnings.push('Configura el prompt del agente para mejores respuestas');
     } else {
       contextItems.push({ name: 'Prompt personalizado', description: 'Instrucciones del negocio configuradas' });
@@ -2352,14 +2354,14 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     
     // Build the complete context network
     const promptContext = {
-      masterPrompt: business.promptMaster?.prompt ? {
+      masterPrompt: business.agentPrompts?.[0]?.prompt ? {
         enabled: true,
-        length: business.promptMaster.prompt.length,
-        preview: business.promptMaster.prompt.substring(0, 200) + (business.promptMaster.prompt.length > 200 ? '...' : '')
+        length: business.agentPrompts?.[0].prompt.length,
+        preview: business.agentPrompts?.[0].prompt.substring(0, 200) + (business.agentPrompts?.[0].prompt.length > 200 ? '...' : '')
       } : null,
-      bufferSeconds: business.promptMaster?.bufferSeconds || 0,
-      historyLimit: business.promptMaster?.historyLimit || 10,
-      splitMessages: business.promptMaster?.splitMessages ?? true
+      bufferSeconds: business.agentPrompts?.[0]?.bufferSeconds || 0,
+      historyLimit: business.agentPrompts?.[0]?.historyLimit || 10,
+      splitMessages: business.agentPrompts?.[0]?.splitMessages ?? true
     };
     
     const policyContext = business.policy ? {

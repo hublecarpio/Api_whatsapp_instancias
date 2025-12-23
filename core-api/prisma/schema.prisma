@@ -319,10 +319,10 @@ model Business {
   instances         WhatsAppInstance[]
   products          Product[]
   policy            Policy?
-  promptMaster      AgentPrompt?
+  agentPrompts      AgentPrompt[]
   messages          MessageLog[]
   tags              Tag[]
-  followUpConfig    FollowUpConfig?
+  followUpConfigs   FollowUpConfig[]
   reminders         Reminder[]
   appointments      Appointment[]
   availability      BusinessAvailability[]
@@ -363,11 +363,19 @@ model WhatsAppInstance {
   qr                String?
   isActive          Boolean          @default(true)
   lastConnection    DateTime?
+  webhookConfig     Json?
   createdAt         DateTime         @default(now())
 
-  business       Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  metaCredential MetaCredential?
-  history        WhatsAppInstanceHistory[]
+  business         Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  metaCredential   MetaCredential?
+  history          WhatsAppInstanceHistory[]
+  reminders        Reminder[]
+  appointments     Appointment[]
+  broadcasts       BroadcastCampaign[]
+  followUpConfig   FollowUpConfig?
+  agentPrompt      AgentPrompt?
+
+  @@index([businessId])
 }
 
 enum InstanceEventType {
@@ -469,17 +477,21 @@ model Policy {
 }
 
 model AgentPrompt {
-  id            String   @id @default(uuid())
-  businessId    String   @unique
+  id            String            @id @default(uuid())
+  businessId    String
+  instanceId    String?           @unique
   prompt        String
-  bufferSeconds Int      @default(0)
-  historyLimit  Int      @default(10)
-  splitMessages Boolean  @default(true)
-  updatedAt     DateTime @default(now())
+  bufferSeconds Int               @default(0)
+  historyLimit  Int               @default(10)
+  splitMessages Boolean           @default(true)
+  updatedAt     DateTime          @default(now())
 
-  business Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   tools    AgentTool[]
   files    AgentFile[]
+
+  @@index([businessId])
 }
 
 model AgentFile {
@@ -632,54 +644,61 @@ model StagePrompt {
 }
 
 model FollowUpConfig {
-  id                  String   @id @default(uuid())
-  businessId          String   @unique
-  enabled             Boolean  @default(true)
-  firstDelayMinutes   Int      @default(15)
-  secondDelayMinutes  Int      @default(60)
-  thirdDelayMinutes   Int      @default(240)
-  maxDailyAttempts    Int      @default(3)
-  pressureLevel       Int      @default(1)
-  allowedStartHour    Int      @default(9)
-  allowedEndHour      Int      @default(21)
-  weekendsEnabled     Boolean  @default(false)
-  triggerMode         String   @default("user")
-  stopOnReply         Boolean  @default(true)
+  id                  String            @id @default(uuid())
+  businessId          String
+  instanceId          String?           @unique
+  enabled             Boolean           @default(true)
+  firstDelayMinutes   Int               @default(15)
+  secondDelayMinutes  Int               @default(60)
+  thirdDelayMinutes   Int               @default(240)
+  maxDailyAttempts    Int               @default(3)
+  pressureLevel       Int               @default(1)
+  allowedStartHour    Int               @default(9)
+  allowedEndHour      Int               @default(21)
+  weekendsEnabled     Boolean           @default(false)
+  triggerMode         String            @default("user")
+  stopOnReply         Boolean           @default(true)
   followUpSteps       Json?
   metaTemplateId      String?
   templateVariables   Json?
-  templateEnabled     Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  templateEnabled     Boolean           @default(false)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
-  business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business  Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance  WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   reminders Reminder[]
+
+  @@index([businessId])
 }
 
 model Reminder {
-  id              String    @id @default(uuid())
-  businessId      String
-  contactPhone    String
-  contactName     String?
-  scheduledAt     DateTime
-  executedAt      DateTime?
-  processingAt    DateTime?
-  type            String    @default("auto")
-  status          String    @default("pending")
-  attemptNumber   Int       @default(1)
-  retryCount      Int       @default(0)
-  lastError       String?
-  messageTemplate String?
+  id               String            @id @default(uuid())
+  businessId       String
+  instanceId       String?
+  contactPhone     String
+  contactName      String?
+  scheduledAt      DateTime
+  executedAt       DateTime?
+  processingAt     DateTime?
+  type             String            @default("auto")
+  status           String            @default("pending")
+  attemptNumber    Int               @default(1)
+  retryCount       Int               @default(0)
+  lastError        String?
+  messageTemplate  String?
   generatedMessage String?
-  configId        String?
-  createdAt       DateTime  @default(now())
+  configId         String?
+  createdAt        DateTime          @default(now())
   
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  config FollowUpConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  config   FollowUpConfig?   @relation(fields: [configId], references: [id], onDelete: SetNull)
 
   @@index([businessId, status, scheduledAt])
   @@index([businessId, contactPhone])
   @@index([status, scheduledAt, processingAt])
+  @@index([instanceId])
 }
 
 model TokenUsage {
@@ -969,6 +988,7 @@ enum AppointmentStatus {
 model Appointment {
   id                 String            @id @default(uuid())
   businessId         String
+  instanceId         String?
   contactPhone       String
   contactName        String?
   scheduledAt        DateTime
@@ -986,12 +1006,14 @@ model Appointment {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
 
   @@index([businessId, scheduledAt])
   @@index([businessId, status])
   @@index([businessId, contactPhone])
   @@index([scheduledAt])
+  @@index([instanceId])
 }
 
 model BusinessAvailability {
@@ -1057,6 +1079,7 @@ enum BroadcastMessageType {
 model BroadcastCampaign {
   id              String               @id @default(uuid())
   businessId      String
+  instanceId      String?
   name            String
   status          BroadcastStatus      @default(DRAFT)
   messageType     BroadcastMessageType @default(TEXT)
@@ -1080,11 +1103,13 @@ model BroadcastCampaign {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  logs BroadcastLog[]
+  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  logs     BroadcastLog[]
 
   @@index([businessId, status])
   @@index([businessId, createdAt])
   @@index([status, scheduledAt])
+  @@index([instanceId])
 }
 
 enum BroadcastLogStatus {

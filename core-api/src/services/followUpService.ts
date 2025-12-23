@@ -16,7 +16,10 @@ export async function scheduleFollowUp(
     console.log(`[FOLLOW-UP] scheduleFollowUp called - business: ${businessId}, phone: ${cleanPhone}, source: ${source}`);
     
     const [config, contact, business] = await Promise.all([
-      prisma.followUpConfig.findUnique({ where: { businessId } }),
+      prisma.followUpConfig.findFirst({ 
+        where: { businessId },
+        orderBy: { createdAt: 'desc' }
+      }),
       prisma.contact.findUnique({
         where: { businessId_phone: { businessId, phone: cleanPhone } }
       }),

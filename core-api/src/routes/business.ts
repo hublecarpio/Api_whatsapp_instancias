@@ -56,7 +56,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       include: {
         instances: true,
         policy: true,
-        promptMaster: true,
+        agentPrompts: true,
         _count: { select: { products: true, messages: true } }
       }
     });

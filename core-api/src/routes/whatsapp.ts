@@ -11,6 +11,41 @@ const router = Router();
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
 
+const INSTANCE_LIMITS: Record<string, number> = {
+  STANDARD: 1,
+  BASIC: 1,
+  PRO: 3,
+  ENTERPRISE: 10
+};
+
+async function getInstanceLimit(userId: string): Promise<{ limit: number; tier: string; currentCount: number; businessId: string | null }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { 
+      subscriptionTier: true, 
+      isPro: true,
+      businesses: { 
+        select: { 
+          id: true,
+          _count: { select: { instances: true } }
+        },
+        take: 1
+      }
+    }
+  });
+  
+  if (!user) {
+    return { limit: 1, tier: 'BASIC', currentCount: 0, businessId: null };
+  }
+  
+  const tier = user.subscriptionTier || 'BASIC';
+  const limit = INSTANCE_LIMITS[tier] || 1;
+  const business = user.businesses[0];
+  const currentCount = business?._count?.instances || 0;
+  
+  return { limit, tier, currentCount, businessId: business?.id || null };
+}
+
 function getPublicWebhookUrl(path: string): string {
   if (process.env.PUBLIC_API_URL) {
     return `${process.env.PUBLIC_API_URL}${path}`;
@@ -62,6 +97,257 @@ function normalizeArgentinePhone(phone: string): string {
   
   return clean;
 }
+
+router.get('/instances', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const userInfo = await getUserWithRole(req.userId!);
+    const business = await checkBusinessAccess(req.userId!, businessId as string, userInfo?.role, userInfo?.parentUserId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instances = await prisma.whatsAppInstance.findMany({
+      where: { businessId: businessId as string },
+      include: { metaCredential: { select: { id: true, phoneNumberId: true } } },
+      orderBy: { createdAt: 'asc' }
+    });
+    
+    const { limit, tier, currentCount } = await getInstanceLimit(req.userId!);
+    
+    res.json({
+      instances,
+      limits: {
+        current: currentCount,
+        max: limit,
+        tier,
+        canAddMore: currentCount < limit
+      }
+    });
+  } catch (error: any) {
+    console.error('List instances error:', error.message);
+    res.status(500).json({ error: 'Failed to list instances' });
+  }
+});
+
+router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, name, provider, phoneNumber, copyFromInstanceId } = req.body;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const { limit, tier, currentCount } = await getInstanceLimit(req.userId!);
+    
+    if (currentCount >= limit) {
+      return res.status(403).json({ 
+        error: `Has alcanzado el limite de ${limit} instancia(s) para tu plan ${tier}. Actualiza a PRO o Enterprise para mas numeros.`,
+        code: 'INSTANCE_LIMIT_REACHED',
+        limit,
+        current: currentCount,
+        tier
+      });
+    }
+    
+    const existingInstances = await prisma.whatsAppInstance.findMany({
+      where: { businessId }
+    });
+    const instanceNumber = existingInstances.length + 1;
+    const instanceName = name || `WhatsApp ${instanceNumber}`;
+    const instanceId = `biz_${businessId.substring(0, 8)}_${instanceNumber}`;
+    
+    const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
+    const webhookUrl = `${coreApiUrl}/webhook/${businessId}`;
+    
+    if (provider === 'META_CLOUD') {
+      const instance = await prisma.whatsAppInstance.create({
+        data: {
+          businessId,
+          name: instanceName,
+          provider: 'META_CLOUD',
+          status: 'pending_credentials',
+          phoneNumber: phoneNumber || null
+        }
+      });
+      
+      await recordInstanceEvent({
+        instanceId: instance.id,
+        businessId,
+        eventType: 'CREATED',
+        newProvider: 'META_CLOUD',
+        newStatus: 'pending_credentials',
+        details: `New Meta Cloud instance "${instanceName}" created`
+      });
+      
+      return res.status(201).json({ instance, requiresCredentials: true });
+    }
+    
+    const waResponse = await axios.post(`${WA_API_URL}/instances`, {
+      instanceId,
+      webhook: webhookUrl
+    });
+    
+    const instance = await prisma.whatsAppInstance.create({
+      data: {
+        businessId,
+        name: instanceName,
+        instanceBackendId: instanceId,
+        status: 'pending_qr',
+        phoneNumber: phoneNumber || null
+      }
+    });
+    
+    if (copyFromInstanceId) {
+      const sourceInstance = await prisma.whatsAppInstance.findFirst({
+        where: { id: copyFromInstanceId, businessId },
+        include: { 
+          followUpConfig: true,
+          agentPrompt: { include: { tools: true } }
+        }
+      });
+      
+      if (sourceInstance?.followUpConfig) {
+        await prisma.followUpConfig.create({
+          data: {
+            businessId,
+            instanceId: instance.id,
+            enabled: sourceInstance.followUpConfig.enabled,
+            firstDelayMinutes: sourceInstance.followUpConfig.firstDelayMinutes,
+            secondDelayMinutes: sourceInstance.followUpConfig.secondDelayMinutes,
+            thirdDelayMinutes: sourceInstance.followUpConfig.thirdDelayMinutes,
+            maxDailyAttempts: sourceInstance.followUpConfig.maxDailyAttempts,
+            pressureLevel: sourceInstance.followUpConfig.pressureLevel,
+            allowedStartHour: sourceInstance.followUpConfig.allowedStartHour,
+            allowedEndHour: sourceInstance.followUpConfig.allowedEndHour,
+            weekendsEnabled: sourceInstance.followUpConfig.weekendsEnabled,
+            triggerMode: sourceInstance.followUpConfig.triggerMode,
+            stopOnReply: sourceInstance.followUpConfig.stopOnReply,
+            followUpSteps: sourceInstance.followUpConfig.followUpSteps ?? undefined,
+            metaTemplateId: sourceInstance.followUpConfig.metaTemplateId,
+            templateVariables: sourceInstance.followUpConfig.templateVariables ?? undefined,
+            templateEnabled: sourceInstance.followUpConfig.templateEnabled
+          }
+        });
+      }
+      
+      if (sourceInstance?.agentPrompt) {
+        const newPrompt = await prisma.agentPrompt.create({
+          data: {
+            businessId,
+            instanceId: instance.id,
+            prompt: sourceInstance.agentPrompt.prompt,
+            bufferSeconds: sourceInstance.agentPrompt.bufferSeconds,
+            historyLimit: sourceInstance.agentPrompt.historyLimit,
+            splitMessages: sourceInstance.agentPrompt.splitMessages
+          }
+        });
+        
+        const tools = sourceInstance.agentPrompt.tools;
+        if (tools && tools.length > 0) {
+          await prisma.agentTool.createMany({
+            data: tools.map(tool => ({
+              promptId: newPrompt.id,
+              name: tool.name,
+              description: tool.description,
+              url: tool.url,
+              method: tool.method,
+              headers: tool.headers ?? undefined,
+              bodyTemplate: tool.bodyTemplate ?? undefined,
+              parameters: tool.parameters ?? undefined,
+              dynamicVariables: tool.dynamicVariables ?? undefined,
+              enabled: tool.enabled
+            }))
+          });
+        }
+      }
+    }
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId,
+      eventType: 'CREATED',
+      newProvider: 'BAILEYS',
+      newStatus: 'pending_qr',
+      backendId: instanceId,
+      details: `New Baileys instance "${instanceName}" created`
+    });
+    
+    res.status(201).json({
+      instance,
+      waInstance: waResponse.data
+    });
+  } catch (error: any) {
+    console.error('Add instance error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to add WhatsApp instance' });
+  }
+});
+
+router.delete('/instances/:instanceId', requireEmailVerified, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string },
+      include: { metaCredential: true }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    if (instance.provider === 'BAILEYS' && instance.instanceBackendId) {
+      try {
+        await axios.delete(`${WA_API_URL}/instances/${instance.instanceBackendId}`);
+      } catch (err) {
+        console.log('Baileys instance cleanup failed (may not exist)');
+      }
+    }
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId: businessId as string,
+      eventType: 'DELETED',
+      previousProvider: instance.provider,
+      previousStatus: instance.status,
+      phoneNumber: instance.phoneNumber,
+      details: `Instance "${instance.name}" deleted`
+    });
+    
+    if (instance.metaCredential) {
+      await prisma.metaCredential.delete({ where: { instanceId: instance.id } }).catch(() => {});
+    }
+    
+    await prisma.followUpConfig.deleteMany({ where: { instanceId: instance.id } });
+    await prisma.agentPrompt.deleteMany({ where: { instanceId: instance.id } });
+    await prisma.whatsAppInstance.delete({ where: { id: instance.id } });
+    
+    res.json({ success: true, message: `Instance "${instance.name}" deleted` });
+  } catch (error: any) {
+    console.error('Delete instance error:', error.message);
+    res.status(500).json({ error: 'Failed to delete instance' });
+  }
+});
 
 router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Response) => {
   try {

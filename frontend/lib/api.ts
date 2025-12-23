@@ -154,6 +154,18 @@ export const waApi = {
     appSecret: string;
     phoneNumber?: string;
   }) => api.post('/wa/create-meta', data),
+  
+  listInstances: (businessId: string) => api.get(`/wa/instances?businessId=${businessId}`),
+  addInstance: (data: {
+    businessId: string;
+    name?: string;
+    provider?: 'BAILEYS' | 'META_CLOUD';
+    phoneNumber?: string;
+    copyFromInstanceId?: string;
+  }) => api.post('/wa/instances/add', data),
+  deleteInstance: (instanceId: string, businessId: string) => 
+    api.delete(`/wa/instances/${instanceId}?businessId=${businessId}`),
+  
   instances: (businessId: string) => api.get(`/wa/instances/${businessId}`),
   status: (businessId: string) => api.get(`/wa/${businessId}/status`),
   qr: (businessId: string) => api.get(`/wa/${businessId}/qr`),

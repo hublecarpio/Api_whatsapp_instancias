@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
+import { useInstanceStore, WhatsAppInstance } from '@/store/instance';
 import { waApi, businessApi } from '@/lib/api';
+import InstanceSelector from '@/components/InstanceSelector';
 
 interface ConnectionEvent {
   type: string;
@@ -58,7 +60,14 @@ const COUNTRY_CODES = [
 export default function WhatsAppPage() {
   const { currentBusiness, setCurrentBusiness } = useBusinessStore();
   const { user } = useAuthStore();
+  const { 
+    instances, 
+    selectedInstanceId, 
+    getSelectedInstance,
+    updateInstance 
+  } = useInstanceStore();
   const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const [provider, setProvider] = useState<string>('BAILEYS');
@@ -469,29 +478,62 @@ export default function WhatsAppPage() {
     );
   }
 
+  const selectedInstance = getSelectedInstance();
+
   return (
     <div className="p-4 sm:p-0">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl sm:text-2xl font-bold text-white">WhatsApp</h1>
-          {status !== 'not_created' && (
+          {viewMode === 'detail' && selectedInstance && (
+            <button 
+              onClick={() => setViewMode('list')}
+              className="text-sm text-neon-blue hover:text-neon-blue/80 flex items-center gap-1"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Ver todos
+            </button>
+          )}
+          {viewMode === 'detail' && status !== 'not_created' && (
             <>
               {getStatusBadge()}
               {getProviderBadge()}
             </>
           )}
         </div>
-        {phoneNumber && (status === 'open' || status === 'connected') && (
+        {viewMode === 'detail' && phoneNumber && (status === 'open' || status === 'connected') && (
           <span className="text-sm text-gray-400">+{phoneNumber}</span>
         )}
       </div>
 
-      {error && (
-        <div className="bg-accent-error/10 border border-accent-error/20 text-accent-error px-3 py-2 rounded-lg mb-3 flex items-center justify-between text-sm">
-          <span>{error}</span>
-          <button onClick={() => setError('')} className="text-accent-error/70 hover:text-accent-error ml-2">✕</button>
+      {viewMode === 'list' && (
+        <div className="card mb-6">
+          <InstanceSelector 
+            businessId={currentBusiness.id}
+            onInstanceSelect={(instance) => {
+              setViewMode('detail');
+              setStatus(instance.status);
+              setProvider(instance.provider);
+              setPhoneNumber(instance.phoneNumber || '');
+              if (instance.status === 'pending_qr' && instance.provider !== 'META_CLOUD') {
+                waApi.qr(currentBusiness.id).then(res => setQrCode(res.data.qr || '')).catch(() => {});
+              }
+            }}
+            showAddButton={true}
+          />
         </div>
       )}
+
+      {viewMode === 'detail' && (
+        <>
+          {error && (
+            <div className="bg-accent-error/10 border border-accent-error/20 text-accent-error px-3 py-2 rounded-lg mb-3 flex items-center justify-between text-sm">
+              <span>{error}</span>
+              <button onClick={() => setError('')} className="text-accent-error/70 hover:text-accent-error ml-2">✕</button>
+            </div>
+          )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
@@ -960,6 +1002,7 @@ export default function WhatsAppPage() {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 }

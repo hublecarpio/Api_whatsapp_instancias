@@ -48,7 +48,7 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
   const business = await prisma.business.findUnique({
     where: { id: businessId },
     include: {
-      promptMaster: {
+      agentPrompts: {
         include: { tools: { where: { enabled: true } } }
       },
       policy: true,

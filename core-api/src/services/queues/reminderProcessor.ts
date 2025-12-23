@@ -138,7 +138,7 @@ async function generateFollowUpMessage(
 ): Promise<string> {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
-    include: { promptMaster: true }
+    include: { agentPrompts: true }
   });
   
   if (!business || !isOpenAIConfigured()) {
@@ -282,7 +282,7 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
       business: {
         include: {
           instances: true,
-          followUpConfig: true
+          followUpConfigs: true
         }
       }
     }
@@ -293,7 +293,9 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
     return;
   }
   
-  const config = reminder.business.followUpConfig;
+  const config = reminder.business.followUpConfigs?.find((c: any) => 
+    c.instanceId === reminder.instanceId || !c.instanceId
+  ) || reminder.business.followUpConfigs?.[0];
   
   if (config && !config.enabled && reminder.type === 'auto') {
     await prisma.reminder.update({
