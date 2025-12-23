@@ -1,1 +1,5 @@
-{}
+{
+  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
+  "/dashboard/billing/page": "app/dashboard/billing/page.js",
+  "/dashboard/chat/page": "app/dashboard/chat/page.js"
+}
