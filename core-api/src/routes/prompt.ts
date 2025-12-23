@@ -23,7 +23,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const existing = await prisma.agentPrompt.findUnique({ where: { businessId } });
+    const existing = await prisma.agentPrompt.findFirst({ where: { businessId } });
     
     const data: any = { prompt, updatedAt: new Date() };
     if (bufferSeconds !== undefined) data.bufferSeconds = bufferSeconds;
@@ -33,7 +33,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     let agentPrompt;
     if (existing) {
       agentPrompt = await prisma.agentPrompt.update({
-        where: { businessId },
+        where: { id: existing.id },
         data,
         include: { tools: true }
       });
@@ -64,7 +64,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const prompt = await prisma.agentPrompt.findUnique({
+    const prompt = await prisma.agentPrompt.findFirst({
       where: { businessId: business_id as string },
       include: { tools: true }
     });

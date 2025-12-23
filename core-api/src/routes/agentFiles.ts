@@ -23,7 +23,7 @@ router.get('/:businessId', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    const prompt = await prisma.agentPrompt.findUnique({
+    const prompt = await prisma.agentPrompt.findFirst({
       where: { businessId },
       include: {
         files: {
@@ -53,7 +53,7 @@ router.post('/:businessId', upload.single('file'), async (req: AuthRequest, res:
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    let prompt = await prisma.agentPrompt.findUnique({
+    let prompt = await prisma.agentPrompt.findFirst({
       where: { businessId }
     });
 
@@ -122,7 +122,7 @@ router.put('/:businessId/:fileId', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    const prompt = await prisma.agentPrompt.findUnique({
+    const prompt = await prisma.agentPrompt.findFirst({
       where: { businessId }
     });
 
@@ -170,7 +170,7 @@ router.delete('/:businessId/:fileId', async (req: AuthRequest, res: Response) =>
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    const prompt = await prisma.agentPrompt.findUnique({
+    const prompt = await prisma.agentPrompt.findFirst({
       where: { businessId }
     });
 
