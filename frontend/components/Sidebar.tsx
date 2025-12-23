@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
 import Logo from './Logo';
+import { HoloIcon } from './icons/HoloIcons';
 
 export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const pathname = usePathname();
@@ -142,7 +143,7 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
                 href={link.href}
                 className={`sidebar-link ${pathname === link.href ? 'active' : ''}`}
               >
-                <span className="text-xl">{link.icon}</span>
+                <HoloIcon emoji={link.icon} size={22} />
                 <span>{link.label}</span>
               </Link>
             ))}
@@ -155,11 +156,11 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
                 key={link.href}
                 href={link.href}
                 title={link.label}
-                className={`text-2xl hover:bg-dark-hover p-2 rounded-lg transition-colors ${
+                className={`hover:bg-dark-hover p-2 rounded-lg transition-colors ${
                   pathname === link.href ? 'bg-neon-blue/10 ring-1 ring-neon-blue/50' : ''
                 }`}
               >
-                {link.icon}
+                <HoloIcon emoji={link.icon} size={26} />
               </Link>
             ))}
           </div>
