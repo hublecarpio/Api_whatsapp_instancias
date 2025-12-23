@@ -247,6 +247,7 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
 
     const {
       name,
+      instanceId,
       messageType,
       content,
       mediaUrl,
@@ -303,6 +304,7 @@ router.post('/:businessId', async (req: AuthRequest, res: Response) => {
 
     const result = await broadcastService.createBroadcastCampaign({
       businessId: req.params.businessId,
+      instanceId: instanceId || undefined,
       name,
       messageType: messageType || 'TEXT',
       content,

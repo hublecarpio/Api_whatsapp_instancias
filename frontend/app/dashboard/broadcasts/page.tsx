@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useBusinessStore } from '@/store/business';
+import { useInstanceStore } from '@/store/instance';
 import axios from 'axios';
 import { waApi } from '@/lib/api';
 
@@ -86,10 +87,12 @@ interface AvailableVariable {
 
 export default function BroadcastsPage() {
   const { currentBusiness } = useBusinessStore();
+  const { instances, setInstances } = useInstanceStore();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [templates, setTemplates] = useState<MetaTemplate[]>([]);
   const [instance, setInstance] = useState<WhatsAppInstance | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
@@ -447,6 +450,7 @@ export default function BroadcastsPage() {
 
       const response = await axios.post(`${API_URL}/broadcasts/${currentBusiness.id}`, {
         name: formData.name,
+        instanceId: selectedInstanceId || undefined,
         messageType,
         content: formData.includeMedia ? undefined : formData.content || undefined,
         mediaUrl: formData.includeMedia ? formData.mediaUrl : undefined,
@@ -577,6 +581,14 @@ export default function BroadcastsPage() {
       loadContacts();
       loadInstanceAndTemplates();
       loadAvailableVariables();
+      waApi.listInstances(currentBusiness.id).then(res => {
+        setInstances(res.data || []);
+        if (res.data?.length > 0 && !selectedInstanceId) {
+          setSelectedInstanceId(res.data[0].id);
+        }
+      }).catch(err => {
+        console.error('Failed to load instances:', err);
+      });
     }
   }, [currentBusiness?.id]);
 
@@ -876,6 +888,23 @@ export default function BroadcastsPage() {
                       <span className="block mt-1 text-yellow-400">No tienes contactos dentro de la ventana de 24 horas.</span>
                     )}
                   </p>
+                </div>
+              )}
+
+              {instances.length > 1 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Enviar desde</label>
+                  <select
+                    value={selectedInstanceId}
+                    onChange={e => setSelectedInstanceId(e.target.value)}
+                    className="input w-full"
+                  >
+                    {instances.map((inst: any) => (
+                      <option key={inst.id} value={inst.id}>
+                        {inst.name || inst.phoneNumber || `Instancia ${inst.id.slice(-8)}`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 

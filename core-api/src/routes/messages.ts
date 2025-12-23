@@ -77,7 +77,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/conversations', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id } = req.query;
+    const { business_id, instance_id } = req.query;
     
     if (!business_id) {
       return res.status(400).json({ error: 'business_id is required' });
@@ -102,6 +102,11 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     }
     
     const whereClause: any = { businessId: business_id as string };
+    
+    if (instance_id) {
+      whereClause.instanceId = instance_id as string;
+    }
+    
     if (user.role === 'ASESOR' && assignedPhones.length > 0) {
       whereClause.OR = assignedPhones.flatMap(p => [{ sender: p }, { recipient: p }]);
     }
@@ -178,7 +183,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
 
 router.get('/conversation/:phone', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id } = req.query;
+    const { business_id, instance_id } = req.query;
     const { phone } = req.params;
     
     if (!business_id) {
@@ -212,14 +217,20 @@ router.get('/conversation/:phone', async (req: AuthRequest, res: Response) => {
       `${cleanPhone}@lid`
     ];
     
+    const whereClause: any = {
+      businessId: business_id as string,
+      OR: phoneVariants.flatMap(p => [
+        { sender: p },
+        { recipient: p }
+      ])
+    };
+    
+    if (instance_id) {
+      whereClause.instanceId = instance_id as string;
+    }
+    
     const messages = await prisma.messageLog.findMany({
-      where: {
-        businessId: business_id as string,
-        OR: phoneVariants.flatMap(p => [
-          { sender: p },
-          { recipient: p }
-        ])
-      },
+      where: whereClause,
       orderBy: { createdAt: 'asc' }
     });
     

@@ -182,10 +182,16 @@ export const waApi = {
 };
 
 export const messageApi = {
-  conversations: (businessId: string) => 
-    api.get(`/messages/conversations?business_id=${businessId}`),
-  conversation: (businessId: string, phone: string) => 
-    api.get(`/messages/conversation/${phone}?business_id=${businessId}`),
+  conversations: (businessId: string, instanceId?: string) => {
+    let url = `/messages/conversations?business_id=${businessId}`;
+    if (instanceId) url += `&instance_id=${instanceId}`;
+    return api.get(url);
+  },
+  conversation: (businessId: string, phone: string, instanceId?: string) => {
+    let url = `/messages/conversation/${phone}?business_id=${businessId}`;
+    if (instanceId) url += `&instance_id=${instanceId}`;
+    return api.get(url);
+  },
   windowStatus: (businessId: string, phone: string) =>
     api.get(`/messages/conversation/${phone}/window-status?business_id=${businessId}`),
   send: (businessId: string, to: string, message: string) =>

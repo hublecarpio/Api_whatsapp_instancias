@@ -71,6 +71,7 @@ export async function sendBroadcastMessage(
   variables: string[],
   campaign: {
     businessId: string;
+    instanceId?: string;
     messageType: BroadcastMessageType;
     content: string | null;
     mediaUrl: string | null;
@@ -98,8 +99,12 @@ export async function sendBroadcastMessage(
   };
 
   try {
+    const instanceWhere: any = { businessId: campaign.businessId };
+    if (campaign.instanceId) {
+      instanceWhere.id = campaign.instanceId;
+    }
     const instance = await prisma.whatsAppInstance.findFirst({
-      where: { businessId: campaign.businessId },
+      where: instanceWhere,
       include: { metaCredential: true }
     });
 
@@ -356,7 +361,7 @@ export async function runBroadcastCampaign(campaignId: string): Promise<Broadcas
       log.contactPhone,
       log.contactName,
       variables,
-      campaign,
+      { ...campaign, instanceId: campaign.instanceId || undefined },
       namedVariables
     );
 
@@ -406,6 +411,7 @@ interface ContactWithVariables {
 
 export async function createBroadcastCampaign(params: {
   businessId: string;
+  instanceId?: string;
   name: string;
   messageType: BroadcastMessageType;
   content?: string;
@@ -553,6 +559,7 @@ export async function createBroadcastCampaign(params: {
   const campaign = await prisma.broadcastCampaign.create({
     data: {
       businessId: params.businessId,
+      instanceId: params.instanceId,
       name: params.name,
       status: 'DRAFT',
       messageType: params.messageType,

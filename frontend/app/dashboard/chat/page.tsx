@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
+import { useInstanceStore } from '@/store/instance';
 import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi } from '@/lib/api';
 
 interface Conversation {
@@ -91,6 +92,7 @@ interface ContactAssignment {
 
 export default function ChatPage() {
   const { currentBusiness } = useBusinessStore();
+  const { selectedInstanceId, instances, setInstances } = useInstanceStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [selectedContactName, setSelectedContactName] = useState<string>('');
@@ -675,7 +677,7 @@ export default function ChatPage() {
   const fetchConversations = async () => {
     if (!currentBusiness) return;
     try {
-      const response = await messageApi.conversations(currentBusiness.id);
+      const response = await messageApi.conversations(currentBusiness.id, selectedInstanceId || undefined);
       setConversations(response.data);
     } catch (err) {
       console.error('Failed to fetch conversations:', err);
@@ -687,12 +689,30 @@ export default function ChatPage() {
   const fetchMessages = async (phone: string) => {
     if (!currentBusiness) return;
     try {
-      const response = await messageApi.conversation(currentBusiness.id, phone);
+      const response = await messageApi.conversation(currentBusiness.id, phone, selectedInstanceId || undefined);
       setMessages(response.data);
     } catch (err) {
       console.error('Failed to fetch messages:', err);
     }
   };
+  
+  useEffect(() => {
+    if (currentBusiness) {
+      waApi.listInstances(currentBusiness.id).then(res => {
+        setInstances(res.data || []);
+      }).catch(err => {
+        console.error('Failed to fetch instances:', err);
+      });
+    }
+  }, [currentBusiness, setInstances]);
+  
+  useEffect(() => {
+    if (currentBusiness) {
+      setSelectedPhone(null);
+      setMessages([]);
+      fetchConversations();
+    }
+  }, [selectedInstanceId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -998,7 +1018,26 @@ export default function ChatPage() {
         <div className={`${showChatList ? 'w-full sm:w-80' : 'hidden sm:block sm:w-0'} transition-all duration-300 overflow-hidden border-r border-dark-border flex flex-col`}>
           <div className="p-3 border-b border-dark-border bg-dark-card">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="font-semibold text-white">Chats</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold text-white">Chats</h2>
+                {instances.length > 1 && (
+                  <select
+                    value={selectedInstanceId || ''}
+                    onChange={(e) => {
+                      const { setSelectedInstanceId } = useInstanceStore.getState();
+                      setSelectedInstanceId(e.target.value || null);
+                    }}
+                    className="text-xs bg-dark-surface border border-dark-border rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-neon-blue"
+                  >
+                    <option value="">Todas</option>
+                    {instances.map((inst: any) => (
+                      <option key={inst.id} value={inst.id}>
+                        {inst.name || inst.phoneNumber || inst.id.slice(-8)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400 bg-dark-hover px-2 py-0.5 rounded-full">{filteredConversations.length}</span>
                 <button onClick={openNewChatModal} className="p-1.5 rounded-lg text-neon-blue hover:bg-neon-blue/20 transition-colors" title="Nuevo chat">
