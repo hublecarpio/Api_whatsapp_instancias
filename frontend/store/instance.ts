@@ -48,10 +48,11 @@ export const useInstanceStore = create<InstanceState>()(
       
       setInstances: (instances) => {
         const state = get();
-        const newSelectedId = instances.length > 0 
-          ? (instances.find(i => i.id === state.selectedInstanceId)?.id || instances[0].id)
+        const safeInstances = Array.isArray(instances) ? instances : [];
+        const newSelectedId = safeInstances.length > 0 
+          ? (safeInstances.find(i => i.id === state.selectedInstanceId)?.id || safeInstances[0].id)
           : null;
-        set({ instances, selectedInstanceId: newSelectedId });
+        set({ instances: safeInstances, selectedInstanceId: newSelectedId });
       },
       
       setSelectedInstanceId: (id) => set({ selectedInstanceId: id }),
@@ -60,22 +61,30 @@ export const useInstanceStore = create<InstanceState>()(
       
       getSelectedInstance: () => {
         const state = get();
-        return state.instances.find(i => i.id === state.selectedInstanceId) || state.instances[0] || null;
+        const safeInstances = Array.isArray(state.instances) ? state.instances : [];
+        return safeInstances.find(i => i.id === state.selectedInstanceId) || safeInstances[0] || null;
       },
       
-      addInstance: (instance) => set((state) => ({
-        instances: [...state.instances, instance],
-        selectedInstanceId: instance.id
-      })),
+      addInstance: (instance) => set((state) => {
+        const safeInstances = Array.isArray(state.instances) ? state.instances : [];
+        return {
+          instances: [...safeInstances, instance],
+          selectedInstanceId: instance.id
+        };
+      }),
       
-      updateInstance: (id, data) => set((state) => ({
-        instances: state.instances.map((i) => 
-          i.id === id ? { ...i, ...data } : i
-        )
-      })),
+      updateInstance: (id, data) => set((state) => {
+        const safeInstances = Array.isArray(state.instances) ? state.instances : [];
+        return {
+          instances: safeInstances.map((i) => 
+            i.id === id ? { ...i, ...data } : i
+          )
+        };
+      }),
       
       removeInstance: (id) => set((state) => {
-        const filtered = state.instances.filter(i => i.id !== id);
+        const safeInstances = Array.isArray(state.instances) ? state.instances : [];
+        const filtered = safeInstances.filter(i => i.id !== id);
         const newSelectedId = state.selectedInstanceId === id 
           ? (filtered[0]?.id || null)
           : state.selectedInstanceId;
