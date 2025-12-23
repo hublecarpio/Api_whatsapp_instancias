@@ -1,11 +1,11 @@
 {
-  "/login/page": "app/login/page.js",
   "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
   "/dashboard/billing/page": "app/dashboard/billing/page.js",
-  "/dashboard/chat/page": "app/dashboard/chat/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
-  "/dashboard/business/page": "app/dashboard/business/page.js",
   "/dashboard/api-docs/page": "app/dashboard/api-docs/page.js",
-  "/dashboard/reminders/page": "app/dashboard/reminders/page.js"
+  "/dashboard/reminders/page": "app/dashboard/reminders/page.js",
+  "/dashboard/tags/page": "app/dashboard/tags/page.js",
+  "/dashboard/broadcasts/page": "app/dashboard/broadcasts/page.js",
+  "/dashboard/chat/page": "app/dashboard/chat/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
+  "/dashboard/business/page": "app/dashboard/business/page.js"
 }
