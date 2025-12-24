@@ -1462,6 +1462,9 @@ video {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+.cursor-default {
+  cursor: default;
+}
 .cursor-help {
   cursor: help;
 }

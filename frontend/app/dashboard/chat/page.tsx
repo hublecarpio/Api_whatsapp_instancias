@@ -1023,42 +1023,49 @@ export default function ChatPage() {
       <div className="flex-1 flex overflow-hidden sm:rounded-2xl border border-dark-border bg-dark-surface shadow-dark-lg">
         <div className={`${showChatList ? 'w-full sm:w-80' : 'hidden sm:block sm:w-0'} transition-all duration-300 overflow-hidden border-r border-dark-border flex flex-col`}>
           <div className="p-3 border-b border-dark-border bg-dark-card">
-            {instances.length > 1 && (
+            {instances.length >= 1 && (
               <div className="mb-3 p-2 bg-dark-bg rounded-lg border border-dark-border">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs text-gray-400 uppercase tracking-wide">Bandeja de</span>
+                  <span className="text-xs text-gray-400 uppercase tracking-wide">
+                    {instances.length === 1 ? 'Conectado a' : 'Bandeja de'}
+                  </span>
                   {instanceSwitching && (
                     <div className="animate-spin w-3 h-3 border border-neon-blue border-t-transparent rounded-full"></div>
                   )}
                 </div>
                 <div className="flex gap-1 flex-wrap">
-                  <button
-                    onClick={() => {
-                      const { setSelectedInstanceId } = useInstanceStore.getState();
-                      setSelectedInstanceId(null);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      !selectedInstanceId 
-                        ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/30' 
-                        : 'bg-dark-surface text-gray-400 hover:text-white hover:bg-dark-surface/80'
-                    }`}
-                  >
-                    Todas
-                  </button>
+                  {instances.length > 1 && (
+                    <button
+                      onClick={() => {
+                        const { setSelectedInstanceId } = useInstanceStore.getState();
+                        setSelectedInstanceId(null);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        !selectedInstanceId 
+                          ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/30' 
+                          : 'bg-dark-surface text-gray-400 hover:text-white hover:bg-dark-surface/80'
+                      }`}
+                    >
+                      Todas
+                    </button>
+                  )}
                   {instances.map((inst: any) => {
                     const isConnected = inst.status === 'open' || inst.status === 'connected';
+                    const isSelected = instances.length === 1 || selectedInstanceId === inst.id;
                     return (
                       <button
                         key={inst.id}
                         onClick={() => {
-                          const { setSelectedInstanceId } = useInstanceStore.getState();
-                          setSelectedInstanceId(inst.id);
+                          if (instances.length > 1) {
+                            const { setSelectedInstanceId } = useInstanceStore.getState();
+                            setSelectedInstanceId(inst.id);
+                          }
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                          selectedInstanceId === inst.id
+                          isSelected
                             ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/30'
                             : 'bg-dark-surface text-gray-400 hover:text-white hover:bg-dark-surface/80'
-                        }`}
+                        } ${instances.length === 1 ? 'cursor-default' : ''}`}
                       >
                         <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></span>
                         {inst.name || inst.phoneNumber || `#${inst.id.slice(-4)}`}
