@@ -49,7 +49,11 @@ export default function ExtractionPage() {
 
   useEffect(() => {
     if (currentBusiness?.id) {
-      waApi.listInstances(currentBusiness.id).then(res => setInstances(res.data)).catch(() => {});
+      waApi.listInstances(currentBusiness.id).then(res => {
+        if (res.data && Array.isArray(res.data.instances)) {
+          setInstances(res.data.instances);
+        }
+      }).catch(() => {});
       loadFields();
     }
   }, [currentBusiness?.id]);

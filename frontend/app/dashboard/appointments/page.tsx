@@ -90,7 +90,11 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (currentBusiness?.id) {
-      waApi.listInstances(currentBusiness.id).then((res: any) => setInstances(res.data)).catch(() => {});
+      waApi.listInstances(currentBusiness.id).then((res: any) => {
+        if (res.data && Array.isArray(res.data.instances)) {
+          setInstances(res.data.instances);
+        }
+      }).catch(() => {});
       loadAppointments();
       loadAvailability();
       loadGoogleCalendarStatus();

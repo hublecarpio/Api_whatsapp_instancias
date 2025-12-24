@@ -224,7 +224,15 @@ export default function PromptPage() {
       setBotEnabled(currentBusiness.botEnabled);
       const version = (currentBusiness as any).agentVersion || 'v1';
       setAgentVersion(version);
-      waApi.listInstances(currentBusiness.id).then(res => setInstances(res.data)).catch(() => {});
+      waApi.listInstances(currentBusiness.id).then(res => {
+        const data = res.data;
+        if (data && Array.isArray(data.instances)) {
+          setInstances(data.instances);
+          if (data.limits) {
+            useInstanceStore.getState().setLimits(data.limits);
+          }
+        }
+      }).catch(() => {});
       loadData();
       loadAgentFiles();
       loadInjectionCode();
@@ -1146,7 +1154,7 @@ export default function PromptPage() {
                       updateInst(selectedInstanceId, { businessObjective: 'SALES' });
                     } else if (currentBusiness) {
                       await businessApi.update(currentBusiness.id, { businessObjective: 'SALES' } as any);
-                      updateBusiness({ ...currentBusiness, businessObjective: 'SALES' } as any);
+                      updateBusiness(currentBusiness.id, { businessObjective: 'SALES' } as any);
                     }
                     setSuccess('Objetivo actualizado');
                     setTimeout(() => setSuccess(''), 2000);
@@ -1171,7 +1179,7 @@ export default function PromptPage() {
                       updateInst(selectedInstanceId, { businessObjective: 'APPOINTMENTS' });
                     } else if (currentBusiness) {
                       await businessApi.update(currentBusiness.id, { businessObjective: 'APPOINTMENTS' } as any);
-                      updateBusiness({ ...currentBusiness, businessObjective: 'APPOINTMENTS' } as any);
+                      updateBusiness(currentBusiness.id, { businessObjective: 'APPOINTMENTS' } as any);
                     }
                     setSuccess('Objetivo actualizado');
                     setTimeout(() => setSuccess(''), 2000);
