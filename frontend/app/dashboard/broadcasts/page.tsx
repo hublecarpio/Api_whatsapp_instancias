@@ -583,9 +583,11 @@ export default function BroadcastsPage() {
       loadInstanceAndTemplates();
       loadAvailableVariables();
       waApi.listInstances(currentBusiness.id).then(res => {
-        setInstances(res.data || []);
-        if (res.data?.length > 0 && !selectedInstanceId) {
-          setSelectedInstanceId(res.data[0].id);
+        if (res.data && Array.isArray(res.data.instances)) {
+          setInstances(res.data.instances);
+          if (res.data.instances.length > 0 && !selectedInstanceId) {
+            setSelectedInstanceId(res.data.instances[0].id);
+          }
         }
       }).catch(err => {
         console.error('Failed to load instances:', err);
@@ -632,16 +634,45 @@ export default function BroadcastsPage() {
     return <div className="p-6 text-gray-500">Selecciona un negocio primero</div>;
   }
 
+  const selectedInstance = instances.find((i: any) => i.id === selectedInstanceId);
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-white">Envio Masivo</h1>
-        <button
-          onClick={() => setShowNewCampaign(true)}
-          className="btn btn-primary"
-        >
-          + Nueva Campana
-        </button>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-white">Envio Masivo</h1>
+          {instances.length > 1 && (
+            <select
+              value={selectedInstanceId || ''}
+              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              className="input py-2 px-3 text-sm min-w-[180px]"
+            >
+              <option value="">Seleccionar instancia</option>
+              {instances.map((inst: any) => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {selectedInstance && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-card border border-dark-border rounded-lg">
+              <div className={`w-2 h-2 rounded-full ${selectedInstance.status === 'CONNECTED' ? 'bg-accent-success' : 'bg-gray-500'}`} />
+              <span className="text-xs text-gray-400">Emisor:</span>
+              <span className="text-sm text-white font-medium">
+                {selectedInstance.phoneNumber || selectedInstance.name || 'Instancia'}
+              </span>
+            </div>
+          )}
+          <button
+            onClick={() => setShowNewCampaign(true)}
+            className="btn btn-primary"
+          >
+            + Nueva Campana
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
