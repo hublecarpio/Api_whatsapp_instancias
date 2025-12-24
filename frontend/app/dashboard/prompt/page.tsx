@@ -131,9 +131,8 @@ Directrices:
 export default function PromptPage() {
   const { currentBusiness, updateBusiness } = useBusinessStore();
   const { user } = useAuthStore();
-  const { instances, setInstances } = useInstanceStore();
+  const { instances, setInstances, selectedInstanceId, setSelectedInstanceId, getSelectedInstance } = useInstanceStore();
   const isPro = user?.isPro ?? false;
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [prompt, setPrompt] = useState('');
   const [promptId, setPromptId] = useState<string | null>(null);
   const [bufferSeconds, setBufferSeconds] = useState(7);
@@ -237,21 +236,27 @@ export default function PromptPage() {
   }, [currentBusiness]);
 
   const handleInstanceChange = async (instId: string) => {
-    setSelectedInstanceId(instId);
-    if (currentBusiness) {
-      if (instId && instances.length > 1) {
-        const selectedInstance = instances.find(i => i.id === instId);
-        setBotEnabled(selectedInstance?.botEnabled ?? true);
+    setSelectedInstanceId(instId || null);
+  };
+
+  useEffect(() => {
+    const loadInstanceData = async () => {
+      if (!currentBusiness) return;
+      
+      const selectedInst = getSelectedInstance();
+      if (selectedInstanceId && instances.length > 1 && selectedInst) {
+        setBotEnabled(selectedInst.botEnabled ?? true);
       } else {
         setBotEnabled(currentBusiness.botEnabled);
       }
+      
       setLoading(true);
       try {
-        const res = await promptApi.get(currentBusiness.id, instId || undefined);
+        const res = await promptApi.get(currentBusiness.id, selectedInstanceId || undefined);
         if (res.data) {
           setPrompt(res.data.prompt);
           setPromptId(res.data.id);
-          setBufferSeconds(res.data.bufferSeconds ?? 0);
+          setBufferSeconds(res.data.bufferSeconds ?? 7);
           setHistoryLimit(res.data.historyLimit ?? 10);
           setSplitMessages(res.data.splitMessages ?? true);
           setTools(res.data.tools || []);
@@ -268,8 +273,12 @@ export default function PromptPage() {
       } finally {
         setLoading(false);
       }
-    }
-  };
+      
+      loadAgentFiles();
+    };
+    
+    loadInstanceData();
+  }, [currentBusiness?.id, selectedInstanceId]);
 
   useEffect(() => {
     if (currentBusiness && agentVersion === 'v2') {
@@ -1106,21 +1115,80 @@ export default function PromptPage() {
 
   return (
     <div className="max-w-4xl p-4 sm:p-0">
-      <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">Agente IA</h1>
-        {instances.length > 1 && (
-          <select
-            value={selectedInstanceId}
-            onChange={(e) => handleInstanceChange(e.target.value)}
-            className="input py-2 px-3 text-sm min-w-[160px]"
-          >
-            <option value="">Config. general</option>
-            {instances.map(inst => (
-              <option key={inst.id} value={inst.id}>
-                {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
-              </option>
-            ))}
-          </select>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Agente IA</h1>
+          {instances.length > 1 && (
+            <select
+              value={selectedInstanceId || ''}
+              onChange={(e) => handleInstanceChange(e.target.value)}
+              className="input py-2 px-3 text-sm min-w-[160px]"
+            >
+              <option value="">Config. general</option>
+              {instances.map(inst => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {instances.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Objetivo:</span>
+            <div className="flex gap-1">
+              <button
+                onClick={async () => {
+                  try {
+                    if (currentBusiness && selectedInstanceId) {
+                      await waApi.updateInstance(selectedInstanceId, currentBusiness.id, { businessObjective: 'SALES' });
+                      const { updateInstance: updateInst } = useInstanceStore.getState();
+                      updateInst(selectedInstanceId, { businessObjective: 'SALES' });
+                    } else if (currentBusiness) {
+                      await businessApi.update(currentBusiness.id, { businessObjective: 'SALES' } as any);
+                      updateBusiness({ ...currentBusiness, businessObjective: 'SALES' } as any);
+                    }
+                    setSuccess('Objetivo actualizado');
+                    setTimeout(() => setSuccess(''), 2000);
+                  } catch (err: any) {
+                    setError(err.response?.data?.error || 'Error al cambiar objetivo');
+                  }
+                }}
+                className={`px-3 py-1 text-xs rounded-full font-medium transition-all ${
+                  (selectedInstanceId && getSelectedInstance() ? getSelectedInstance()?.businessObjective : currentBusiness?.businessObjective) === 'APPOINTMENTS'
+                    ? 'bg-dark-hover text-gray-400 hover:bg-gray-600'
+                    : 'bg-accent-success/20 text-accent-success border border-accent-success/50'
+                }`}
+              >
+                🛒 Ventas
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    if (currentBusiness && selectedInstanceId) {
+                      await waApi.updateInstance(selectedInstanceId, currentBusiness.id, { businessObjective: 'APPOINTMENTS' });
+                      const { updateInstance: updateInst } = useInstanceStore.getState();
+                      updateInst(selectedInstanceId, { businessObjective: 'APPOINTMENTS' });
+                    } else if (currentBusiness) {
+                      await businessApi.update(currentBusiness.id, { businessObjective: 'APPOINTMENTS' } as any);
+                      updateBusiness({ ...currentBusiness, businessObjective: 'APPOINTMENTS' } as any);
+                    }
+                    setSuccess('Objetivo actualizado');
+                    setTimeout(() => setSuccess(''), 2000);
+                  } catch (err: any) {
+                    setError(err.response?.data?.error || 'Error al cambiar objetivo');
+                  }
+                }}
+                className={`px-3 py-1 text-xs rounded-full font-medium transition-all ${
+                  (selectedInstanceId && getSelectedInstance() ? getSelectedInstance()?.businessObjective : currentBusiness?.businessObjective) === 'APPOINTMENTS'
+                    ? 'bg-accent-success/20 text-accent-success border border-accent-success/50'
+                    : 'bg-dark-hover text-gray-400 hover:bg-gray-600'
+                }`}
+              >
+                📅 Citas
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
