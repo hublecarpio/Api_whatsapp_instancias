@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { tagsApi } from '@/lib/api';
+import { useInstanceStore } from '@/store/instance';
+import { tagsApi, waApi } from '@/lib/api';
 
 interface Tag {
   id: string;
@@ -11,6 +12,7 @@ interface Tag {
   description?: string;
   order: number;
   isDefault: boolean;
+  instanceId?: string;
   stagePrompt?: {
     id: string;
     promptOverride?: string;
@@ -21,6 +23,8 @@ interface Tag {
 
 export default function TagsPage() {
   const { currentBusiness } = useBusinessStore();
+  const { instances, setInstances } = useInstanceStore();
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
@@ -36,19 +40,26 @@ export default function TagsPage() {
 
   useEffect(() => {
     if (currentBusiness) {
+      waApi.listInstances(currentBusiness.id).then((res: any) => setInstances(res.data)).catch(() => {});
       fetchTags();
     }
   }, [currentBusiness]);
+
+  useEffect(() => {
+    if (currentBusiness) {
+      fetchTags();
+    }
+  }, [selectedInstanceId]);
 
   const fetchTags = async () => {
     if (!currentBusiness) return;
     setLoading(true);
     try {
-      const response = await tagsApi.list(currentBusiness.id);
+      const response = await tagsApi.list(currentBusiness.id, selectedInstanceId || undefined);
       setTags(response.data);
       
       if (response.data.length === 0) {
-        const initRes = await tagsApi.initDefaults(currentBusiness.id);
+        const initRes = await tagsApi.initDefaults(currentBusiness.id, selectedInstanceId || undefined);
         setTags(initRes.data);
       }
     } catch (err) {
@@ -64,6 +75,7 @@ export default function TagsPage() {
     try {
       const newTag = await tagsApi.create({
         business_id: currentBusiness.id,
+        instance_id: selectedInstanceId || undefined,
         name: formData.name,
         color: formData.color,
         description: formData.description
@@ -158,15 +170,31 @@ export default function TagsPage() {
             Gestiona las etapas del pipeline de ventas. El agente AI usara esta informacion para adaptar sus respuestas.
           </p>
         </div>
-        <button
-          onClick={() => { setShowNewForm(true); setEditingTag(null); }}
-          className="btn btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nueva Etapa
-        </button>
+        <div className="flex items-center gap-3">
+          {instances.length > 1 && (
+            <select
+              value={selectedInstanceId}
+              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              className="input py-2 px-3 text-sm min-w-[160px]"
+            >
+              <option value="">Config. general</option>
+              {instances.map(inst => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={() => { setShowNewForm(true); setEditingTag(null); }}
+            className="btn btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nueva Etapa
+          </button>
+        </div>
       </div>
 
       {(showNewForm || editingTag) && (

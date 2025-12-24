@@ -381,6 +381,7 @@ model WhatsAppInstance {
   broadcasts       BroadcastCampaign[]
   followUpConfig   FollowUpConfig?
   agentPrompt      AgentPrompt?
+  tags             Tag[]
 
   @@index([businessId])
   @@index([apiKeyPrefix])
@@ -592,6 +593,7 @@ model MessageLog {
 model Tag {
   id          String   @id @default(uuid())
   businessId  String
+  instanceId  String?
   name        String
   color       String   @default("#6B7280")
   description String?
@@ -600,13 +602,15 @@ model Tag {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  business     Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance     WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   assignments  TagAssignment[]
   history      TagHistory[]
   stagePrompt  StagePrompt?
 
-  @@unique([businessId, name])
+  @@unique([businessId, name, instanceId])
   @@index([businessId, order])
+  @@index([businessId, instanceId])
 }
 
 model TagAssignment {

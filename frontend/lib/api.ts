@@ -302,16 +302,17 @@ export const billingApi = {
 };
 
 export const tagsApi = {
-  list: (businessId: string) => api.get(`/tags?business_id=${businessId}`),
-  create: (data: { business_id: string; name: string; color?: string; description?: string }) =>
+  list: (businessId: string, instanceId?: string) => 
+    api.get(`/tags?business_id=${businessId}${instanceId ? `&instance_id=${instanceId}` : ''}`),
+  create: (data: { business_id: string; instance_id?: string; name: string; color?: string; description?: string }) =>
     api.post('/tags', data),
   update: (id: string, data: { name?: string; color?: string; description?: string; order?: number }) =>
     api.put(`/tags/${id}`, data),
   delete: (id: string) => api.delete(`/tags/${id}`),
   reorder: (businessId: string, tagOrders: { id: string; order: number }[]) =>
     api.put('/tags/reorder', { business_id: businessId, tag_orders: tagOrders }),
-  initDefaults: (businessId: string) =>
-    api.post('/tags/init-defaults', { business_id: businessId }),
+  initDefaults: (businessId: string, instanceId?: string) =>
+    api.post('/tags/init-defaults', { business_id: businessId, instance_id: instanceId }),
   setStagePrompt: (tagId: string, data: { promptOverride?: string; systemContext?: string }) =>
     api.post(`/tags/${tagId}/stage-prompt`, data),
   assign: (data: { business_id: string; contact_phone: string; tag_id: string; source?: string }) =>

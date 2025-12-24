@@ -30,7 +30,7 @@ const DEFAULT_TAGS = [
 
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { business_id } = req.query;
+    const { business_id, instance_id } = req.query;
     
     if (!business_id) {
       res.status(400).json({ error: 'business_id is required' });
@@ -49,8 +49,15 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    const whereClause: any = { businessId: business_id as string };
+    if (instance_id) {
+      whereClause.instanceId = instance_id as string;
+    } else {
+      whereClause.instanceId = null;
+    }
+
     const tags = await prisma.tag.findMany({
-      where: { businessId: business_id as string },
+      where: whereClause,
       include: {
         stagePrompt: true,
         _count: {
@@ -68,7 +75,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response): Promise
 
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { business_id, name, color, description, order } = req.body;
+    const { business_id, instance_id, name, color, description, order } = req.body;
 
     if (!business_id || !name) {
       res.status(400).json({ error: 'business_id and name are required' });
@@ -84,14 +91,22 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
       return;
     }
 
+    const whereClause: any = { businessId: business_id };
+    if (instance_id) {
+      whereClause.instanceId = instance_id;
+    } else {
+      whereClause.instanceId = null;
+    }
+
     const maxOrder = await prisma.tag.aggregate({
-      where: { businessId: business_id },
+      where: whereClause,
       _max: { order: true }
     });
 
     const tag = await prisma.tag.create({
       data: {
         businessId: business_id,
+        instanceId: instance_id || null,
         name,
         color: color || '#6B7280',
         description: description || '',
@@ -201,7 +216,7 @@ router.put('/reorder', authMiddleware, async (req: AuthRequest, res: Response): 
 
 router.post('/init-defaults', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { business_id } = req.body;
+    const { business_id, instance_id } = req.body;
 
     if (!business_id) {
       res.status(400).json({ error: 'business_id is required' });
@@ -217,8 +232,15 @@ router.post('/init-defaults', authMiddleware, async (req: AuthRequest, res: Resp
       return;
     }
 
+    const whereClause: any = { businessId: business_id };
+    if (instance_id) {
+      whereClause.instanceId = instance_id;
+    } else {
+      whereClause.instanceId = null;
+    }
+
     const existingTags = await prisma.tag.count({
-      where: { businessId: business_id }
+      where: whereClause
     });
 
     if (existingTags > 0) {
@@ -229,13 +251,14 @@ router.post('/init-defaults', authMiddleware, async (req: AuthRequest, res: Resp
     const tags = await prisma.tag.createMany({
       data: DEFAULT_TAGS.map(tag => ({
         businessId: business_id,
+        instanceId: instance_id || null,
         ...tag,
         isDefault: true
       }))
     });
 
     const createdTags = await prisma.tag.findMany({
-      where: { businessId: business_id },
+      where: whereClause,
       orderBy: { order: 'asc' }
     });
 
