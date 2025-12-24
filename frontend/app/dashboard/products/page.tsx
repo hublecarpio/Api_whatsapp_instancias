@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { productApi, productMediaApi } from '@/lib/api';
+import { useInstanceStore } from '@/store/instance';
+import { productApi, productMediaApi, waApi } from '@/lib/api';
 
 interface Product {
   id: string;
@@ -15,6 +16,8 @@ interface Product {
 
 export default function ProductsPage() {
   const { currentBusiness } = useBusinessStore();
+  const { instances, setInstances } = useInstanceStore();
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -40,9 +43,16 @@ export default function ProductsPage() {
 
   useEffect(() => {
     if (currentBusiness) {
+      waApi.listInstances(currentBusiness.id).then((res: any) => setInstances(res.data)).catch(() => {});
       fetchProducts();
     }
   }, [currentBusiness]);
+
+  useEffect(() => {
+    if (currentBusiness) {
+      fetchProducts();
+    }
+  }, [selectedInstanceId]);
 
   const filteredProducts = products
     .filter(product => 
@@ -65,7 +75,7 @@ export default function ProductsPage() {
     if (!currentBusiness) return;
     
     try {
-      const response = await productApi.list(currentBusiness.id);
+      const response = await productApi.list(currentBusiness.id, selectedInstanceId || undefined);
       setProducts(response.data);
     } catch (err) {
       console.error('Failed to fetch products:', err);
@@ -199,7 +209,7 @@ export default function ProductsPage() {
         return;
       }
       
-      const response = await productApi.bulkCreate(currentBusiness.id, products);
+      const response = await productApi.bulkCreate(currentBusiness.id, products, selectedInstanceId || undefined);
       fetchProducts();
       alert(`Se crearon ${response.data.created} productos exitosamente${response.data.skipped > 0 ? `. ${response.data.skipped} filas fueron omitidas por datos invalidos.` : ''}`);
     } catch (err: any) {
@@ -272,6 +282,7 @@ export default function ProductsPage() {
       } else {
         await productApi.create({
           businessId: currentBusiness.id,
+          instanceId: selectedInstanceId || null,
           title,
           description,
           price: parseFloat(price),
@@ -313,7 +324,23 @@ export default function ProductsPage() {
   return (
     <div className="p-4 sm:p-0">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">Productos</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Productos</h1>
+          {instances.length > 1 && (
+            <select
+              value={selectedInstanceId}
+              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              className="input py-2 px-3 text-sm min-w-[160px]"
+            >
+              <option value="">Config. general</option>
+              {instances.map(inst => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <input

@@ -71,11 +71,11 @@ export const businessApi = {
 };
 
 export const productApi = {
-  list: (businessId: string) => api.get(`/products?business_id=${businessId}`),
+  list: (businessId: string, instanceId?: string) => api.get(`/products?business_id=${businessId}${instanceId ? `&instance_id=${instanceId}` : ''}`),
   create: (data: any) => api.post('/products', data),
   update: (id: string, data: any) => api.put(`/products/${id}`, data),
   delete: (id: string) => api.delete(`/products/${id}`),
-  bulkCreate: (businessId: string, products: any[]) => api.post('/products/bulk', { businessId, products }),
+  bulkCreate: (businessId: string, products: any[], instanceId?: string) => api.post('/products/bulk', { businessId, products, instanceId }),
   search: (businessId: string, query: string, limit?: number) => api.post('/products/search', { businessId, query, limit })
 };
 
@@ -340,8 +340,8 @@ export const tagsApi = {
 };
 
 export const ordersApi = {
-  list: (businessId: string, status?: string) =>
-    api.get(`/orders?businessId=${businessId}${status ? `&status=${status}` : ''}`),
+  list: (businessId: string, status?: string, instanceId?: string) =>
+    api.get(`/orders?businessId=${businessId}${status ? `&status=${status}` : ''}${instanceId ? `&instanceId=${instanceId}` : ''}`),
   syncPayment: (sessionId: string) =>
     api.post(`/orders/sync-payment/${sessionId}`),
   get: (orderId: string) => api.get(`/orders/${orderId}`),

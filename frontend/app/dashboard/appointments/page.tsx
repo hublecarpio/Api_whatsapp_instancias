@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useBusinessStore } from '@/store/business';
+import { useInstanceStore } from '@/store/instance';
+import { waApi } from '@/lib/api';
 import axios from 'axios';
 
 interface Appointment {
@@ -48,6 +50,8 @@ const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes
 
 export default function AppointmentsPage() {
   const { currentBusiness } = useBusinessStore();
+  const { instances, setInstances } = useInstanceStore();
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'calendar' | 'list' | 'availability' | 'google'>('list');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [availability, setAvailability] = useState<BusinessAvailability[]>([]);
@@ -87,11 +91,18 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (currentBusiness?.id) {
+      waApi.listInstances(currentBusiness.id).then((res: any) => setInstances(res.data)).catch(() => {});
       loadAppointments();
       loadAvailability();
       loadGoogleCalendarStatus();
     }
   }, [currentBusiness?.id, statusFilter]);
+
+  useEffect(() => {
+    if (currentBusiness?.id) {
+      loadAppointments();
+    }
+  }, [selectedInstanceId]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -113,6 +124,7 @@ export default function AppointmentsPage() {
       setLoading(true);
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
+      if (selectedInstanceId) params.set('instanceId', selectedInstanceId);
       
       const response = await axios.get(
         `${process.env.NEXT_PUBLIC_CORE_API_URL || '/api'}/appointments?${params}`,
@@ -303,7 +315,23 @@ export default function AppointmentsPage() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">Citas</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Citas</h1>
+          {instances.length > 1 && (
+            <select
+              value={selectedInstanceId}
+              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              className="input py-2 px-3 text-sm min-w-[160px]"
+            >
+              <option value="">Config. general</option>
+              {instances.map(inst => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         <button
           onClick={() => setShowNewModal(true)}
           className="btn btn-primary"

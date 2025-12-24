@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useBusinessStore } from '@/store/business';
+import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
-import { ordersApi } from '@/lib/api';
+import { ordersApi, waApi } from '@/lib/api';
 import ExtractionFieldsManager from '@/components/ExtractionFieldsManager';
 
 interface OrderItem {
@@ -100,6 +101,8 @@ const LINK_STATUS_COLORS: Record<string, string> = {
 
 export default function OrdersPage() {
   const { currentBusiness } = useBusinessStore();
+  const { instances, setInstances } = useInstanceStore();
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const { user } = useAuthStore();
   const canUsePaymentLinks = user?.paymentLinkEnabled ?? false;
   const [activeTab, setActiveTab] = useState<'orders' | 'links' | 'extraction'>('orders');
@@ -154,6 +157,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (currentBusiness?.id) {
+      waApi.listInstances(currentBusiness.id).then((res: any) => setInstances(res.data)).catch(() => {});
       if (activeTab === 'orders') {
         loadOrders();
       } else {
@@ -162,12 +166,22 @@ export default function OrdersPage() {
     }
   }, [currentBusiness?.id, statusFilter, linkStatusFilter, activeTab]);
 
+  useEffect(() => {
+    if (currentBusiness?.id) {
+      if (activeTab === 'orders') {
+        loadOrders();
+      } else if (activeTab === 'links') {
+        loadPaymentLinks();
+      }
+    }
+  }, [selectedInstanceId]);
+
   const loadOrders = async () => {
     if (!currentBusiness?.id) return;
     
     try {
       setLoading(true);
-      const response = await ordersApi.list(currentBusiness.id, statusFilter || undefined);
+      const response = await ordersApi.list(currentBusiness.id, statusFilter || undefined, selectedInstanceId || undefined);
       setOrders(response.data);
     } catch (error) {
       console.error('Error loading orders:', error);
@@ -276,9 +290,25 @@ export default function OrdersPage() {
   return (
     <div className="p-3 sm:p-6">
       <div className="mb-4 sm:mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">
-          {canUsePaymentLinks ? 'Pedidos y Enlaces' : 'Pedidos y Vouchers'}
-        </h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">
+            {canUsePaymentLinks ? 'Pedidos y Enlaces' : 'Pedidos y Vouchers'}
+          </h1>
+          {instances.length > 1 && (
+            <select
+              value={selectedInstanceId}
+              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              className="input py-2 px-3 text-sm min-w-[160px]"
+            >
+              <option value="">Config. general</option>
+              {instances.map(inst => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         <p className="text-gray-400 text-sm mt-1">
           {canUsePaymentLinks ? 'Gestiona pedidos y enlaces de pago' : 'Gestiona pedidos y confirma pagos con voucher'}
         </p>
