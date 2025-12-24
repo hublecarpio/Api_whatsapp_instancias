@@ -1029,6 +1029,8 @@ router.get('/instances/:businessId', async (req: AuthRequest, res: Response) => 
       phoneNumber: inst.phoneNumber,
       status: inst.status,
       isActive: inst.isActive,
+      botEnabled: inst.botEnabled,
+      businessObjective: inst.businessObjective,
       lastConnection: inst.lastConnection,
       createdAt: inst.createdAt,
       webhookUrl: inst.provider === 'META_CLOUD' ? getPublicWebhookUrl(`/webhook/meta/${inst.id}`) : null,
