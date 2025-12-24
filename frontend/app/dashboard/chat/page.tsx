@@ -708,11 +708,15 @@ export default function ChatPage() {
     }
   }, [currentBusiness, setInstances]);
   
+  const [instanceSwitching, setInstanceSwitching] = useState(false);
+  
   useEffect(() => {
     if (currentBusiness) {
+      setInstanceSwitching(true);
       setSelectedPhone(null);
       setMessages([]);
-      fetchConversations();
+      setConversations([]);
+      fetchConversations().finally(() => setInstanceSwitching(false));
     }
   }, [selectedInstanceId]);
 
@@ -1019,25 +1023,60 @@ export default function ChatPage() {
       <div className="flex-1 flex overflow-hidden sm:rounded-2xl border border-dark-border bg-dark-surface shadow-dark-lg">
         <div className={`${showChatList ? 'w-full sm:w-80' : 'hidden sm:block sm:w-0'} transition-all duration-300 overflow-hidden border-r border-dark-border flex flex-col`}>
           <div className="p-3 border-b border-dark-border bg-dark-card">
+            {instances.length > 1 && (
+              <div className="mb-3 p-2 bg-dark-bg rounded-lg border border-dark-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-gray-400 uppercase tracking-wide">Bandeja de</span>
+                  {instanceSwitching && (
+                    <div className="animate-spin w-3 h-3 border border-neon-blue border-t-transparent rounded-full"></div>
+                  )}
+                </div>
+                <div className="flex gap-1 flex-wrap">
+                  <button
+                    onClick={() => {
+                      const { setSelectedInstanceId } = useInstanceStore.getState();
+                      setSelectedInstanceId(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      !selectedInstanceId 
+                        ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/30' 
+                        : 'bg-dark-surface text-gray-400 hover:text-white hover:bg-dark-surface/80'
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  {instances.map((inst: any) => {
+                    const isConnected = inst.status === 'open' || inst.status === 'connected';
+                    return (
+                      <button
+                        key={inst.id}
+                        onClick={() => {
+                          const { setSelectedInstanceId } = useInstanceStore.getState();
+                          setSelectedInstanceId(inst.id);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                          selectedInstanceId === inst.id
+                            ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/30'
+                            : 'bg-dark-surface text-gray-400 hover:text-white hover:bg-dark-surface/80'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                        {inst.name || inst.phoneNumber || `#${inst.id.slice(-4)}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <h2 className="font-semibold text-white">Chats</h2>
-                {instances.length > 1 && (
-                  <select
-                    value={selectedInstanceId || ''}
-                    onChange={(e) => {
-                      const { setSelectedInstanceId } = useInstanceStore.getState();
-                      setSelectedInstanceId(e.target.value || null);
-                    }}
-                    className="text-xs bg-dark-surface border border-dark-border rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-neon-blue"
-                  >
-                    <option value="">Todas</option>
-                    {instances.map((inst: any) => (
-                      <option key={inst.id} value={inst.id}>
-                        {inst.name || inst.phoneNumber || inst.id.slice(-8)}
-                      </option>
-                    ))}
-                  </select>
+                {selectedInstanceId && instances.length > 1 && (
+                  <span className="px-2 py-0.5 bg-neon-blue/20 text-neon-blue text-xs rounded-full">
+                    {instances.find((i: any) => i.id === selectedInstanceId)?.name || 
+                     instances.find((i: any) => i.id === selectedInstanceId)?.phoneNumber || 
+                     'Instancia'}
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -1096,8 +1135,11 @@ export default function ChatPage() {
           </div>
           
           <div className="flex-1 overflow-y-auto scrollbar-thin scroll-smooth-ios">
-            {loading ? (
-              <div className="p-4 text-center"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-neon-blue mx-auto" /></div>
+            {(loading || instanceSwitching) ? (
+              <div className="p-4 text-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-neon-blue mx-auto mb-2" />
+                {instanceSwitching && <p className="text-xs text-gray-400">Cambiando bandeja...</p>}
+              </div>
             ) : filteredConversations.length === 0 ? (
               <div className="p-6 text-center text-gray-500 text-sm">
                 <div className="w-16 h-16 mx-auto mb-3 bg-dark-card rounded-full flex items-center justify-center">
