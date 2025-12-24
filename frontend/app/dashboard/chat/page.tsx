@@ -624,12 +624,14 @@ export default function ChatPage() {
         await templatesApi.send(currentBusiness.id, {
           templateName: selectedNewChatTemplate.name,
           to: cleanPhone,
-          variables: newChatTemplateVariables.length > 0 ? newChatTemplateVariables : undefined
+          variables: newChatTemplateVariables.length > 0 ? newChatTemplateVariables : undefined,
+          instanceId: selectedInstanceId || undefined
         });
       } else if (newChatMessage.trim()) {
         await waApi.send(currentBusiness.id, { 
           to: cleanPhone, 
-          message: newChatMessage 
+          message: newChatMessage,
+          instanceId: selectedInstanceId || undefined
         });
       } else {
         setError('Escribe un mensaje o selecciona una plantilla');
@@ -745,7 +747,7 @@ export default function ChatPage() {
         const uploadRes = await mediaApi.upload(currentBusiness.id, fileCopy.file);
         const { url, type, mimetype } = uploadRes.data;
         
-        const sendData: any = { to: selectedPhone };
+        const sendData: any = { to: selectedPhone, instanceId: selectedInstanceId || undefined };
         if (type === 'image') {
           sendData.imageUrl = url;
           sendData.message = messageCopy || undefined;
@@ -764,7 +766,7 @@ export default function ChatPage() {
         setPreviewFile(null);
         setUploading(false);
       } else {
-        await waApi.send(currentBusiness.id, { to: selectedPhone, message: messageCopy });
+        await waApi.send(currentBusiness.id, { to: selectedPhone, message: messageCopy, instanceId: selectedInstanceId || undefined });
       }
       
       fetchMessages(selectedPhone);

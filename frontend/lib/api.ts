@@ -270,6 +270,7 @@ export const templatesApi = {
     to: string;
     variables?: string[];
     headerVariables?: string[];
+    instanceId?: string;
   }) => api.post(`/templates/${businessId}/send-template`, data)
 };
 

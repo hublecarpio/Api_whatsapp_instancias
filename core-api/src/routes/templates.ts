@@ -27,15 +27,20 @@ function normalizeArgentinePhone(phone: string): string {
 
 router.use(authMiddleware);
 
-async function getMetaCredentialForBusiness(userId: string, businessId: string) {
+async function getMetaCredentialForBusiness(userId: string, businessId: string, instanceId?: string) {
   const business = await prisma.business.findFirst({
     where: { id: businessId, userId }
   });
   
   if (!business) return null;
   
+  const whereClause: any = { businessId, provider: 'META_CLOUD' };
+  if (instanceId) {
+    whereClause.id = instanceId;
+  }
+  
   const instance = await prisma.whatsAppInstance.findFirst({
-    where: { businessId, provider: 'META_CLOUD' },
+    where: whereClause,
     include: { metaCredential: true }
   });
   
@@ -282,13 +287,13 @@ router.delete('/:businessId/:templateId', async (req: AuthRequest, res: Response
 
 router.post('/:businessId/send-template', async (req: AuthRequest, res: Response) => {
   try {
-    const { templateName, to, variables, headerVariables } = req.body;
+    const { templateName, to, variables, headerVariables, instanceId } = req.body;
     
     if (!templateName || !to) {
       return res.status(400).json({ error: 'templateName and to are required' });
     }
     
-    const credential = await getMetaCredentialForBusiness(req.userId!, req.params.businessId);
+    const credential = await getMetaCredentialForBusiness(req.userId!, req.params.businessId, instanceId);
     
     if (!credential) {
       return res.status(404).json({ error: 'No Meta Cloud instance found' });

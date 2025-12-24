@@ -993,7 +993,7 @@ router.get('/:businessId/qr', async (req: AuthRequest, res: Response) => {
 
 router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
   try {
-    const { to, message, imageUrl, videoUrl, audioUrl, fileUrl, fileName, mimeType } = req.body;
+    const { to, message, imageUrl, videoUrl, audioUrl, fileUrl, fileName, mimeType, instanceId } = req.body;
     
     const user = await getUserWithRole(req.userId!);
     if (!user) {
@@ -1013,8 +1013,13 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
       }
     }
     
+    const instanceWhere: any = { businessId: req.params.businessId };
+    if (instanceId) {
+      instanceWhere.id = instanceId;
+    }
+    
     const instance = await prisma.whatsAppInstance.findFirst({
-      where: { businessId: req.params.businessId },
+      where: instanceWhere,
       include: { metaCredential: true }
     });
     
