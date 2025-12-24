@@ -32,6 +32,14 @@ export function GlassProvider({ children }: { children: ReactNode }) {
     fetchGlassMode();
   }, [fetchGlassMode]);
 
+  useEffect(() => {
+    if (glassMode) {
+      document.body.classList.add('glass-mode');
+    } else {
+      document.body.classList.remove('glass-mode');
+    }
+  }, [glassMode]);
+
   const getCardClass = (baseClass?: string) => {
     if (!glassMode) return baseClass || 'card';
     const base = baseClass || '';

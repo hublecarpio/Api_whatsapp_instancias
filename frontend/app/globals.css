@@ -267,7 +267,7 @@ input, textarea, select {
 }
 
 .glass-card:hover {
-  @apply bg-white/8 border-white/15;
+  @apply bg-white/10 border-white/20;
 }
 
 .glass-modal {
@@ -286,11 +286,49 @@ input, textarea, select {
 }
 
 .glass-input {
-  @apply bg-white/5 backdrop-blur-md border border-white/15 focus:border-white/30 focus:bg-white/10;
+  @apply bg-white/5 backdrop-blur-md border border-white/20 focus:border-white/30 focus:bg-white/10;
   transition: all 0.2s ease;
 }
 
 .glass-button {
   @apply bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 hover:border-white/30;
   transition: all 0.2s ease;
+}
+
+body.glass-mode .card {
+  @apply bg-white/5 backdrop-blur-xl border-white/10 shadow-2xl;
+  transition: all 0.3s ease;
+}
+
+body.glass-mode .card:hover {
+  @apply bg-white/10 border-white/20;
+}
+
+body.glass-mode .bg-dark-surface {
+  @apply bg-white/5 backdrop-blur-xl;
+}
+
+body.glass-mode .bg-dark-card {
+  @apply bg-white/10 backdrop-blur-lg;
+}
+
+body.glass-mode aside {
+  @apply bg-white/5 backdrop-blur-xl border-r-white/10;
+}
+
+body.glass-mode header {
+  @apply bg-white/5 backdrop-blur-xl border-b-white/10;
+}
+
+body.glass-mode .input {
+  @apply bg-white/5 backdrop-blur-md border-white/20;
+}
+
+body.glass-mode .input:focus {
+  @apply bg-white/10 border-white/30;
+}
+
+body.glass-mode [role="dialog"] > div,
+body.glass-mode .modal-content {
+  @apply bg-white/10 backdrop-blur-2xl border-white/20 shadow-2xl;
 }

@@ -1759,7 +1759,8 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
       defaultReasoningV2, 
       availableModels,
       maxTokensPerRequest,
-      enableGPT5Features 
+      enableGPT5Features,
+      glassMode
     } = req.body;
 
     const updates: any = {};
@@ -1837,6 +1838,13 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
         return res.status(400).json({ error: 'enableGPT5Features must be a boolean' });
       }
       updates.enableGPT5Features = enableGPT5Features;
+    }
+    
+    if (glassMode !== undefined) {
+      if (typeof glassMode !== 'boolean') {
+        return res.status(400).json({ error: 'glassMode must be a boolean' });
+      }
+      updates.glassMode = glassMode;
     }
     
     if (Object.keys(updates).length === 0) {
