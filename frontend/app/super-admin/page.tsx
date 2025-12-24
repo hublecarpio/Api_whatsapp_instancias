@@ -1182,7 +1182,7 @@ function SystemTab({ token }: { token: string }) {
 
             <div className="pt-4 border-t border-dark-border">
               <h4 className="text-sm font-medium text-gray-400 mb-3">Configuracion de UI</h4>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 mb-4">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1197,6 +1197,161 @@ function SystemTab({ token }: { token: string }) {
                   </div>
                 </label>
               </div>
+            </div>
+
+            <div className="pt-4 border-t border-dark-border">
+              <h4 className="text-sm font-medium text-gray-400 mb-3">Branding / White-Label</h4>
+              <p className="text-xs text-gray-500 mb-4">Personaliza la identidad visual de la plataforma para marca blanca</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Nombre de la App
+                  </label>
+                  <input
+                    type="text"
+                    value={aiSettings.appName || 'Effi'}
+                    onChange={(e) => handleAiSettingChange('appName', e.target.value)}
+                    className="input w-full"
+                    placeholder="Effi"
+                    disabled={saving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Tagline
+                  </label>
+                  <input
+                    type="text"
+                    value={aiSettings.appTagline || 'WhatsApp AI Platform'}
+                    onChange={(e) => handleAiSettingChange('appTagline', e.target.value)}
+                    className="input w-full"
+                    placeholder="WhatsApp AI Platform"
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    URL del Logo
+                  </label>
+                  <input
+                    type="url"
+                    value={aiSettings.logoUrl || ''}
+                    onChange={(e) => handleAiSettingChange('logoUrl', e.target.value || null)}
+                    className="input w-full"
+                    placeholder="https://ejemplo.com/logo.png"
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Imagen PNG/SVG transparente recomendada (altura 40px)</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    URL del Favicon
+                  </label>
+                  <input
+                    type="url"
+                    value={aiSettings.faviconUrl || ''}
+                    onChange={(e) => handleAiSettingChange('faviconUrl', e.target.value || null)}
+                    className="input w-full"
+                    placeholder="https://ejemplo.com/favicon.ico"
+                    disabled={saving}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Icono .ico o .png 32x32px</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Color Primario
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={aiSettings.primaryColor || '#00D4FF'}
+                      onChange={(e) => handleAiSettingChange('primaryColor', e.target.value)}
+                      className="w-10 h-10 rounded border border-dark-border cursor-pointer"
+                      disabled={saving}
+                    />
+                    <input
+                      type="text"
+                      value={aiSettings.primaryColor || '#00D4FF'}
+                      onChange={(e) => handleAiSettingChange('primaryColor', e.target.value)}
+                      className="input flex-1"
+                      placeholder="#00D4FF"
+                      disabled={saving}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Botones, links, acentos</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Color Secundario
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={aiSettings.secondaryColor || '#8B5CF6'}
+                      onChange={(e) => handleAiSettingChange('secondaryColor', e.target.value)}
+                      className="w-10 h-10 rounded border border-dark-border cursor-pointer"
+                      disabled={saving}
+                    />
+                    <input
+                      type="text"
+                      value={aiSettings.secondaryColor || '#8B5CF6'}
+                      onChange={(e) => handleAiSettingChange('secondaryColor', e.target.value)}
+                      className="input flex-1"
+                      placeholder="#8B5CF6"
+                      disabled={saving}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Elementos secundarios</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Color de Acento
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={aiSettings.accentColor || '#10B981'}
+                      onChange={(e) => handleAiSettingChange('accentColor', e.target.value)}
+                      className="w-10 h-10 rounded border border-dark-border cursor-pointer"
+                      disabled={saving}
+                    />
+                    <input
+                      type="text"
+                      value={aiSettings.accentColor || '#10B981'}
+                      onChange={(e) => handleAiSettingChange('accentColor', e.target.value)}
+                      className="input flex-1"
+                      placeholder="#10B981"
+                      disabled={saving}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Success, estados positivos</p>
+                </div>
+              </div>
+
+              {(aiSettings.logoUrl || aiSettings.appName !== 'Effi') && (
+                <div className="mt-4 p-4 bg-dark-bg rounded-lg border border-dark-border">
+                  <p className="text-xs text-gray-400 mb-2">Vista previa:</p>
+                  <div className="flex items-center gap-3">
+                    {aiSettings.logoUrl ? (
+                      <img src={aiSettings.logoUrl} alt="Logo" className="h-8 object-contain" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: aiSettings.primaryColor || '#00D4FF' }}>
+                        {(aiSettings.appName || 'E')[0]}
+                      </div>
+                    )}
+                    <span className="font-semibold text-white">{aiSettings.appName || 'Effi'}</span>
+                    <span className="text-xs text-gray-400">|</span>
+                    <span className="text-xs text-gray-400">{aiSettings.appTagline || 'WhatsApp AI Platform'}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="pt-4 border-t border-dark-border">

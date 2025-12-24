@@ -1060,6 +1060,13 @@ model PlatformSettings {
   maxTokensPerRequest   Int             @default(4096)
   enableGPT5Features    Boolean         @default(true)
   glassMode             Boolean         @default(false)
+  appName               String          @default("Effi")
+  appTagline            String          @default("WhatsApp AI Platform")
+  logoUrl               String?
+  faviconUrl            String?
+  primaryColor          String          @default("#00D4FF")
+  secondaryColor        String          @default("#8B5CF6")
+  accentColor           String          @default("#10B981")
   updatedAt             DateTime        @updatedAt
   updatedBy             String?
 }

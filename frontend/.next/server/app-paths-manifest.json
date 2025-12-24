@@ -1,5 +1,7 @@
 {
-  "/login/page": "app/login/page.js",
   "/super-admin/page": "app/super-admin/page.js",
-  "/dashboard/api-docs/page": "app/dashboard/api-docs/page.js"
+  "/dashboard/api-docs/page": "app/dashboard/api-docs/page.js",
+  "/dashboard/reminders/page": "app/dashboard/reminders/page.js",
+  "/dashboard/business/page": "app/dashboard/business/page.js",
+  "/dashboard/prompt/page": "app/dashboard/prompt/page.js"
 }

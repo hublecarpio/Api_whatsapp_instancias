@@ -141,15 +141,40 @@ router.get('/ui-settings', async (req: Request, res: Response) => {
   try {
     const settings = await prisma.platformSettings.findUnique({
       where: { id: 'default' },
-      select: { glassMode: true }
+      select: { 
+        glassMode: true,
+        appName: true,
+        appTagline: true,
+        logoUrl: true,
+        faviconUrl: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true
+      }
     });
     
     res.json({
-      glassMode: settings?.glassMode ?? false
+      glassMode: settings?.glassMode ?? false,
+      appName: settings?.appName ?? 'Effi',
+      appTagline: settings?.appTagline ?? 'WhatsApp AI Platform',
+      logoUrl: settings?.logoUrl ?? null,
+      faviconUrl: settings?.faviconUrl ?? null,
+      primaryColor: settings?.primaryColor ?? '#00D4FF',
+      secondaryColor: settings?.secondaryColor ?? '#8B5CF6',
+      accentColor: settings?.accentColor ?? '#10B981'
     });
   } catch (error: any) {
     console.error('Error fetching UI settings:', error);
-    res.json({ glassMode: false });
+    res.json({ 
+      glassMode: false,
+      appName: 'Effi',
+      appTagline: 'WhatsApp AI Platform',
+      logoUrl: null,
+      faviconUrl: null,
+      primaryColor: '#00D4FF',
+      secondaryColor: '#8B5CF6',
+      accentColor: '#10B981'
+    });
   }
 });
 
