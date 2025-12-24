@@ -1060,6 +1060,7 @@ model PlatformSettings {
   maxTokensPerRequest   Int             @default(4096)
   enableGPT5Features    Boolean         @default(true)
   glassMode             Boolean         @default(false)
+  brandingEnabled       Boolean         @default(true)
   appName               String          @default("Effi")
   appTagline            String          @default("WhatsApp AI Platform")
   logoUrl               String?
