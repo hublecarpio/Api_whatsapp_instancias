@@ -208,14 +208,21 @@ export default function InstanceSelector({
                     </p>
                   </div>
                 </div>
-                <div className="text-xs text-gray-500">
-                  {instance.status === 'open' || instance.status === 'connected' 
-                    ? 'Conectado' 
-                    : instance.status === 'pending_qr'
-                    ? 'Esperando QR'
-                    : instance.status === 'pending_credentials'
-                    ? 'Config. pendiente'
-                    : 'Desconectado'}
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-xs text-gray-500">
+                    {instance.status === 'open' || instance.status === 'connected' 
+                      ? 'Conectado' 
+                      : instance.status === 'pending_qr'
+                      ? 'Esperando QR'
+                      : instance.status === 'pending_credentials'
+                      ? 'Config. pendiente'
+                      : 'Desconectado'}
+                  </span>
+                  {(instance.status === 'open' || instance.status === 'connected') && (
+                    <span className="text-xs text-neon-blue flex items-center gap-1">
+                      🔑 Ver API
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
