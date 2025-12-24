@@ -101,8 +101,7 @@ const LINK_STATUS_COLORS: Record<string, string> = {
 
 export default function OrdersPage() {
   const { currentBusiness } = useBusinessStore();
-  const { instances, setInstances } = useInstanceStore();
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
+  const { instances, setInstances, selectedInstanceId, setSelectedInstanceId } = useInstanceStore();
   const { user } = useAuthStore();
   const canUsePaymentLinks = user?.paymentLinkEnabled ?? false;
   const [activeTab, setActiveTab] = useState<'orders' | 'links' | 'extraction'>('orders');
@@ -296,8 +295,8 @@ export default function OrdersPage() {
           </h1>
           {instances.length > 1 && (
             <select
-              value={selectedInstanceId}
-              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              value={selectedInstanceId || ''}
+              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
               className="input py-2 px-3 text-sm min-w-[160px]"
             >
               <option value="">Config. general</option>

@@ -51,9 +51,13 @@ export const useInstanceStore = create<InstanceState>()(
       setInstances: (instances) => {
         const state = get();
         const safeInstances = Array.isArray(instances) ? instances : [];
-        const newSelectedId = safeInstances.length > 0 
-          ? (safeInstances.find(i => i.id === state.selectedInstanceId)?.id || safeInstances[0].id)
-          : null;
+        // Preserve user's selected instance if it exists in the new list
+        // Only reset to first instance if current selection is not in the list
+        const currentSelectionExists = state.selectedInstanceId && 
+          safeInstances.some(i => i.id === state.selectedInstanceId);
+        const newSelectedId = currentSelectionExists 
+          ? state.selectedInstanceId 
+          : (safeInstances.length > 0 ? safeInstances[0].id : null);
         set({ instances: safeInstances, selectedInstanceId: newSelectedId });
       },
       

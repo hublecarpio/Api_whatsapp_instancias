@@ -23,8 +23,7 @@ interface Tag {
 
 export default function TagsPage() {
   const { currentBusiness } = useBusinessStore();
-  const { instances, setInstances } = useInstanceStore();
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
+  const { instances, setInstances, selectedInstanceId, setSelectedInstanceId } = useInstanceStore();
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
@@ -173,8 +172,8 @@ export default function TagsPage() {
         <div className="flex items-center gap-3">
           {instances.length > 1 && (
             <select
-              value={selectedInstanceId}
-              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              value={selectedInstanceId || ''}
+              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
               className="input py-2 px-3 text-sm min-w-[160px]"
             >
               <option value="">Config. general</option>

@@ -50,8 +50,7 @@ const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes
 
 export default function AppointmentsPage() {
   const { currentBusiness } = useBusinessStore();
-  const { instances, setInstances } = useInstanceStore();
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
+  const { instances, setInstances, selectedInstanceId, setSelectedInstanceId } = useInstanceStore();
   const [activeTab, setActiveTab] = useState<'calendar' | 'list' | 'availability' | 'google'>('list');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [availability, setAvailability] = useState<BusinessAvailability[]>([]);
@@ -319,8 +318,8 @@ export default function AppointmentsPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-white">Citas</h1>
           {instances.length > 1 && (
             <select
-              value={selectedInstanceId}
-              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              value={selectedInstanceId || ''}
+              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
               className="input py-2 px-3 text-sm min-w-[160px]"
             >
               <option value="">Config. general</option>

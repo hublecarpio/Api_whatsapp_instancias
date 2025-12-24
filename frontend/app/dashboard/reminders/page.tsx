@@ -100,7 +100,7 @@ function formatTimeRemaining(scheduledAt: string): string {
 
 export default function RemindersPage() {
   const { currentBusiness } = useBusinessStore();
-  const { instances, setInstances } = useInstanceStore();
+  const { instances, setInstances, selectedInstanceId, setSelectedInstanceId } = useInstanceStore();
   const [config, setConfig] = useState<FollowUpConfig | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [templates, setTemplates] = useState<MetaTemplate[]>([]);
@@ -114,7 +114,6 @@ export default function RemindersPage() {
   const [expandedReminder, setExpandedReminder] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
   const [filterInstanceId, setFilterInstanceId] = useState<string>('');
-  const [configInstanceId, setConfigInstanceId] = useState<string>('');
 
   useEffect(() => {
     if (currentBusiness) {
@@ -122,6 +121,12 @@ export default function RemindersPage() {
       waApi.listInstances(currentBusiness.id).then(res => setInstances(res.data)).catch(() => {});
     }
   }, [currentBusiness]);
+
+  useEffect(() => {
+    if (currentBusiness) {
+      fetchData();
+    }
+  }, [selectedInstanceId]);
 
   useEffect(() => {
     if (!currentBusiness || !['pending', 'history', 'logs'].includes(activeTab)) return;
@@ -160,7 +165,7 @@ export default function RemindersPage() {
     setLoading(true);
     try {
       const [configRes, remindersRes] = await Promise.all([
-        remindersApi.getConfig(currentBusiness.id, instId || configInstanceId || undefined),
+        remindersApi.getConfig(currentBusiness.id, instId || selectedInstanceId || undefined),
         remindersApi.list(currentBusiness.id)
       ]);
       
@@ -217,7 +222,7 @@ export default function RemindersPage() {
     if (!currentBusiness || !config) return;
     setSaving(true);
     try {
-      const configData = configInstanceId ? { ...config, instanceId: configInstanceId } : config;
+      const configData = selectedInstanceId ? { ...config, instanceId: selectedInstanceId } : config;
       await remindersApi.updateConfig(currentBusiness.id, configData);
     } catch (err) {
       console.error('Error saving config:', err);
@@ -227,7 +232,7 @@ export default function RemindersPage() {
   };
 
   const handleConfigInstanceChange = async (instId: string) => {
-    setConfigInstanceId(instId);
+    setSelectedInstanceId(instId || null);
     await fetchData(instId);
   };
 
@@ -439,7 +444,7 @@ export default function RemindersPage() {
                 Configurar seguimientos para:
               </label>
               <select
-                value={configInstanceId}
+                value={selectedInstanceId || ''}
                 onChange={(e) => handleConfigInstanceChange(e.target.value)}
                 className="input"
               >

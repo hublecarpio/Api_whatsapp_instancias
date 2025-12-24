@@ -28,13 +28,12 @@ const FIELD_TYPES = [
 
 export default function ExtractionPage() {
   const { currentBusiness } = useBusinessStore();
-  const { instances, setInstances } = useInstanceStore();
+  const { instances, setInstances, selectedInstanceId, setSelectedInstanceId } = useInstanceStore();
   const [fields, setFields] = useState<ExtractionField[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingField, setEditingField] = useState<ExtractionField | null>(null);
@@ -212,8 +211,8 @@ export default function ExtractionPage() {
         <div className="flex items-center gap-3">
           {instances.length > 1 && (
             <select
-              value={selectedInstanceId}
-              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              value={selectedInstanceId || ''}
+              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
               className="text-sm bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-gray-300"
             >
               <option value="">Config. general</option>

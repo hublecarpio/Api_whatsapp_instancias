@@ -88,12 +88,11 @@ interface AvailableVariable {
 
 export default function BroadcastsPage() {
   const { currentBusiness } = useBusinessStore();
-  const { instances, setInstances } = useInstanceStore();
+  const { instances, setInstances, selectedInstanceId, setSelectedInstanceId } = useInstanceStore();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [templates, setTemplates] = useState<MetaTemplate[]>([]);
   const [instance, setInstance] = useState<WhatsAppInstance | null>(null);
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
@@ -924,8 +923,8 @@ export default function BroadcastsPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Enviar desde</label>
                   <select
-                    value={selectedInstanceId}
-                    onChange={e => setSelectedInstanceId(e.target.value)}
+                    value={selectedInstanceId || ''}
+                    onChange={e => setSelectedInstanceId(e.target.value || null)}
                     className="input w-full"
                   >
                     {instances.map((inst: any) => (
