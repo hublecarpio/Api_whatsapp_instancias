@@ -1181,6 +1181,25 @@ function SystemTab({ token }: { token: string }) {
             </div>
 
             <div className="pt-4 border-t border-dark-border">
+              <h4 className="text-sm font-medium text-gray-400 mb-3">Configuracion de UI</h4>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={aiSettings.glassMode || false}
+                    onChange={(e) => handleAiSettingChange('glassMode', e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-600 bg-dark-card text-accent-purple focus:ring-accent-purple"
+                    disabled={saving}
+                  />
+                  <div>
+                    <span className="text-gray-300">Modo Glass (Apple Style)</span>
+                    <p className="text-xs text-gray-500">Habilita efectos de glassmorphism con backdrop-blur en cards, paneles y modales</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-dark-border">
               <h4 className="text-sm font-medium text-gray-400 mb-3">Modelos Disponibles</h4>
               <div className="flex flex-wrap gap-2">
                 {aiModels.map(model => (

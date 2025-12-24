@@ -1,3 +1,5 @@
 {
-  "/dashboard/api-docs/page": "app/dashboard/api-docs/page.js"
+  "/login/page": "app/login/page.js",
+  "/dashboard/api-docs/page": "app/dashboard/api-docs/page.js",
+  "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js"
 }
