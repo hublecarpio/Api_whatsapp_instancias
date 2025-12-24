@@ -8,16 +8,22 @@ export type TriggerSource = 'ai' | 'user';
 export async function scheduleFollowUp(
   businessId: string, 
   contactPhone: string,
-  source: TriggerSource = 'ai'
+  source: TriggerSource = 'ai',
+  instanceId?: string | null
 ): Promise<void> {
   try {
     const cleanPhone = contactPhone.replace(/\D/g, '');
     
-    console.log(`[FOLLOW-UP] scheduleFollowUp called - business: ${businessId}, phone: ${cleanPhone}, source: ${source}`);
+    console.log(`[FOLLOW-UP] scheduleFollowUp called - business: ${businessId}, phone: ${cleanPhone}, source: ${source}, instanceId: ${instanceId || 'none'}`);
     
-    const [config, contact, business] = await Promise.all([
+    // First try to find instance-specific config, then fall back to general config
+    const [instanceConfig, generalConfig, contact, business] = await Promise.all([
+      instanceId ? prisma.followUpConfig.findFirst({ 
+        where: { businessId, instanceId },
+        orderBy: { createdAt: 'desc' }
+      }) : null,
       prisma.followUpConfig.findFirst({ 
-        where: { businessId },
+        where: { businessId, instanceId: null },
         orderBy: { createdAt: 'desc' }
       }),
       prisma.contact.findUnique({
@@ -25,6 +31,8 @@ export async function scheduleFollowUp(
       }),
       prisma.business.findUnique({ where: { id: businessId }, select: { timezone: true } })
     ]);
+    
+    const config = instanceConfig || generalConfig;
     
     const timezone = business?.timezone || 'America/Lima';
     
@@ -148,10 +156,15 @@ export async function scheduleFollowUp(
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     console.log(`[FOLLOW-UP] Scheduled time: ${scheduledAt.toISOString()} (timezone: ${timezone}, local hour: ${getHours(finalZoned)}:${String(getMinutes(finalZoned)).padStart(2, '0')}, day: ${dayNames[getDay(finalZoned)]})`);
     
+    // Use the instanceId from config or the one passed to the function
+    const reminderInstanceId = instanceId || config.instanceId || null;
+    
     const reminder = await prisma.reminder.create({
       data: {
         businessId,
+        instanceId: reminderInstanceId,
         contactPhone: cleanPhone,
+        contactName: contact?.name || null,
         scheduledAt,
         type: 'auto',
         attemptNumber: todayAttempts + 1,
@@ -166,6 +179,7 @@ export async function scheduleFollowUp(
       const jobData: ReminderJobData = {
         reminderId: reminder.id,
         businessId,
+        instanceId: reminderInstanceId || undefined,
         contactPhone: cleanPhone,
         attemptNumber: todayAttempts + 1,
         type: 'auto'

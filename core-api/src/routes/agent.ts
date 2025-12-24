@@ -862,7 +862,7 @@ async function processWithAgentV2(
       ).catch(err => console.error('[Agent V2] Failed to dispatch agent_message webhook:', err.message));
       
       // Schedule follow-up after sending response
-      await scheduleFollowUp(business.id, contactPhone, 'ai');
+      await scheduleFollowUp(business.id, contactPhone, 'ai', instance?.id);
     } catch (sendError: any) {
       console.error('Failed to send WhatsApp message (V2):', sendError.response?.data || sendError.message);
     }
@@ -1969,7 +1969,7 @@ async function processWithAgent(
       ).catch(err => console.error('[Agent V1] Failed to dispatch agent_message webhook:', err.message));
       
       // Schedule follow-up after sending response
-      await scheduleFollowUp(businessId, contactPhone, 'ai');
+      await scheduleFollowUp(businessId, contactPhone, 'ai', instance?.id);
     } catch (sendError: any) {
       console.error('Failed to send WhatsApp message:', sendError.response?.data || sendError.message);
     }

@@ -1439,7 +1439,7 @@ async function sendWhatsAppResponse(
     }
     
     // Schedule follow-up after sending response
-    await scheduleFollowUp(business.id, cleanPhone, 'ai');
+    await scheduleFollowUp(business.id, cleanPhone, 'ai', instance?.id);
     
     console.log(`[AI Worker] Response sent and logged to ${cleanPhone}`);
   } catch (error: any) {

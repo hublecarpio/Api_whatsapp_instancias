@@ -38,6 +38,7 @@ function getConnection(): Redis {
 export interface ReminderJobData {
   reminderId: string;
   businessId: string;
+  instanceId?: string;
   contactPhone: string;
   attemptNumber: number;
   type: 'auto' | 'manual';

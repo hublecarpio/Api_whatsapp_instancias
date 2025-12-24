@@ -1274,7 +1274,7 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
     });
     
     // Schedule follow-up after manual message
-    await scheduleFollowUp(req.params.businessId, cleanTo, 'user');
+    await scheduleFollowUp(req.params.businessId, cleanTo, 'user', instance?.id);
     
     res.json(response);
   } catch (error: any) {

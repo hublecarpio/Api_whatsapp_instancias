@@ -338,11 +338,17 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
     }
   }
   
-  const instance = reminder.business.instances[0];
+  // Use the specific instance from the reminder, or fall back to the first connected instance
+  let instance = reminder.instanceId 
+    ? reminder.business.instances.find((i: any) => i.id === reminder.instanceId)
+    : reminder.business.instances.find((i: any) => i.status === 'CONNECTED') || reminder.business.instances[0];
+  
   if (!instance) {
-    console.log(`No WhatsApp instance for business ${businessId}`);
+    console.log(`No WhatsApp instance for business ${businessId} (reminderInstanceId: ${reminder.instanceId})`);
     throw new Error(`No WhatsApp instance for business ${businessId}`);
   }
+  
+  console.log(`[REMINDER] Using instance ${instance.id} (${instance.name || instance.phoneNumber}) for reminder ${reminderId}`);
   
   const windowStatus = await checkWindowStatus(businessId, contactPhone);
   
