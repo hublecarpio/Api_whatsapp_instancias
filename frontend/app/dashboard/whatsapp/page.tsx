@@ -840,9 +840,9 @@ export default function WhatsAppPage() {
                       updateInstance(selectedInstanceId, { businessObjective: 'SALES' } as any);
                     }
                   }}
-                  className={`p-2 rounded-lg border text-center transition-all text-xs ${
+                  className={`p-3 rounded-lg border-2 text-center transition-all text-xs font-medium ${
                     selectedInstance?.businessObjective === 'SALES' || !selectedInstance?.businessObjective
-                      ? 'border-neon-blue bg-neon-blue/20 text-neon-blue'
+                      ? 'border-accent-success bg-accent-success/20 text-accent-success ring-1 ring-accent-success/50'
                       : 'border-dark-border bg-dark-hover text-gray-400 hover:border-gray-500'
                   }`}
                 >
@@ -856,9 +856,9 @@ export default function WhatsAppPage() {
                       updateInstance(selectedInstanceId, { businessObjective: 'APPOINTMENTS' } as any);
                     }
                   }}
-                  className={`p-2 rounded-lg border text-center transition-all text-xs ${
+                  className={`p-3 rounded-lg border-2 text-center transition-all text-xs font-medium ${
                     selectedInstance?.businessObjective === 'APPOINTMENTS'
-                      ? 'border-neon-blue bg-neon-blue/20 text-neon-blue'
+                      ? 'border-accent-success bg-accent-success/20 text-accent-success ring-1 ring-accent-success/50'
                       : 'border-dark-border bg-dark-hover text-gray-400 hover:border-gray-500'
                   }`}
                 >
