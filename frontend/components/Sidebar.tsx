@@ -14,11 +14,12 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   const { user, logout } = useAuthStore();
   const { currentBusiness } = useBusinessStore();
   
-  // Subscribe to instance store changes using selector pattern for reactivity
-  const selectedInstance = useInstanceStore((state) => {
-    const instances = Array.isArray(state.instances) ? state.instances : [];
-    return instances.find(i => i.id === state.selectedInstanceId) || instances[0] || null;
-  });
+  // Subscribe to instance store - get primitive values to ensure reactivity
+  const { instances, selectedInstanceId } = useInstanceStore();
+  
+  // Derive selected instance from primitives
+  const safeInstances = Array.isArray(instances) ? instances : [];
+  const selectedInstance = safeInstances.find(i => i.id === selectedInstanceId) || safeInstances[0] || null;
 
   const handleLogout = () => {
     logout();
