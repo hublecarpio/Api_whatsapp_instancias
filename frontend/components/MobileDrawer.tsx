@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
+import { useInstanceStore } from '@/store/instance';
 import Logo from './Logo';
 import HoloIcon from './icons/HoloIcons';
 
@@ -18,6 +19,12 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const { currentBusiness } = useBusinessStore();
+  
+  // Subscribe to instance store changes using selector pattern for reactivity
+  const selectedInstance = useInstanceStore((state) => {
+    const instances = Array.isArray(state.instances) ? state.instances : [];
+    return instances.find(i => i.id === state.selectedInstanceId) || instances[0] || null;
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -36,8 +43,9 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
     onClose();
   };
 
-  const businessObjective = currentBusiness?.businessObjective || 'SALES';
-  const instanceProvider = currentBusiness?.instances?.[0]?.provider;
+  // Use selected instance's objective, fallback to business objective, then default to SALES
+  const businessObjective = selectedInstance?.businessObjective || currentBusiness?.businessObjective || 'SALES';
+  const instanceProvider = selectedInstance?.provider || currentBusiness?.instances?.[0]?.provider;
   
   const baseLinks = [
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
