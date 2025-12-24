@@ -4,6 +4,7 @@ import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
 import SuperAdminV2 from '@/components/SuperAdminV2';
+import { useGlassStore } from '@/store/glass';
 
 interface OverviewData {
   users: { total: number; bySubscription: Record<string, number> };
@@ -887,6 +888,7 @@ function SystemTab({ token }: { token: string }) {
   const [saving, setSaving] = useState(false);
   const [aiModels, setAiModels] = useState<any[]>([]);
   const [reasoningEfforts, setReasoningEfforts] = useState<string[]>([]);
+  const { fetchSettings: refreshGlassStore } = useGlassStore();
 
   useEffect(() => {
     fetch('/api/super-admin/system-health', {
@@ -910,6 +912,8 @@ function SystemTab({ token }: { token: string }) {
       .finally(() => setAiLoading(false));
   }, [token]);
 
+  const uiRelatedKeys = ['glassMode', 'brandingEnabled', 'primaryColor', 'secondaryColor', 'accentColor', 'appName', 'appTagline', 'logoUrl', 'faviconUrl'];
+  
   const handleAiSettingChange = async (key: string, value: any) => {
     setSaving(true);
     try {
@@ -925,6 +929,9 @@ function SystemTab({ token }: { token: string }) {
       if (response.ok) {
         const data = await response.json();
         setAiSettings(data.settings);
+        if (uiRelatedKeys.includes(key)) {
+          refreshGlassStore();
+        }
       }
     } catch (err) {
       console.error('Failed to update AI settings:', err);
@@ -1208,12 +1215,12 @@ function SystemTab({ token }: { token: string }) {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={async () => {
-                      if (!confirm('Restablecer todos los valores de branding a los originales de Effi?')) return;
+                      if (!confirm('Restablecer todos los valores de branding a los originales de EfficoreChat?')) return;
                       setSaving(true);
                       try {
                         const defaults = {
-                          appName: 'Effi',
-                          appTagline: 'WhatsApp AI Platform',
+                          appName: 'EfficoreChat',
+                          appTagline: 'WhatsApp Business Platform',
                           logoUrl: null,
                           faviconUrl: null,
                           primaryColor: '#00D4FF',
@@ -1233,6 +1240,7 @@ function SystemTab({ token }: { token: string }) {
                         if (res.ok) {
                           const data = await res.json();
                           setAiSettings(data.settings);
+                          refreshGlassStore();
                         }
                       } catch (err) {
                         console.error('Failed to reset branding:', err);
@@ -1243,7 +1251,7 @@ function SystemTab({ token }: { token: string }) {
                     className="btn btn-sm btn-ghost text-xs"
                     disabled={saving}
                   >
-                    Restablecer Effi
+                    Restablecer Original
                   </button>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input

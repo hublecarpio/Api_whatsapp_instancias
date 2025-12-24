@@ -24,8 +24,8 @@ interface GlassContextValue {
 }
 
 const defaultBranding: BrandingSettings = {
-  appName: 'Effi',
-  appTagline: 'WhatsApp AI Platform',
+  appName: 'EfficoreChat',
+  appTagline: 'WhatsApp Business Platform',
   logoUrl: null,
   faviconUrl: null,
   primaryColor: '#00D4FF',

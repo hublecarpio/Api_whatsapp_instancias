@@ -22,8 +22,8 @@ interface GlassState {
 }
 
 const defaultBranding: BrandingSettings = {
-  appName: 'Effi',
-  appTagline: 'WhatsApp AI Platform',
+  appName: 'EfficoreChat',
+  appTagline: 'WhatsApp Business Platform',
   logoUrl: null,
   faviconUrl: null,
   primaryColor: '#00D4FF',
@@ -51,8 +51,8 @@ export const useGlassStore = create<GlassState>((set) => ({
           glassMode: data.glassMode ?? false,
           brandingEnabled,
           branding: brandingEnabled ? {
-            appName: data.appName ?? 'Effi',
-            appTagline: data.appTagline ?? 'WhatsApp AI Platform',
+            appName: data.appName ?? 'EfficoreChat',
+            appTagline: data.appTagline ?? 'WhatsApp Business Platform',
             logoUrl: data.logoUrl ?? null,
             faviconUrl: data.faviconUrl ?? null,
             primaryColor: data.primaryColor ?? '#00D4FF',

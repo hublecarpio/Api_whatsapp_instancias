@@ -1061,8 +1061,8 @@ model PlatformSettings {
   enableGPT5Features    Boolean         @default(true)
   glassMode             Boolean         @default(false)
   brandingEnabled       Boolean         @default(true)
-  appName               String          @default("Effi")
-  appTagline            String          @default("WhatsApp AI Platform")
+  appName               String          @default("EfficoreChat")
+  appTagline            String          @default("WhatsApp Business Platform")
   logoUrl               String?
   faviconUrl            String?
   primaryColor          String          @default("#00D4FF")
