@@ -11,15 +11,30 @@ router.use(requireActiveSubscription);
 router.get('/config/:businessId', async (req: Request, res: Response) => {
   try {
     const { businessId } = req.params;
+    const { instanceId } = req.query;
     
-    let config = await prisma.followUpConfig.findUnique({
-      where: { businessId }
-    });
+    let config;
     
-    if (!config) {
-      config = await prisma.followUpConfig.create({
-        data: { businessId }
+    if (instanceId) {
+      config = await prisma.followUpConfig.findUnique({
+        where: { instanceId: instanceId as string }
       });
+      
+      if (!config) {
+        config = await prisma.followUpConfig.create({
+          data: { businessId, instanceId: instanceId as string }
+        });
+      }
+    } else {
+      config = await prisma.followUpConfig.findFirst({
+        where: { businessId, instanceId: null }
+      });
+      
+      if (!config) {
+        config = await prisma.followUpConfig.create({
+          data: { businessId }
+        });
+      }
     }
     
     res.json(config);
@@ -33,6 +48,7 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
   try {
     const { businessId } = req.params;
     const {
+      instanceId,
       enabled,
       firstDelayMinutes,
       secondDelayMinutes,
@@ -54,44 +70,68 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'triggerMode must be one of: user, agent, any' });
     }
     
-    const config = await prisma.followUpConfig.upsert({
-      where: { businessId },
-      update: {
-        enabled: enabled ?? undefined,
-        firstDelayMinutes: firstDelayMinutes ?? undefined,
-        secondDelayMinutes: secondDelayMinutes ?? undefined,
-        thirdDelayMinutes: thirdDelayMinutes ?? undefined,
-        maxDailyAttempts: maxDailyAttempts ?? undefined,
-        pressureLevel: pressureLevel ?? undefined,
-        allowedStartHour: allowedStartHour ?? undefined,
-        allowedEndHour: allowedEndHour ?? undefined,
-        weekendsEnabled: weekendsEnabled ?? undefined,
-        triggerMode: triggerMode ?? undefined,
-        stopOnReply: stopOnReply ?? undefined,
-        followUpSteps: followUpSteps !== undefined ? followUpSteps : undefined,
-        metaTemplateId: metaTemplateId !== undefined ? metaTemplateId : undefined,
-        templateVariables: templateVariables !== undefined ? templateVariables : undefined,
-        templateEnabled: templateEnabled !== undefined ? templateEnabled : undefined
-      },
-      create: {
-        businessId,
-        enabled: enabled ?? true,
-        firstDelayMinutes: firstDelayMinutes ?? 15,
-        secondDelayMinutes: secondDelayMinutes ?? 60,
-        thirdDelayMinutes: thirdDelayMinutes ?? 240,
-        maxDailyAttempts: maxDailyAttempts ?? 3,
-        pressureLevel: pressureLevel ?? 1,
-        allowedStartHour: allowedStartHour ?? 9,
-        allowedEndHour: allowedEndHour ?? 21,
-        weekendsEnabled: weekendsEnabled ?? false,
-        triggerMode: triggerMode ?? 'user',
-        stopOnReply: stopOnReply ?? true,
-        followUpSteps: followUpSteps ?? null,
-        metaTemplateId: metaTemplateId ?? null,
-        templateVariables: templateVariables ?? null,
-        templateEnabled: templateEnabled ?? false
+    const updateData = {
+      enabled: enabled ?? undefined,
+      firstDelayMinutes: firstDelayMinutes ?? undefined,
+      secondDelayMinutes: secondDelayMinutes ?? undefined,
+      thirdDelayMinutes: thirdDelayMinutes ?? undefined,
+      maxDailyAttempts: maxDailyAttempts ?? undefined,
+      pressureLevel: pressureLevel ?? undefined,
+      allowedStartHour: allowedStartHour ?? undefined,
+      allowedEndHour: allowedEndHour ?? undefined,
+      weekendsEnabled: weekendsEnabled ?? undefined,
+      triggerMode: triggerMode ?? undefined,
+      stopOnReply: stopOnReply ?? undefined,
+      followUpSteps: followUpSteps !== undefined ? followUpSteps : undefined,
+      metaTemplateId: metaTemplateId !== undefined ? metaTemplateId : undefined,
+      templateVariables: templateVariables !== undefined ? templateVariables : undefined,
+      templateEnabled: templateEnabled !== undefined ? templateEnabled : undefined
+    };
+    
+    const createData = {
+      businessId,
+      instanceId: instanceId || undefined,
+      enabled: enabled ?? true,
+      firstDelayMinutes: firstDelayMinutes ?? 15,
+      secondDelayMinutes: secondDelayMinutes ?? 60,
+      thirdDelayMinutes: thirdDelayMinutes ?? 240,
+      maxDailyAttempts: maxDailyAttempts ?? 3,
+      pressureLevel: pressureLevel ?? 1,
+      allowedStartHour: allowedStartHour ?? 9,
+      allowedEndHour: allowedEndHour ?? 21,
+      weekendsEnabled: weekendsEnabled ?? false,
+      triggerMode: triggerMode ?? 'user',
+      stopOnReply: stopOnReply ?? true,
+      followUpSteps: followUpSteps ?? null,
+      metaTemplateId: metaTemplateId ?? null,
+      templateVariables: templateVariables ?? null,
+      templateEnabled: templateEnabled ?? false
+    };
+    
+    let config;
+    
+    if (instanceId) {
+      config = await prisma.followUpConfig.upsert({
+        where: { instanceId },
+        update: updateData,
+        create: createData
+      });
+    } else {
+      const existing = await prisma.followUpConfig.findFirst({
+        where: { businessId, instanceId: null }
+      });
+      
+      if (existing) {
+        config = await prisma.followUpConfig.update({
+          where: { id: existing.id },
+          data: updateData
+        });
+      } else {
+        config = await prisma.followUpConfig.create({
+          data: createData
+        });
       }
-    });
+    }
     
     res.json(config);
   } catch (error) {

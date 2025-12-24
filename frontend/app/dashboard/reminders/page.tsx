@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { remindersApi, templatesApi } from '@/lib/api';
+import { useInstanceStore } from '@/store/instance';
+import { remindersApi, templatesApi, waApi } from '@/lib/api';
 
 interface FollowUpStep {
   delayMinutes: number;
@@ -54,6 +55,7 @@ interface Reminder {
   lastError?: string;
   messageTemplate?: string;
   generatedMessage?: string;
+  instanceId?: string | null;
 }
 
 const CONTACT_FIELDS = [
@@ -98,6 +100,7 @@ function formatTimeRemaining(scheduledAt: string): string {
 
 export default function RemindersPage() {
   const { currentBusiness } = useBusinessStore();
+  const { instances, setInstances } = useInstanceStore();
   const [config, setConfig] = useState<FollowUpConfig | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [templates, setTemplates] = useState<MetaTemplate[]>([]);
@@ -110,10 +113,13 @@ export default function RemindersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [expandedReminder, setExpandedReminder] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [filterInstanceId, setFilterInstanceId] = useState<string>('');
+  const [configInstanceId, setConfigInstanceId] = useState<string>('');
 
   useEffect(() => {
     if (currentBusiness) {
       fetchData();
+      waApi.listInstances(currentBusiness.id).then(res => setInstances(res.data)).catch(() => {});
     }
   }, [currentBusiness]);
 
@@ -149,12 +155,12 @@ export default function RemindersPage() {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (instId?: string) => {
     if (!currentBusiness) return;
     setLoading(true);
     try {
       const [configRes, remindersRes] = await Promise.all([
-        remindersApi.getConfig(currentBusiness.id),
+        remindersApi.getConfig(currentBusiness.id, instId || configInstanceId || undefined),
         remindersApi.list(currentBusiness.id)
       ]);
       
@@ -211,12 +217,18 @@ export default function RemindersPage() {
     if (!currentBusiness || !config) return;
     setSaving(true);
     try {
-      await remindersApi.updateConfig(currentBusiness.id, config);
+      const configData = configInstanceId ? { ...config, instanceId: configInstanceId } : config;
+      await remindersApi.updateConfig(currentBusiness.id, configData);
     } catch (err) {
       console.error('Error saving config:', err);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleConfigInstanceChange = async (instId: string) => {
+    setConfigInstanceId(instId);
+    await fetchData(instId);
   };
 
   const handleCancelReminder = async (id: string) => {
@@ -421,6 +433,29 @@ export default function RemindersPage() {
 
       {activeTab === 'config' && config && (
         <div className="card">
+          {instances.length > 1 && (
+            <div className="mb-6 p-4 bg-dark-bg rounded-lg border border-dark-border">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Configurar seguimientos para:
+              </label>
+              <select
+                value={configInstanceId}
+                onChange={(e) => handleConfigInstanceChange(e.target.value)}
+                className="input"
+              >
+                <option value="">Configuracion general (sin instancia)</option>
+                {instances.map(inst => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.name || inst.phoneNumber || inst.id.slice(0,8)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-2">
+                Cada numero de WhatsApp puede tener su propia configuracion de seguimiento
+              </p>
+            </div>
+          )}
+
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="font-semibold text-lg text-white">Seguimiento automatico</h3>
@@ -763,26 +798,42 @@ export default function RemindersPage() {
         <div className="card overflow-hidden p-0">
           <div className="p-4 border-b border-dark-border flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-white">Cola de recordatorios ({pendingReminders.length})</h3>
+              <h3 className="font-semibold text-white">Cola de recordatorios ({pendingReminders.filter(r => !filterInstanceId || r.instanceId === filterInstanceId).length})</h3>
               {lastRefresh && (
                 <p className="text-xs text-gray-500 mt-1">
                   Actualizado: {lastRefresh.toLocaleTimeString()}
                 </p>
               )}
             </div>
-            <button
-              onClick={handleManualRefresh}
-              disabled={refreshing}
-              className="p-2 hover:bg-dark-hover rounded-lg transition-colors"
-              title="Actualizar"
-            >
-              <svg className={`w-5 h-5 text-gray-400 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              {instances.length > 1 && (
+                <select
+                  value={filterInstanceId}
+                  onChange={(e) => setFilterInstanceId(e.target.value)}
+                  className="text-xs bg-dark-bg border border-dark-border rounded-lg px-2 py-1.5 text-gray-300"
+                >
+                  <option value="">Todas las instancias</option>
+                  {instances.map(inst => (
+                    <option key={inst.id} value={inst.id}>
+                      {inst.name || inst.phoneNumber || inst.id.slice(0,8)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                onClick={handleManualRefresh}
+                disabled={refreshing}
+                className="p-2 hover:bg-dark-hover rounded-lg transition-colors"
+                title="Actualizar"
+              >
+                <svg className={`w-5 h-5 text-gray-400 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
           </div>
           
-          {pendingReminders.length === 0 ? (
+          {pendingReminders.filter(r => !filterInstanceId || r.instanceId === filterInstanceId).length === 0 ? (
             <div className="p-8 text-center">
               <svg className="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -792,7 +843,7 @@ export default function RemindersPage() {
             </div>
           ) : (
             <div className="divide-y divide-dark-border">
-              {pendingReminders.map(reminder => (
+              {pendingReminders.filter(r => !filterInstanceId || r.instanceId === filterInstanceId).map(reminder => (
                 <div key={reminder.id} className="p-4 hover:bg-dark-hover/50 transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -809,6 +860,14 @@ export default function RemindersPage() {
                           }`}>
                             {reminder.type === 'manual' ? 'Manual' : 'Auto'}
                           </span>
+                          {reminder.instanceId && instances.length > 1 && (() => {
+                            const inst = instances.find(i => i.id === reminder.instanceId);
+                            return inst ? (
+                              <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                                {inst.name || inst.phoneNumber || inst.id.slice(0,6)}
+                              </span>
+                            ) : null;
+                          })()}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-sm">
                           <span className="text-accent-warning font-medium">
@@ -846,15 +905,31 @@ export default function RemindersPage() {
           <div className="p-4 border-b border-dark-border">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-white">Historial de envios</h3>
-              <button
-                onClick={handleManualRefresh}
-                disabled={refreshing}
-                className="p-2 hover:bg-dark-hover rounded-lg transition-colors"
-              >
-                <svg className={`w-5 h-5 text-gray-400 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                {instances.length > 1 && (
+                  <select
+                    value={filterInstanceId}
+                    onChange={(e) => setFilterInstanceId(e.target.value)}
+                    className="text-xs bg-dark-bg border border-dark-border rounded-lg px-2 py-1.5 text-gray-300"
+                  >
+                    <option value="">Todas las instancias</option>
+                    {instances.map(inst => (
+                      <option key={inst.id} value={inst.id}>
+                        {inst.name || inst.phoneNumber || inst.id.slice(0,8)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  onClick={handleManualRefresh}
+                  disabled={refreshing}
+                  className="p-2 hover:bg-dark-hover rounded-lg transition-colors"
+                >
+                  <svg className={`w-5 h-5 text-gray-400 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="flex gap-2 overflow-x-auto hide-scrollbar">
               {[
@@ -878,13 +953,13 @@ export default function RemindersPage() {
             </div>
           </div>
           
-          {filteredHistory.length === 0 ? (
+          {filteredHistory.filter(r => !filterInstanceId || r.instanceId === filterInstanceId).length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               No hay historial de seguimientos
             </div>
           ) : (
             <div className="divide-y divide-dark-border">
-              {filteredHistory.slice(0, 50).map(reminder => (
+              {filteredHistory.filter(r => !filterInstanceId || r.instanceId === filterInstanceId).slice(0, 50).map(reminder => (
                 <div 
                   key={reminder.id} 
                   className="hover:bg-dark-hover/50 transition-colors cursor-pointer"
@@ -892,11 +967,19 @@ export default function RemindersPage() {
                 >
                   <div className="p-4 flex items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-white truncate">
                           {reminder.contactName || reminder.contactPhone}
                         </p>
                         <span className="text-xs text-gray-500">#{reminder.attemptNumber}</span>
+                        {reminder.instanceId && instances.length > 1 && (() => {
+                          const inst = instances.find(i => i.id === reminder.instanceId);
+                          return inst ? (
+                            <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                              {inst.name || inst.phoneNumber || inst.id.slice(0,6)}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                       <p className="text-sm text-gray-400">
                         {formatDate(reminder.executedAt || reminder.scheduledAt)}

@@ -233,7 +233,7 @@ export const productMediaApi = {
 };
 
 export const remindersApi = {
-  getConfig: (businessId: string) => api.get(`/reminders/config/${businessId}`),
+  getConfig: (businessId: string, instanceId?: string) => api.get(`/reminders/config/${businessId}${instanceId ? `?instanceId=${instanceId}` : ''}`),
   updateConfig: (businessId: string, data: any) => api.put(`/reminders/config/${businessId}`, data),
   list: (businessId: string, status?: string, contactPhone?: string) => {
     let url = `/reminders/${businessId}`;
