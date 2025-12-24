@@ -86,9 +86,10 @@ export const policyApi = {
 };
 
 export const promptApi = {
-  get: (businessId: string) => api.get(`/agent/prompt?business_id=${businessId}`),
+  get: (businessId: string, instanceId?: string) => api.get(`/agent/prompt?business_id=${businessId}${instanceId ? `&instance_id=${instanceId}` : ''}`),
   save: (data: { 
-    businessId: string; 
+    businessId: string;
+    instanceId?: string; 
     prompt: string; 
     bufferSeconds?: number;
     historyLimit?: number;

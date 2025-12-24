@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
-import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi } from '@/lib/api';
+import { useInstanceStore } from '@/store/instance';
+import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi, waApi } from '@/lib/api';
 import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel } from '@/components/AgentV2';
 import AgentHealthDashboard from '@/components/AgentHealthDashboard';
 
@@ -130,7 +131,9 @@ Directrices:
 export default function PromptPage() {
   const { currentBusiness, updateBusiness } = useBusinessStore();
   const { user } = useAuthStore();
+  const { instances, setInstances } = useInstanceStore();
   const isPro = user?.isPro ?? false;
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [prompt, setPrompt] = useState('');
   const [promptId, setPromptId] = useState<string | null>(null);
   const [bufferSeconds, setBufferSeconds] = useState(0);
@@ -222,6 +225,7 @@ export default function PromptPage() {
       setBotEnabled(currentBusiness.botEnabled);
       const version = (currentBusiness as any).agentVersion || 'v1';
       setAgentVersion(version);
+      waApi.listInstances(currentBusiness.id).then(res => setInstances(res.data)).catch(() => {});
       loadData();
       loadAgentFiles();
       loadInjectionCode();
@@ -231,6 +235,35 @@ export default function PromptPage() {
       }
     }
   }, [currentBusiness]);
+
+  const handleInstanceChange = async (instId: string) => {
+    setSelectedInstanceId(instId);
+    if (currentBusiness) {
+      setLoading(true);
+      try {
+        const res = await promptApi.get(currentBusiness.id, instId || undefined);
+        if (res.data) {
+          setPrompt(res.data.prompt);
+          setPromptId(res.data.id);
+          setBufferSeconds(res.data.bufferSeconds ?? 0);
+          setHistoryLimit(res.data.historyLimit ?? 10);
+          setSplitMessages(res.data.splitMessages ?? true);
+          setTools(res.data.tools || []);
+        } else {
+          setPrompt(DEFAULT_PROMPT);
+          setPromptId(null);
+          setBufferSeconds(0);
+          setHistoryLimit(10);
+          setSplitMessages(true);
+          setTools([]);
+        }
+      } catch (err) {
+        console.error('Error loading prompt:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (currentBusiness && agentVersion === 'v2') {
@@ -703,6 +736,7 @@ export default function PromptPage() {
     try {
       const response = await promptApi.save({
         businessId: currentBusiness.id,
+        instanceId: selectedInstanceId || undefined,
         prompt,
         bufferSeconds,
         historyLimit,
@@ -1070,22 +1104,38 @@ export default function PromptPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6 p-3 bg-dark-card rounded-lg border border-dark-border">
+      <div className="flex items-center justify-between mb-6 p-3 bg-dark-card rounded-lg border border-dark-border gap-4">
         <div className="flex items-center gap-3">
           <div className={`w-2 h-2 rounded-full ${botEnabled ? 'bg-accent-success' : 'bg-gray-500'}`} />
           <span className="text-sm text-gray-300">Bot {botEnabled ? 'activo' : 'inactivo'}</span>
         </div>
-        <button
-          onClick={handleToggleBot}
-          disabled={loading}
-          className={`px-4 py-1.5 text-sm rounded-full font-medium transition-colors ${
-            botEnabled
-              ? 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30'
-              : 'bg-dark-hover text-gray-400 hover:bg-gray-600'
-          }`}
-        >
-          {botEnabled ? 'Desactivar' : 'Activar'}
-        </button>
+        <div className="flex items-center gap-3">
+          {instances.length > 1 && (
+            <select
+              value={selectedInstanceId}
+              onChange={(e) => handleInstanceChange(e.target.value)}
+              className="text-xs bg-dark-bg border border-dark-border rounded-lg px-2 py-1.5 text-gray-300"
+            >
+              <option value="">Config. general</option>
+              {instances.map(inst => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name || inst.phoneNumber || inst.id.slice(0,8)}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={handleToggleBot}
+            disabled={loading}
+            className={`px-4 py-1.5 text-sm rounded-full font-medium transition-colors ${
+              botEnabled
+                ? 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30'
+                : 'bg-dark-hover text-gray-400 hover:bg-gray-600'
+            }`}
+          >
+            {botEnabled ? 'Desactivar' : 'Activar'}
+          </button>
+        </div>
       </div>
 
       {agentVersion === 'v1' ? (

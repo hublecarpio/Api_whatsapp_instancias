@@ -12,7 +12,7 @@ async function checkBusinessAccess(userId: string, businessId: string) {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, prompt, bufferSeconds, historyLimit, splitMessages } = req.body;
+    const { businessId, instanceId, prompt, bufferSeconds, historyLimit, splitMessages } = req.body;
     
     if (!businessId || !prompt) {
       return res.status(400).json({ error: 'businessId and prompt are required' });
@@ -23,7 +23,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const existing = await prisma.agentPrompt.findFirst({ where: { businessId } });
+    let existing;
+    if (instanceId) {
+      existing = await prisma.agentPrompt.findUnique({ where: { instanceId } });
+    } else {
+      existing = await prisma.agentPrompt.findFirst({ where: { businessId, instanceId: null } });
+    }
     
     const data: any = { prompt, updatedAt: new Date() };
     if (bufferSeconds !== undefined) data.bufferSeconds = bufferSeconds;
@@ -39,7 +44,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       });
     } else {
       agentPrompt = await prisma.agentPrompt.create({
-        data: { businessId, ...data },
+        data: { businessId, instanceId: instanceId || undefined, ...data },
         include: { tools: true }
       });
     }
@@ -53,7 +58,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id } = req.query;
+    const { business_id, instance_id } = req.query;
     
     if (!business_id) {
       return res.status(400).json({ error: 'business_id query param is required' });
@@ -64,10 +69,20 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const prompt = await prisma.agentPrompt.findFirst({
-      where: { businessId: business_id as string },
-      include: { tools: true }
-    });
+    let prompt;
+    if (instance_id) {
+      prompt = await prisma.agentPrompt.findUnique({
+        where: { instanceId: instance_id as string },
+        include: { tools: true }
+      });
+    }
+    
+    if (!prompt) {
+      prompt = await prisma.agentPrompt.findFirst({
+        where: { businessId: business_id as string, instanceId: null },
+        include: { tools: true }
+      });
+    }
     
     res.json(prompt || null);
   } catch (error) {
