@@ -46,6 +46,7 @@ let cachedSettings: {
   availableModels: string[];
   maxTokensPerRequest: number;
   enableGPT5Features: boolean;
+  glassMode: boolean;
 } | null = null;
 let settingsCacheTime = 0;
 const SETTINGS_CACHE_TTL = 60000;
@@ -76,7 +77,8 @@ export async function getPlatformSettings() {
     refinerModelV2: settings.refinerModelV2,
     availableModels: settings.availableModels,
     maxTokensPerRequest: settings.maxTokensPerRequest,
-    enableGPT5Features: settings.enableGPT5Features
+    enableGPT5Features: settings.enableGPT5Features,
+    glassMode: settings.glassMode
   };
   settingsCacheTime = now;
 
@@ -94,6 +96,7 @@ export async function updatePlatformSettings(updates: {
   availableModels?: string[];
   maxTokensPerRequest?: number;
   enableGPT5Features?: boolean;
+  glassMode?: boolean;
   updatedBy?: string;
 }) {
   const settings = await prisma.platformSettings.upsert({
