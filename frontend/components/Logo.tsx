@@ -82,8 +82,9 @@ export default function Logo({ size = 'md', showText = true }: LogoProps) {
         />
       </div>
       {showText && (
-        <span className={`font-bold ${text} text-white tracking-tight`}>
-          {branding.appName}
+        <span className={`font-bold ${text} tracking-tight`}>
+          <span className="text-white">Efficore</span>
+          <span style={{ color: branding.primaryColor }}>Chat</span>
         </span>
       )}
     </div>
