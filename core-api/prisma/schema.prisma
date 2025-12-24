@@ -365,6 +365,11 @@ model WhatsAppInstance {
   lastConnection    DateTime?
   webhookConfig     Json?
   createdAt         DateTime         @default(now())
+  
+  apiKeyHash        String?
+  apiKeyPrefix      String?
+  webhookUrl        String?
+  webhookSecret     String?
 
   business         Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   metaCredential   MetaCredential?
@@ -376,6 +381,7 @@ model WhatsAppInstance {
   agentPrompt      AgentPrompt?
 
   @@index([businessId])
+  @@index([apiKeyPrefix])
 }
 
 enum InstanceEventType {
