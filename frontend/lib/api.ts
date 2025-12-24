@@ -174,6 +174,12 @@ export const waApi = {
     api.post(`/wa/instances/${instanceId}/restart?businessId=${businessId}`),
   instanceReset: (instanceId: string, businessId: string) => 
     api.post(`/wa/instances/${instanceId}/reset?businessId=${businessId}`),
+  instanceApiConfig: (instanceId: string, businessId: string) => 
+    api.get(`/wa/instances/${instanceId}/api-config?businessId=${businessId}`),
+  instanceRegenerateApiKey: (instanceId: string, businessId: string) => 
+    api.post(`/wa/instances/${instanceId}/regenerate-api-key?businessId=${businessId}`),
+  instanceUpdateWebhook: (instanceId: string, businessId: string, webhookUrl: string | null) => 
+    api.put(`/wa/instances/${instanceId}/webhook?businessId=${businessId}`, { webhookUrl }),
   
   instances: (businessId: string) => api.get(`/wa/instances/${businessId}`),
   status: (businessId: string) => api.get(`/wa/${businessId}/status`),

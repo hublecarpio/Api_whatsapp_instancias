@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import axios from 'axios';
+import crypto from 'crypto';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireEmailVerified } from '../middleware/billing.js';
@@ -10,6 +11,17 @@ import { scheduleFollowUp } from '../services/followUpService.js';
 const router = Router();
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
+
+function generateInstanceApiKey(): { apiKey: string; apiKeyHash: string; apiKeyPrefix: string } {
+  const apiKey = `efk_${crypto.randomBytes(32).toString('hex')}`;
+  const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+  const apiKeyPrefix = apiKey.substring(0, 12);
+  return { apiKey, apiKeyHash, apiKeyPrefix };
+}
+
+function generateWebhookSecret(): string {
+  return `whs_${crypto.randomBytes(16).toString('hex')}`;
+}
 
 const INSTANCE_LIMITS: Record<string, number> = {
   STANDARD: 1,
@@ -135,6 +147,124 @@ router.get('/instances', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/instances/:instanceId/api-config', async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const userInfo = await getUserWithRole(req.userId!);
+    const business = await checkBusinessAccess(req.userId!, businessId as string, userInfo?.role, userInfo?.parentUserId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    res.json({
+      instanceId: instance.id,
+      instanceName: instance.name,
+      apiKeyPrefix: instance.apiKeyPrefix,
+      webhookUrl: instance.webhookUrl,
+      webhookSecret: instance.webhookSecret,
+      hasApiKey: !!instance.apiKeyHash
+    });
+  } catch (error: any) {
+    console.error('Get instance API config error:', error.message);
+    res.status(500).json({ error: 'Failed to get API configuration' });
+  }
+});
+
+router.post('/instances/:instanceId/regenerate-api-key', requireEmailVerified, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    const { apiKey, apiKeyHash, apiKeyPrefix } = generateInstanceApiKey();
+    
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: { apiKeyHash, apiKeyPrefix }
+    });
+    
+    res.json({
+      apiKey,
+      apiKeyPrefix,
+      message: 'API key regenerated successfully. Save this key - it will not be shown again.'
+    });
+  } catch (error: any) {
+    console.error('Regenerate API key error:', error.message);
+    res.status(500).json({ error: 'Failed to regenerate API key' });
+  }
+});
+
+router.put('/instances/:instanceId/webhook', requireEmailVerified, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    const { webhookUrl } = req.body;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    const webhookSecret = instance.webhookSecret || generateWebhookSecret();
+    
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: { webhookUrl: webhookUrl || null, webhookSecret }
+    });
+    
+    res.json({
+      webhookUrl: webhookUrl || null,
+      webhookSecret,
+      message: 'Webhook configuration updated'
+    });
+  } catch (error: any) {
+    console.error('Update webhook error:', error.message);
+    res.status(500).json({ error: 'Failed to update webhook' });
+  }
+});
+
 router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, name, provider, phoneNumber, copyFromInstanceId } = req.body;
@@ -169,10 +299,10 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     });
     const instanceNumber = existingInstances.length + 1;
     const instanceName = name || `WhatsApp ${instanceNumber}`;
-    const instanceId = `biz_${businessId.substring(0, 8)}_${instanceNumber}`;
+    const instanceBackendId = `biz_${businessId.substring(0, 8)}_${instanceNumber}`;
     
-    const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
-    const webhookUrl = `${coreApiUrl}/webhook/${businessId}`;
+    const { apiKey, apiKeyHash, apiKeyPrefix } = generateInstanceApiKey();
+    const instanceWebhookSecret = generateWebhookSecret();
     
     if (provider === 'META_CLOUD') {
       const instance = await prisma.whatsAppInstance.create({
@@ -181,7 +311,10 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
           name: instanceName,
           provider: 'META_CLOUD',
           status: 'pending_credentials',
-          phoneNumber: phoneNumber || null
+          phoneNumber: phoneNumber || null,
+          apiKeyHash,
+          apiKeyPrefix,
+          webhookSecret: instanceWebhookSecret
         }
       });
       
@@ -194,21 +327,27 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
         details: `New Meta Cloud instance "${instanceName}" created`
       });
       
-      return res.status(201).json({ instance, requiresCredentials: true });
+      return res.status(201).json({ instance, apiKey, requiresCredentials: true });
     }
     
+    const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
+    const internalWebhookUrl = `${coreApiUrl}/webhook/${businessId}`;
+    
     const waResponse = await axios.post(`${WA_API_URL}/instances`, {
-      instanceId,
-      webhook: webhookUrl
+      instanceId: instanceBackendId,
+      webhook: internalWebhookUrl
     });
     
     const instance = await prisma.whatsAppInstance.create({
       data: {
         businessId,
         name: instanceName,
-        instanceBackendId: instanceId,
+        instanceBackendId,
         status: 'pending_qr',
-        phoneNumber: phoneNumber || null
+        phoneNumber: phoneNumber || null,
+        apiKeyHash,
+        apiKeyPrefix,
+        webhookSecret: instanceWebhookSecret
       }
     });
     
@@ -283,12 +422,13 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
       eventType: 'CREATED',
       newProvider: 'BAILEYS',
       newStatus: 'pending_qr',
-      backendId: instanceId,
+      backendId: instanceBackendId,
       details: `New Baileys instance "${instanceName}" created`
     });
     
     res.status(201).json({
       instance,
+      apiKey,
       waInstance: waResponse.data
     });
   } catch (error: any) {
