@@ -11,6 +11,7 @@ interface Conversation {
   lastMessage: string | null;
   lastMessageAt: string;
   messageCount: number;
+  instanceId?: string | null;
 }
 
 interface Message {
@@ -95,6 +96,7 @@ export default function ChatPage() {
   const { selectedInstanceId, instances, setInstances } = useInstanceStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const [selectedConversationInstanceId, setSelectedConversationInstanceId] = useState<string | null>(null);
   const [selectedContactName, setSelectedContactName] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -532,10 +534,12 @@ export default function ChatPage() {
     if (!currentBusiness || !selectedPhone) return;
     setSendingTemplate(true);
     try {
+      const effectiveInstanceId = selectedInstanceId || selectedConversationInstanceId || undefined;
       await templatesApi.send(currentBusiness.id, {
         templateName: template.name,
         to: selectedPhone,
-        variables: variables.length > 0 ? variables : undefined
+        variables: variables.length > 0 ? variables : undefined,
+        instanceId: effectiveInstanceId
       });
       setShowTemplateModal(false);
       setSelectedTemplateForSend(null);
@@ -714,6 +718,7 @@ export default function ChatPage() {
     if (currentBusiness) {
       setInstanceSwitching(true);
       setSelectedPhone(null);
+      setSelectedConversationInstanceId(null);
       setMessages([]);
       setConversations([]);
       fetchConversations().finally(() => setInstanceSwitching(false));
@@ -751,7 +756,8 @@ export default function ChatPage() {
         const uploadRes = await mediaApi.upload(currentBusiness.id, fileCopy.file);
         const { url, type, mimetype } = uploadRes.data;
         
-        const sendData: any = { to: selectedPhone, instanceId: selectedInstanceId || undefined };
+        const effectiveInstanceId = selectedInstanceId || selectedConversationInstanceId || undefined;
+        const sendData: any = { to: selectedPhone, instanceId: effectiveInstanceId };
         if (type === 'image') {
           sendData.imageUrl = url;
           sendData.message = messageCopy || undefined;
@@ -770,7 +776,8 @@ export default function ChatPage() {
         setPreviewFile(null);
         setUploading(false);
       } else {
-        await waApi.send(currentBusiness.id, { to: selectedPhone, message: messageCopy, instanceId: selectedInstanceId || undefined });
+        const effectiveInstanceId = selectedInstanceId || selectedConversationInstanceId || undefined;
+        await waApi.send(currentBusiness.id, { to: selectedPhone, message: messageCopy, instanceId: effectiveInstanceId });
       }
       
       fetchMessages(selectedPhone);
@@ -1147,7 +1154,7 @@ export default function ChatPage() {
               (viewMode === 'kanban' ? getConversationsByTag(selectedTag) : filteredConversations).map((conv) => {
                 const contactTag = getContactTag(conv.phone);
                 return (
-                  <button key={conv.phone} onClick={() => { setSelectedPhone(conv.phone); setSelectedContactName(conv.contactName || ''); setChatListOpen(false); }} className={`w-full p-3 text-left hover:bg-dark-hover transition-colors flex items-center gap-3 ${selectedPhone === conv.phone ? 'bg-neon-blue/10 border-l-2 border-neon-blue' : ''}`}>
+                  <button key={conv.phone} onClick={() => { setSelectedPhone(conv.phone); setSelectedContactName(conv.contactName || ''); setSelectedConversationInstanceId(conv.instanceId || null); setChatListOpen(false); }} className={`w-full p-3 text-left hover:bg-dark-hover transition-colors flex items-center gap-3 ${selectedPhone === conv.phone ? 'bg-neon-blue/10 border-l-2 border-neon-blue' : ''}`}>
                     <div className="w-12 h-12 bg-dark-card rounded-full flex items-center justify-center flex-shrink-0 relative">
                       <span className="text-xl">👤</span>
                       {contactTag && <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-dark-surface" style={{ backgroundColor: contactTag.color }} />}
@@ -1216,6 +1223,13 @@ export default function ChatPage() {
                     {windowStatus?.provider === 'META_CLOUD' && (
                       <span className={`text-xs px-1.5 py-0.5 rounded ${windowStatus.windowOpen ? 'bg-neon-blue/20 text-neon-blue' : 'bg-accent-warning/20 text-accent-warning'}`}>
                         {windowStatus.windowOpen ? `📬 ${windowStatus.hoursRemaining}h` : '📭 Template'}
+                      </span>
+                    )}
+                    {instances.length > 1 && (selectedInstanceId || selectedConversationInstanceId) && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-dark-hover text-gray-300" title="Enviando desde esta instancia">
+                        📱 {instances.find((i: any) => i.id === (selectedInstanceId || selectedConversationInstanceId))?.name || 
+                           instances.find((i: any) => i.id === (selectedInstanceId || selectedConversationInstanceId))?.phoneNumber?.slice(-4) || 
+                           'WhatsApp'}
                       </span>
                     )}
                   </div>

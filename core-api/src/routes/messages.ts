@@ -123,6 +123,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       lastMessageAt: Date;
       messageCount: number;
       unread: number;
+      instanceId: string | null;
     }>();
     
     messages.forEach(msg => {
@@ -157,7 +158,8 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
           lastMessage: msg.message,
           lastMessageAt: msg.createdAt,
           messageCount: 1,
-          unread: msg.direction === 'inbound' ? 1 : 0
+          unread: msg.direction === 'inbound' ? 1 : 0,
+          instanceId: msg.instanceId
         });
       } else {
         const conv = conversationsMap.get(phone)!;
