@@ -364,8 +364,8 @@ export const ordersApi = {
 };
 
 export const extractionApi = {
-  getFields: (businessId: string) =>
-    api.get(`/extraction/fields/${businessId}`),
+  getFields: (businessId: string, instanceId?: string) =>
+    api.get(`/extraction/fields/${businessId}${instanceId ? `?instance_id=${instanceId}` : ''}`),
   createField: (businessId: string, data: { 
     fieldKey: string; 
     fieldLabel: string; 
@@ -373,6 +373,7 @@ export const extractionApi = {
     description?: string;
     required?: boolean;
     useForAppointment?: boolean;
+    instanceId?: string;
   }) =>
     api.post(`/extraction/fields/${businessId}`, data),
   updateField: (businessId: string, fieldId: string, data: { 

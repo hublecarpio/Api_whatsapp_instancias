@@ -833,6 +833,7 @@ model PaymentSession {
 model ExtractionField {
   id                String   @id @default(uuid())
   businessId        String
+  instanceId        String?
   fieldKey          String
   fieldLabel        String
   fieldType         String   @default("text")
@@ -844,8 +845,9 @@ model ExtractionField {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @default(now()) @updatedAt
 
-  @@unique([businessId, fieldKey])
+  @@unique([businessId, fieldKey, instanceId])
   @@index([businessId])
+  @@index([businessId, instanceId])
   @@index([businessId, useForAppointment])
 }
 

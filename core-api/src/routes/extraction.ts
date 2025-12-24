@@ -16,6 +16,7 @@ async function checkBusinessAccess(userId: string, businessId: string) {
 router.get('/fields/:businessId', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
+    const { instance_id } = req.query;
     
     const business = await checkBusinessAccess(req.userId!, businessId);
     if (!business) {
@@ -23,11 +24,14 @@ router.get('/fields/:businessId', async (req: AuthRequest, res: Response) => {
     }
 
     const fields = await prisma.extractionField.findMany({
-      where: { businessId },
+      where: { 
+        businessId,
+        instanceId: instance_id ? String(instance_id) : null
+      },
       orderBy: { order: 'asc' }
     });
 
-    if (fields.length === 0) {
+    if (fields.length === 0 && !instance_id) {
       const defaultFields = [
         { fieldKey: 'nombre', fieldLabel: 'Nombre completo', required: true, order: 0 },
         { fieldKey: 'email', fieldLabel: 'Email', required: false, order: 1 },
@@ -39,6 +43,7 @@ router.get('/fields/:businessId', async (req: AuthRequest, res: Response) => {
       await prisma.extractionField.createMany({
         data: defaultFields.map(f => ({
           businessId,
+          instanceId: null,
           fieldKey: f.fieldKey,
           fieldLabel: f.fieldLabel,
           fieldType: 'text',
@@ -49,7 +54,7 @@ router.get('/fields/:businessId', async (req: AuthRequest, res: Response) => {
       });
 
       const createdFields = await prisma.extractionField.findMany({
-        where: { businessId },
+        where: { businessId, instanceId: null },
         orderBy: { order: 'asc' }
       });
 
@@ -66,7 +71,7 @@ router.get('/fields/:businessId', async (req: AuthRequest, res: Response) => {
 router.post('/fields/:businessId', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { fieldKey, fieldLabel, fieldType = 'text', description, required = false, useForAppointment = false } = req.body;
+    const { fieldKey, fieldLabel, fieldType = 'text', description, required = false, useForAppointment = false, instanceId } = req.body;
     
     const business = await checkBusinessAccess(req.userId!, businessId);
     if (!business) {
@@ -77,9 +82,12 @@ router.post('/fields/:businessId', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'fieldKey and fieldLabel are required' });
     }
 
-    const existing = await prisma.extractionField.findUnique({
+    const normalizedKey = fieldKey.toLowerCase().replace(/\s+/g, '_');
+    const existing = await prisma.extractionField.findFirst({
       where: {
-        businessId_fieldKey: { businessId, fieldKey }
+        businessId,
+        fieldKey: normalizedKey,
+        instanceId: instanceId || null
       }
     });
 
@@ -88,14 +96,15 @@ router.post('/fields/:businessId', async (req: AuthRequest, res: Response) => {
     }
 
     const maxOrder = await prisma.extractionField.aggregate({
-      where: { businessId },
+      where: { businessId, instanceId: instanceId || null },
       _max: { order: true }
     });
 
     const field = await (prisma.extractionField as any).create({
       data: {
         businessId,
-        fieldKey: fieldKey.toLowerCase().replace(/\s+/g, '_'),
+        instanceId: instanceId || null,
+        fieldKey: normalizedKey,
         fieldLabel,
         fieldType,
         description,

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
-import { extractionApi } from '@/lib/api';
+import { useInstanceStore } from '@/store/instance';
+import { extractionApi, waApi } from '@/lib/api';
 
 interface ExtractionField {
   id: string;
@@ -27,11 +28,13 @@ const FIELD_TYPES = [
 
 export default function ExtractionPage() {
   const { currentBusiness } = useBusinessStore();
+  const { instances, setInstances } = useInstanceStore();
   const [fields, setFields] = useState<ExtractionField[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingField, setEditingField] = useState<ExtractionField | null>(null);
@@ -47,9 +50,16 @@ export default function ExtractionPage() {
 
   useEffect(() => {
     if (currentBusiness?.id) {
+      waApi.listInstances(currentBusiness.id).then(res => setInstances(res.data)).catch(() => {});
       loadFields();
     }
   }, [currentBusiness?.id]);
+
+  useEffect(() => {
+    if (currentBusiness?.id) {
+      loadFields();
+    }
+  }, [selectedInstanceId]);
 
   useEffect(() => {
     if (success || error) {
@@ -64,7 +74,7 @@ export default function ExtractionPage() {
   const loadFields = async () => {
     try {
       setLoading(true);
-      const response = await extractionApi.getFields(currentBusiness!.id);
+      const response = await extractionApi.getFields(currentBusiness!.id, selectedInstanceId || undefined);
       setFields(response.data);
     } catch (err: any) {
       setError('Error al cargar campos');
@@ -96,6 +106,7 @@ export default function ExtractionPage() {
         description: formData.description.trim(),
         required: formData.required,
         useForAppointment: formData.useForAppointment,
+        instanceId: selectedInstanceId || undefined,
       });
 
       setSuccess('Campo creado');
@@ -198,15 +209,31 @@ export default function ExtractionPage() {
             Configura que datos extraer automaticamente de las conversaciones
           </p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Agregar Campo
-        </button>
+        <div className="flex items-center gap-3">
+          {instances.length > 1 && (
+            <select
+              value={selectedInstanceId}
+              onChange={(e) => setSelectedInstanceId(e.target.value)}
+              className="text-sm bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-gray-300"
+            >
+              <option value="">Config. general</option>
+              {instances.map((inst: any) => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name || inst.phoneNumber || inst.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Agregar Campo
+          </button>
+        </div>
       </div>
 
       {error && (
