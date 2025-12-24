@@ -564,6 +564,60 @@ router.post('/instances/:instanceId/restart', async (req: AuthRequest, res: Resp
   }
 });
 
+router.post('/instances/:instanceId/reset', requireEmailVerified, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const userInfo = await getUserWithRole(req.userId!);
+    const business = await checkBusinessAccess(req.userId!, businessId as string, userInfo?.role, userInfo?.parentUserId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    if (!instance.instanceBackendId) {
+      return res.status(400).json({ error: 'Instance has no backend connection' });
+    }
+    
+    await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/reset`);
+    
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: { 
+        status: 'pending_qr',
+        phoneNumber: null
+      }
+    });
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId: businessId as string,
+      eventType: 'SESSION_EXPIRED',
+      previousStatus: instance.status,
+      newStatus: 'pending_qr',
+      phoneNumber: instance.phoneNumber,
+      details: `Instance "${instance.name}" reset for new phone number`
+    });
+    
+    res.json({ success: true, message: 'Instance reset successfully' });
+  } catch (error: any) {
+    console.error('Reset instance error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to reset instance' });
+  }
+});
+
 router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, webhook, phoneNumber } = req.body;

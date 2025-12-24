@@ -64,7 +64,9 @@ export default function WhatsAppPage() {
     instances, 
     selectedInstanceId, 
     getSelectedInstance,
-    updateInstance 
+    updateInstance,
+    removeInstance,
+    setSelectedInstanceId
   } = useInstanceStore();
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
@@ -334,7 +336,11 @@ export default function WhatsAppPage() {
     addEvent('action', 'Cambiando numero...');
     
     try {
-      await waApi.reset(currentBusiness.id);
+      if (selectedInstanceId) {
+        await waApi.instanceReset(selectedInstanceId, currentBusiness.id);
+      } else {
+        await waApi.reset(currentBusiness.id);
+      }
       addEvent('success', 'Sesion reseteada. Escanea el QR con tu nuevo numero.');
       await fetchStatus();
     } catch (err: any) {
@@ -348,22 +354,33 @@ export default function WhatsAppPage() {
 
   const handleDelete = async () => {
     if (!currentBusiness) return;
-    if (!confirm('Eliminar conexion de WhatsApp? Tendras que configurar de nuevo.')) return;
+    if (!confirm('Eliminar esta conexion de WhatsApp? Tendras que configurar de nuevo.')) return;
     
     setActionLoading('delete');
     setError('');
     addEvent('action', 'Eliminando instancia...');
     
     try {
-      await waApi.delete(currentBusiness.id);
+      if (selectedInstanceId) {
+        await waApi.deleteInstance(selectedInstanceId, currentBusiness.id);
+      } else {
+        await waApi.delete(currentBusiness.id);
+      }
       addEvent('success', 'Instancia eliminada');
-      const refreshed = await businessApi.get(currentBusiness.id);
-      setCurrentBusiness(refreshed.data);
+      
+      if (selectedInstanceId) {
+        removeInstance(selectedInstanceId);
+      }
+      setSelectedInstanceId(null);
+      setViewMode('list');
       setStatus('not_created');
       setQrCode('');
       setPhoneNumber('');
       setMetaInfo(null);
       setWebhookInfo(null);
+      
+      const refreshed = await businessApi.get(currentBusiness.id);
+      setCurrentBusiness(refreshed.data);
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Error al eliminar';
       setError(errorMsg);

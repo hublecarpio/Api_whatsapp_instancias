@@ -172,6 +172,8 @@ export const waApi = {
     api.get(`/wa/instances/${instanceId}/qr?businessId=${businessId}`),
   instanceRestart: (instanceId: string, businessId: string) => 
     api.post(`/wa/instances/${instanceId}/restart?businessId=${businessId}`),
+  instanceReset: (instanceId: string, businessId: string) => 
+    api.post(`/wa/instances/${instanceId}/reset?businessId=${businessId}`),
   
   instances: (businessId: string) => api.get(`/wa/instances/${businessId}`),
   status: (businessId: string) => api.get(`/wa/${businessId}/status`),
