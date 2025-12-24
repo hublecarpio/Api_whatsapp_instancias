@@ -239,6 +239,12 @@ export default function PromptPage() {
   const handleInstanceChange = async (instId: string) => {
     setSelectedInstanceId(instId);
     if (currentBusiness) {
+      if (instId && instances.length > 1) {
+        const selectedInstance = instances.find(i => i.id === instId);
+        setBotEnabled(selectedInstance?.botEnabled ?? true);
+      } else {
+        setBotEnabled(currentBusiness.botEnabled);
+      }
       setLoading(true);
       try {
         const res = await promptApi.get(currentBusiness.id, instId || undefined);
@@ -758,10 +764,19 @@ export default function PromptPage() {
     setError('');
 
     try {
-      const response = await businessApi.toggleBot(currentBusiness.id, !botEnabled);
-      setBotEnabled(response.data.botEnabled);
-      updateBusiness(currentBusiness.id, { botEnabled: response.data.botEnabled });
-      setSuccess(`Bot ${response.data.botEnabled ? 'activado' : 'desactivado'}`);
+      if (selectedInstanceId && instances.length > 1) {
+        const selectedInstance = instances.find(i => i.id === selectedInstanceId);
+        const newBotEnabled = !botEnabled;
+        await whatsappApi.updateInstance(selectedInstanceId, currentBusiness.id, { botEnabled: newBotEnabled });
+        setBotEnabled(newBotEnabled);
+        setInstances(instances.map(i => i.id === selectedInstanceId ? { ...i, botEnabled: newBotEnabled } : i));
+        setSuccess(`Bot ${newBotEnabled ? 'activado' : 'desactivado'} para ${selectedInstance?.name || 'instancia'}`);
+      } else {
+        const response = await businessApi.toggleBot(currentBusiness.id, !botEnabled);
+        setBotEnabled(response.data.botEnabled);
+        updateBusiness(currentBusiness.id, { botEnabled: response.data.botEnabled });
+        setSuccess(`Bot ${response.data.botEnabled ? 'activado' : 'desactivado'}`);
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al cambiar estado del bot');
     } finally {

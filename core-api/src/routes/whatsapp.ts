@@ -228,7 +228,7 @@ router.put('/instances/:instanceId', requireEmailVerified, async (req: AuthReque
   try {
     const { instanceId } = req.params;
     const { businessId } = req.query;
-    const { name, businessObjective } = req.body;
+    const { name, businessObjective, botEnabled } = req.body;
     
     if (!businessId) {
       return res.status(400).json({ error: 'businessId is required' });
@@ -250,6 +250,7 @@ router.put('/instances/:instanceId', requireEmailVerified, async (req: AuthReque
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (businessObjective !== undefined) updateData.businessObjective = businessObjective;
+    if (botEnabled !== undefined) updateData.botEnabled = botEnabled;
     
     const updated = await prisma.whatsAppInstance.update({
       where: { id: instance.id },

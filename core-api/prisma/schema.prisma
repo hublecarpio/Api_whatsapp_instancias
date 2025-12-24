@@ -362,6 +362,7 @@ model WhatsAppInstance {
   status            String           @default("pending_qr")
   qr                String?
   isActive          Boolean          @default(true)
+  botEnabled        Boolean          @default(true)
   lastConnection    DateTime?
   webhookConfig     Json?
   createdAt         DateTime         @default(now())

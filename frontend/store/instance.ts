@@ -11,6 +11,7 @@ export interface WhatsAppInstance {
   status: string;
   qr?: string;
   isActive: boolean;
+  botEnabled?: boolean;
   webhookConfig?: any;
   lastConnection?: string;
   createdAt: string;
