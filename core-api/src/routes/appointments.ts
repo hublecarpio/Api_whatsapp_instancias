@@ -140,7 +140,7 @@ async function checkAvailability(
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const userId = (req as any).userId;
-    const { status, from, to, contactPhone } = req.query;
+    const { status, from, to, contactPhone, instanceId } = req.query;
 
     const business = await prisma.business.findFirst({
       where: { userId }
@@ -164,6 +164,10 @@ router.get('/', authMiddleware, async (req, res) => {
 
     if (contactPhone) {
       where.contactPhone = { contains: contactPhone as string };
+    }
+
+    if (instanceId !== undefined) {
+      where.instanceId = instanceId || null;
     }
 
     const appointments = await prisma.appointment.findMany({

@@ -432,7 +432,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
 router.get('/', authMiddleware, async (req: any, res) => {
   try {
-    const { businessId, status, limit } = req.query;
+    const { businessId, status, limit, instanceId } = req.query;
 
     if (!businessId) {
       return res.status(400).json({ error: 'businessId es requerido' });
@@ -452,7 +452,8 @@ router.get('/', authMiddleware, async (req: any, res) => {
     const orders = await getOrdersByBusiness(
       businessId,
       status as string | undefined,
-      limit ? parseInt(limit as string) : 50
+      limit ? parseInt(limit as string) : 50,
+      instanceId as string | undefined
     );
 
     res.json(orders);

@@ -287,7 +287,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, title, description, price, stock, imageUrl } = req.body;
+    const { businessId, instanceId, title, description, price, stock, imageUrl } = req.body;
     
     if (!businessId || !title || price === undefined) {
       return res.status(400).json({ error: 'businessId, title and price are required' });
@@ -301,6 +301,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const product = await prisma.product.create({
       data: { 
         businessId, 
+        instanceId: instanceId || null,
         title, 
         description, 
         price, 
@@ -318,7 +319,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id } = req.query;
+    const { business_id, instance_id } = req.query;
     
     if (!business_id) {
       return res.status(400).json({ error: 'business_id query param is required' });
@@ -329,8 +330,15 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    const whereClause: any = { businessId: business_id as string };
+    if (instance_id) {
+      whereClause.instanceId = instance_id as string;
+    } else {
+      whereClause.instanceId = null;
+    }
+    
     const products = await prisma.product.findMany({
-      where: { businessId: business_id as string },
+      where: whereClause,
       orderBy: { createdAt: 'desc' }
     });
     

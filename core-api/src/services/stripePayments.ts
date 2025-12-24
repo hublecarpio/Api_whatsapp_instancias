@@ -304,10 +304,13 @@ export async function handlePaymentCanceled(sessionId: string): Promise<{
   }
 }
 
-export async function getOrdersByBusiness(businessId: string, status?: string, limit = 50): Promise<any[]> {
+export async function getOrdersByBusiness(businessId: string, status?: string, limit = 50, instanceId?: string): Promise<any[]> {
   const where: any = { businessId };
   if (status) {
     where.status = status;
+  }
+  if (instanceId !== undefined) {
+    where.instanceId = instanceId || null;
   }
 
   return prisma.order.findMany({
