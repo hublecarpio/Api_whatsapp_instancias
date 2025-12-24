@@ -1,5 +1,6 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
+import { ClientProviders } from '@/components/ClientProviders';
 
 export const metadata: Metadata = {
   title: 'EfficoreChat - WhatsApp Business Platform',
@@ -49,7 +50,9 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark">
       <body className="bg-dark-bg text-white min-h-screen antialiased">
-        {children}
+        <ClientProviders>
+          {children}
+        </ClientProviders>
       </body>
     </html>
   );
