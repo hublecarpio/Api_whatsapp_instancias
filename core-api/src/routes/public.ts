@@ -137,4 +137,20 @@ router.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+router.get('/ui-settings', async (req: Request, res: Response) => {
+  try {
+    const settings = await prisma.platformSettings.findUnique({
+      where: { id: 'default' },
+      select: { glassMode: true }
+    });
+    
+    res.json({
+      glassMode: settings?.glassMode ?? false
+    });
+  } catch (error: any) {
+    console.error('Error fetching UI settings:', error);
+    res.json({ glassMode: false });
+  }
+});
+
 export default router;
