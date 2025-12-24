@@ -509,7 +509,7 @@ export default function PromptPage() {
     
     setLoadingFiles(true);
     try {
-      const res = await agentFilesApi.list(currentBusiness.id);
+      const res = await agentFilesApi.list(currentBusiness.id, selectedInstanceId || undefined);
       setAgentFiles(res.data.files || []);
     } catch (err) {
       console.error('Error loading agent files:', err);
@@ -568,7 +568,7 @@ export default function PromptPage() {
       formData.append('triggerKeywords', newFile.triggerKeywords);
       formData.append('triggerContext', newFile.triggerContext);
       
-      await agentFilesApi.upload(currentBusiness.id, formData);
+      await agentFilesApi.upload(currentBusiness.id, formData, selectedInstanceId || undefined);
       setSuccess('Archivo subido correctamente');
       setShowFileForm(false);
       setSelectedFile(null);
@@ -627,7 +627,7 @@ export default function PromptPage() {
     const fileOrders = newFiles.map((f, i) => ({ id: f.id, order: i }));
     
     try {
-      await agentFilesApi.reorder(currentBusiness!.id, fileOrders);
+      await agentFilesApi.reorder(currentBusiness!.id, fileOrders, selectedInstanceId || undefined);
       setAgentFiles(newFiles);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al reordenar');

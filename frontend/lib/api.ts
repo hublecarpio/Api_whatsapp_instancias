@@ -444,25 +444,28 @@ export const knowledgeApi = {
 };
 
 export const agentFilesApi = {
-  list: (businessId: string) =>
-    api.get(`/agent/files/${businessId}`),
-  upload: (businessId: string, formData: FormData) =>
-    api.post(`/agent/files/${businessId}`, formData, {
+  list: (businessId: string, instanceId?: string) =>
+    api.get(`/agent/files/${businessId}${instanceId ? `?instanceId=${instanceId}` : ''}`),
+  upload: (businessId: string, formData: FormData, instanceId?: string) => {
+    if (instanceId) formData.append('instanceId', instanceId);
+    return api.post(`/agent/files/${businessId}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+    });
+  },
   update: (businessId: string, fileId: string, data: { 
     name?: string; 
     description?: string; 
     triggerKeywords?: string; 
     triggerContext?: string; 
     order?: number; 
-    enabled?: boolean 
+    enabled?: boolean;
+    instanceId?: string;
   }) =>
     api.put(`/agent/files/${businessId}/${fileId}`, data),
   delete: (businessId: string, fileId: string) =>
     api.delete(`/agent/files/${businessId}/${fileId}`),
-  reorder: (businessId: string, fileOrders: { id: string; order: number }[]) =>
-    api.put(`/agent/files/${businessId}/reorder`, { fileOrders })
+  reorder: (businessId: string, fileOrders: { id: string; order: number }[], instanceId?: string) =>
+    api.put(`/agent/files/${businessId}/reorder`, { fileOrders, instanceId })
 };
 
 export const agentHealthApi = {

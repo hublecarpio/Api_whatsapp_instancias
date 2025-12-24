@@ -13,6 +13,7 @@ router.use(authMiddleware);
 router.get('/:businessId', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
+    const { instanceId } = req.query;
     const userId = req.userId;
 
     const business = await prisma.business.findFirst({
@@ -24,7 +25,10 @@ router.get('/:businessId', async (req: AuthRequest, res: Response) => {
     }
 
     const prompt = await prisma.agentPrompt.findFirst({
-      where: { businessId },
+      where: { 
+        businessId,
+        instanceId: instanceId ? String(instanceId) : null
+      },
       include: {
         files: {
           orderBy: { order: 'asc' }
@@ -43,7 +47,7 @@ router.post('/:businessId', upload.single('file'), async (req: AuthRequest, res:
   try {
     const { businessId } = req.params;
     const userId = req.userId;
-    const { name, description, triggerKeywords, triggerContext, order } = req.body;
+    const { name, description, triggerKeywords, triggerContext, order, instanceId } = req.body;
 
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId }
@@ -54,13 +58,17 @@ router.post('/:businessId', upload.single('file'), async (req: AuthRequest, res:
     }
 
     let prompt = await prisma.agentPrompt.findFirst({
-      where: { businessId }
+      where: { 
+        businessId,
+        instanceId: instanceId || null
+      }
     });
 
     if (!prompt) {
       prompt = await prisma.agentPrompt.create({
         data: {
           businessId,
+          instanceId: instanceId || null,
           prompt: 'Eres un asistente virtual profesional.'
         }
       });
