@@ -96,7 +96,17 @@ input, textarea, select {
 
   select.input option,
   select option {
-    @apply bg-dark-surface text-white py-2;
+    background-color: #1a1f2e !important;
+    color: #ffffff !important;
+    padding: 8px 12px;
+  }
+
+  select.input option:hover,
+  select option:hover,
+  select.input option:checked,
+  select option:checked {
+    background-color: #2a3142 !important;
+    color: #00d4ff !important;
   }
 
   .input-error {

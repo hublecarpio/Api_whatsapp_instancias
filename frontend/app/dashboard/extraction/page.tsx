@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { extractionApi, waApi } from '@/lib/api';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 interface ExtractionField {
   id: string;
@@ -214,18 +215,18 @@ export default function ExtractionPage() {
         </div>
         <div className="flex items-center gap-3">
           {instances.length > 1 && (
-            <select
+            <CustomSelect
               value={selectedInstanceId || ''}
-              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
-              className="text-sm bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-gray-300"
-            >
-              <option value="">Config. general</option>
-              {instances.map((inst: any) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name || inst.phoneNumber || inst.id.slice(0, 8)}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedInstanceId(val || null)}
+              options={[
+                { value: '', label: 'Config. general' },
+                ...instances.map((inst: any) => ({
+                  value: inst.id,
+                  label: inst.name || inst.phoneNumber || inst.id.slice(0, 8)
+                }))
+              ]}
+              className="min-w-[180px]"
+            />
           )}
           <button
             onClick={() => setShowAddModal(true)}

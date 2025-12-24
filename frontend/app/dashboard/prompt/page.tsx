@@ -5,6 +5,7 @@ import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { useInstanceStore } from '@/store/instance';
 import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi, waApi } from '@/lib/api';
+import CustomSelect from '@/components/ui/CustomSelect';
 import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel } from '@/components/AgentV2';
 import AgentHealthDashboard from '@/components/AgentHealthDashboard';
 
@@ -1127,18 +1128,18 @@ export default function PromptPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-xl sm:text-2xl font-bold text-white">Agente IA</h1>
           {instances.length > 1 && (
-            <select
+            <CustomSelect
               value={selectedInstanceId || ''}
-              onChange={(e) => handleInstanceChange(e.target.value)}
-              className="input py-2 px-3 text-sm min-w-[160px]"
-            >
-              <option value="">Config. general</option>
-              {instances.map(inst => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => handleInstanceChange(val)}
+              options={[
+                { value: '', label: 'Config. general' },
+                ...instances.map(inst => ({
+                  value: inst.id,
+                  label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
+                }))
+              ]}
+              className="min-w-[180px]"
+            />
           )}
         </div>
         {instances.length > 0 && (

@@ -5,6 +5,7 @@ import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import axios from 'axios';
 import { waApi } from '@/lib/api';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 interface WhatsAppGroup {
   id: string;
@@ -642,18 +643,18 @@ export default function BroadcastsPage() {
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-white">Envio Masivo</h1>
           {instances.length > 1 && (
-            <select
+            <CustomSelect
               value={selectedInstanceId || ''}
-              onChange={(e) => setSelectedInstanceId(e.target.value)}
-              className="input py-2 px-3 text-sm min-w-[180px]"
-            >
-              <option value="">Seleccionar instancia</option>
-              {instances.map((inst: any) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedInstanceId(val)}
+              options={[
+                { value: '', label: 'Seleccionar instancia' },
+                ...instances.map((inst: any) => ({
+                  value: inst.id,
+                  label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
+                }))
+              ]}
+              className="min-w-[200px]"
+            />
           )}
         </div>
         <div className="flex items-center gap-3">

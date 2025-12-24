@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { remindersApi, templatesApi, waApi } from '@/lib/api';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 interface FollowUpStep {
   delayMinutes: number;
@@ -415,18 +416,18 @@ export default function RemindersPage() {
                 </span>
               </div>
             )}
-            <select
+            <CustomSelect
               value={selectedInstanceId || ''}
-              onChange={(e) => handleConfigInstanceChange(e.target.value)}
-              className="input py-2 px-3 text-sm min-w-[160px]"
-            >
-              <option value="">Config. general</option>
-              {instances.map((inst: any) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => handleConfigInstanceChange(val)}
+              options={[
+                { value: '', label: 'Config. general' },
+                ...instances.map((inst: any) => ({
+                  value: inst.id,
+                  label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
+                }))
+              ]}
+              className="min-w-[180px]"
+            />
           </div>
         )}
       </div>

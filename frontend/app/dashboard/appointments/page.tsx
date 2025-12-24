@@ -5,6 +5,7 @@ import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { waApi } from '@/lib/api';
 import axios from 'axios';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 interface Appointment {
   id: string;
@@ -321,18 +322,18 @@ export default function AppointmentsPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-xl sm:text-2xl font-bold text-white">Citas</h1>
           {instances.length > 1 && (
-            <select
+            <CustomSelect
               value={selectedInstanceId || ''}
-              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
-              className="input py-2 px-3 text-sm min-w-[160px]"
-            >
-              <option value="">Config. general</option>
-              {instances.map(inst => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedInstanceId(val || null)}
+              options={[
+                { value: '', label: 'Config. general' },
+                ...instances.map((inst: any) => ({
+                  value: inst.id,
+                  label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
+                }))
+              ]}
+              className="min-w-[180px]"
+            />
           )}
         </div>
         <button
