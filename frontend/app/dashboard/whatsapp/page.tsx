@@ -137,7 +137,7 @@ export default function WhatsAppPage() {
         });
       }
       
-      if (newStatus === 'pending_qr' && response.data.provider !== 'META_CLOUD') {
+      if ((newStatus === 'pending_qr' || newStatus === 'requires_qr') && response.data.provider !== 'META_CLOUD') {
         let qrResponse;
         if (selectedInstanceId) {
           qrResponse = await waApi.instanceQr(selectedInstanceId, currentBusiness.id);
@@ -159,6 +159,7 @@ export default function WhatsAppPage() {
     const texts: Record<string, string> = {
       'not_created': 'Sin configurar',
       'pending_qr': 'Esperando QR',
+      'requires_qr': 'Esperando QR',
       'open': 'Conectado',
       'connected': 'Conectado',
       'closed': 'Desconectado',
@@ -376,6 +377,7 @@ export default function WhatsAppPage() {
     const badges: Record<string, { bg: string; dot: string; text: string }> = {
       'not_created': { bg: 'bg-gray-700', dot: 'bg-gray-400', text: 'Sin configurar' },
       'pending_qr': { bg: 'bg-accent-warning/20', dot: 'bg-accent-warning', text: 'Esperando QR' },
+      'requires_qr': { bg: 'bg-accent-warning/20', dot: 'bg-accent-warning', text: 'Esperando QR' },
       'open': { bg: 'bg-accent-success/20', dot: 'bg-accent-success', text: 'Conectado' },
       'connected': { bg: 'bg-accent-success/20', dot: 'bg-accent-success', text: 'Conectado' },
       'closed': { bg: 'bg-accent-error/20', dot: 'bg-accent-error', text: 'Desconectado' },
@@ -536,7 +538,7 @@ export default function WhatsAppPage() {
               setStatus(instance.status);
               setProvider(instance.provider);
               setPhoneNumber(instance.phoneNumber || '');
-              if (instance.status === 'pending_qr' && instance.provider !== 'META_CLOUD') {
+              if ((instance.status === 'pending_qr' || instance.status === 'requires_qr') && instance.provider !== 'META_CLOUD') {
                 waApi.qr(currentBusiness.id).then(res => setQrCode(res.data.qr || '')).catch(() => {});
               }
             }}
@@ -575,7 +577,7 @@ export default function WhatsAppPage() {
               </div>
             )}
 
-            {status === 'pending_qr' && provider !== 'META_CLOUD' && (
+            {(status === 'pending_qr' || status === 'requires_qr') && provider !== 'META_CLOUD' && (
               <div className="py-2">
                 <div className="text-center mb-3">
                   <h2 className="text-lg font-semibold text-white">Escanea el codigo QR</h2>
