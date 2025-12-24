@@ -14,6 +14,7 @@ export interface WhatsAppInstance {
   webhookConfig?: any;
   lastConnection?: string;
   createdAt: string;
+  businessObjective?: 'SALES' | 'APPOINTMENTS';
   metaCredential?: { id: string; phoneNumberId: string };
 }
 

@@ -827,6 +827,48 @@ export default function WhatsAppPage() {
             )}
           </div>
 
+          {selectedInstanceId && (status === 'open' || status === 'connected') && (
+            <div className="card">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                <span>🎯</span> Objetivo
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={async () => {
+                    if (currentBusiness && selectedInstanceId) {
+                      await waApi.updateInstance(selectedInstanceId, currentBusiness.id, { businessObjective: 'SALES' });
+                      updateInstance(selectedInstanceId, { businessObjective: 'SALES' } as any);
+                    }
+                  }}
+                  className={`p-2 rounded-lg border text-center transition-all text-xs ${
+                    selectedInstance?.businessObjective === 'SALES' || !selectedInstance?.businessObjective
+                      ? 'border-neon-blue bg-neon-blue/20 text-neon-blue'
+                      : 'border-dark-border bg-dark-hover text-gray-400 hover:border-gray-500'
+                  }`}
+                >
+                  <span className="block text-lg mb-1">🛒</span>
+                  Ventas
+                </button>
+                <button
+                  onClick={async () => {
+                    if (currentBusiness && selectedInstanceId) {
+                      await waApi.updateInstance(selectedInstanceId, currentBusiness.id, { businessObjective: 'APPOINTMENTS' });
+                      updateInstance(selectedInstanceId, { businessObjective: 'APPOINTMENTS' } as any);
+                    }
+                  }}
+                  className={`p-2 rounded-lg border text-center transition-all text-xs ${
+                    selectedInstance?.businessObjective === 'APPOINTMENTS'
+                      ? 'border-neon-blue bg-neon-blue/20 text-neon-blue'
+                      : 'border-dark-border bg-dark-hover text-gray-400 hover:border-gray-500'
+                  }`}
+                >
+                  <span className="block text-lg mb-1">📅</span>
+                  Citas
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-300 mb-2">💡 Ayuda</h3>
             <ul className="text-xs text-gray-400 space-y-1">

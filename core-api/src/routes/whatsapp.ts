@@ -224,6 +224,45 @@ router.post('/instances/:instanceId/regenerate-api-key', requireEmailVerified, a
   }
 });
 
+router.put('/instances/:instanceId', requireEmailVerified, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    const { name, businessObjective } = req.body;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (businessObjective !== undefined) updateData.businessObjective = businessObjective;
+    
+    const updated = await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: updateData
+    });
+    
+    res.json(updated);
+  } catch (error: any) {
+    console.error('Update instance error:', error.message);
+    res.status(500).json({ error: 'Failed to update instance' });
+  }
+});
+
 router.put('/instances/:instanceId/webhook', requireEmailVerified, async (req: AuthRequest, res: Response) => {
   try {
     const { instanceId } = req.params;

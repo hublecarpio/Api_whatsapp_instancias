@@ -365,6 +365,7 @@ model WhatsAppInstance {
   lastConnection    DateTime?
   webhookConfig     Json?
   createdAt         DateTime         @default(now())
+  businessObjective BusinessObjective?
   
   apiKeyHash        String?
   apiKeyPrefix      String?

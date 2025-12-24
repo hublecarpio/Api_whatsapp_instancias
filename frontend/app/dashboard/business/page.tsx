@@ -73,7 +73,6 @@ export default function BusinessPage() {
   const [currencyCode, setCurrencyCode] = useState('PEN');
   const [currencySymbol, setCurrencySymbol] = useState('S/.');
   
-  const [businessObjective, setBusinessObjective] = useState<'SALES' | 'APPOINTMENTS'>('SALES');
 
   useEffect(() => {
     if (user) {
@@ -173,8 +172,6 @@ export default function BusinessPage() {
       setTimezone(currentBusiness.timezone || 'America/Lima');
       setCurrencyCode(currentBusiness.currencyCode || 'PEN');
       setCurrencySymbol(currentBusiness.currencySymbol || 'S/.');
-      setBusinessObjective((currentBusiness as any).businessObjective || 'SALES');
-      
       businessApi.getStats(currentBusiness.id).then((res) => {
         setStats(res.data);
       }).catch(() => {});
@@ -196,7 +193,7 @@ export default function BusinessPage() {
 
     try {
       if (currentBusiness) {
-        await businessApi.update(currentBusiness.id, { name, description, industry, timezone, currencyCode, currencySymbol, businessObjective });
+        await businessApi.update(currentBusiness.id, { name, description, industry, timezone, currencyCode, currencySymbol });
         
         const refreshed = await businessApi.get(currentBusiness.id);
         setCurrentBusiness(refreshed.data);
@@ -297,8 +294,8 @@ export default function BusinessPage() {
             <div className="text-xs text-gray-400">Contactos</div>
           </div>
           <div className="card p-3 text-center">
-            <div className="text-lg font-bold text-white">{formatNumber(businessObjective === 'APPOINTMENTS' ? stats.appointments : stats.orders)}</div>
-            <div className="text-xs text-gray-400">{businessObjective === 'APPOINTMENTS' ? 'Citas' : 'Ordenes'}</div>
+            <div className="text-lg font-bold text-white">{formatNumber(stats.orders)}</div>
+            <div className="text-xs text-gray-400">Ordenes</div>
           </div>
           <div className="card p-3 text-center">
             <div className="text-lg font-bold text-white">{formatNumber(stats.campaigns)}</div>
@@ -566,46 +563,6 @@ export default function BusinessPage() {
             </div>
           </div>
           
-          <div className="mt-6 pt-6 border-t border-dark-border">
-            <label className="block text-sm font-medium text-gray-300 mb-3">
-              Objetivo del negocio
-            </label>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => setBusinessObjective('SALES')}
-                className={`p-4 rounded-lg border-2 transition-all ${
-                  businessObjective === 'SALES' 
-                    ? 'border-neon-blue bg-neon-blue/10 text-white' 
-                    : 'border-dark-border bg-dark-surface text-gray-400 hover:border-gray-600'
-                }`}
-              >
-                <div className="text-2xl mb-2">🛒</div>
-                <div className="font-medium">Ventas</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  E-commerce, pedidos, productos
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setBusinessObjective('APPOINTMENTS')}
-                className={`p-4 rounded-lg border-2 transition-all ${
-                  businessObjective === 'APPOINTMENTS' 
-                    ? 'border-neon-blue bg-neon-blue/10 text-white' 
-                    : 'border-dark-border bg-dark-surface text-gray-400 hover:border-gray-600'
-                }`}
-              >
-                <div className="text-2xl mb-2">📅</div>
-                <div className="font-medium">Citas</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  Servicios, reuniones, calendario
-                </div>
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-2">
-              Esto configura las herramientas del agente IA y las opciones del menu
-            </p>
-          </div>
         </div>
       </div>
 
