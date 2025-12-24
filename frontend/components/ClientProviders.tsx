@@ -2,11 +2,14 @@
 
 import { ReactNode } from 'react';
 import { GlassProvider } from './GlassProvider';
+import { UiCapabilityProvider } from './UiCapabilityProvider';
 
 export function ClientProviders({ children }: { children: ReactNode }) {
   return (
     <GlassProvider>
-      {children}
+      <UiCapabilityProvider>
+        {children}
+      </UiCapabilityProvider>
     </GlassProvider>
   );
 }

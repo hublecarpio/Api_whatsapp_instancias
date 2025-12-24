@@ -22,6 +22,10 @@
   --brand-secondary-rgb: 139, 92, 246;
   --brand-accent: #10B981;
   --brand-accent-rgb: 16, 185, 129;
+  --ui-columns: 2;
+  --ui-card-width: auto;
+  --ui-glass-blur: 20px;
+  --ui-touch-target: 36px;
 }
 
 * {
@@ -337,4 +341,94 @@ body.glass-mode .input:focus {
 body.glass-mode [role="dialog"] > div,
 body.glass-mode .modal-content {
   @apply bg-white/10 backdrop-blur-2xl border-white/20 shadow-2xl;
+}
+
+.touch-target {
+  min-height: var(--ui-touch-target);
+  min-width: var(--ui-touch-target);
+}
+
+html[data-touch="true"] .touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+html[data-touch="true"] .sidebar-link {
+  @apply py-4;
+  min-height: 44px;
+}
+
+html[data-touch="true"] .btn {
+  @apply py-3;
+  min-height: 44px;
+}
+
+html[data-touch="true"] .input {
+  @apply py-3;
+  min-height: 44px;
+}
+
+html[data-mobile="true"] .mobile-card-full {
+  width: 100% !important;
+}
+
+html[data-mobile="true"] .mobile-single-col {
+  grid-template-columns: 1fr !important;
+}
+
+html[data-glass-support="false"] .glass-card,
+html[data-glass-support="false"] body.glass-mode .card {
+  @apply bg-black/40 border-white/10;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-glass-support="false"] .glass-modal,
+html[data-glass-support="false"] body.glass-mode [role="dialog"] > div {
+  @apply bg-black/50 border-white/10;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-glass-support="false"] .glass-panel,
+html[data-glass-support="false"] .glass-sidebar,
+html[data-glass-support="false"] body.glass-mode aside,
+html[data-glass-support="false"] body.glass-mode header {
+  @apply bg-black/30 border-white/10;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-mobile="true"] .glass-card,
+html[data-mobile="true"] body.glass-mode .card {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+html[data-mobile="true"] .glass-modal,
+html[data-mobile="true"] body.glass-mode [role="dialog"] > div {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+html[data-mobile="true"] .glass-panel,
+html[data-mobile="true"] .glass-sidebar {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.adaptive-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--ui-columns), minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 767px) {
+  .adaptive-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .card {
+    width: 100%;
+  }
 }
