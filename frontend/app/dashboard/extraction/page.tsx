@@ -216,15 +216,12 @@ export default function ExtractionPage() {
         <div className="flex items-center gap-3">
           {instances.length > 1 && (
             <CustomSelect
-              value={selectedInstanceId || ''}
+              value={selectedInstanceId || instances[0]?.id || ''}
               onChange={(val) => setSelectedInstanceId(val || null)}
-              options={[
-                { value: '', label: 'Config. general' },
-                ...instances.map((inst: any) => ({
+              options={instances.map((inst: any) => ({
                   value: inst.id,
                   label: inst.name || inst.phoneNumber || inst.id.slice(0, 8)
-                }))
-              ]}
+                }))}
               className="min-w-[180px]"
             />
           )}

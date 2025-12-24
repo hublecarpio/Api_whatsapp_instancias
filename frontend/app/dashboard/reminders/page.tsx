@@ -417,15 +417,12 @@ export default function RemindersPage() {
               </div>
             )}
             <CustomSelect
-              value={selectedInstanceId || ''}
+              value={selectedInstanceId || instances[0]?.id || ''}
               onChange={(val) => handleConfigInstanceChange(val)}
-              options={[
-                { value: '', label: 'Config. general' },
-                ...instances.map((inst: any) => ({
+              options={instances.map((inst: any) => ({
                   value: inst.id,
                   label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
-                }))
-              ]}
+                }))}
               className="min-w-[180px]"
             />
           </div>
@@ -472,28 +469,6 @@ export default function RemindersPage() {
 
       {activeTab === 'config' && config && (
         <div className="card">
-          {instances.length > 1 && (
-            <div className="mb-6 p-4 bg-dark-bg rounded-lg border border-dark-border">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Configurar seguimientos para:
-              </label>
-              <select
-                value={selectedInstanceId || ''}
-                onChange={(e) => handleConfigInstanceChange(e.target.value)}
-                className="input"
-              >
-                <option value="">Configuracion general (sin instancia)</option>
-                {instances.map(inst => (
-                  <option key={inst.id} value={inst.id}>
-                    {inst.name || inst.phoneNumber || inst.id.slice(0,8)}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-2">
-                Cada numero de WhatsApp puede tener su propia configuracion de seguimiento
-              </p>
-            </div>
-          )}
 
           <div className="flex items-center justify-between mb-6">
             <div>

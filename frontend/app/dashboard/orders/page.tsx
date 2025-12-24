@@ -6,6 +6,7 @@ import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
 import { ordersApi, waApi } from '@/lib/api';
 import ExtractionFieldsManager from '@/components/ExtractionFieldsManager';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 interface OrderItem {
   id: string;
@@ -298,18 +299,15 @@ export default function OrdersPage() {
             {canUsePaymentLinks ? 'Pedidos y Enlaces' : 'Pedidos y Vouchers'}
           </h1>
           {instances.length > 1 && (
-            <select
-              value={selectedInstanceId || ''}
-              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
-              className="input py-2 px-3 text-sm min-w-[160px]"
-            >
-              <option value="">Config. general</option>
-              {instances.map(inst => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
-                </option>
-              ))}
-            </select>
+            <CustomSelect
+              value={selectedInstanceId || instances[0]?.id || ''}
+              onChange={(val) => setSelectedInstanceId(val || null)}
+              options={instances.map((inst: any) => ({
+                value: inst.id,
+                label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
+              }))}
+              className="min-w-[160px]"
+            />
           )}
         </div>
         <p className="text-gray-400 text-sm mt-1">

@@ -1129,15 +1129,12 @@ export default function PromptPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-white">Agente IA</h1>
           {instances.length > 1 && (
             <CustomSelect
-              value={selectedInstanceId || ''}
+              value={selectedInstanceId || instances[0]?.id || ''}
               onChange={(val) => handleInstanceChange(val)}
-              options={[
-                { value: '', label: 'Config. general' },
-                ...instances.map(inst => ({
+              options={instances.map(inst => ({
                   value: inst.id,
                   label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
-                }))
-              ]}
+                }))}
               className="min-w-[180px]"
             />
           )}

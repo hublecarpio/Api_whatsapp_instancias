@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { tagsApi, waApi } from '@/lib/api';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 interface Tag {
   id: string;
@@ -175,18 +176,15 @@ export default function TagsPage() {
         </div>
         <div className="flex items-center gap-3">
           {instances.length > 1 && (
-            <select
-              value={selectedInstanceId || ''}
-              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
-              className="input py-2 px-3 text-sm min-w-[160px]"
-            >
-              <option value="">Config. general</option>
-              {instances.map(inst => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
-                </option>
-              ))}
-            </select>
+            <CustomSelect
+              value={selectedInstanceId || instances[0]?.id || ''}
+              onChange={(val) => setSelectedInstanceId(val || null)}
+              options={instances.map((inst: any) => ({
+                value: inst.id,
+                label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
+              }))}
+              className="min-w-[160px]"
+            />
           )}
           <button
             onClick={() => { setShowNewForm(true); setEditingTag(null); }}

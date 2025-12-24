@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { productApi, productMediaApi, waApi } from '@/lib/api';
+import CustomSelect from '@/components/ui/CustomSelect';
 
 interface Product {
   id: string;
@@ -330,18 +331,15 @@ export default function ProductsPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-xl sm:text-2xl font-bold text-white">Productos</h1>
           {instances.length > 1 && (
-            <select
-              value={selectedInstanceId || ''}
-              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
-              className="input py-2 px-3 text-sm min-w-[160px]"
-            >
-              <option value="">Config. general</option>
-              {instances.map(inst => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
-                </option>
-              ))}
-            </select>
+            <CustomSelect
+              value={selectedInstanceId || instances[0]?.id || ''}
+              onChange={(val) => setSelectedInstanceId(val || null)}
+              options={instances.map((inst: any) => ({
+                value: inst.id,
+                label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
+              }))}
+              className="min-w-[160px]"
+            />
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">

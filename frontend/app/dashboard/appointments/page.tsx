@@ -323,15 +323,12 @@ export default function AppointmentsPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-white">Citas</h1>
           {instances.length > 1 && (
             <CustomSelect
-              value={selectedInstanceId || ''}
+              value={selectedInstanceId || instances[0]?.id || ''}
               onChange={(val) => setSelectedInstanceId(val || null)}
-              options={[
-                { value: '', label: 'Config. general' },
-                ...instances.map((inst: any) => ({
+              options={instances.map((inst: any) => ({
                   value: inst.id,
                   label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
-                }))
-              ]}
+                }))}
               className="min-w-[180px]"
             />
           )}
