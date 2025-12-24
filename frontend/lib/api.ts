@@ -166,6 +166,13 @@ export const waApi = {
   deleteInstance: (instanceId: string, businessId: string) => 
     api.delete(`/wa/instances/${instanceId}?businessId=${businessId}`),
   
+  instanceStatus: (instanceId: string, businessId: string) => 
+    api.get(`/wa/instances/${instanceId}/status?businessId=${businessId}`),
+  instanceQr: (instanceId: string, businessId: string) => 
+    api.get(`/wa/instances/${instanceId}/qr?businessId=${businessId}`),
+  instanceRestart: (instanceId: string, businessId: string) => 
+    api.post(`/wa/instances/${instanceId}/restart?businessId=${businessId}`),
+  
   instances: (businessId: string) => api.get(`/wa/instances/${businessId}`),
   status: (businessId: string) => api.get(`/wa/${businessId}/status`),
   qr: (businessId: string) => api.get(`/wa/${businessId}/qr`),

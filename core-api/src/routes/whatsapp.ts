@@ -143,6 +143,10 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
       return res.status(400).json({ error: 'businessId is required' });
     }
     
+    if (provider === 'BAILEYS' && !phoneNumber) {
+      return res.status(400).json({ error: 'El numero de telefono es obligatorio para instancias Baileys' });
+    }
+    
     const business = await checkBusinessAccess(req.userId!, businessId);
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
@@ -346,6 +350,217 @@ router.delete('/instances/:instanceId', requireEmailVerified, async (req: AuthRe
   } catch (error: any) {
     console.error('Delete instance error:', error.message);
     res.status(500).json({ error: 'Failed to delete instance' });
+  }
+});
+
+router.get('/instances/:instanceId/status', async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const userInfo = await getUserWithRole(req.userId!);
+    const business = await checkBusinessAccess(req.userId!, businessId as string, userInfo?.role, userInfo?.parentUserId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string },
+      include: { metaCredential: true }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    if (instance.provider === 'META_CLOUD') {
+      if (!instance.metaCredential) {
+        return res.status(500).json({ error: 'Meta credentials not found' });
+      }
+      
+      try {
+        const metaService = new MetaCloudService({
+          accessToken: instance.metaCredential.accessToken,
+          phoneNumberId: instance.metaCredential.phoneNumberId,
+          businessId: instance.metaCredential.businessId
+        });
+        
+        const phoneInfo = await metaService.getPhoneNumberInfo();
+        
+        return res.json({
+          id: instance.id,
+          name: instance.name,
+          provider: instance.provider,
+          phoneNumber: phoneInfo.display_phone_number || instance.phoneNumber,
+          status: 'connected',
+          isActive: instance.isActive,
+          lastConnection: instance.lastConnection,
+          webhookUrl: getPublicWebhookUrl(`/webhook/meta/${instance.id}`),
+          webhookVerifyToken: instance.metaCredential.webhookVerifyToken,
+          metaInfo: {
+            displayPhoneNumber: phoneInfo.display_phone_number,
+            qualityRating: phoneInfo.quality_rating,
+            verifiedName: phoneInfo.verified_name
+          }
+        });
+      } catch (err: any) {
+        return res.json({
+          id: instance.id,
+          name: instance.name,
+          provider: instance.provider,
+          phoneNumber: instance.phoneNumber,
+          status: 'error',
+          error: 'Could not verify Meta connection'
+        });
+      }
+    }
+    
+    if (!instance.instanceBackendId) {
+      return res.json({
+        id: instance.id,
+        name: instance.name,
+        provider: instance.provider,
+        status: 'not_created',
+        phoneNumber: instance.phoneNumber
+      });
+    }
+    
+    try {
+      const waResponse = await axios.get(`${WA_API_URL}/instances/${instance.instanceBackendId}/status`);
+      const waStatus = waResponse.data?.data?.status || waResponse.data?.status || instance.status;
+      
+      if (waStatus !== instance.status) {
+        await prisma.whatsAppInstance.update({
+          where: { id: instance.id },
+          data: { status: waStatus }
+        });
+      }
+      
+      return res.json({
+        id: instance.id,
+        name: instance.name,
+        provider: instance.provider,
+        status: waStatus,
+        phoneNumber: instance.phoneNumber || waResponse.data?.data?.phoneNumber,
+        isActive: instance.isActive,
+        lastConnection: instance.lastConnection,
+        instanceBackendId: instance.instanceBackendId
+      });
+    } catch (err) {
+      return res.json({
+        id: instance.id,
+        name: instance.name,
+        provider: instance.provider,
+        status: instance.status || 'disconnected',
+        phoneNumber: instance.phoneNumber,
+        isActive: instance.isActive
+      });
+    }
+  } catch (error: any) {
+    console.error('Get instance status error:', error.message);
+    res.status(500).json({ error: 'Failed to get instance status' });
+  }
+});
+
+router.get('/instances/:instanceId/qr', async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const userInfo = await getUserWithRole(req.userId!);
+    const business = await checkBusinessAccess(req.userId!, businessId as string, userInfo?.role, userInfo?.parentUserId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    if (!instance.instanceBackendId) {
+      return res.status(400).json({ error: 'Instance has no backend connection' });
+    }
+    
+    const waResponse = await axios.get(`${WA_API_URL}/instances/${instance.instanceBackendId}/qr`);
+    
+    const qrCode = waResponse.data?.data?.qrCode || waResponse.data?.qrCode || instance.qr;
+    
+    if (qrCode && qrCode !== instance.qr) {
+      await prisma.whatsAppInstance.update({
+        where: { id: instance.id },
+        data: { qr: qrCode }
+      });
+    }
+    
+    res.json({ 
+      qr: qrCode,
+      status: waResponse.data?.data?.status || instance.status
+    });
+  } catch (error: any) {
+    console.error('Get instance QR error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to get QR code' });
+  }
+});
+
+router.post('/instances/:instanceId/restart', async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const userInfo = await getUserWithRole(req.userId!);
+    const business = await checkBusinessAccess(req.userId!, businessId as string, userInfo?.role, userInfo?.parentUserId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    if (!instance.instanceBackendId) {
+      return res.status(400).json({ error: 'Instance has no backend connection' });
+    }
+    
+    await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/restart`);
+    
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: { status: 'pending_qr' }
+    });
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId: businessId as string,
+      eventType: 'RECONNECTED',
+      previousStatus: instance.status,
+      newStatus: 'pending_qr',
+      details: `Instance "${instance.name}" restarted`
+    });
+    
+    res.json({ success: true, message: 'Instance restarted' });
+  } catch (error: any) {
+    console.error('Restart instance error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to restart instance' });
   }
 });
 

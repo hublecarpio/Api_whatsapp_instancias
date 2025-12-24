@@ -1,14 +1,9 @@
 {
   "pages": {
-    "/dashboard/whatsapp/page": [
+    "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/whatsapp/page.js"
-    ],
-    "/dashboard/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/layout.js"
+      "static/chunks/app/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -16,55 +11,60 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/dashboard/prompt/page": [
+    "/dashboard/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/prompt/page.js"
+      "static/chunks/app/dashboard/page.js"
     ],
-    "/dashboard/billing/page": [
+    "/dashboard/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/billing/page.js"
-    ],
-    "/dashboard/chat/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/chat/page.js"
+      "static/chunks/app/dashboard/layout.js"
     ],
     "/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/login/page.js"
     ],
-    "/dashboard/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/page.js"
-    ],
     "/dashboard/business/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/business/page.js"
     ],
-    "/dashboard/api-docs/page": [
+    "/dashboard/contacts/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/api-docs/page.js"
+      "static/chunks/app/dashboard/contacts/page.js"
     ],
-    "/dashboard/reminders/page": [
+    "/dashboard/broadcasts/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/reminders/page.js"
+      "static/chunks/app/dashboard/broadcasts/page.js"
+    ],
+    "/dashboard/whatsapp/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/whatsapp/page.js"
+    ],
+    "/dashboard/chat/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/chat/page.js"
     ],
     "/dashboard/tags/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/tags/page.js"
     ],
-    "/dashboard/broadcasts/page": [
+    "/dashboard/api-docs/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/broadcasts/page.js"
+      "static/chunks/app/dashboard/api-docs/page.js"
+    ],
+    "/dashboard/extraction/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/extraction/page.js"
     ]
   }
 }

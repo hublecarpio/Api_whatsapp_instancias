@@ -36,6 +36,19 @@ export default function InstanceSelector({
   const [newInstanceName, setNewInstanceName] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<'BAILEYS' | 'META_CLOUD'>('BAILEYS');
   const [copyFromInstance, setCopyFromInstance] = useState<string>('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryCode, setCountryCode] = useState('+52');
+  
+  const COUNTRY_CODES = [
+    { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
+    { code: '+52', country: 'Mexico', flag: '🇲🇽' },
+    { code: '+34', country: 'España', flag: '🇪🇸' },
+    { code: '+57', country: 'Colombia', flag: '🇨🇴' },
+    { code: '+54', country: 'Argentina', flag: '🇦🇷' },
+    { code: '+55', country: 'Brasil', flag: '🇧🇷' },
+    { code: '+56', country: 'Chile', flag: '🇨🇱' },
+    { code: '+51', country: 'Peru', flag: '🇵🇪' },
+  ];
 
   const fetchInstances = useCallback(async () => {
     if (!businessId) return;
@@ -62,14 +75,25 @@ export default function InstanceSelector({
 
   const handleAddInstance = async () => {
     if (!businessId) return;
+    
+    if (selectedProvider === 'BAILEYS' && !phoneNumber) {
+      setAddError('El numero de telefono es obligatorio');
+      return;
+    }
+    
     setAddLoading(true);
     setAddError('');
+    
+    const fullPhone = selectedProvider === 'BAILEYS' 
+      ? `${countryCode.replace('+', '')}${phoneNumber.replace(/\D/g, '')}`
+      : undefined;
     
     try {
       const response = await waApi.addInstance({
         businessId,
         name: newInstanceName || undefined,
         provider: selectedProvider,
+        phoneNumber: fullPhone,
         copyFromInstanceId: copyFromInstance || undefined
       });
       
@@ -77,6 +101,7 @@ export default function InstanceSelector({
       setShowAddModal(false);
       setNewInstanceName('');
       setCopyFromInstance('');
+      setPhoneNumber('');
       
       if (response.data.instance) {
         setSelectedInstanceId(response.data.instance.id);
@@ -283,6 +308,37 @@ export default function InstanceSelector({
                 </button>
               </div>
             </div>
+            
+            {selectedProvider === 'BAILEYS' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Numero de telefono <span className="text-red-400">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    className="bg-dark-surface border border-dark-border rounded-lg px-3 py-2 focus:ring-2 focus:ring-neon-blue/50"
+                  >
+                    {COUNTRY_CODES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.flag} {c.code}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Numero sin codigo de pais"
+                    className="flex-1 bg-dark-surface border border-dark-border rounded-lg px-4 py-2 focus:ring-2 focus:ring-neon-blue/50"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Ingresa el numero que vas a escanear con el QR
+                </p>
+              </div>
+            )}
             
             {instances.length > 0 && (
               <div>
