@@ -90,6 +90,20 @@ export default function WhatsAppPage() {
   const [countryCode, setCountryCode] = useState('+52');
   const [phoneInput, setPhoneInput] = useState('');
   
+  const [apiConfig, setApiConfig] = useState<{
+    apiKeyPrefix: string | null;
+    webhookUrl: string | null;
+    webhookSecret: string | null;
+    hasApiKey: boolean;
+  } | null>(null);
+  const [apiConfigLoading, setApiConfigLoading] = useState(false);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [regeneratingKey, setRegeneratingKey] = useState(false);
+  const [editingWebhook, setEditingWebhook] = useState(false);
+  const [webhookUrlInput, setWebhookUrlInput] = useState('');
+  const [savingWebhook, setSavingWebhook] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  
   const [metaForm, setMetaForm] = useState<MetaFormData>({
     name: '',
     accessToken: '',
@@ -107,6 +121,59 @@ export default function WhatsAppPage() {
       timestamp: new Date()
     }, ...prev.slice(0, 9)]);
   }, []);
+
+  const fetchApiConfig = useCallback(async () => {
+    if (!currentBusiness || !selectedInstanceId) return;
+    setApiConfigLoading(true);
+    try {
+      const response = await waApi.instanceApiConfig(selectedInstanceId, currentBusiness.id);
+      setApiConfig(response.data);
+      setWebhookUrlInput(response.data.webhookUrl || '');
+    } catch (err) {
+      console.error('Failed to fetch API config:', err);
+      setApiConfig(null);
+    } finally {
+      setApiConfigLoading(false);
+    }
+  }, [currentBusiness, selectedInstanceId]);
+
+  const handleRegenerateApiKey = async () => {
+    if (!currentBusiness || !selectedInstanceId) return;
+    if (!confirm('¿Regenerar la API key? La clave anterior dejará de funcionar.')) return;
+    
+    setRegeneratingKey(true);
+    try {
+      const response = await waApi.instanceRegenerateApiKey(selectedInstanceId, currentBusiness.id);
+      setNewApiKey(response.data.apiKey);
+      setApiConfig(prev => prev ? { ...prev, apiKeyPrefix: response.data.apiKeyPrefix, hasApiKey: true } : null);
+      addEvent('success', 'API key regenerada');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al regenerar API key');
+    } finally {
+      setRegeneratingKey(false);
+    }
+  };
+
+  const handleSaveWebhook = async () => {
+    if (!currentBusiness || !selectedInstanceId) return;
+    setSavingWebhook(true);
+    try {
+      const response = await waApi.instanceUpdateWebhook(selectedInstanceId, currentBusiness.id, webhookUrlInput || null);
+      setApiConfig(prev => prev ? { ...prev, webhookUrl: response.data.webhookUrl, webhookSecret: response.data.webhookSecret } : null);
+      setEditingWebhook(false);
+      addEvent('success', 'Webhook actualizado');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al guardar webhook');
+    } finally {
+      setSavingWebhook(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   const fetchStatus = useCallback(async () => {
     if (!currentBusiness) return;
@@ -176,6 +243,13 @@ export default function WhatsAppPage() {
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
+
+  useEffect(() => {
+    if (selectedInstanceId && viewMode === 'detail') {
+      fetchApiConfig();
+      setNewApiKey(null);
+    }
+  }, [selectedInstanceId, viewMode, fetchApiConfig]);
 
   const handleSelectBaileys = () => {
     setShowProviderModal(false);
@@ -445,10 +519,6 @@ export default function WhatsAppPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    addEvent('success', 'Copiado al portapapeles');
-  };
 
   const fetchHistory = async () => {
     if (!currentBusiness) return;
@@ -664,14 +734,14 @@ export default function WhatsAppPage() {
                         <label className="text-xs text-neon-blue/70">URL del Webhook:</label>
                         <div className="flex items-center gap-2">
                           <code className="text-xs bg-dark-hover text-gray-300 px-2 py-1 rounded flex-1 overflow-x-auto">{webhookInfo.url}</code>
-                          <button onClick={() => copyToClipboard(webhookInfo.url)} className="text-neon-blue hover:text-cyan-400 text-xs">📋</button>
+                          <button onClick={() => copyToClipboard(webhookInfo.url, 'webhookUrl')} className="text-neon-blue hover:text-cyan-400 text-xs">{copiedField === 'webhookUrl' ? '✓' : '📋'}</button>
                         </div>
                       </div>
                       <div>
                         <label className="text-xs text-neon-blue/70">Token de verificacion:</label>
                         <div className="flex items-center gap-2">
                           <code className="text-xs bg-dark-hover text-gray-300 px-2 py-1 rounded flex-1">{webhookInfo.token}</code>
-                          <button onClick={() => copyToClipboard(webhookInfo.token)} className="text-neon-blue hover:text-cyan-400 text-xs">📋</button>
+                          <button onClick={() => copyToClipboard(webhookInfo.token, 'webhookToken')} className="text-neon-blue hover:text-cyan-400 text-xs">{copiedField === 'webhookToken' ? '✓' : '📋'}</button>
                         </div>
                       </div>
                     </div>
@@ -763,6 +833,121 @@ export default function WhatsAppPage() {
               <li>• <strong className="text-gray-300">QR expiro:</strong> Reiniciar</li>
             </ul>
           </div>
+
+          {selectedInstanceId && (status === 'open' || status === 'connected') && (
+            <div className="card">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                <span>🔑</span> Credenciales API
+              </h3>
+              
+              {apiConfigLoading ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-neon-blue"></div>
+                </div>
+              ) : apiConfig ? (
+                <div className="space-y-3">
+                  {newApiKey && (
+                    <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-3">
+                      <p className="text-xs text-accent-success font-semibold mb-1">Nueva API Key (solo se muestra una vez):</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-dark-bg px-2 py-1 rounded text-white flex-1 overflow-x-auto">{newApiKey}</code>
+                        <button 
+                          onClick={() => copyToClipboard(newApiKey, 'newApiKey')}
+                          className="text-xs text-accent-success hover:text-accent-success/80"
+                        >
+                          {copiedField === 'newApiKey' ? '✓' : '📋'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">API Key</label>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs bg-dark-bg px-2 py-1 rounded text-gray-300 flex-1">
+                        {apiConfig.hasApiKey ? `${apiConfig.apiKeyPrefix}...` : 'No configurada'}
+                      </code>
+                      <button
+                        onClick={handleRegenerateApiKey}
+                        disabled={regeneratingKey}
+                        className="text-xs px-2 py-1 bg-neon-blue/20 text-neon-blue rounded hover:bg-neon-blue/30 disabled:opacity-50"
+                      >
+                        {regeneratingKey ? '...' : 'Regenerar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Webhook URL</label>
+                    {editingWebhook ? (
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="url"
+                          value={webhookUrlInput}
+                          onChange={(e) => setWebhookUrlInput(e.target.value)}
+                          placeholder="https://tu-servidor.com/webhook"
+                          className="w-full text-xs bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-white focus:outline-none focus:border-neon-blue"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveWebhook}
+                            disabled={savingWebhook}
+                            className="text-xs px-2 py-1 bg-accent-success/20 text-accent-success rounded hover:bg-accent-success/30 disabled:opacity-50"
+                          >
+                            {savingWebhook ? '...' : 'Guardar'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingWebhook(false);
+                              setWebhookUrlInput(apiConfig.webhookUrl || '');
+                            }}
+                            className="text-xs px-2 py-1 bg-gray-600/20 text-gray-400 rounded hover:bg-gray-600/30"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-dark-bg px-2 py-1 rounded text-gray-300 flex-1 truncate">
+                          {apiConfig.webhookUrl || 'No configurada'}
+                        </code>
+                        <button
+                          onClick={() => setEditingWebhook(true)}
+                          className="text-xs px-2 py-1 bg-neon-blue/20 text-neon-blue rounded hover:bg-neon-blue/30"
+                        >
+                          Editar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {apiConfig.webhookSecret && (
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Webhook Secret</label>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-dark-bg px-2 py-1 rounded text-gray-300 flex-1 overflow-x-auto">
+                          {apiConfig.webhookSecret}
+                        </code>
+                        <button 
+                          onClick={() => copyToClipboard(apiConfig.webhookSecret!, 'webhookSecret')}
+                          className="text-xs text-neon-blue hover:text-neon-blue/80"
+                        >
+                          {copiedField === 'webhookSecret' ? '✓' : '📋'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    Usa estas credenciales para integrar este numero de WhatsApp con tu sistema.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 text-center py-2">No se pudo cargar la configuracion</p>
+              )}
+            </div>
+          )}
 
           <div className="card">
             <div className="flex items-center justify-between mb-3">

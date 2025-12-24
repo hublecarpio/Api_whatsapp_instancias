@@ -3211,6 +3211,10 @@ input, textarea, select {
   background-color: rgb(16 185 129 / 0.2);
 }
 
+.hover\:bg-accent-success\/30:hover {
+  background-color: rgb(16 185 129 / 0.3);
+}
+
 .hover\:bg-accent-success\/80:hover {
   background-color: rgb(16 185 129 / 0.8);
 }
@@ -3275,6 +3279,10 @@ input, textarea, select {
 .hover\:bg-gray-600:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(75 85 99 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-gray-600\/30:hover {
+  background-color: rgb(75 85 99 / 0.3);
 }
 
 .hover\:bg-gray-600\/50:hover {
@@ -3388,6 +3396,10 @@ input, textarea, select {
 .hover\:text-accent-success:hover {
   --tw-text-opacity: 1;
   color: rgb(16 185 129 / var(--tw-text-opacity, 1));
+}
+
+.hover\:text-accent-success\/80:hover {
+  color: rgb(16 185 129 / 0.8);
 }
 
 .hover\:text-cyan-400:hover {
