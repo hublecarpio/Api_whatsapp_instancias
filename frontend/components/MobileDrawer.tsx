@@ -80,22 +80,38 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
     ...commonLinks
   ];
 
-  const getStatusBadge = () => {
+  const getStatusInfo = () => {
     if (!user?.subscriptionStatus) return null;
     
-    const statusMap: Record<string, { label: string; class: string }> = {
-      active: { label: 'Plan Activo', class: 'status-active' },
-      trial: { label: 'Periodo de Prueba', class: 'status-trial' },
-      past_due: { label: 'Pago Pendiente', class: 'status-warning' },
-      pending: { label: 'Sin Suscripcion', class: 'status-error' },
-      canceled: { label: 'Cancelado', class: 'status-error' }
+    const planType = user.planType || 'none';
+    
+    if (planType === 'pro') {
+      return { label: 'Avanzado', class: 'status-pro', dotClass: 'bg-accent-purple' };
+    }
+    
+    if (planType === 'basic') {
+      return { label: 'Basic', class: 'status-active', dotClass: 'bg-neon-blue' };
+    }
+    
+    const statusMap: Record<string, { label: string; class: string; dotClass: string }> = {
+      active: { label: 'Plan Activo', class: 'status-active', dotClass: 'bg-accent-success' },
+      trial: { label: 'Periodo de Prueba', class: 'status-trial', dotClass: 'bg-neon-blue' },
+      past_due: { label: 'Pago Pendiente', class: 'status-warning', dotClass: 'bg-accent-warning' },
+      pending: { label: 'Sin Suscripcion', class: 'status-error', dotClass: 'bg-accent-error' },
+      canceled: { label: 'Cancelado', class: 'status-error', dotClass: 'bg-accent-error' }
     };
 
-    const status = statusMap[user.subscriptionStatus] || statusMap.pending;
+    return statusMap[user.subscriptionStatus] || statusMap.pending;
+  };
+
+  const statusInfo = getStatusInfo();
+  
+  const getStatusBadge = () => {
+    if (!statusInfo) return null;
     return (
-      <span className={`status-badge ${status.class}`}>
-        <span className="w-1.5 h-1.5 rounded-full bg-current" />
-        {status.label}
+      <span className={`status-badge ${statusInfo.class}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dotClass}`} />
+        {statusInfo.label}
       </span>
     );
   };
