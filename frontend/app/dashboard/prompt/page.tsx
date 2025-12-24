@@ -1070,91 +1070,22 @@ export default function PromptPage() {
         </div>
       )}
 
-      <div className="card mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Estado del Bot</h2>
-            <p className="text-sm text-gray-400">
-              {botEnabled 
-                ? 'El bot respondera automaticamente a los mensajes'
-                : 'Los mensajes se registraran pero no habra respuesta automatica'}
-            </p>
-          </div>
-          <button
-            onClick={handleToggleBot}
-            disabled={loading}
-            className={`px-6 py-3 rounded-full font-medium transition-colors ${
-              botEnabled
-                ? 'bg-accent-success text-white hover:bg-green-600'
-                : 'bg-dark-hover text-gray-400 hover:bg-gray-600'
-            }`}
-          >
-            {botEnabled ? 'Activo' : 'Inactivo'}
-          </button>
+      <div className="flex items-center justify-between mb-6 p-3 bg-dark-card rounded-lg border border-dark-border">
+        <div className="flex items-center gap-3">
+          <div className={`w-2 h-2 rounded-full ${botEnabled ? 'bg-accent-success' : 'bg-gray-500'}`} />
+          <span className="text-sm text-gray-300">Bot {botEnabled ? 'activo' : 'inactivo'}</span>
         </div>
-      </div>
-
-      <div className="card mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Version del Agente</h2>
-            <p className="text-sm text-gray-400">
-              {agentVersion === 'v1' 
-                ? 'Agente Clasico - Respuestas directas con OpenAI'
-                : 'Agente V2 Enterprise Pro - Sistema multi-agente con LangGraph'}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleChangeAgentVersion('v1')}
-              disabled={loading}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                agentVersion === 'v1'
-                  ? 'bg-neon-blue text-dark-bg'
-                  : 'bg-dark-hover text-gray-400 hover:text-white'
-              }`}
-            >
-              V1 Clasico
-            </button>
-            <button
-              onClick={() => handleChangeAgentVersion('v2')}
-              disabled={loading}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                agentVersion === 'v2'
-                  ? 'bg-neon-purple text-white'
-                  : ((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro')
-                    ? 'bg-dark-hover text-purple-400 hover:bg-neon-purple/20 hover:text-white'
-                    : 'bg-dark-hover/50 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              V2 Enterprise Pro
-              {agentVersion !== 'v2' && (
-                <span className="text-xs bg-purple-500/30 text-purple-400 px-2 py-0.5 rounded-full">ENTERPRISE</span>
-              )}
-            </button>
-          </div>
-        </div>
-        {agentVersion === 'v2' && (
-          <div className="mt-4 p-3 bg-neon-purple/10 border border-neon-purple/20 rounded-lg">
-            <p className="text-sm text-neon-purple">
-              El Agente V2 Enterprise Pro usa procesamiento avanzado con LangGraph, memoria inteligente y sistema multi-agente.
-            </p>
-          </div>
-        )}
-        {agentVersion !== 'v2' && !((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro') && (
-          <div className="mt-4 p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
-            <p className="text-sm text-gray-400">
-              El Agente V2 Enterprise Pro requiere plan Enterprise ($400/mes). Contacta a soporte para solicitarlo.
-            </p>
-          </div>
-        )}
-        {agentVersion !== 'v2' && ((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro') && (
-          <div className="mt-4 p-3 bg-neon-purple/10 border border-neon-purple/30 rounded-lg">
-            <p className="text-sm text-neon-purple">
-              Tienes plan Enterprise activo. Haz clic en "V2 Enterprise Pro" para activar el agente avanzado.
-            </p>
-          </div>
-        )}
+        <button
+          onClick={handleToggleBot}
+          disabled={loading}
+          className={`px-4 py-1.5 text-sm rounded-full font-medium transition-colors ${
+            botEnabled
+              ? 'bg-accent-success/20 text-accent-success hover:bg-accent-success/30'
+              : 'bg-dark-hover text-gray-400 hover:bg-gray-600'
+          }`}
+        >
+          {botEnabled ? 'Desactivar' : 'Activar'}
+        </button>
       </div>
 
       {agentVersion === 'v1' ? (
@@ -1261,14 +1192,6 @@ export default function PromptPage() {
             }`}
           >
             Configuracion
-          </button>
-          <button
-            onClick={() => setActiveV2Tab('api')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'api' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            API & Webhooks
           </button>
           <div className="ml-auto">
             {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} />}
