@@ -1,128 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useBusinessStore } from '@/store/business';
-import { agentApiKeyApi, agentWebhookApi } from '@/lib/api';
+import { useState } from 'react';
+import Link from 'next/link';
 
 export default function ApiDocsPage() {
-  const { currentBusiness } = useBusinessStore();
-  const [apiKeyInfo, setApiKeyInfo] = useState<any>(null);
-  const [newApiKey, setNewApiKey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('enviar');
-
-  const [webhookConfig, setWebhookConfig] = useState<{ 
-    webhookUrl: string | null; 
-    webhookEvents: string[]; 
-    webhookSecret: string | null; 
-    availableEvents: string[] 
-  } | null>(null);
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
-  const [loadingWebhook, setLoadingWebhook] = useState(false);
-  const [webhookSuccess, setWebhookSuccess] = useState<string | null>(null);
-  const [webhookError, setWebhookError] = useState<string | null>(null);
 
   const baseUrl = typeof window !== 'undefined' 
     ? (() => {
         const host = window.location.host;
-        // Production: app.efficore.es -> api.efficore.es
         if (host.includes('efficore.es')) {
           return 'https://api.efficore.es';
         }
-        // Development: replace frontend port with backend port
         return `${window.location.protocol}//${host.replace(':5000', ':3001')}`;
       })()
     : 'https://api.efficore.es';
-
-  useEffect(() => {
-    if (currentBusiness?.id) {
-      loadApiKeyInfo();
-      loadWebhookConfig();
-    }
-  }, [currentBusiness?.id]);
-
-  const loadApiKeyInfo = async () => {
-    setLoading(true);
-    try {
-      const response = await agentApiKeyApi.get(currentBusiness!.id);
-      setApiKeyInfo(response.data);
-    } catch (error) {
-      console.error('Error loading API key info:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadWebhookConfig = async () => {
-    try {
-      const res = await agentWebhookApi.get(currentBusiness!.id);
-      setWebhookConfig(res.data);
-      setWebhookUrl(res.data.webhookUrl || '');
-      setSelectedEvents(res.data.webhookEvents || []);
-    } catch (err) {
-      console.error('Error loading webhook config:', err);
-    }
-  };
-
-  const generateApiKey = async () => {
-    setGenerating(true);
-    try {
-      const response = await agentApiKeyApi.create(currentBusiness!.id);
-      setNewApiKey(response.data.apiKey);
-      setApiKeyInfo({
-        hasApiKey: true,
-        prefix: response.data.prefix,
-        createdAt: response.data.createdAt
-      });
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Error generando API key');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const revokeApiKey = async () => {
-    if (!confirm('Estas seguro? Esta accion revocara tu API key actual y deberas generar una nueva.')) {
-      return;
-    }
-    try {
-      await agentApiKeyApi.revoke(currentBusiness!.id);
-      setApiKeyInfo({ hasApiKey: false });
-      setNewApiKey(null);
-    } catch (error) {
-      console.error('Error revoking API key:', error);
-    }
-  };
-
-  const handleToggleEvent = (event: string) => {
-    setSelectedEvents(prev => 
-      prev.includes(event) 
-        ? prev.filter(e => e !== event)
-        : [...prev, event]
-    );
-  };
-
-  const handleSaveWebhook = async () => {
-    setWebhookError(null);
-    setWebhookSuccess(null);
-    setLoadingWebhook(true);
-    try {
-      const res = await agentWebhookApi.update(currentBusiness!.id, {
-        webhookUrl: webhookUrl || null,
-        webhookEvents: selectedEvents
-      });
-      setWebhookConfig(res.data);
-      setWebhookSuccess('Webhook configurado correctamente');
-      setTimeout(() => setWebhookSuccess(null), 3000);
-    } catch (err: any) {
-      setWebhookError(err.response?.data?.error || 'Error al configurar webhook');
-    } finally {
-      setLoadingWebhook(false);
-    }
-  };
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -153,191 +46,27 @@ export default function ApiDocsPage() {
     { id: 'mensajes', label: 'Mensajes' },
     { id: 'pedidos', label: 'Pedidos' },
     { id: 'citas', label: 'Citas' },
-  ];
-
-  const availableEvents = webhookConfig?.availableEvents || [
-    'user_message', 
-    'agent_message', 
-    'state_change', 
-    'tool_call', 
-    'stage_change'
+    { id: 'webhooks', label: 'Webhooks' },
   ];
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white mb-2">API & Webhooks</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">Documentacion API</h1>
         <p className="text-gray-400">
           Integra tu CRM o sistemas externos con nuestra API. Envia mensajes, consulta contactos y recibe eventos en tiempo real.
         </p>
       </div>
 
-      <div className="bg-dark-surface rounded-xl border border-dark-border p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Tu API Key</h2>
-        
-        {loading ? (
-          <div className="text-gray-400">Cargando...</div>
-        ) : apiKeyInfo?.hasApiKey ? (
-          <div className="space-y-4">
-            {newApiKey ? (
-              <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-4">
-                <p className="text-accent-success text-sm mb-2 font-medium">
-                  Guarda esta API key ahora - no podras verla de nuevo:
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-dark-bg px-3 py-2 rounded text-white font-mono text-sm break-all">
-                    {newApiKey}
-                  </code>
-                  <button
-                    onClick={() => copyToClipboard(newApiKey, 'newkey')}
-                    className="px-3 py-2 bg-accent-success text-white rounded hover:bg-accent-success/80 transition-colors text-sm"
-                  >
-                    {copied === 'newkey' ? 'Copiado!' : 'Copiar'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-4">
-                <div>
-                  <p className="text-gray-400 text-sm">API Key activa</p>
-                  <code className="text-white font-mono">{apiKeyInfo.prefix}...</code>
-                </div>
-                <span className="text-gray-500 text-sm">
-                  Creada: {new Date(apiKeyInfo.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-            )}
-            
-            <div className="flex gap-2">
-              <button
-                onClick={generateApiKey}
-                disabled={generating}
-                className="px-4 py-2 bg-neon-blue text-dark-bg rounded-lg hover:bg-neon-blue/80 transition-colors text-sm"
-              >
-                {generating ? 'Generando...' : 'Regenerar Key'}
-              </button>
-              <button
-                onClick={revokeApiKey}
-                className="px-4 py-2 border border-accent-error text-accent-error rounded-lg hover:bg-accent-error/10 transition-colors text-sm"
-              >
-                Revocar Key
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-gray-400">No tienes una API key activa.</p>
-            <button
-              onClick={generateApiKey}
-              disabled={generating}
-              className="px-4 py-2 bg-neon-blue text-dark-bg rounded-lg hover:bg-neon-blue/80 transition-colors"
-            >
-              {generating ? 'Generando...' : 'Generar API Key'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="bg-accent-purple/10 border border-accent-purple/30 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Configurar Webhook</h2>
-        <p className="text-gray-400 text-sm mb-4">
-          Recibe eventos en tiempo real cuando llegan mensajes, el agente responde, o cambia el estado de un contacto.
+      <div className="bg-neon-blue/10 border border-neon-blue/30 rounded-xl p-4">
+        <p className="text-gray-300 text-sm">
+          <span className="text-neon-blue font-medium">Configuracion de credenciales:</span>{' '}
+          Genera tu API Key y configura webhooks desde la seccion de{' '}
+          <Link href="/dashboard/whatsapp" className="text-neon-blue hover:underline">
+            WhatsApp
+          </Link>
+          {' '}en la pestana "API" de cada instancia.
         </p>
-
-        {webhookSuccess && (
-          <div className="mb-4 p-3 bg-accent-success/10 border border-accent-success/30 rounded-lg text-accent-success text-sm">
-            {webhookSuccess}
-          </div>
-        )}
-        {webhookError && (
-          <div className="mb-4 p-3 bg-accent-error/10 border border-accent-error/30 rounded-lg text-accent-error text-sm">
-            {webhookError}
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">URL del Webhook</label>
-            <input
-              type="url"
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-              placeholder="https://tu-servidor.com/webhook"
-              className="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-purple/50"
-            />
-            <p className="text-xs text-gray-500 mt-1">Debe ser HTTPS para produccion</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Eventos a recibir</label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {availableEvents.map(event => (
-                <label key={event} className="flex items-center gap-2 p-2 bg-dark-surface rounded-lg cursor-pointer hover:bg-dark-hover border border-dark-border">
-                  <input
-                    type="checkbox"
-                    checked={selectedEvents.includes(event)}
-                    onChange={() => handleToggleEvent(event)}
-                    className="w-4 h-4 rounded border-gray-600 bg-dark-hover text-accent-purple focus:ring-accent-purple"
-                  />
-                  <span className="text-sm text-gray-300">{event.replace(/_/g, ' ')}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {webhookConfig?.webhookSecret && (
-            <div className="p-3 bg-dark-surface rounded-lg border border-dark-border">
-              <p className="text-xs text-gray-400 mb-1">Webhook Secret (para verificar firmas HMAC-SHA256):</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs text-gray-300 font-mono break-all">{webhookConfig.webhookSecret}</code>
-                <button
-                  onClick={() => copyToClipboard(webhookConfig.webhookSecret!, 'secret')}
-                  className="text-xs text-gray-400 hover:text-white"
-                >
-                  {copied === 'secret' ? 'Copiado!' : 'Copiar'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={handleSaveWebhook}
-            disabled={loadingWebhook}
-            className="px-4 py-2 bg-accent-purple text-white rounded-lg hover:bg-accent-purple/80 transition-colors text-sm"
-          >
-            {loadingWebhook ? 'Guardando...' : 'Guardar Webhook'}
-          </button>
-        </div>
-
-        <div className="mt-6 pt-4 border-t border-dark-border">
-          <h3 className="text-sm font-semibold text-gray-300 mb-2">Formato de Eventos</h3>
-          <div className="text-xs text-gray-400 space-y-1">
-            <p><code className="text-accent-purple">user_message</code> - Cuando un usuario envia un mensaje (texto, imagenes, audio, video)</p>
-            <p><code className="text-accent-purple">agent_message</code> - Cuando el agente responde (incluye respuesta y media enviada)</p>
-            <p><code className="text-accent-purple">state_change</code> - Cuando cambia el estado del cliente (etapa, tags)</p>
-            <p><code className="text-accent-purple">tool_call</code> - Cuando el agente ejecuta una herramienta</p>
-            <p><code className="text-accent-purple">stage_change</code> - Cuando el cliente avanza de etapa</p>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <h3 className="text-sm font-semibold text-gray-300 mb-2">Ejemplo de Payload</h3>
-          <CodeBlock
-            id="webhook-example"
-            language="json"
-            code={`{
-  "event": "user_message",
-  "timestamp": "2024-01-15T10:30:00.000Z",
-  "businessId": "abc123",
-  "data": {
-    "contactPhone": "5215512345678",
-    "contactName": "Juan Perez",
-    "message": "Hola, quiero informacion",
-    "messageType": "text"
-  }
-}`}
-          />
-        </div>
       </div>
 
       <div className="bg-dark-surface rounded-xl border border-dark-border p-6">
@@ -347,7 +76,7 @@ export default function ApiDocsPage() {
         </p>
         <CodeBlock 
           id="auth"
-          code={`Authorization: Bearer ${newApiKey || apiKeyInfo?.prefix ? `${apiKeyInfo?.prefix || 'efk_'}...tu_api_key` : 'efk_tu_api_key_aqui'}`}
+          code={`Authorization: Bearer efk_tu_api_key_aqui`}
         />
       </div>
 
@@ -523,6 +252,67 @@ export default function ApiDocsPage() {
 curl -X GET "${baseUrl}/api/v1/appointments?from=2024-01-01&to=2024-12-31" \\
   -H "Authorization: Bearer efk_tu_api_key"`}
               />
+            </>
+          )}
+
+          {activeTab === 'webhooks' && (
+            <>
+              <div>
+                <h3 className="text-white font-medium mb-2">Eventos Disponibles</h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  Configura tu URL de webhook en la seccion de WhatsApp para recibir estos eventos en tiempo real.
+                </p>
+              </div>
+
+              <div className="bg-dark-bg rounded-lg p-4 mb-4">
+                <ul className="text-gray-400 text-sm space-y-2">
+                  <li><code className="text-accent-purple">user_message</code> - Cuando un usuario envia un mensaje (texto, imagenes, audio, video)</li>
+                  <li><code className="text-accent-purple">agent_message</code> - Cuando el agente responde (incluye respuesta y media enviada)</li>
+                  <li><code className="text-accent-purple">state_change</code> - Cuando cambia el estado del cliente (etapa, tags)</li>
+                  <li><code className="text-accent-purple">tool_call</code> - Cuando el agente ejecuta una herramienta</li>
+                  <li><code className="text-accent-purple">stage_change</code> - Cuando el cliente avanza de etapa</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="text-gray-300 text-sm mb-2">Ejemplo de Payload:</h4>
+                <CodeBlock
+                  id="webhook-example"
+                  language="json"
+                  code={`{
+  "event": "user_message",
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "businessId": "abc123",
+  "instanceId": "inst_123",
+  "data": {
+    "contactPhone": "5215512345678",
+    "contactName": "Juan Perez",
+    "message": "Hola, quiero informacion",
+    "messageType": "text"
+  }
+}`}
+                />
+              </div>
+
+              <div className="mt-4">
+                <h4 className="text-gray-300 text-sm mb-2">Verificacion de Firma (HMAC-SHA256):</h4>
+                <p className="text-gray-400 text-sm mb-2">
+                  Cada webhook incluye un header <code className="text-neon-blue">X-Webhook-Signature</code> que puedes usar para verificar la autenticidad.
+                </p>
+                <CodeBlock
+                  id="verify-signature"
+                  language="javascript"
+                  code={`const crypto = require('crypto');
+
+function verifyWebhook(payload, signature, secret) {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+  return signature === expected;
+}`}
+                />
+              </div>
             </>
           )}
         </div>
