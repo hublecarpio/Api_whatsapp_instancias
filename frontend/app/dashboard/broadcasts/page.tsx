@@ -70,6 +70,7 @@ interface Campaign {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  instanceId?: string | null;
 }
 
 type MessageType = 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
@@ -123,6 +124,7 @@ export default function BroadcastsPage() {
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [availableVariables, setAvailableVariables] = useState<AvailableVariable[]>([]);
+  const [filterInstanceId, setFilterInstanceId] = useState<string>('');
   const [metaMode, setMetaMode] = useState<'template' | 'regular'>('template');
 
   const isMetaCloud = instance?.provider === 'META_CLOUD';
@@ -646,7 +648,23 @@ export default function BroadcastsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
           <div className="pb-4 border-b border-dark-border mb-4">
-            <h2 className="text-lg font-semibold text-white">Campanas</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white">Campanas</h2>
+              {instances.length > 1 && (
+                <select
+                  value={filterInstanceId}
+                  onChange={e => setFilterInstanceId(e.target.value)}
+                  className="text-xs bg-dark-surface border border-dark-border rounded px-2 py-1 text-gray-300"
+                >
+                  <option value="">Todas las instancias</option>
+                  {instances.map((inst: any) => (
+                    <option key={inst.id} value={inst.id}>
+                      {inst.name || inst.phoneNumber || `#${inst.id.slice(-4)}`}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
           <div className="space-y-2 max-h-[600px] overflow-y-auto">
             {loading ? (
@@ -654,7 +672,9 @@ export default function BroadcastsPage() {
             ) : campaigns.length === 0 ? (
               <div className="p-4 text-center text-gray-400">No hay campanas</div>
             ) : (
-              campaigns.map(campaign => (
+              campaigns
+                .filter(c => !filterInstanceId || c.instanceId === filterInstanceId)
+                .map(campaign => (
                 <div
                   key={campaign.id}
                   className={`p-4 rounded-lg cursor-pointer transition-colors ${selectedCampaign?.id === campaign.id ? 'bg-neon-blue/10 border border-neon-blue/50' : 'bg-dark-surface hover:bg-dark-hover border border-dark-border'}`}
@@ -667,7 +687,16 @@ export default function BroadcastsPage() {
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="font-medium text-white">{campaign.name}</h3>
-                      <p className="text-sm text-gray-400">{campaign.messageType}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-400">{campaign.messageType}</p>
+                        {campaign.instanceId && instances.length > 1 && (
+                          <span className="text-xs px-1.5 py-0.5 bg-dark-bg rounded text-gray-500">
+                            {instances.find((i: any) => i.id === campaign.instanceId)?.name || 
+                             instances.find((i: any) => i.id === campaign.instanceId)?.phoneNumber || 
+                             'Instancia'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(campaign.status)}`}>
                       {campaign.status}
