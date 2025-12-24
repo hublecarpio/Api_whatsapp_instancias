@@ -1760,7 +1760,14 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
       availableModels,
       maxTokensPerRequest,
       enableGPT5Features,
-      glassMode
+      glassMode,
+      appName,
+      appTagline,
+      logoUrl,
+      faviconUrl,
+      primaryColor,
+      secondaryColor,
+      accentColor
     } = req.body;
 
     const updates: any = {};
@@ -1845,6 +1852,51 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
         return res.status(400).json({ error: 'glassMode must be a boolean' });
       }
       updates.glassMode = glassMode;
+    }
+    
+    if (appName !== undefined) {
+      if (typeof appName !== 'string' || appName.length > 50) {
+        return res.status(400).json({ error: 'appName must be a string with max 50 characters' });
+      }
+      updates.appName = appName;
+    }
+    
+    if (appTagline !== undefined) {
+      if (typeof appTagline !== 'string' || appTagline.length > 100) {
+        return res.status(400).json({ error: 'appTagline must be a string with max 100 characters' });
+      }
+      updates.appTagline = appTagline;
+    }
+    
+    if (logoUrl !== undefined) {
+      updates.logoUrl = logoUrl;
+    }
+    
+    if (faviconUrl !== undefined) {
+      updates.faviconUrl = faviconUrl;
+    }
+    
+    const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+    
+    if (primaryColor !== undefined) {
+      if (typeof primaryColor !== 'string' || !hexColorRegex.test(primaryColor)) {
+        return res.status(400).json({ error: 'primaryColor must be a valid hex color (e.g., #00D4FF)' });
+      }
+      updates.primaryColor = primaryColor;
+    }
+    
+    if (secondaryColor !== undefined) {
+      if (typeof secondaryColor !== 'string' || !hexColorRegex.test(secondaryColor)) {
+        return res.status(400).json({ error: 'secondaryColor must be a valid hex color (e.g., #8B5CF6)' });
+      }
+      updates.secondaryColor = secondaryColor;
+    }
+    
+    if (accentColor !== undefined) {
+      if (typeof accentColor !== 'string' || !hexColorRegex.test(accentColor)) {
+        return res.status(400).json({ error: 'accentColor must be a valid hex color (e.g., #10B981)' });
+      }
+      updates.accentColor = accentColor;
     }
     
     if (Object.keys(updates).length === 0) {
