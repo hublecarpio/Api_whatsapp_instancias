@@ -340,10 +340,10 @@ export default function AppointmentsPage() {
         </button>
       </div>
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-thin">
         <button
           onClick={() => setActiveTab('list')}
-          className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+          className={`px-3 sm:px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap flex-shrink-0 ${
             activeTab === 'list' 
               ? 'bg-neon-blue text-white' 
               : 'bg-dark-surface text-gray-400 hover:text-white'
@@ -353,7 +353,7 @@ export default function AppointmentsPage() {
         </button>
         <button
           onClick={() => setActiveTab('calendar')}
-          className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+          className={`px-3 sm:px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap flex-shrink-0 ${
             activeTab === 'calendar' 
               ? 'bg-neon-blue text-white' 
               : 'bg-dark-surface text-gray-400 hover:text-white'
@@ -363,7 +363,7 @@ export default function AppointmentsPage() {
         </button>
         <button
           onClick={() => setActiveTab('availability')}
-          className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+          className={`px-3 sm:px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap flex-shrink-0 ${
             activeTab === 'availability' 
               ? 'bg-neon-blue text-white' 
               : 'bg-dark-surface text-gray-400 hover:text-white'
@@ -373,7 +373,7 @@ export default function AppointmentsPage() {
         </button>
         <button
           onClick={() => setActiveTab('google')}
-          className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
+          className={`px-3 sm:px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-1 sm:gap-2 whitespace-nowrap flex-shrink-0 ${
             activeTab === 'google' 
               ? 'bg-neon-blue text-white' 
               : 'bg-dark-surface text-gray-400 hover:text-white'
@@ -382,7 +382,7 @@ export default function AppointmentsPage() {
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
             <path d="M22.46 6c-.85.38-1.78.64-2.75.76 1-.6 1.76-1.55 2.12-2.68-.93.55-1.96.95-3.06 1.17-.88-.94-2.13-1.53-3.51-1.53-2.66 0-4.81 2.16-4.81 4.81 0 .38.04.75.13 1.1-4-.2-7.58-2.11-9.96-5.02-.42.72-.66 1.56-.66 2.46 0 1.68.85 3.16 2.14 4.02-.79-.02-1.53-.24-2.18-.6v.06c0 2.35 1.67 4.31 3.88 4.76-.4.1-.83.16-1.27.16-.31 0-.62-.03-.92-.08.63 1.96 2.45 3.39 4.61 3.43-1.69 1.32-3.83 2.1-6.15 2.1-.4 0-.8-.02-1.19-.07 2.19 1.4 4.78 2.22 7.57 2.22 9.07 0 14.02-7.52 14.02-14.02 0-.21 0-.42-.01-.63.96-.69 1.79-1.56 2.45-2.55-.88.39-1.83.65-2.82.77z"/>
           </svg>
-          Google Calendar
+          <span className="hidden sm:inline">Google</span> Calendar
           {googleCalendarStatus?.connected && (
             <span className="w-2 h-2 rounded-full bg-green-500"></span>
           )}

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { useBusinessStore } from '@/store/business';
 import Logo from './Logo';
+import HoloIcon from './icons/HoloIcons';
 
 interface MobileDrawerProps {
   isOpen: boolean;
@@ -127,7 +128,7 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
               onClick={onClose}
               className={`sidebar-link ${pathname === link.href ? 'active' : ''}`}
             >
-              <span className="text-xl">{link.icon}</span>
+              <HoloIcon emoji={link.icon} size={22} />
               <span>{link.label}</span>
             </Link>
           ))}
