@@ -110,7 +110,12 @@ export default function WhatsAppPage() {
     if (!currentBusiness) return;
     
     try {
-      const response = await waApi.status(currentBusiness.id);
+      let response;
+      if (selectedInstanceId) {
+        response = await waApi.instanceStatus(selectedInstanceId, currentBusiness.id);
+      } else {
+        response = await waApi.status(currentBusiness.id);
+      }
       const newStatus = response.data.status;
       
       if (newStatus !== status && status !== '') {
@@ -133,7 +138,12 @@ export default function WhatsAppPage() {
       }
       
       if (newStatus === 'pending_qr' && response.data.provider !== 'META_CLOUD') {
-        const qrResponse = await waApi.qr(currentBusiness.id);
+        let qrResponse;
+        if (selectedInstanceId) {
+          qrResponse = await waApi.instanceQr(selectedInstanceId, currentBusiness.id);
+        } else {
+          qrResponse = await waApi.qr(currentBusiness.id);
+        }
         setQrCode(qrResponse.data.qr || '');
       } else {
         setQrCode('');
@@ -143,7 +153,7 @@ export default function WhatsAppPage() {
         setStatus('not_created');
       }
     }
-  }, [currentBusiness, status, addEvent]);
+  }, [currentBusiness, selectedInstanceId, status, addEvent]);
 
   const getStatusText = (s: string) => {
     const texts: Record<string, string> = {
@@ -272,7 +282,12 @@ export default function WhatsAppPage() {
     addEvent('action', 'Refrescando QR...');
     
     try {
-      const qrResponse = await waApi.qr(currentBusiness.id);
+      let qrResponse;
+      if (selectedInstanceId) {
+        qrResponse = await waApi.instanceQr(selectedInstanceId, currentBusiness.id);
+      } else {
+        qrResponse = await waApi.qr(currentBusiness.id);
+      }
       setQrCode(qrResponse.data.qr || '');
       setLastUpdate(new Date());
       addEvent('success', 'QR actualizado');
@@ -293,7 +308,11 @@ export default function WhatsAppPage() {
     addEvent('action', 'Reiniciando conexion...');
     
     try {
-      await waApi.restart(currentBusiness.id);
+      if (selectedInstanceId) {
+        await waApi.instanceRestart(selectedInstanceId, currentBusiness.id);
+      } else {
+        await waApi.restart(currentBusiness.id);
+      }
       addEvent('success', 'Conexion reiniciada');
       await fetchStatus();
     } catch (err: any) {
