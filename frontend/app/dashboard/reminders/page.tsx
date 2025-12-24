@@ -393,13 +393,42 @@ export default function RemindersPage() {
     );
   }
 
+  const selectedInstance = instances.find((i: any) => i.id === selectedInstanceId);
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">Seguimiento Automatico</h1>
-        <p className="text-gray-400 text-sm mt-1">
-          Configura el seguimiento automatico para clientes que no responden
-        </p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Seguimiento Automatico</h1>
+          <p className="text-gray-400 text-sm mt-1">
+            Configura el seguimiento automatico para clientes que no responden
+          </p>
+        </div>
+        {instances.length > 1 && (
+          <div className="flex items-center gap-3">
+            {selectedInstance && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-card border border-dark-border rounded-lg">
+                <div className={`w-2 h-2 rounded-full ${selectedInstance.status === 'CONNECTED' ? 'bg-accent-success' : 'bg-gray-500'}`} />
+                <span className="text-xs text-gray-400">Instancia:</span>
+                <span className="text-sm text-white font-medium">
+                  {selectedInstance.phoneNumber || selectedInstance.name || 'Instancia'}
+                </span>
+              </div>
+            )}
+            <select
+              value={selectedInstanceId || ''}
+              onChange={(e) => handleConfigInstanceChange(e.target.value)}
+              className="input py-2 px-3 text-sm min-w-[160px]"
+            >
+              <option value="">Config. general</option>
+              {instances.map((inst: any) => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2 mb-6 overflow-x-auto hide-scrollbar">

@@ -89,6 +89,16 @@ input, textarea, select {
            transition-all duration-200;
   }
 
+  select.input,
+  select {
+    @apply cursor-pointer;
+  }
+
+  select.input option,
+  select option {
+    @apply bg-dark-surface text-white py-2;
+  }
+
   .input-error {
     @apply border-accent-error focus:ring-accent-error/50 focus:border-accent-error;
   }
