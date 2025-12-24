@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
-import { businessApi, policyApi, billingApi, authApi } from '@/lib/api';
+import { businessApi, billingApi, authApi } from '@/lib/api';
 import Starter from '@/components/Starter';
 
 interface BusinessStats {
@@ -73,10 +73,6 @@ export default function BusinessPage() {
   const [currencyCode, setCurrencyCode] = useState('PEN');
   const [currencySymbol, setCurrencySymbol] = useState('S/.');
   
-  const [shippingPolicy, setShippingPolicy] = useState('');
-  const [refundPolicy, setRefundPolicy] = useState('');
-  const [brandVoice, setBrandVoice] = useState('');
-  const [policyId, setPolicyId] = useState<string | null>(null);
   const [businessObjective, setBusinessObjective] = useState<'SALES' | 'APPOINTMENTS'>('SALES');
 
   useEffect(() => {
@@ -179,15 +175,6 @@ export default function BusinessPage() {
       setCurrencySymbol(currentBusiness.currencySymbol || 'S/.');
       setBusinessObjective((currentBusiness as any).businessObjective || 'SALES');
       
-      policyApi.get(currentBusiness.id).then((res) => {
-        if (res.data) {
-          setShippingPolicy(res.data.shippingPolicy || '');
-          setRefundPolicy(res.data.refundPolicy || '');
-          setBrandVoice(res.data.brandVoice || '');
-          setPolicyId(res.data.id);
-        }
-      }).catch(() => {});
-
       businessApi.getStats(currentBusiness.id).then((res) => {
         setStats(res.data);
       }).catch(() => {});
@@ -222,32 +209,6 @@ export default function BusinessPage() {
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al guardar');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSavePolicy = async () => {
-    if (!currentBusiness) return;
-    
-    setLoading(true);
-    setError('');
-
-    try {
-      if (policyId) {
-        await policyApi.update(policyId, { shippingPolicy, refundPolicy, brandVoice });
-      } else {
-        const response = await policyApi.create({
-          businessId: currentBusiness.id,
-          shippingPolicy,
-          refundPolicy,
-          brandVoice
-        });
-        setPolicyId(response.data.id);
-      }
-      setSuccess('Politicas guardadas correctamente');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al guardar politicas');
     } finally {
       setLoading(false);
     }
@@ -751,54 +712,6 @@ export default function BusinessPage() {
             </div>
           )}
 
-          <div className="card mb-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Politicas del negocio</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Politica de envios
-                </label>
-                <textarea
-                  value={shippingPolicy}
-                  onChange={(e) => setShippingPolicy(e.target.value)}
-                  className="input resize-none"
-                  rows={2}
-                  placeholder="Describe como manejas los envios..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Politica de devoluciones
-                </label>
-                <textarea
-                  value={refundPolicy}
-                  onChange={(e) => setRefundPolicy(e.target.value)}
-                  className="input resize-none"
-                  rows={2}
-                  placeholder="Describe tu politica de devoluciones..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Tono de marca
-                </label>
-                <textarea
-                  value={brandVoice}
-                  onChange={(e) => setBrandVoice(e.target.value)}
-                  className="input resize-none"
-                  rows={2}
-                  placeholder="Ej: Amigable, profesional, cercano..."
-                />
-              </div>
-            </div>
-            <button
-              onClick={handleSavePolicy}
-              disabled={loading}
-              className="btn btn-secondary mt-4"
-            >
-              Guardar politicas
-            </button>
-          </div>
         </>
       )}
     </div>
