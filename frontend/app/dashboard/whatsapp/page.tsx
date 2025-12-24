@@ -63,11 +63,14 @@ export default function WhatsAppPage() {
   const { 
     instances, 
     selectedInstanceId, 
+    limits,
     getSelectedInstance,
     updateInstance,
     removeInstance,
     setSelectedInstanceId
   } = useInstanceStore();
+  
+  const isPro = user?.isPro || ['PRO', 'ENTERPRISE'].includes(limits?.tier || '');
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -834,7 +837,7 @@ export default function WhatsAppPage() {
             </ul>
           </div>
 
-          {selectedInstanceId && (status === 'open' || status === 'connected') && (
+          {selectedInstanceId && (status === 'open' || status === 'connected') && isPro && (
             <div className="card">
               <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
                 <span>🔑</span> Credenciales API
@@ -939,9 +942,16 @@ export default function WhatsAppPage() {
                     </div>
                   )}
 
-                  <p className="text-xs text-gray-500 mt-2">
-                    Usa estas credenciales para integrar este numero de WhatsApp con tu sistema.
-                  </p>
+                  <div className="mt-3 pt-3 border-t border-dark-border">
+                    <a
+                      href="/dashboard/api-docs"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full text-xs px-3 py-2 bg-neon-blue/10 text-neon-blue rounded-lg hover:bg-neon-blue/20 transition-colors"
+                    >
+                      <span>📖</span> Ver Documentacion API
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-gray-500 text-center py-2">No se pudo cargar la configuracion</p>

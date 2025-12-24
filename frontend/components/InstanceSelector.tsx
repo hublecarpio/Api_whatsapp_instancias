@@ -115,7 +115,7 @@ export default function InstanceSelector({
   };
 
   const canAddMore = limits?.canAddMore ?? false;
-  const isPro = ['PRO', 'ENTERPRISE'].includes(limits?.tier || '');
+  const isPro = user?.isPro || ['PRO', 'ENTERPRISE'].includes(limits?.tier || '');
   const selectedInstance = getSelectedInstance();
 
   if (compact) {
@@ -218,7 +218,7 @@ export default function InstanceSelector({
                       ? 'Config. pendiente'
                       : 'Desconectado'}
                   </span>
-                  {(instance.status === 'open' || instance.status === 'connected') && (
+                  {isPro && (instance.status === 'open' || instance.status === 'connected') && (
                     <span className="text-xs text-neon-blue flex items-center gap-1">
                       🔑 Ver API
                     </span>
