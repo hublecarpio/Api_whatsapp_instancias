@@ -10,6 +10,8 @@ const router = Router();
 interface ApiKeyRequest extends Request {
   businessId?: string;
   business?: any;
+  instanceId?: string;
+  instance?: any;
 }
 
 function hashApiKey(key: string): string {
@@ -34,6 +36,46 @@ async function validateApiKey(req: ApiKeyRequest, res: Response, next: NextFunct
     }
     
     const apiKeyHash = hashApiKey(apiKey);
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { apiKeyHash },
+      include: {
+        metaCredential: true,
+        business: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                subscriptionTier: true,
+                isPro: true,
+                proBonusExpiresAt: true
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    if (instance) {
+      const user = instance.business.user;
+      const hasProAccess = user.isPro || 
+        (user.proBonusExpiresAt && user.proBonusExpiresAt > new Date()) ||
+        user.subscriptionTier === 'PRO' ||
+        user.subscriptionTier === 'ENTERPRISE';
+      
+      if (!hasProAccess) {
+        return res.status(403).json({ 
+          error: 'Esta API requiere plan PRO o superior',
+          tier: user.subscriptionTier
+        });
+      }
+      
+      req.businessId = instance.business.id;
+      req.business = { ...instance.business, instances: [instance] };
+      req.instanceId = instance.id;
+      req.instance = instance;
+      return next();
+    }
     
     const business = await prisma.business.findFirst({
       where: { apiKeyHash },
@@ -78,6 +120,8 @@ async function validateApiKey(req: ApiKeyRequest, res: Response, next: NextFunct
     
     req.businessId = business.id;
     req.business = business;
+    req.instanceId = business.instances[0]?.id;
+    req.instance = business.instances[0];
     next();
   } catch (error: any) {
     console.error('API key validation error:', error);
@@ -88,13 +132,16 @@ async function validateApiKey(req: ApiKeyRequest, res: Response, next: NextFunct
 router.get('/me', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
     const business = req.business;
+    const instance = req.instance;
     
     res.json({
       businessId: business.id,
       businessName: business.name,
-      whatsappConnected: business.instances.length > 0,
-      whatsappPhone: business.instances[0]?.phoneNumber || null,
-      provider: business.instances[0]?.provider || null
+      instanceId: instance?.id || null,
+      instanceName: instance?.name || null,
+      whatsappConnected: !!instance && ['open', 'CONNECTED', 'connected'].includes(instance.status),
+      whatsappPhone: instance?.phoneNumber || null,
+      provider: instance?.provider || null
     });
   } catch (error: any) {
     console.error('API /me error:', error);
@@ -106,6 +153,7 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
   try {
     const { to, message, mediaUrl, mediaType } = req.body;
     const business = req.business;
+    const instance = req.instance;
     
     if (!to) {
       return res.status(400).json({ error: 'Campo "to" (numero de telefono) es requerido' });
@@ -115,9 +163,12 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
       return res.status(400).json({ error: 'Campo "message" o "mediaUrl" es requerido' });
     }
     
-    const instance = business.instances[0];
     if (!instance) {
-      return res.status(400).json({ error: 'No hay instancia de WhatsApp conectada' });
+      return res.status(400).json({ error: 'No hay instancia de WhatsApp asociada a esta API key' });
+    }
+    
+    if (!['open', 'CONNECTED', 'connected'].includes(instance.status)) {
+      return res.status(400).json({ error: 'La instancia de WhatsApp no esta conectada', status: instance.status });
     }
     
     const cleanTo = to.replace(/\D/g, '');

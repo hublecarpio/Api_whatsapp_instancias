@@ -1,7 +1,4 @@
 {
   "/dashboard/chat/page": "app/dashboard/chat/page.js",
-  "/dashboard/extraction/page": "app/dashboard/extraction/page.js",
-  "/dashboard/appointments/page": "app/dashboard/appointments/page.js",
-  "/dashboard/contacts/page": "app/dashboard/contacts/page.js",
-  "/dashboard/prompt/page": "app/dashboard/prompt/page.js"
+  "/dashboard/broadcasts/page": "app/dashboard/broadcasts/page.js"
 }
