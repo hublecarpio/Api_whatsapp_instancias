@@ -382,6 +382,8 @@ model WhatsAppInstance {
   followUpConfig   FollowUpConfig?
   agentPrompt      AgentPrompt?
   tags             Tag[]
+  products         Product[]                 @relation("ProductInstance")
+  orders           Order[]                   @relation("OrderInstance")
 
   @@index([businessId])
   @@index([apiKeyPrefix])
@@ -462,6 +464,7 @@ model MetaTemplate {
 model Product {
   id          String   @id @default(uuid())
   businessId  String
+  instanceId  String?
   title       String
   description String?
   price       Float
@@ -469,9 +472,11 @@ model Product {
   imageUrl    String?
   createdAt   DateTime @default(now())
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance WhatsAppInstance? @relation("ProductInstance", fields: [instanceId], references: [id], onDelete: SetNull)
 
   @@index([businessId, title])
+  @@index([businessId, instanceId])
 }
 
 model Policy {
@@ -765,6 +770,7 @@ enum OrderStatus {
 model Order {
   id                    String      @id @default(uuid())
   businessId            String
+  instanceId            String?
   contactPhone          String
   contactName           String?
   email                 String?
@@ -792,10 +798,12 @@ model Order {
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
 
-  items OrderItem[]
+  items    OrderItem[]
+  instance WhatsAppInstance? @relation("OrderInstance", fields: [instanceId], references: [id], onDelete: SetNull)
 
   @@index([businessId, status])
   @@index([businessId, contactPhone])
+  @@index([businessId, instanceId])
   @@index([createdAt])
 }
 
