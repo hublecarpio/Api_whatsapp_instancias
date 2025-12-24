@@ -73,14 +73,14 @@ router.post('/internal/log', async (req: Request, res: Response) => {
     let finalToolId = toolId;
     
     if (!finalToolId && toolName) {
-      const prompt = await prisma.agentPrompt.findUnique({
+      const prompt = await prisma.agentPrompt.findFirst({
         where: { businessId },
         include: { tools: true }
       });
       
       const cleanToolName = toolName.replace(/^custom_/, '');
       
-      const matchedTool = prompt?.tools.find(t => 
+      const matchedTool = prompt?.tools.find((t: any) => 
         t.name.toLowerCase() === toolName.toLowerCase() ||
         t.name.toLowerCase() === cleanToolName.toLowerCase()
       );
@@ -134,7 +134,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const prompt = await prisma.agentPrompt.findUnique({
+    const prompt = await prisma.agentPrompt.findFirst({
       where: { businessId: business_id as string },
       include: { tools: true }
     });
@@ -164,7 +164,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    let prompt = await prisma.agentPrompt.findUnique({
+    let prompt = await prisma.agentPrompt.findFirst({
       where: { businessId: business_id }
     });
     

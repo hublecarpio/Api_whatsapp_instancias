@@ -1,0 +1,40 @@
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             13.7s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.500                                                                                                                                                                       
+0.500 > core-api@1.0.0 build                                                                                                                                                
+0.500 > tsc                                                                                                                                                                 
+0.500                                                                                                                                                                       
+13.62 src/routes/public.ts(91,7): error TS2322: Type '{ businessId: string; }' is not assignable to type 'AgentPromptWhereUniqueInput'.                                     
+13.62   Type '{ businessId: string; }' is not assignable to type '{ id: string; instanceId: string; } & { id?: string | undefined; instanceId?: string | undefined; AND?: Ag
+entPromptWhereInput | AgentPromptWhereInput[] | undefined; ... 11 more ...; files?: AgentFileListRelationFilter | undefined; }'.                                            
+13.62     Type '{ businessId: string; }' is missing the following properties from type '{ id: string; instanceId: string; }': id, instanceId
+13.62 src/routes/public.ts(96,9): error TS2322: Type '{ businessId: string; }' is not assignable to type 'AgentPromptWhereUniqueInput'.
+13.62   Type '{ businessId: string; }' is not assignable to type '{ id: string; instanceId: string; } & { id?: string | undefined; instanceId?: string | undefined; AND?: AgentPromptWhereInput | AgentPromptWhereInput[] | undefined; ... 11 more ...; files?: AgentFileListRelationFilter | undefined; }'.
+13.62     Type '{ businessId: string; }' is missing the following properties from type '{ id: string; instanceId: string; }': id, instanceId
+13.62 src/routes/tools.ts(77,9): error TS2322: Type '{ businessId: any; }' is not assignable to type 'AgentPromptWhereUniqueInput'.
+13.62   Type '{ businessId: any; }' is not assignable to type '{ id: string; instanceId: string; } & { id?: string | undefined; instanceId?: string | undefined; AND?: AgentPromptWhereInput | AgentPromptWhereInput[] | undefined; ... 11 more ...; files?: AgentFileListRelationFilter | undefined; }'.
+13.62     Type '{ businessId: any; }' is missing the following properties from type '{ id: string; instanceId: string; }': id, instanceId
+13.62 src/routes/tools.ts(83,35): error TS2339: Property 'tools' does not exist on type '{ id: string; businessId: string; instanceId: string | null; updatedAt: Date; prompt: string; bufferSeconds: number; historyLimit: number; splitMessages: boolean; }'.
+13.62 src/routes/tools.ts(83,46): error TS7006: Parameter 't' implicitly has an 'any' type.
+13.62 src/routes/tools.ts(138,7): error TS2322: Type '{ businessId: string; }' is not assignable to type 'AgentPromptWhereUniqueInput'.
+13.62   Type '{ businessId: string; }' is not assignable to type '{ id: string; instanceId: string; } & { id?: string | undefined; instanceId?: string | undefined; AND?: AgentPromptWhereInput | AgentPromptWhereInput[] | undefined; ... 11 more ...; files?: AgentFileListRelationFilter | undefined; }'.
+13.62     Type '{ businessId: string; }' is missing the following properties from type '{ id: string; instanceId: string; }': id, instanceId
+13.62 src/routes/tools.ts(142,22): error TS2339: Property 'tools' does not exist on type '{ id: string; businessId: string; instanceId: string | null; updatedAt: Date; prompt: string; bufferSeconds: number; historyLimit: number; splitMessages: boolean; }'.
+13.62 src/routes/tools.ts(168,7): error TS2322: Type '{ businessId: any; }' is not assignable to type 'AgentPromptWhereUniqueInput'.
+13.62   Type '{ businessId: any; }' is not assignable to type '{ id: string; instanceId: string; } & { id?: string | undefined; instanceId?: string | undefined; AND?: AgentPromptWhereInput | AgentPromptWhereInput[] | undefined; ... 11 more ...; files?: AgentFileListRelationFilter | undefined; }'.
+13.62     Type '{ businessId: any; }' is missing the following properties from type '{ id: string; instanceId: string; }': id, instanceId
+13.62 src/services/followUpService.ts(3,44): error TS2307: Cannot find module 'date-fns-tz' or its corresponding type declarations.
+13.62 src/services/followUpService.ts(4,106): error TS2307: Cannot find module 'date-fns' or its corresponding type declarations.
+13.62 src/services/queues/reminderProcessor.ts(7,44): error TS2307: Cannot find module 'date-fns-tz' or its corresponding type declarations.
+13.62 src/services/queues/reminderProcessor.ts(8,94): error TS2307: Cannot find module 'date-fns' or its corresponding type declarations.
+------
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2

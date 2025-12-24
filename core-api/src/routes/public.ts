@@ -87,13 +87,13 @@ router.post('/inject-prompt', async (req: Request, res: Response) => {
       }
     });
 
-    let promptRecord = await prisma.agentPrompt.findUnique({
+    let promptRecord = await prisma.agentPrompt.findFirst({
       where: { businessId: business.id }
     });
 
     if (promptRecord) {
       await prisma.agentPrompt.update({
-        where: { businessId: business.id },
+        where: { id: promptRecord.id },
         data: {
           prompt: prompt_comercial_final,
           updatedAt: new Date()
