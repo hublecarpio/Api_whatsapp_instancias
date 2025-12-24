@@ -701,7 +701,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (currentBusiness) {
       waApi.listInstances(currentBusiness.id).then(res => {
-        setInstances(res.data || []);
+        setInstances(res.data.instances || []);
       }).catch(err => {
         console.error('Failed to fetch instances:', err);
       });
