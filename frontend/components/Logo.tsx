@@ -1,11 +1,15 @@
 'use client';
 
+import { useBranding } from './GlassProvider';
+
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
   showText?: boolean;
 }
 
 export default function Logo({ size = 'md', showText = true }: LogoProps) {
+  const branding = useBranding();
+  
   const sizes = {
     sm: { icon: 24, text: 'text-lg' },
     md: { icon: 32, text: 'text-xl' },
@@ -13,6 +17,24 @@ export default function Logo({ size = 'md', showText = true }: LogoProps) {
   };
 
   const { icon, text } = sizes[size];
+
+  if (branding.logoUrl) {
+    return (
+      <div className="flex items-center gap-2">
+        <img 
+          src={branding.logoUrl} 
+          alt={branding.appName} 
+          style={{ height: icon }}
+          className="object-contain"
+        />
+        {showText && (
+          <span className={`font-bold ${text} text-white tracking-tight`}>
+            {branding.appName}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2">
@@ -24,6 +46,7 @@ export default function Logo({ size = 'md', showText = true }: LogoProps) {
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
           className="drop-shadow-[0_0_8px_rgba(0,212,255,0.5)]"
+          style={{ filter: `drop-shadow(0 0 8px ${branding.primaryColor}80)` }}
         >
           <rect
             x="2"
@@ -31,33 +54,36 @@ export default function Logo({ size = 'md', showText = true }: LogoProps) {
             width="36"
             height="36"
             rx="8"
-            stroke="#00D4FF"
+            stroke={branding.primaryColor}
             strokeWidth="2.5"
             fill="transparent"
           />
           <path
             d="M12 14L20 20L12 26V14Z"
-            fill="#00D4FF"
-            className="drop-shadow-[0_0_4px_rgba(0,212,255,0.8)]"
+            fill={branding.primaryColor}
+            style={{ filter: `drop-shadow(0 0 4px ${branding.primaryColor}CC)` }}
           />
           <path
             d="M20 14L28 20L20 26V14Z"
-            fill="#00D4FF"
+            fill={branding.primaryColor}
             fillOpacity="0.5"
           />
           <circle
             cx="20"
             cy="20"
             r="3"
-            fill="#00D4FF"
+            fill={branding.primaryColor}
             className="animate-pulse"
           />
         </svg>
-        <div className="absolute inset-0 bg-neon-blue/20 blur-xl rounded-full -z-10" />
+        <div 
+          className="absolute inset-0 blur-xl rounded-full -z-10" 
+          style={{ backgroundColor: `${branding.primaryColor}33` }}
+        />
       </div>
       {showText && (
         <span className={`font-bold ${text} text-white tracking-tight`}>
-          Efficore<span className="text-neon-blue">Chat</span>
+          {branding.appName}
         </span>
       )}
     </div>

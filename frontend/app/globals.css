@@ -16,6 +16,12 @@
   --color-text-muted: #6B7280;
   --topbar-height: 56px;
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --brand-primary: #00D4FF;
+  --brand-primary-rgb: 0, 212, 255;
+  --brand-secondary: #8B5CF6;
+  --brand-secondary-rgb: 139, 92, 246;
+  --brand-accent: #10B981;
+  --brand-accent-rgb: 16, 185, 129;
 }
 
 * {

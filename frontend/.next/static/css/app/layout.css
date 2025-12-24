@@ -2903,6 +2903,10 @@ body.glass-mode .mobile-drawer {
   --tw-drop-shadow: drop-shadow(0 0 8px rgba(0,212,255,0.6));
   filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
 }
+.drop-shadow {
+  --tw-drop-shadow: drop-shadow(0 1px 2px rgb(0 0 0 / 0.1)) drop-shadow(0 1px 1px rgb(0 0 0 / 0.06));
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+}
 .filter {
   filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
 }
@@ -2993,6 +2997,12 @@ body.glass-mode .mobile-drawer {
   --color-text-muted: #6B7280;
   --topbar-height: 56px;
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --brand-primary: #00D4FF;
+  --brand-primary-rgb: 0, 212, 255;
+  --brand-secondary: #8B5CF6;
+  --brand-secondary-rgb: 139, 92, 246;
+  --brand-accent: #10B981;
+  --brand-accent-rgb: 16, 185, 129;
 }
 
 * {
