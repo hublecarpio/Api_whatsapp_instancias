@@ -1200,10 +1200,71 @@ function SystemTab({ token }: { token: string }) {
             </div>
 
             <div className="pt-4 border-t border-dark-border">
-              <h4 className="text-sm font-medium text-gray-400 mb-3">Branding / White-Label</h4>
-              <p className="text-xs text-gray-500 mb-4">Personaliza la identidad visual de la plataforma para marca blanca</p>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400">Branding / White-Label</h4>
+                  <p className="text-xs text-gray-500">Personaliza la identidad visual de la plataforma para marca blanca</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      if (!confirm('Restablecer todos los valores de branding a los originales de Effi?')) return;
+                      setSaving(true);
+                      try {
+                        const defaults = {
+                          appName: 'Effi',
+                          appTagline: 'WhatsApp AI Platform',
+                          logoUrl: null,
+                          faviconUrl: null,
+                          primaryColor: '#00D4FF',
+                          secondaryColor: '#8B5CF6',
+                          accentColor: '#10B981'
+                        };
+                        for (const [key, value] of Object.entries(defaults)) {
+                          await fetch('/api/super-admin/platform-settings', {
+                            method: 'PATCH',
+                            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ [key]: value })
+                          });
+                        }
+                        const res = await fetch('/api/super-admin/platform-settings', {
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setAiSettings(data.settings);
+                        }
+                      } catch (err) {
+                        console.error('Failed to reset branding:', err);
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    className="btn btn-sm btn-ghost text-xs"
+                    disabled={saving}
+                  >
+                    Restablecer Effi
+                  </button>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aiSettings.brandingEnabled !== false}
+                      onChange={(e) => handleAiSettingChange('brandingEnabled', e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-600 bg-dark-card text-neon-blue focus:ring-neon-blue"
+                      disabled={saving}
+                    />
+                    <span className="text-xs text-gray-400">Habilitado</span>
+                  </label>
+                </div>
+              </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              {aiSettings.brandingEnabled === false && (
+                <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm">
+                  Branding personalizado deshabilitado. Se usan los valores por defecto de Effi.
+                </div>
+              )}
+              
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 ${aiSettings.brandingEnabled === false ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Nombre de la App
@@ -1263,7 +1324,7 @@ function SystemTab({ token }: { token: string }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${aiSettings.brandingEnabled === false ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Color Primario

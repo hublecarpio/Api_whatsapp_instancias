@@ -12,9 +12,11 @@ interface BrandingSettings {
 
 interface GlassState {
   glassMode: boolean;
+  brandingEnabled: boolean;
   loading: boolean;
   branding: BrandingSettings;
   setGlassMode: (mode: boolean) => void;
+  setBrandingEnabled: (enabled: boolean) => void;
   setBranding: (branding: Partial<BrandingSettings>) => void;
   fetchSettings: () => Promise<void>;
 }
@@ -31,9 +33,11 @@ const defaultBranding: BrandingSettings = {
 
 export const useGlassStore = create<GlassState>((set) => ({
   glassMode: false,
+  brandingEnabled: true,
   loading: true,
   branding: defaultBranding,
   setGlassMode: (mode) => set({ glassMode: mode }),
+  setBrandingEnabled: (enabled) => set({ brandingEnabled: enabled }),
   setBranding: (branding) => set((state) => ({ 
     branding: { ...state.branding, ...branding } 
   })),
@@ -42,9 +46,11 @@ export const useGlassStore = create<GlassState>((set) => ({
       const response = await fetch('/api/public/ui-settings');
       if (response.ok) {
         const data = await response.json();
+        const brandingEnabled = data.brandingEnabled ?? true;
         set({ 
-          glassMode: data.glassMode ?? false, 
-          branding: {
+          glassMode: data.glassMode ?? false,
+          brandingEnabled,
+          branding: brandingEnabled ? {
             appName: data.appName ?? 'Effi',
             appTagline: data.appTagline ?? 'WhatsApp AI Platform',
             logoUrl: data.logoUrl ?? null,
@@ -52,7 +58,7 @@ export const useGlassStore = create<GlassState>((set) => ({
             primaryColor: data.primaryColor ?? '#00D4FF',
             secondaryColor: data.secondaryColor ?? '#8B5CF6',
             accentColor: data.accentColor ?? '#10B981',
-          },
+          } : defaultBranding,
           loading: false 
         });
       } else {

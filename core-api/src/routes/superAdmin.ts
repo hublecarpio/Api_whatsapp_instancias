@@ -1767,7 +1767,8 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
       faviconUrl,
       primaryColor,
       secondaryColor,
-      accentColor
+      accentColor,
+      brandingEnabled
     } = req.body;
 
     const updates: any = {};
@@ -1897,6 +1898,13 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
         return res.status(400).json({ error: 'accentColor must be a valid hex color (e.g., #10B981)' });
       }
       updates.accentColor = accentColor;
+    }
+    
+    if (brandingEnabled !== undefined) {
+      if (typeof brandingEnabled !== 'boolean') {
+        return res.status(400).json({ error: 'brandingEnabled must be a boolean' });
+      }
+      updates.brandingEnabled = brandingEnabled;
     }
     
     if (Object.keys(updates).length === 0) {
