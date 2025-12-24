@@ -1130,7 +1130,7 @@ async function processWithAgent(
     const toolParams = (tool.parameters as any[]) || [];
     const dynamicVars = (tool.dynamicVariables as any[]) || [];
     const properties: Record<string, any> = {};
-    const required: string[] = [];
+    const requiredSet = new Set<string>();
     
     if (toolParams.length > 0) {
       toolParams.forEach((param: any) => {
@@ -1139,12 +1139,12 @@ async function processWithAgent(
           description: param.description || `Parameter ${param.name}`
         };
         if (param.required) {
-          required.push(param.name);
+          requiredSet.add(param.name);
         }
       });
     } else if (dynamicVars.length === 0) {
       properties['query'] = { type: 'string', description: 'The query or data to send to the external service' };
-      required.push('query');
+      requiredSet.add('query');
     }
     
     dynamicVars.forEach((v: any) => {
@@ -1152,11 +1152,14 @@ async function processWithAgent(
       if (v.formatExample) {
         desc += ` (formato: ${v.formatExample})`;
       }
-      properties[v.name] = {
-        type: 'string',
-        description: desc
-      };
-      required.push(v.name);
+      // Only add if not already defined in parameters
+      if (!properties[v.name]) {
+        properties[v.name] = {
+          type: 'string',
+          description: desc
+        };
+      }
+      requiredSet.add(v.name);
     });
     
     return {
@@ -1167,7 +1170,7 @@ async function processWithAgent(
         parameters: {
           type: 'object',
           properties,
-          required
+          required: Array.from(requiredSet)
         }
       }
     };

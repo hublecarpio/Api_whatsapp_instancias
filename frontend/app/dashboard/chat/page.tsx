@@ -93,7 +93,7 @@ interface ContactAssignment {
 
 export default function ChatPage() {
   const { currentBusiness } = useBusinessStore();
-  const { selectedInstanceId, instances, setInstances } = useInstanceStore();
+  const { selectedInstanceId, setSelectedInstanceId, instances, setInstances } = useInstanceStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [selectedConversationInstanceId, setSelectedConversationInstanceId] = useState<string | null>(null);
@@ -705,12 +705,17 @@ export default function ChatPage() {
   useEffect(() => {
     if (currentBusiness) {
       waApi.listInstances(currentBusiness.id).then(res => {
-        setInstances(res.data.instances || []);
+        const loadedInstances = res.data.instances || [];
+        setInstances(loadedInstances);
+        // Auto-select first instance if multiple and none selected
+        if (loadedInstances.length > 1 && !selectedInstanceId) {
+          setSelectedInstanceId(loadedInstances[0].id);
+        }
       }).catch(err => {
         console.error('Failed to fetch instances:', err);
       });
     }
-  }, [currentBusiness, setInstances]);
+  }, [currentBusiness, setInstances, selectedInstanceId, setSelectedInstanceId]);
   
   const [instanceSwitching, setInstanceSwitching] = useState(false);
   
@@ -1035,19 +1040,6 @@ export default function ChatPage() {
                 {instanceSwitching && (
                   <div className="animate-spin w-3 h-3 border border-neon-blue border-t-transparent rounded-full mr-1"></div>
                 )}
-                <button
-                  onClick={() => {
-                    const { setSelectedInstanceId } = useInstanceStore.getState();
-                    setSelectedInstanceId(null);
-                  }}
-                  className={`px-2 py-1 rounded text-xs transition-all ${
-                    !selectedInstanceId 
-                      ? 'bg-neon-blue/20 text-neon-blue' 
-                      : 'text-gray-500 hover:text-gray-300'
-                  }`}
-                >
-                  Todas
-                </button>
                 {instances.map((inst: any) => {
                   const isConnected = inst.status === 'open' || inst.status === 'connected';
                   const isSelected = selectedInstanceId === inst.id;
