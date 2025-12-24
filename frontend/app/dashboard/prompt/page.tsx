@@ -136,7 +136,7 @@ export default function PromptPage() {
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [prompt, setPrompt] = useState('');
   const [promptId, setPromptId] = useState<string | null>(null);
-  const [bufferSeconds, setBufferSeconds] = useState(0);
+  const [bufferSeconds, setBufferSeconds] = useState(7);
   const [historyLimit, setHistoryLimit] = useState(10);
   const [splitMessages, setSplitMessages] = useState(true);
   const [tools, setTools] = useState<Tool[]>([]);
@@ -258,7 +258,7 @@ export default function PromptPage() {
         } else {
           setPrompt(DEFAULT_PROMPT);
           setPromptId(null);
-          setBufferSeconds(0);
+          setBufferSeconds(7);
           setHistoryLimit(10);
           setSplitMessages(true);
           setTools([]);
@@ -767,7 +767,7 @@ export default function PromptPage() {
       if (selectedInstanceId && instances.length > 1) {
         const selectedInstance = instances.find(i => i.id === selectedInstanceId);
         const newBotEnabled = !botEnabled;
-        await whatsappApi.updateInstance(selectedInstanceId, currentBusiness.id, { botEnabled: newBotEnabled });
+        await waApi.updateInstance(selectedInstanceId, currentBusiness.id, { botEnabled: newBotEnabled });
         setBotEnabled(newBotEnabled);
         setInstances(instances.map(i => i.id === selectedInstanceId ? { ...i, botEnabled: newBotEnabled } : i));
         setSuccess(`Bot ${newBotEnabled ? 'activado' : 'desactivado'} para ${selectedInstance?.name || 'instancia'}`);
@@ -1106,7 +1106,23 @@ export default function PromptPage() {
 
   return (
     <div className="max-w-4xl p-4 sm:p-0">
-      <h1 className="text-xl sm:text-2xl font-bold text-white mb-6">Agente IA</h1>
+      <div className="flex items-center gap-3 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Agente IA</h1>
+        {instances.length > 1 && (
+          <select
+            value={selectedInstanceId}
+            onChange={(e) => handleInstanceChange(e.target.value)}
+            className="input py-2 px-3 text-sm min-w-[160px]"
+          >
+            <option value="">Config. general</option>
+            {instances.map(inst => (
+              <option key={inst.id} value={inst.id}>
+                {inst.name} {inst.phoneNumber ? `(${inst.phoneNumber})` : ''}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       {success && (
         <div className="bg-accent-success/10 border border-accent-success/20 text-accent-success px-4 py-3 rounded-lg mb-4">
@@ -1125,20 +1141,6 @@ export default function PromptPage() {
           <span className="text-sm text-gray-300">Bot {botEnabled ? 'activo' : 'inactivo'}</span>
         </div>
         <div className="flex items-center gap-3">
-          {instances.length > 1 && (
-            <select
-              value={selectedInstanceId}
-              onChange={(e) => handleInstanceChange(e.target.value)}
-              className="text-xs bg-dark-bg border border-dark-border rounded-lg px-2 py-1.5 text-gray-300"
-            >
-              <option value="">Config. general</option>
-              {instances.map(inst => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name || inst.phoneNumber || inst.id.slice(0,8)}
-                </option>
-              ))}
-            </select>
-          )}
           <button
             onClick={handleToggleBot}
             disabled={loading}

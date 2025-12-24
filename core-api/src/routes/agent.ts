@@ -2006,7 +2006,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     }
     
     const promptConfig = business.agentPrompts?.[0];
-    const bufferSeconds = promptConfig?.bufferSeconds || 0;
+    const bufferSeconds = promptConfig?.bufferSeconds ?? 7;
     const bufferKey = `${business_id}:${contactPhone}`;
     
     if (bufferSeconds > 0) {
@@ -2172,7 +2172,7 @@ router.get('/config', authMiddleware, requireActiveSubscription, async (req: Req
     
     res.json({
       prompt: prompt?.prompt || '',
-      bufferSeconds: prompt?.bufferSeconds || 0,
+      bufferSeconds: prompt?.bufferSeconds ?? 7,
       historyLimit: prompt?.historyLimit || 10,
       splitMessages: prompt?.splitMessages ?? true,
       tools: prompt?.tools || []
@@ -2359,7 +2359,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
         length: business.agentPrompts?.[0].prompt.length,
         preview: business.agentPrompts?.[0].prompt.substring(0, 200) + (business.agentPrompts?.[0].prompt.length > 200 ? '...' : '')
       } : null,
-      bufferSeconds: business.agentPrompts?.[0]?.bufferSeconds || 0,
+      bufferSeconds: business.agentPrompts?.[0]?.bufferSeconds ?? 7,
       historyLimit: business.agentPrompts?.[0]?.historyLimit || 10,
       splitMessages: business.agentPrompts?.[0]?.splitMessages ?? true
     };
