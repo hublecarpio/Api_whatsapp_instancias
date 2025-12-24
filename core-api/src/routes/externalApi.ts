@@ -175,27 +175,27 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
     
     if (instance.provider === 'BAILEYS') {
       const waApiUrl = process.env.WA_API_URL || 'http://localhost:8080';
+      const baileysInstanceId = instance.instanceId;
       
-      let endpoint = '/send-text';
+      let endpoint = `/instances/${baileysInstanceId}/sendMessage`;
       let payload: any = {
-        instanceId: instance.instanceId,
         to: cleanTo,
-        text: message
+        message: message
       };
       
       if (mediaUrl) {
         if (mediaType === 'image' || mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-          endpoint = '/send-image';
-          payload = { instanceId: instance.instanceId, to: cleanTo, imageUrl: mediaUrl, caption: message || '' };
+          endpoint = `/instances/${baileysInstanceId}/sendImage`;
+          payload = { to: cleanTo, imageUrl: mediaUrl, caption: message || '' };
         } else if (mediaType === 'video' || mediaUrl.match(/\.(mp4|mov|avi)$/i)) {
-          endpoint = '/send-video';
-          payload = { instanceId: instance.instanceId, to: cleanTo, videoUrl: mediaUrl, caption: message || '' };
+          endpoint = `/instances/${baileysInstanceId}/sendVideo`;
+          payload = { to: cleanTo, videoUrl: mediaUrl, caption: message || '' };
         } else if (mediaType === 'audio' || mediaUrl.match(/\.(mp3|ogg|wav|m4a)$/i)) {
-          endpoint = '/send-audio';
-          payload = { instanceId: instance.instanceId, to: cleanTo, audioUrl: mediaUrl };
+          endpoint = `/instances/${baileysInstanceId}/sendAudio`;
+          payload = { to: cleanTo, audioUrl: mediaUrl };
         } else if (mediaType === 'document' || mediaUrl.match(/\.(pdf|doc|docx|xls|xlsx)$/i)) {
-          endpoint = '/send-document';
-          payload = { instanceId: instance.instanceId, to: cleanTo, documentUrl: mediaUrl, caption: message || '' };
+          endpoint = `/instances/${baileysInstanceId}/sendFile`;
+          payload = { to: cleanTo, fileUrl: mediaUrl, caption: message || '', fileName: 'document' };
         }
       }
       
