@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useInstanceStore, WhatsAppInstance, InstanceLimits } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
 import { waApi } from '@/lib/api';
@@ -258,9 +259,9 @@ export default function InstanceSelector({
         </div>
       )}
 
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
-          <div className="bg-dark-card rounded-2xl p-6 max-w-md w-full space-y-5 border border-dark-border shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
+      {showAddModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-dark-card rounded-2xl p-6 max-w-md w-full space-y-5 border border-dark-border shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white text-center">Agregar nuevo numero</h3>
             
             {addError && (
@@ -393,7 +394,8 @@ export default function InstanceSelector({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
