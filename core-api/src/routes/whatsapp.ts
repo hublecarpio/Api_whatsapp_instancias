@@ -537,6 +537,111 @@ router.delete('/instances/:instanceId', requireEmailVerified, async (req: AuthRe
   }
 });
 
+router.put('/instances/:instanceId/meta-credentials', requireEmailVerified, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    const { accessToken, metaBusinessId, phoneNumberId, appId, appSecret, phoneNumber } = req.body;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    if (!accessToken || !metaBusinessId || !phoneNumberId || !appId || !appSecret) {
+      return res.status(400).json({ error: 'All credential fields are required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { id: instanceId, businessId: businessId as string, provider: 'META_CLOUD' },
+      include: { metaCredential: true }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Meta Cloud instance not found' });
+    }
+    
+    const metaService = new MetaCloudService({
+      accessToken,
+      phoneNumberId,
+      businessId: metaBusinessId
+    });
+    
+    try {
+      const phoneInfo = await metaService.getPhoneNumberInfo();
+      console.log('Meta credentials validated:', phoneInfo.verified_name || phoneInfo.display_phone_number);
+    } catch (err: any) {
+      console.error('Meta validation error:', err.response?.data || err.message);
+      return res.status(400).json({ 
+        error: 'Invalid Meta credentials',
+        details: err.response?.data?.error?.message || err.message
+      });
+    }
+    
+    const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
+    const webhookUrl = `${coreApiUrl}/meta-webhook/${instanceId}`;
+    const webhookVerifyToken = instance.metaCredential?.webhookVerifyToken || 
+      require('crypto').randomBytes(24).toString('hex');
+    
+    if (instance.metaCredential) {
+      await prisma.metaCredential.update({
+        where: { instanceId: instance.id },
+        data: {
+          accessToken,
+          businessId: metaBusinessId,
+          phoneNumberId,
+          appId,
+          appSecret,
+          webhookVerifyToken
+        }
+      });
+    } else {
+      await prisma.metaCredential.create({
+        data: {
+          instanceId: instance.id,
+          accessToken,
+          businessId: metaBusinessId,
+          phoneNumberId,
+          appId,
+          appSecret,
+          webhookVerifyToken
+        }
+      });
+    }
+    
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: {
+        status: 'connected',
+        phoneNumber: phoneNumber || null
+      }
+    });
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId: businessId as string,
+      eventType: 'CONNECTED',
+      newStatus: 'connected',
+      phoneNumber,
+      details: 'Meta Cloud credentials configured successfully'
+    });
+    
+    res.json({
+      success: true,
+      webhookUrl,
+      webhookVerifyToken,
+      message: 'Meta Cloud credentials updated successfully'
+    });
+  } catch (error: any) {
+    console.error('Update Meta credentials error:', error.message);
+    res.status(500).json({ error: 'Failed to update Meta credentials' });
+  }
+});
+
 router.get('/instances/:instanceId/status', async (req: AuthRequest, res: Response) => {
   try {
     const { instanceId } = req.params;

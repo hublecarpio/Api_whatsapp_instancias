@@ -354,6 +354,63 @@ export default function WhatsAppPage() {
     }
   };
 
+  const handleUpdateMetaCredentials = async () => {
+    if (!currentBusiness || !selectedInstanceId) return;
+    
+    if (!metaForm.accessToken || !metaForm.metaBusinessId || !metaForm.phoneNumberId || !metaForm.appId || !metaForm.appSecret) {
+      setError('Todos los campos son obligatorios');
+      return;
+    }
+    
+    if (!metaForm.displayPhoneNumber) {
+      setError('El numero de telefono es obligatorio');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    addEvent('action', 'Guardando credenciales Meta Cloud...');
+    
+    try {
+      const response = await waApi.updateMetaCredentials(selectedInstanceId, currentBusiness.id, {
+        accessToken: metaForm.accessToken,
+        metaBusinessId: metaForm.metaBusinessId,
+        phoneNumberId: metaForm.phoneNumberId,
+        appId: metaForm.appId,
+        appSecret: metaForm.appSecret,
+        phoneNumber: metaForm.displayPhoneNumber.replace(/\D/g, '')
+      });
+      
+      addEvent('success', 'Credenciales guardadas');
+      
+      if (response.data.webhookUrl) {
+        setWebhookInfo({
+          url: response.data.webhookUrl,
+          token: response.data.webhookVerifyToken
+        });
+      }
+      
+      await fetchStatus();
+      
+      setMetaForm({
+        name: '',
+        accessToken: '',
+        metaBusinessId: '',
+        phoneNumberId: '',
+        appId: '',
+        appSecret: '',
+        displayPhoneNumber: ''
+      });
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error || 'Error al guardar credenciales';
+      const details = err.response?.data?.details;
+      setError(details ? `${errorMsg}: ${details}` : errorMsg);
+      addEvent('error', errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRefreshQR = async () => {
     if (!currentBusiness) return;
     
@@ -664,6 +721,96 @@ export default function WhatsAppPage() {
                     {loading ? 'Creando...' : 'Crear instancia'}
                   </button>
                 )}
+              </div>
+            )}
+
+            {status === 'pending_credentials' && provider === 'META_CLOUD' && (
+              <div className="py-4">
+                <div className="text-center mb-4">
+                  <div className="text-3xl mb-2">☁️</div>
+                  <h2 className="text-lg font-semibold text-white mb-1">Configura Meta Cloud API</h2>
+                  <p className="text-gray-400 text-sm">Ingresa las credenciales de tu cuenta de Meta Business</p>
+                </div>
+                
+                <div className="max-w-md mx-auto space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Access Token *</label>
+                    <input
+                      type="password"
+                      value={metaForm.accessToken}
+                      onChange={(e) => setMetaForm({ ...metaForm, accessToken: e.target.value })}
+                      className="input w-full text-sm"
+                      placeholder="EAAxxxxxx..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Meta Business ID *</label>
+                    <input
+                      type="text"
+                      value={metaForm.metaBusinessId}
+                      onChange={(e) => setMetaForm({ ...metaForm, metaBusinessId: e.target.value })}
+                      className="input w-full text-sm"
+                      placeholder="123456789012345"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Phone Number ID *</label>
+                    <input
+                      type="text"
+                      value={metaForm.phoneNumberId}
+                      onChange={(e) => setMetaForm({ ...metaForm, phoneNumberId: e.target.value })}
+                      className="input w-full text-sm"
+                      placeholder="123456789012345"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">App ID *</label>
+                    <input
+                      type="text"
+                      value={metaForm.appId}
+                      onChange={(e) => setMetaForm({ ...metaForm, appId: e.target.value })}
+                      className="input w-full text-sm"
+                      placeholder="123456789012345"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">App Secret *</label>
+                    <input
+                      type="password"
+                      value={metaForm.appSecret}
+                      onChange={(e) => setMetaForm({ ...metaForm, appSecret: e.target.value })}
+                      className="input w-full text-sm"
+                      placeholder="abc123..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Numero de telefono *</label>
+                    <input
+                      type="text"
+                      value={metaForm.displayPhoneNumber}
+                      onChange={(e) => setMetaForm({ ...metaForm, displayPhoneNumber: e.target.value })}
+                      className="input w-full text-sm"
+                      placeholder="+521234567890"
+                    />
+                  </div>
+                  
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={handleUpdateMetaCredentials}
+                      disabled={loading}
+                      className="btn btn-primary flex-1"
+                    >
+                      {loading ? 'Guardando...' : 'Guardar credenciales'}
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      disabled={actionLoading !== null}
+                      className="btn btn-danger"
+                    >
+                      {actionLoading === 'delete' ? '...' : 'Eliminar'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

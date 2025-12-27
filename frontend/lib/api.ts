@@ -156,6 +156,15 @@ export const waApi = {
     phoneNumber?: string;
   }) => api.post('/wa/create-meta', data),
   
+  updateMetaCredentials: (instanceId: string, businessId: string, data: {
+    accessToken: string;
+    metaBusinessId: string;
+    phoneNumberId: string;
+    appId: string;
+    appSecret: string;
+    phoneNumber?: string;
+  }) => api.put(`/wa/instances/${instanceId}/meta-credentials?businessId=${businessId}`, data),
+  
   listInstances: (businessId: string) => api.get(`/wa/instances?businessId=${businessId}`),
   addInstance: (data: {
     businessId: string;
