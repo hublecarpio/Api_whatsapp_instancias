@@ -873,7 +873,7 @@ export default function BillingPage() {
             <p className="text-gray-300 text-sm mb-3">
               Aun no tienes un codigo de referido. Elige un codigo personalizado para empezar a ganar comisiones.
             </p>
-            <div className="flex gap-2 mb-3">
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <input
                 type="text"
                 value={customReferralCode}
@@ -885,7 +885,7 @@ export default function BillingPage() {
               <button
                 onClick={handleClaimReferralCode}
                 disabled={claimLoading || !customReferralCode.trim()}
-                className="btn btn-primary"
+                className="btn btn-primary w-full sm:w-auto"
               >
                 {claimLoading ? 'Creando...' : 'Crear codigo'}
               </button>
@@ -985,7 +985,7 @@ export default function BillingPage() {
         )}
         
         {(!user?.proBonusExpiresAt || new Date(user.proBonusExpiresAt) <= new Date()) && (
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
               value={referralCode}
@@ -996,7 +996,7 @@ export default function BillingPage() {
             <button
               onClick={handleApplyReferral}
               disabled={referralLoading}
-              className="btn btn-primary whitespace-nowrap"
+              className="btn btn-primary w-full sm:w-auto"
             >
               {referralLoading ? 'Aplicando...' : 'Aplicar Codigo'}
             </button>
