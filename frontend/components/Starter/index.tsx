@@ -42,8 +42,8 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
   const { glassMode } = useGlass();
   
   const bgClass = glassMode 
-    ? "fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col overflow-auto"
-    : "fixed inset-0 z-50 bg-gradient-to-br from-[#0a0a14] via-[#12121f] to-[#0a0a14] flex flex-col overflow-auto";
+    ? "fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center overflow-auto p-4"
+    : "fixed inset-0 z-50 bg-gradient-to-br from-[#0a0a14] via-[#12121f] to-[#0a0a14] flex items-center justify-center overflow-auto p-4";
 
   const handleStepComplete = (step: number) => {
     const newStepCompleted = { ...stepCompleted, [step]: true };
@@ -123,45 +123,47 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
             exit={{ opacity: 0 }}
             className={bgClass}
           >
-            <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full px-4 py-8">
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2, type: 'spring' }}
-                className="text-center"
-              >
-                <Effi message="¡Todo listo! Tu asistente esta preparado." mood="celebrating" />
-                
+            <div className="flex flex-col max-w-2xl w-full bg-[#12121f]/80 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-2xl">
+              <div className="flex flex-col items-center justify-center px-6 py-8">
                 <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
-                  className="mt-8"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.2, type: 'spring' }}
+                  className="text-center"
                 >
-                  <div className="bg-[#25D366]/10 border border-[#25D366]/30 rounded-2xl p-6 mb-6">
-                    <div className="text-5xl mb-4">🎉</div>
-                    <h2 className="text-2xl font-bold text-white mb-3">
-                      ¡Configuracion completada!
-                    </h2>
-                    <p className="text-gray-300 text-lg mb-4">
-                      Ahora hablale a tu numero de WhatsApp y prueba tu agente
-                    </p>
-                    <div className="bg-[#1a1a2e] rounded-xl p-4 text-left">
-                      <p className="text-gray-400 text-sm mb-2">Tip:</p>
-                      <p className="text-white text-sm">
-                        Envia un mensaje desde otro telefono al numero que conectaste y veras como tu asistente responde automaticamente.
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleCloseFinal}
-                    className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition text-lg"
+                  <Effi message="¡Todo listo! Tu asistente esta preparado." mood="celebrating" />
+                  
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="mt-8"
                   >
-                    Ir al panel →
-                  </button>
+                    <div className="bg-[#25D366]/10 border border-[#25D366]/30 rounded-2xl p-6 mb-6">
+                      <div className="text-5xl mb-4">🎉</div>
+                      <h2 className="text-2xl font-bold text-white mb-3">
+                        ¡Configuracion completada!
+                      </h2>
+                      <p className="text-gray-300 text-lg mb-4">
+                        Ahora hablale a tu numero de WhatsApp y prueba tu agente
+                      </p>
+                      <div className="bg-[#1a1a2e] rounded-xl p-4 text-left">
+                        <p className="text-gray-400 text-sm mb-2">Tip:</p>
+                        <p className="text-white text-sm">
+                          Envia un mensaje desde otro telefono al numero que conectaste y veras como tu asistente responde automaticamente.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleCloseFinal}
+                      className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition text-lg"
+                    >
+                      Ir al panel →
+                    </button>
+                  </motion.div>
                 </motion.div>
-              </motion.div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -178,7 +180,8 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
           exit={{ opacity: 0 }}
           className={bgClass}
         >
-          <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8">
+          <div className="flex flex-col max-w-4xl w-full bg-[#12121f]/80 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-2xl max-h-[calc(100vh-32px)] overflow-auto">
+            <div className="flex-1 flex flex-col px-4 sm:px-6 py-5 sm:py-8">
             <div className="flex justify-between items-start mb-4 sm:mb-6">
               <div className="flex-1">
                 <motion.h1
@@ -268,6 +271,7 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
               <div className="text-gray-500 text-xs sm:text-sm">
                 {currentStep} / {STEPS.length}
               </div>
+            </div>
             </div>
           </div>
         </motion.div>
