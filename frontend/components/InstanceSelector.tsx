@@ -259,8 +259,8 @@ export default function InstanceSelector({
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-dark-card/95 rounded-2xl p-6 max-w-md w-full space-y-5 border border-dark-border shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto">
+          <div className="bg-dark-card rounded-2xl p-6 max-w-md w-full space-y-5 border border-dark-border shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white text-center">Agregar nuevo numero</h3>
             
             {addError && (
