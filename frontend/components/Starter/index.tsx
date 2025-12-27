@@ -7,6 +7,7 @@ import StepWhatsApp from './StepWhatsApp';
 import StepAgent from './StepAgent';
 import { businessApi } from '@/lib/api';
 import { useBusinessStore } from '@/store/business';
+import { useGlass } from '@/components/GlassProvider';
 
 interface StarterProps {
   businessId: string;
@@ -38,6 +39,11 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
   const [isExiting, setIsExiting] = useState(false);
   const [showFinalScreen, setShowFinalScreen] = useState(false);
   const { updateBusiness } = useBusinessStore();
+  const { glassMode } = useGlass();
+  
+  const bgClass = glassMode 
+    ? "fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col overflow-auto"
+    : "fixed inset-0 z-50 bg-gradient-to-br from-[#0a0a14] via-[#12121f] to-[#0a0a14] flex flex-col overflow-auto";
 
   const handleStepComplete = (step: number) => {
     const newStepCompleted = { ...stepCompleted, [step]: true };
@@ -115,7 +121,7 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-gradient-to-br from-[#0a0a14] via-[#12121f] to-[#0a0a14] flex flex-col overflow-auto"
+            className={bgClass}
           >
             <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full px-4 py-8">
               <motion.div
@@ -170,7 +176,7 @@ export default function Starter({ businessId, businessName, onComplete }: Starte
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-gradient-to-br from-[#0a0a14] via-[#12121f] to-[#0a0a14] flex flex-col overflow-auto"
+          className={bgClass}
         >
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8">
             <div className="flex justify-between items-start mb-4 sm:mb-6">

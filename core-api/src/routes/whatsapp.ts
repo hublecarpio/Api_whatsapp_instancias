@@ -473,7 +473,11 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     });
   } catch (error: any) {
     console.error('Add instance error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to add WhatsApp instance' });
+    const errorMessage = error.response?.data?.error 
+      || error.response?.data?.message 
+      || error.message 
+      || 'Failed to add WhatsApp instance';
+    res.status(error.response?.status || 500).json({ error: errorMessage });
   }
 });
 
