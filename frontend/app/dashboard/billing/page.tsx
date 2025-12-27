@@ -337,14 +337,14 @@ export default function BillingPage() {
     if (isDemo) {
       return (
         <span className="bg-amber-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-          Demo (2 dias)
+          Demo
         </span>
       );
     }
 
     const badges: Record<string, { color: string; text: string }> = {
       pending: { color: 'bg-gray-500', text: 'Sin suscripcion' },
-      trial: { color: 'bg-neon-blue', text: status.daysRemaining !== null ? `Prueba (${status.daysRemaining} dias restantes)` : 'Periodo de prueba' },
+      trial: { color: 'bg-neon-blue', text: 'Periodo de Prueba' },
       active: { color: 'bg-accent-success', text: 'Activa' },
       past_due: { color: 'bg-accent-warning', text: 'Pago pendiente' },
       canceled: { color: 'bg-accent-error', text: 'Cancelada' },
@@ -447,8 +447,8 @@ export default function BillingPage() {
             </p>
             <p className={`${demoInfo?.demoExpired ? 'text-red-400/70' : 'text-amber-400/70'} text-sm mt-1`}>
               {demoInfo?.demoExpired 
-                ? 'Tu periodo de prueba de 2 dias ha terminado. Agrega una tarjeta para continuar usando el agente IA.'
-                : `Te quedan ${demoInfo?.daysRemaining || 2} dias de prueba gratis. Limite: 150K tokens.`
+                ? 'Has alcanzado tu limite de tokens gratuitos. Activa tu plan con tarjeta para obtener 7 dias gratis y continuar.'
+                : `Tienes 150K tokens gratuitos para probar el agente IA.`
               }
             </p>
             {demoInfo?.demoExpired && (
@@ -664,7 +664,7 @@ export default function BillingPage() {
           <div className="bg-accent-error/10 border border-accent-error/30 rounded-lg p-4 mb-4">
             <p className="text-accent-error font-medium">Tu prueba gratuita ha expirado</p>
             <p className="text-accent-error/70 text-sm mt-1">
-              Tu periodo de prueba de 2 dias ha terminado. Elige un plan para continuar usando el servicio.
+              Has alcanzado tu limite de tokens gratuitos. Elige un plan para obtener 7 dias gratis y continuar.
             </p>
           </div>
         )}
@@ -754,7 +754,7 @@ export default function BillingPage() {
           {/* Show subscribe button only if no active subscription and not Enterprise */}
           {!isEnterprise && !status?.hasSubscription && (status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || status?.subscriptionStatus === 'trial') && (
             <button onClick={() => handleSubscribe('BASIC')} disabled={actionLoading} className="btn btn-secondary w-full">
-              {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar con tarjeta (5 dias gratis)' : 'Comenzar con Basic'}
+              {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar con tarjeta (7 dias gratis)' : 'Comenzar con Basic'}
             </button>
           )}
           {/* Show active badge if user has BASIC subscription and not Enterprise */}
@@ -792,7 +792,7 @@ export default function BillingPage() {
           {/* Show subscribe/upgrade button only if no subscription, not Enterprise */}
           {!isEnterprise && !status?.hasSubscription && (status?.subscriptionStatus === 'pending' || status?.subscriptionStatus === 'canceled' || status?.subscriptionStatus === 'expired' || status?.subscriptionStatus === 'trial') && (
             <button onClick={() => handleSubscribe('PRO')} disabled={actionLoading} className="btn btn-primary w-full">
-              {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar Pro (5 dias gratis)' : 'Comenzar con Pro'}
+              {actionLoading ? 'Procesando...' : status?.subscriptionStatus === 'trial' ? 'Activar Pro (7 dias gratis)' : 'Comenzar con Pro'}
             </button>
           )}
           {/* Show upgrade button for BASIC users only if not Enterprise */}

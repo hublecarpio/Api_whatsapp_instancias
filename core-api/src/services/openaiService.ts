@@ -449,10 +449,11 @@ export async function getTokenUsageStats(businessId: string, options?: {
 }
 
 export const DEMO_TOKEN_LIMIT = 150000;
-export const TRIAL_TOKEN_LIMIT = 500000;
+export const TRIAL_TOKEN_LIMIT = 150000; // Free trial: 150k tokens (no time limit)
 export const BASIC_TOKEN_LIMIT = 1600000;
 export const PRO_TOKEN_LIMIT = 7500000;
-export const DEMO_DAYS = 2;
+export const DEMO_DAYS = 2; // Legacy - not used for new token-based trial
+export const TRIAL_DAYS_WITH_CARD = 7; // Trial with card: 7 days free
 
 export function getTokenLimitByTier(tier: string, subscriptionStatus: string): number {
   if (subscriptionStatus !== 'ACTIVE') {
@@ -565,16 +566,8 @@ export async function checkUserTokenLimit(userId: string): Promise<{
   if ((user.demoPhase === 'DEMO' || user.subscriptionStatus === 'TRIAL') && !hasStripeSubscription) {
     const now = new Date();
     
-    // Use trialEndAt if available, otherwise fall back to demoStartedAt calculation
-    let demoExpired = false;
-    if (user.trialEndAt) {
-      demoExpired = now > new Date(user.trialEndAt);
-    } else if (user.demoStartedAt) {
-      const demoStarted = new Date(user.demoStartedAt);
-      const hoursSinceDemo = (now.getTime() - demoStarted.getTime()) / (1000 * 60 * 60);
-      demoExpired = hoursSinceDemo >= (DEMO_DAYS * 24);
-    }
-    
+    // NEW MODEL: Free trial is now TOKEN-BASED only (150k tokens), no time limit
+    // Users can use until they exhaust tokens, then need to add card for 7-day trial
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const usage = await prisma.tokenUsage.aggregate({
       _sum: { totalTokens: true },
@@ -582,20 +575,18 @@ export async function checkUserTokenLimit(userId: string): Promise<{
     });
     const tokensUsed = usage._sum.totalTokens || 0;
     
-    // For TRIAL users, use TRIAL token limit; for DEMO users, use DEMO limit
-    const tokenLimit = user.subscriptionStatus === 'TRIAL' ? TRIAL_TOKEN_LIMIT : DEMO_TOKEN_LIMIT;
+    // Free trial limit: 150k tokens
+    const tokenLimit = TRIAL_TOKEN_LIMIT;
     
-    if (demoExpired || tokensUsed >= tokenLimit) {
+    if (tokensUsed >= tokenLimit) {
       return {
         canUseAI: false,
         tokensUsed,
         tokensRemaining: 0,
         bonusTokens: user.bonusTokens,
-        message: demoExpired 
-          ? 'Tu periodo de prueba de 2 dias ha expirado. Agrega una tarjeta para continuar usando el agente IA.'
-          : `Has alcanzado tu limite de ${tokenLimit >= 1000000 ? `${(tokenLimit / 1000000).toFixed(1)}M` : `${(tokenLimit / 1000).toFixed(0)}K`} tokens de la fase de prueba. Agrega una tarjeta para continuar.`,
+        message: `Has alcanzado tu limite de ${tokenLimit >= 1000000 ? `${(tokenLimit / 1000000).toFixed(1)}M` : `${(tokenLimit / 1000).toFixed(0)}K`} tokens de la fase de prueba gratuita. Activa tu plan con tarjeta para obtener 7 dias gratis y continuar.`,
         demoPhase: user.demoPhase,
-        demoExpired,
+        demoExpired: true,
         needsCard: true
       };
     }

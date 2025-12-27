@@ -57,45 +57,37 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Validate: reject if user already has an active Stripe subscription
-    // Double-check: also validate using local subscriptionStatus as fallback
-    if (user.stripeSubscriptionId || ['TRIAL', 'ACTIVE'].includes(user.subscriptionStatus)) {
-      // If we have a subscription ID, verify with Stripe
-      if (user.stripeSubscriptionId) {
-        try {
-          const existingSubscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-          if (['active', 'trialing', 'past_due'].includes(existingSubscription.status)) {
-            return res.status(400).json({ 
-              error: 'Ya tienes una suscripción activa. Para cambiar de plan, usa la opción de upgrade.',
-              hasActiveSubscription: true
-            });
-          }
-          // Subscription exists but is canceled/inactive - allow new checkout
-        } catch (stripeError: any) {
-          // If subscription doesn't exist in Stripe, clear local reference and allow checkout
-          if (stripeError.code === 'resource_missing') {
-            await prisma.user.update({
-              where: { id: userId },
-              data: { stripeSubscriptionId: null, subscriptionStatus: 'PENDING' }
-            });
-          } else {
-            // For any other Stripe error (network, auth, etc.), reject to be safe
-            console.error('Stripe error checking subscription:', stripeError.message);
-            return res.status(503).json({ 
-              error: 'No se pudo verificar el estado de tu suscripción. Intenta de nuevo.',
-              retryable: true
-            });
-          }
+    // Validate: reject only if user has an active Stripe subscription with payment
+    // Users in free trial (no Stripe subscription) CAN create a checkout session
+    if (user.stripeSubscriptionId) {
+      try {
+        const existingSubscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        if (['active', 'trialing', 'past_due'].includes(existingSubscription.status)) {
+          return res.status(400).json({ 
+            error: 'Ya tienes una suscripción activa. Para cambiar de plan, usa la opción de upgrade.',
+            hasActiveSubscription: true
+          });
         }
-      } else {
-        // No Stripe ID but local status shows active - this shouldn't happen but block it
-        console.warn(`User ${userId} has active local status but no Stripe ID - blocking checkout`);
-        return res.status(400).json({ 
-          error: 'Hay un conflicto con tu estado de suscripción. Contacta soporte.',
-          hasActiveSubscription: true
-        });
+        // Subscription exists but is canceled/inactive - allow new checkout
+      } catch (stripeError: any) {
+        // If subscription doesn't exist in Stripe, clear local reference and allow checkout
+        if (stripeError.code === 'resource_missing') {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { stripeSubscriptionId: null, subscriptionStatus: 'PENDING' }
+          });
+        } else {
+          // For any other Stripe error (network, auth, etc.), reject to be safe
+          console.error('Stripe error checking subscription:', stripeError.message);
+          return res.status(503).json({ 
+            error: 'No se pudo verificar el estado de tu suscripción. Intenta de nuevo.',
+            retryable: true
+          });
+        }
       }
     }
+    // Note: Users in TRIAL status without stripeSubscriptionId are allowed to checkout
+    // This enables free trial users to subscribe with a card
 
     let customerId = user.stripeCustomerId;
 
@@ -113,8 +105,8 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
       });
     }
 
-    // Base trial is 5 days + any bonus trial days from referral code
-    const baseTrialDays = 5;
+    // Base trial with card is 7 days + any bonus trial days from referral code
+    const baseTrialDays = 7;
     const bonusTrialDays = user.bonusTrialDays || 0;
     const totalTrialDays = baseTrialDays + bonusTrialDays;
     
