@@ -37,17 +37,17 @@ export default function InstanceSelector({
   const [selectedProvider, setSelectedProvider] = useState<'BAILEYS' | 'META_CLOUD'>('BAILEYS');
   const [copyFromInstance, setCopyFromInstance] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [countryCode, setCountryCode] = useState('+52');
+  const [countryCode, setCountryCode] = useState('+51');
   
   const COUNTRY_CODES = [
-    { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
+    { code: '+51', country: 'Peru', flag: '🇵🇪' },
     { code: '+52', country: 'Mexico', flag: '🇲🇽' },
+    { code: '+1', country: 'USA/Canada', flag: '🇺🇸' },
     { code: '+34', country: 'España', flag: '🇪🇸' },
     { code: '+57', country: 'Colombia', flag: '🇨🇴' },
     { code: '+54', country: 'Argentina', flag: '🇦🇷' },
     { code: '+55', country: 'Brasil', flag: '🇧🇷' },
     { code: '+56', country: 'Chile', flag: '🇨🇱' },
-    { code: '+51', country: 'Peru', flag: '🇵🇪' },
   ];
 
   const fetchInstances = useCallback(async () => {
@@ -259,8 +259,8 @@ export default function InstanceSelector({
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-dark-card rounded-2xl p-6 max-w-md w-full space-y-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card/95 rounded-2xl p-6 max-w-md w-full space-y-4 border border-dark-border shadow-2xl mx-auto">
             <h3 className="text-xl font-bold text-white">Agregar nuevo numero</h3>
             
             {addError && (
