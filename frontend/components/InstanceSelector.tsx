@@ -260,11 +260,11 @@ export default function InstanceSelector({
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-dark-card/95 rounded-2xl p-6 max-w-md w-full space-y-4 border border-dark-border shadow-2xl mx-auto">
-            <h3 className="text-xl font-bold text-white">Agregar nuevo numero</h3>
+          <div className="bg-dark-card/95 rounded-2xl p-6 max-w-md w-full space-y-5 border border-dark-border shadow-2xl">
+            <h3 className="text-xl font-bold text-white text-center">Agregar nuevo numero</h3>
             
             {addError && (
-              <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+              <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm text-center">
                 {addError}
               </div>
             )}
@@ -278,7 +278,7 @@ export default function InstanceSelector({
                 value={newInstanceName}
                 onChange={(e) => setNewInstanceName(e.target.value)}
                 placeholder="Ej: WhatsApp Ventas"
-                className="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-2 focus:ring-2 focus:ring-neon-blue/50"
+                className="w-full bg-dark-surface border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50"
               />
             </div>
             
@@ -290,7 +290,7 @@ export default function InstanceSelector({
                 <button
                   type="button"
                   onClick={() => setSelectedProvider('BAILEYS')}
-                  className={`p-4 rounded-xl border-2 transition-all ${
+                  className={`p-4 rounded-xl border-2 transition-all text-center ${
                     selectedProvider === 'BAILEYS'
                       ? 'border-neon-blue bg-neon-blue/10'
                       : 'border-dark-border hover:border-gray-600'
@@ -303,7 +303,7 @@ export default function InstanceSelector({
                 <button
                   type="button"
                   onClick={() => setSelectedProvider('META_CLOUD')}
-                  className={`p-4 rounded-xl border-2 transition-all ${
+                  className={`p-4 rounded-xl border-2 transition-all text-center ${
                     selectedProvider === 'META_CLOUD'
                       ? 'border-neon-blue bg-neon-blue/10'
                       : 'border-dark-border hover:border-gray-600'
@@ -321,11 +321,11 @@ export default function InstanceSelector({
                 <label className="block text-sm font-medium text-gray-400 mb-2">
                   Numero de telefono <span className="text-red-400">*</span>
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <select
                     value={countryCode}
                     onChange={(e) => setCountryCode(e.target.value)}
-                    className="bg-dark-surface border border-dark-border rounded-lg px-3 py-2 focus:ring-2 focus:ring-neon-blue/50"
+                    className="bg-dark-surface border border-dark-border rounded-lg px-3 py-3 focus:ring-2 focus:ring-neon-blue/50 w-full sm:w-auto"
                   >
                     {COUNTRY_CODES.map((c) => (
                       <option key={c.code} value={c.code}>
@@ -338,10 +338,10 @@ export default function InstanceSelector({
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
                     placeholder="Numero sin codigo de pais"
-                    className="flex-1 bg-dark-surface border border-dark-border rounded-lg px-4 py-2 focus:ring-2 focus:ring-neon-blue/50"
+                    className="flex-1 bg-dark-surface border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 w-full"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 mt-2">
                   Ingresa el numero que vas a escanear con el QR
                 </p>
               </div>
