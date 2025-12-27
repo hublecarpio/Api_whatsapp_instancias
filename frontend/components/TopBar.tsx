@@ -20,7 +20,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
         </svg>
       </button>
 
-      <Logo size="sm" showText={false} />
+      <Logo size="sm" />
 
       <div className="w-10" />
     </header>
