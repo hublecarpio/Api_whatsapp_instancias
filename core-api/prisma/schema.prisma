@@ -1013,11 +1013,15 @@ model Appointment {
   instanceId         String?
   contactPhone       String
   contactName        String?
+  guestEmail         String?
   scheduledAt        DateTime
   durationMinutes    Int               @default(60)
   status             AppointmentStatus @default(PENDING)
   service            String?
   notes              String?
+  eventTitle         String?
+  meetingUrl         String?
+  meetingProvider    String?           @default("GOOGLE_MEET")
   reminderSentAt     DateTime?
   confirmedAt        DateTime?
   cancelledAt        DateTime?

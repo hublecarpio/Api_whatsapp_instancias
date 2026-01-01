@@ -48,7 +48,14 @@ interface CalendarEvent {
   description?: string;
   start: { dateTime: string; timeZone: string };
   end: { dateTime: string; timeZone: string };
-  attendees?: Array<{ email: string }>;
+  attendees?: Array<{ email: string; displayName?: string }>;
+  conferenceData?: {
+    createRequest?: {
+      requestId: string;
+      conferenceSolutionKey: { type: string };
+    };
+  };
+  hangoutLink?: string;
 }
 
 interface FreeBusyResponse {
@@ -177,20 +184,21 @@ export class GoogleCalendarService {
     return this.accessToken;
   }
 
-  async createEvent(event: CalendarEvent, calendarId: string = 'primary'): Promise<CalendarEvent> {
+  async createEvent(event: CalendarEvent, calendarId: string = 'primary', withMeet: boolean = false): Promise<CalendarEvent> {
     const token = await this.ensureValidToken();
 
-    const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(event)
-      }
-    );
+    const url = withMeet 
+      ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?conferenceDataVersion=1`
+      : `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(event)
+    });
 
     if (!response.ok) {
       const error = await response.text();
@@ -326,9 +334,12 @@ export async function createAppointmentInGoogleCalendar(
     dateTime: string;
     durationMinutes: number;
     notes?: string;
+    guestEmail?: string;
+    eventTitle?: string;
+    createMeetLink?: boolean;
   },
   timezone: string = 'America/Lima'
-): Promise<{ success: boolean; eventId?: string; error?: string }> {
+): Promise<{ success: boolean; eventId?: string; meetingUrl?: string; error?: string }> {
   try {
     const service = await getGoogleCalendarService(businessId);
     if (!service) {
@@ -342,8 +353,10 @@ export async function createAppointmentInGoogleCalendar(
     const startDateTime = new Date(appointment.dateTime);
     const endDateTime = new Date(startDateTime.getTime() + appointment.durationMinutes * 60 * 1000);
 
-    const event = await service.createEvent({
-      summary: `Cita: ${appointment.clientName}${appointment.service ? ` - ${appointment.service}` : ''}`,
+    const defaultTitle = `Cita: ${appointment.clientName}${appointment.service ? ` - ${appointment.service}` : ''}`;
+    
+    const eventData: CalendarEvent = {
+      summary: appointment.eventTitle || defaultTitle,
       description: [
         `Cliente: ${appointment.clientName}`,
         `Teléfono: ${appointment.clientPhone}`,
@@ -358,9 +371,38 @@ export async function createAppointmentInGoogleCalendar(
         dateTime: endDateTime.toISOString(),
         timeZone: timezone
       }
-    }, credential?.calendarId || 'primary');
+    };
 
-    return { success: true, eventId: event.id };
+    if (appointment.guestEmail) {
+      eventData.attendees = [{ 
+        email: appointment.guestEmail,
+        displayName: appointment.clientName
+      }];
+    }
+
+    if (appointment.createMeetLink) {
+      const requestId = `meet-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      eventData.conferenceData = {
+        createRequest: {
+          requestId,
+          conferenceSolutionKey: { type: 'hangoutsMeet' }
+        }
+      };
+    }
+
+    const event = await service.createEvent(
+      eventData, 
+      credential?.calendarId || 'primary',
+      !!appointment.createMeetLink
+    );
+
+    console.log(`[GoogleCalendar] Created event ${event.id}${event.hangoutLink ? ` with Meet link: ${event.hangoutLink}` : ''}`);
+
+    return { 
+      success: true, 
+      eventId: event.id,
+      meetingUrl: event.hangoutLink
+    };
   } catch (error: any) {
     console.error('[GoogleCalendar] Failed to create event:', error.message);
     return { success: false, error: error.message };
@@ -408,6 +450,8 @@ export async function updateAppointmentInGoogleCalendar(
     dateTime?: string;
     durationMinutes?: number;
     notes?: string;
+    guestEmail?: string;
+    eventTitle?: string;
   },
   timezone: string = 'America/Lima'
 ): Promise<{ success: boolean; error?: string }> {
@@ -423,7 +467,9 @@ export async function updateAppointmentInGoogleCalendar(
 
     const updateData: any = {};
 
-    if (appointment.clientName || appointment.service) {
+    if (appointment.eventTitle) {
+      updateData.summary = appointment.eventTitle;
+    } else if (appointment.clientName || appointment.service) {
       updateData.summary = `Cita: ${appointment.clientName || 'Cliente'}${appointment.service ? ` - ${appointment.service}` : ''}`;
     }
 
@@ -448,6 +494,13 @@ export async function updateAppointmentInGoogleCalendar(
         dateTime: endDateTime.toISOString(),
         timeZone: timezone
       };
+    }
+
+    if (appointment.guestEmail) {
+      updateData.attendees = [{ 
+        email: appointment.guestEmail,
+        displayName: appointment.clientName
+      }];
     }
 
     await service.updateEvent(eventId, updateData, credential?.calendarId || 'primary');
