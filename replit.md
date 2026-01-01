@@ -37,7 +37,7 @@ The platform employs a microservices-like architecture with a **Frontend (Next.j
 *   **Provider-Separated Token Usage Tracking**: Tracks token usage by provider and feature.
 *   **Payment Mode Control**: Toggle for Stripe payment link vs. voucher-based order flow.
 *   **Dual Business Objectives (SALES/APPOINTMENTS)**: Businesses can toggle between e-commerce and service modes, influencing UI and AI agent behavior.
-*   **Appointment Scheduling System**: Full CRUD, status tracking, double-booking prevention, automatic reminders, and AI tools for scheduling.
+*   **Appointment Scheduling System**: Full CRUD, status tracking, double-booking prevention, automatic reminders, and AI tools for scheduling. Enhanced with **Google Calendar integration** supporting automatic Google Meet link generation (`conferenceDataVersion=1`, `hangoutsMeet`), guest email invitations with calendar notifications, custom event titles, and meeting URL persistence. AI agent tool (`agendar_cita`) can request guest email and create Meet links during conversation.
 *   **Business Availability Configuration**: Configurable working hours and blocked dates.
 *   **Delivery Tracking**: Orders include `DELIVERED` status, agent assignment, and quick actions.
 *   **Agent Files Library (V1)**: Upload documents/images for contextual AI use via the "enviar_archivo" AI tool.
