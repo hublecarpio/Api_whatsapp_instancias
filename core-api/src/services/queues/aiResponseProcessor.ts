@@ -644,6 +644,18 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
       notas: {
         type: 'string',
         description: 'Notas adicionales para la cita'
+      },
+      correo_invitado: {
+        type: 'string',
+        description: 'Correo electrónico del cliente para enviar invitación de Google Calendar. Solo pedir si es necesario para la cita.'
+      },
+      titulo_evento: {
+        type: 'string',
+        description: 'Título personalizado para el evento en Google Calendar (opcional)'
+      },
+      crear_meet: {
+        type: 'boolean',
+        description: 'Si es true, genera un link de Google Meet para la cita virtual (default: false)'
       }
     };
     
@@ -890,19 +902,22 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
         const servicio = args.servicio || '';
         const duracion = args.duracion_minutos || 60;
         const notas = args.notas || '';
+        const correoInvitado = args.correo_invitado || '';
+        const tituloEvento = args.titulo_evento || '';
+        const crearMeet = args.crear_meet === true;
         const normalizedPhone = contactPhone.replace(/\D/g, '');
         
         // Use extracted name if not provided in args, or fall back to contact name
         const nombreCliente = args.nombre || extractedContactData['nombre'] || 
                               extractedContactData['nombre_cliente'] || contactName || 'Cliente';
         
-        console.log(`[AI Worker] Scheduling appointment for ${fechaHora}, client: ${nombreCliente}`);
+        console.log(`[AI Worker] Scheduling appointment for ${fechaHora}, client: ${nombreCliente}, meet: ${crearMeet}`);
         
         // Save any new extracted data from the tool call
         const newDataToSave: Record<string, string> = {};
         for (const [key, value] of Object.entries(args)) {
           if (value && typeof value === 'string' && 
-              !['fecha_hora', 'servicio', 'duracion_minutos', 'notas'].includes(key)) {
+              !['fecha_hora', 'servicio', 'duracion_minutos', 'notas', 'correo_invitado', 'titulo_evento', 'crear_meet'].includes(key)) {
             newDataToSave[key] = value;
           }
         }
@@ -949,7 +964,10 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
               contactPhone: normalizedPhone,
               service: servicio,
               durationMinutes: duracion,
-              notes: notas
+              notes: notas,
+              guestEmail: correoInvitado || undefined,
+              eventTitle: tituloEvento || undefined,
+              createMeetLink: crearMeet
             },
             {
               headers: { 'X-Internal-Secret': process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me' }
@@ -973,10 +991,19 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
               timeZone: businessTimezone
             });
             
+            let confirmationMsg = `Cita agendada exitosamente:\n- Fecha: ${fechaFormateada}\n- Hora: ${horaFormateada}\n- Cliente: ${nombreCliente}\n- Servicio: ${servicio || 'General'}`;
+            
+            if (response.data.meetingUrl) {
+              confirmationMsg += `\n- Link de Meet: ${response.data.meetingUrl}`;
+            }
+            if (correoInvitado) {
+              confirmationMsg += `\n- Invitación enviada a: ${correoInvitado}`;
+            }
+            
             toolMessages.push({
               role: 'tool',
               tool_call_id: toolCall.id,
-              content: `Cita agendada exitosamente:\n- Fecha: ${fechaFormateada}\n- Hora: ${horaFormateada}\n- Cliente: ${nombreCliente}\n- Servicio: ${servicio || 'General'}`
+              content: confirmationMsg
             });
           } else {
             toolMessages.push({

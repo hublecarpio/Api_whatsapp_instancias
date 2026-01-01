@@ -19,6 +19,9 @@ interface Appointment {
   notes: string | null;
   createdBy: string;
   createdAt: string;
+  guestEmail: string | null;
+  meetingUrl: string | null;
+  eventTitle: string | null;
 }
 
 interface BusinessAvailability {
@@ -76,7 +79,10 @@ export default function AppointmentsPage() {
     scheduledAt: '',
     durationMinutes: 60,
     service: '',
-    notes: ''
+    notes: '',
+    guestEmail: '',
+    eventTitle: '',
+    createMeetLink: false
   });
 
   const [newAvailability, setNewAvailability] = useState<{ dayOfWeek: number; startTime: string; endTime: string; enabled: boolean }[]>([
@@ -228,12 +234,20 @@ export default function AppointmentsPage() {
         scheduledAt: '',
         durationMinutes: 60,
         service: '',
-        notes: ''
+        notes: '',
+        guestEmail: '',
+        eventTitle: '',
+        createMeetLink: false
       });
       loadAppointments();
     } catch (error: any) {
       alert(error.response?.data?.error || 'Error al crear cita');
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('Copiado al portapapeles');
   };
 
   const updateStatus = async (id: string, status: string) => {
@@ -477,6 +491,35 @@ export default function AppointmentsPage() {
                         <div className="mb-4">
                           <p className="text-gray-500 text-sm">Notas</p>
                           <p className="text-white text-sm">{apt.notes}</p>
+                        </div>
+                      )}
+
+                      {apt.meetingUrl && (
+                        <div className="mb-4 p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                          <p className="text-gray-400 text-sm mb-1">Link de Google Meet</p>
+                          <div className="flex items-center gap-2">
+                            <a 
+                              href={apt.meetingUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 text-sm underline flex-1 truncate"
+                            >
+                              {apt.meetingUrl}
+                            </a>
+                            <button
+                              onClick={() => copyToClipboard(apt.meetingUrl!)}
+                              className="btn btn-secondary text-xs px-2 py-1"
+                            >
+                              Copiar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {apt.guestEmail && (
+                        <div className="mb-4">
+                          <p className="text-gray-500 text-sm">Invitacion enviada a</p>
+                          <p className="text-white text-sm">{apt.guestEmail}</p>
                         </div>
                       )}
 
@@ -831,6 +874,47 @@ export default function AppointmentsPage() {
                   rows={2}
                 />
               </div>
+
+              {googleCalendarStatus?.connected && (
+                <>
+                  <div className="pt-2 border-t border-dark-border">
+                    <p className="text-sm text-gray-400 mb-3">Opciones de Google Calendar</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-1">Correo para invitacion</label>
+                    <input
+                      type="email"
+                      value={newAppointment.guestEmail}
+                      onChange={(e) => setNewAppointment({ ...newAppointment, guestEmail: e.target.value })}
+                      className="input"
+                      placeholder="cliente@email.com"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Se enviara invitacion de calendario al cliente</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-300 mb-1">Titulo del evento (opcional)</label>
+                    <input
+                      type="text"
+                      value={newAppointment.eventTitle}
+                      onChange={(e) => setNewAppointment({ ...newAppointment, eventTitle: e.target.value })}
+                      className="input"
+                      placeholder="Por defecto: Cita: [nombre] - [servicio]"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="createMeetLink"
+                      checked={newAppointment.createMeetLink}
+                      onChange={(e) => setNewAppointment({ ...newAppointment, createMeetLink: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-500 bg-dark-surface"
+                    />
+                    <label htmlFor="createMeetLink" className="text-sm text-gray-300">
+                      Crear link de Google Meet para videollamada
+                    </label>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex gap-3 mt-6">
               <button

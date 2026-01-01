@@ -334,7 +334,10 @@ router.get('/:id', authMiddleware, async (req, res) => {
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const userId = (req as any).userId;
-    const { contactPhone, contactName, scheduledAt, durationMinutes, service, notes } = req.body;
+    const { 
+      contactPhone, contactName, scheduledAt, durationMinutes, service, notes,
+      guestEmail, eventTitle, createMeetLink 
+    } = req.body;
 
     if (!contactPhone || !scheduledAt) {
       return res.status(400).json({ error: 'contactPhone y scheduledAt son requeridos' });
@@ -361,6 +364,8 @@ router.post('/', authMiddleware, async (req, res) => {
         businessId: business.id,
         contactPhone: contactPhone.replace(/\D/g, ''),
         contactName,
+        guestEmail,
+        eventTitle,
         scheduledAt: scheduledDate,
         durationMinutes: duration,
         service,
@@ -389,18 +394,27 @@ router.post('/', authMiddleware, async (req, res) => {
         service,
         dateTime: scheduledAt,
         durationMinutes: duration,
-        notes
+        notes,
+        guestEmail,
+        eventTitle,
+        createMeetLink: createMeetLink === true
       },
       business.timezone || 'America/Lima'
     );
 
     let updatedAppointment = appointment;
-    if (gcalResult.success && gcalResult.eventId) {
-      console.log(`[APPOINTMENTS] Created Google Calendar event ${gcalResult.eventId}`);
-      updatedAppointment = await prisma.appointment.update({
-        where: { id: appointment.id },
-        data: { googleEventId: gcalResult.eventId }
-      });
+    if (gcalResult.success) {
+      const updateData: any = {};
+      if (gcalResult.eventId) updateData.googleEventId = gcalResult.eventId;
+      if (gcalResult.meetingUrl) updateData.meetingUrl = gcalResult.meetingUrl;
+      
+      if (Object.keys(updateData).length > 0) {
+        console.log(`[APPOINTMENTS] Created Google Calendar event ${gcalResult.eventId}${gcalResult.meetingUrl ? ` with Meet: ${gcalResult.meetingUrl}` : ''}`);
+        updatedAppointment = await prisma.appointment.update({
+          where: { id: appointment.id },
+          data: updateData
+        });
+      }
     } else if (gcalResult.error && gcalResult.error !== 'Google Calendar not connected') {
       console.error(`[APPOINTMENTS] Google Calendar error: ${gcalResult.error}`);
     }
@@ -416,7 +430,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const userId = (req as any).userId;
     const { id } = req.params;
-    const { scheduledAt, durationMinutes, service, notes, contactName } = req.body;
+    const { scheduledAt, durationMinutes, service, notes, contactName, guestEmail, eventTitle } = req.body;
 
     const business = await prisma.business.findFirst({
       where: { userId }
@@ -458,7 +472,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
         durationMinutes,
         service,
         notes,
-        contactName
+        contactName,
+        guestEmail,
+        eventTitle
       }
     });
 
@@ -472,7 +488,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
           service: service || existing.service || undefined,
           dateTime: scheduledAt || existing.scheduledAt.toISOString(),
           durationMinutes: durationMinutes || existing.durationMinutes,
-          notes: notes || existing.notes || undefined
+          notes: notes || existing.notes || undefined,
+          guestEmail: guestEmail || existing.guestEmail || undefined,
+          eventTitle: eventTitle || existing.eventTitle || undefined
         },
         business.timezone || 'America/Lima'
       );
@@ -799,7 +817,10 @@ router.post('/internal/schedule', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { businessId, contactPhone, contactName, scheduledAt, durationMinutes, service, notes } = req.body;
+    const { 
+      businessId, contactPhone, contactName, scheduledAt, durationMinutes, service, notes,
+      guestEmail, eventTitle, createMeetLink 
+    } = req.body;
 
     if (!businessId || !contactPhone || !scheduledAt) {
       return res.status(400).json({ error: 'businessId, contactPhone y scheduledAt son requeridos' });
@@ -821,6 +842,8 @@ router.post('/internal/schedule', async (req, res) => {
         businessId,
         contactPhone: contactPhone.replace(/\D/g, ''),
         contactName,
+        guestEmail,
+        eventTitle,
         scheduledAt: scheduledDate,
         durationMinutes: duration,
         service,
@@ -852,24 +875,35 @@ router.post('/internal/schedule', async (req, res) => {
         service,
         dateTime: scheduledAt,
         durationMinutes: duration,
-        notes
+        notes,
+        guestEmail,
+        eventTitle,
+        createMeetLink: createMeetLink === true
       },
       business?.timezone || 'America/Lima'
     );
 
+    let updatedAppointment = appointment;
     if (gcalResult.success) {
-      console.log(`[APPOINTMENTS INTERNAL] Created Google Calendar event ${gcalResult.eventId}`);
-      await prisma.appointment.update({
-        where: { id: appointment.id },
-        data: { googleEventId: gcalResult.eventId }
-      });
+      const updateData: any = {};
+      if (gcalResult.eventId) updateData.googleEventId = gcalResult.eventId;
+      if (gcalResult.meetingUrl) updateData.meetingUrl = gcalResult.meetingUrl;
+      
+      if (Object.keys(updateData).length > 0) {
+        console.log(`[APPOINTMENTS INTERNAL] Created Google Calendar event ${gcalResult.eventId}${gcalResult.meetingUrl ? ` with Meet: ${gcalResult.meetingUrl}` : ''}`);
+        updatedAppointment = await prisma.appointment.update({
+          where: { id: appointment.id },
+          data: updateData
+        });
+      }
     } else if (gcalResult.error !== 'Google Calendar not connected') {
       console.error(`[APPOINTMENTS INTERNAL] Google Calendar error: ${gcalResult.error}`);
     }
 
     res.json({
       success: true,
-      appointment,
+      appointment: updatedAppointment,
+      meetingUrl: gcalResult.meetingUrl,
       googleCalendarSynced: gcalResult.success
     });
   } catch (error: any) {
