@@ -671,9 +671,24 @@ export default function WhatsAppPage() {
             </>
           )}
         </div>
-        {viewMode === 'detail' && phoneNumber && (status === 'open' || status === 'connected') && (
-          <span className="text-sm text-gray-400">+{phoneNumber}</span>
-        )}
+        <div className="flex items-center gap-3">
+          {viewMode === 'detail' && phoneNumber && (status === 'open' || status === 'connected') && (
+            <span className="text-sm text-gray-400">+{phoneNumber}</span>
+          )}
+          {viewMode === 'detail' && status !== 'not_created' && selectedInstanceId && (
+            <button 
+              onClick={handleDelete}
+              disabled={actionLoading !== null}
+              className="px-3 py-1.5 text-sm text-red-400 hover:text-white hover:bg-red-500 border border-red-500/50 hover:border-red-500 rounded-lg transition-all flex items-center gap-2"
+              title="Eliminar instancia"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span className="hidden sm:inline">{actionLoading === 'delete' ? 'Eliminando...' : 'Eliminar'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {viewMode === 'list' && (
@@ -688,6 +703,13 @@ export default function WhatsAppPage() {
               if ((instance.status === 'pending_qr' || instance.status === 'requires_qr') && instance.provider !== 'META_CLOUD') {
                 waApi.qr(currentBusiness.id).then(res => setQrCode(res.data.qr || '')).catch(() => {});
               }
+            }}
+            onInstanceDeleted={() => {
+              setStatus('not_created');
+              setPhoneNumber('');
+              setQrCode('');
+              setMetaInfo(null);
+              setWebhookInfo(null);
             }}
             showAddButton={true}
           />
@@ -898,20 +920,49 @@ export default function WhatsAppPage() {
                   </div>
                 )}
                 
-                <div className="flex flex-wrap gap-2">
-                  {provider !== 'META_CLOUD' && (
-                    <>
-                      <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm">
-                        {actionLoading === 'restart' ? '...' : 'Reiniciar'}
+                <div className="mt-4 pt-4 border-t border-dark-border">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs text-gray-500">Acciones para</span>
+                    {provider === 'META_CLOUD' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-neon-blue/20 text-neon-blue">
+                        ☁️ Meta Cloud
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-accent-success/20 text-accent-success">
+                        📲 Baileys
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {provider === 'META_CLOUD' ? (
+                      <button 
+                        onClick={() => setShowMetaForm(true)} 
+                        disabled={actionLoading !== null} 
+                        className="btn btn-secondary btn-sm flex items-center gap-1"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Editar credenciales
                       </button>
-                      <button onClick={handleReset} disabled={actionLoading !== null} className="btn btn-warning btn-sm">
-                        {actionLoading === 'reset' ? '...' : 'Cambiar numero'}
-                      </button>
-                    </>
-                  )}
-                  <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm">
-                    {actionLoading === 'delete' ? '...' : 'Eliminar'}
-                  </button>
+                    ) : (
+                      <>
+                        <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          {actionLoading === 'restart' ? '...' : 'Reiniciar sesion'}
+                        </button>
+                        <button onClick={handleReset} disabled={actionLoading !== null} className="btn btn-warning btn-sm flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                          {actionLoading === 'reset' ? '...' : 'Cambiar numero'}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -922,19 +973,43 @@ export default function WhatsAppPage() {
                   <div className="w-10 h-10 bg-accent-error/20 rounded-full flex items-center justify-center flex-shrink-0">
                     <span className="text-xl">⚠️</span>
                   </div>
-                  <div>
-                    <h2 className="font-semibold text-white">Conexion perdida</h2>
-                    <p className="text-xs text-gray-400">Reconecta o elimina para empezar de nuevo</p>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-semibold text-white">Conexion perdida</h2>
+                      {provider === 'META_CLOUD' ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-neon-blue/20 text-neon-blue">Meta Cloud</span>
+                      ) : (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-accent-success/20 text-accent-success">Baileys</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {provider === 'META_CLOUD' 
+                        ? 'Verifica las credenciales de Meta o elimina para configurar de nuevo'
+                        : 'Reconecta escaneando el QR o elimina para empezar de nuevo'}
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-primary btn-sm">
-                    {actionLoading === 'restart' ? '...' : 'Reconectar'}
-                  </button>
-                  <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm">
-                    {actionLoading === 'delete' ? '...' : 'Eliminar'}
-                  </button>
+                  {provider === 'META_CLOUD' ? (
+                    <button 
+                      onClick={() => setShowMetaForm(true)} 
+                      disabled={actionLoading !== null} 
+                      className="btn btn-primary btn-sm flex items-center gap-1"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Revisar credenciales
+                    </button>
+                  ) : (
+                    <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-primary btn-sm flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {actionLoading === 'restart' ? '...' : 'Reconectar'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}

@@ -9,6 +9,7 @@ import { waApi } from '@/lib/api';
 interface InstanceSelectorProps {
   businessId: string;
   onInstanceSelect?: (instance: WhatsAppInstance) => void;
+  onInstanceDeleted?: () => void;
   showAddButton?: boolean;
   compact?: boolean;
 }
@@ -16,6 +17,7 @@ interface InstanceSelectorProps {
 export default function InstanceSelector({ 
   businessId, 
   onInstanceSelect,
+  onInstanceDeleted,
   showAddButton = true,
   compact = false
 }: InstanceSelectorProps) {
@@ -27,7 +29,8 @@ export default function InstanceSelector({
     setInstances, 
     setSelectedInstanceId,
     setLimits,
-    getSelectedInstance
+    getSelectedInstance,
+    removeInstance
   } = useInstanceStore();
   
   const [loading, setLoading] = useState(false);
@@ -39,6 +42,8 @@ export default function InstanceSelector({
   const [copyFromInstance, setCopyFromInstance] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [countryCode, setCountryCode] = useState('+51');
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   
   const COUNTRY_CODES = [
     { code: '+51', country: 'Peru', flag: '🇵🇪' },
@@ -115,6 +120,29 @@ export default function InstanceSelector({
     }
   };
 
+  const handleDeleteInstance = async (instanceId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteLoading(instanceId);
+    
+    try {
+      await waApi.deleteInstance(instanceId, businessId);
+      removeInstance(instanceId);
+      
+      if (selectedInstanceId === instanceId) {
+        setSelectedInstanceId(null);
+      }
+      
+      await fetchInstances();
+      setShowDeleteConfirm(null);
+      onInstanceDeleted?.();
+    } catch (error: any) {
+      console.error('Error deleting instance:', error);
+      setAddError(error.response?.data?.error || 'Error al eliminar instancia');
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
   const canAddMore = limits?.canAddMore ?? false;
   const isPro = user?.isPro || ['PRO', 'ENTERPRISE'].includes(limits?.tier || '');
   const selectedInstance = getSelectedInstance();
@@ -184,7 +212,7 @@ export default function InstanceSelector({
             <div
               key={instance.id}
               onClick={() => handleSelectInstance(instance)}
-              className={`p-4 rounded-xl border cursor-pointer transition-all ${
+              className={`p-4 rounded-xl border cursor-pointer transition-all group ${
                 selectedInstanceId === instance.id
                   ? 'border-neon-blue bg-neon-blue/10'
                   : 'border-dark-border bg-dark-surface hover:border-gray-600'
@@ -209,21 +237,35 @@ export default function InstanceSelector({
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className="text-xs text-gray-500">
-                    {instance.status === 'open' || instance.status === 'connected' 
-                      ? 'Conectado' 
-                      : instance.status === 'pending_qr'
-                      ? 'Esperando QR'
-                      : instance.status === 'pending_credentials'
-                      ? 'Config. pendiente'
-                      : 'Desconectado'}
-                  </span>
-                  {isPro && (instance.status === 'open' || instance.status === 'connected') && (
-                    <span className="text-xs text-neon-blue flex items-center gap-1">
-                      🔑 Ver API
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs text-gray-500">
+                      {instance.status === 'open' || instance.status === 'connected' 
+                        ? 'Conectado' 
+                        : instance.status === 'pending_qr'
+                        ? 'Esperando QR'
+                        : instance.status === 'pending_credentials'
+                        ? 'Config. pendiente'
+                        : 'Desconectado'}
                     </span>
-                  )}
+                    {isPro && (instance.status === 'open' || instance.status === 'connected') && (
+                      <span className="text-xs text-neon-blue flex items-center gap-1">
+                        🔑 Ver API
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeleteConfirm(instance.id);
+                    }}
+                    className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    title="Eliminar instancia"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>
@@ -391,6 +433,79 @@ export default function InstanceSelector({
                 className="flex-1 btn-primary disabled:opacity-50"
               >
                 {addLoading ? 'Agregando...' : 'Agregar'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {showDeleteConfirm && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-dark-card rounded-2xl p-6 max-w-sm w-full space-y-4 border border-dark-border shadow-2xl">
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-red-500/20 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Eliminar instancia</h3>
+              {(() => {
+                const instanceToDelete = instances.find(i => i.id === showDeleteConfirm);
+                return (
+                  <p className="text-gray-400 text-sm">
+                    {instanceToDelete?.provider === 'META_CLOUD' 
+                      ? 'Esta accion eliminara la conexion con Meta Cloud API. Deberas volver a configurar las credenciales para reconectar.'
+                      : 'Esta accion eliminara la sesion de WhatsApp Web. Deberas escanear el codigo QR nuevamente para reconectar.'}
+                  </p>
+                );
+              })()}
+            </div>
+            
+            <div className="p-3 bg-dark-surface rounded-lg border border-dark-border">
+              {(() => {
+                const instanceToDelete = instances.find(i => i.id === showDeleteConfirm);
+                return instanceToDelete ? (
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      instanceToDelete.status === 'open' || instanceToDelete.status === 'connected' 
+                        ? 'bg-green-500' 
+                        : 'bg-red-500'
+                    }`} />
+                    <div>
+                      <p className="font-medium text-white text-sm">{instanceToDelete.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {instanceToDelete.phoneNumber || 'Sin numero'} - {instanceToDelete.provider === 'META_CLOUD' ? 'Meta Cloud' : 'Baileys'}
+                      </p>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(null)}
+                disabled={deleteLoading !== null}
+                className="flex-1 px-4 py-2 bg-dark-surface border border-dark-border rounded-lg hover:bg-dark-hover transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleDeleteInstance(showDeleteConfirm, e)}
+                disabled={deleteLoading !== null}
+                className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleteLoading === showDeleteConfirm ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    Eliminando...
+                  </>
+                ) : (
+                  'Eliminar'
+                )}
               </button>
             </div>
           </div>
