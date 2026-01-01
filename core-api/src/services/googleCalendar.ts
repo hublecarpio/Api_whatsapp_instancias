@@ -200,6 +200,29 @@ export class GoogleCalendarService {
     return response.json();
   }
 
+  async updateEvent(eventId: string, event: Partial<CalendarEvent>, calendarId: string = 'primary'): Promise<CalendarEvent> {
+    const token = await this.ensureValidToken();
+
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(event)
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to update event: ${error}`);
+    }
+
+    return response.json();
+  }
+
   async getFreeBusy(
     timeMin: string,
     timeMax: string,
@@ -371,6 +394,88 @@ export async function getGoogleCalendarBusySlots(
     return { success: true, busySlots };
   } catch (error: any) {
     console.error('[GoogleCalendar] Failed to get busy slots:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateAppointmentInGoogleCalendar(
+  businessId: string,
+  eventId: string,
+  appointment: {
+    clientName?: string;
+    clientPhone?: string;
+    service?: string;
+    dateTime?: string;
+    durationMinutes?: number;
+    notes?: string;
+  },
+  timezone: string = 'America/Lima'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const service = await getGoogleCalendarService(businessId);
+    if (!service) {
+      return { success: false, error: 'Google Calendar not connected' };
+    }
+
+    const credential = await prisma.googleCalendarCredential.findUnique({
+      where: { businessId }
+    });
+
+    const updateData: any = {};
+
+    if (appointment.clientName || appointment.service) {
+      updateData.summary = `Cita: ${appointment.clientName || 'Cliente'}${appointment.service ? ` - ${appointment.service}` : ''}`;
+    }
+
+    if (appointment.clientName || appointment.clientPhone || appointment.service || appointment.notes) {
+      updateData.description = [
+        appointment.clientName ? `Cliente: ${appointment.clientName}` : null,
+        appointment.clientPhone ? `Teléfono: ${appointment.clientPhone}` : null,
+        appointment.service ? `Servicio: ${appointment.service}` : null,
+        appointment.notes ? `Notas: ${appointment.notes}` : null
+      ].filter(Boolean).join('\n');
+    }
+
+    if (appointment.dateTime && appointment.durationMinutes) {
+      const startDateTime = new Date(appointment.dateTime);
+      const endDateTime = new Date(startDateTime.getTime() + appointment.durationMinutes * 60 * 1000);
+      
+      updateData.start = {
+        dateTime: startDateTime.toISOString(),
+        timeZone: timezone
+      };
+      updateData.end = {
+        dateTime: endDateTime.toISOString(),
+        timeZone: timezone
+      };
+    }
+
+    await service.updateEvent(eventId, updateData, credential?.calendarId || 'primary');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[GoogleCalendar] Failed to update event:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function deleteAppointmentFromGoogleCalendar(
+  businessId: string,
+  eventId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const service = await getGoogleCalendarService(businessId);
+    if (!service) {
+      return { success: false, error: 'Google Calendar not connected' };
+    }
+
+    const credential = await prisma.googleCalendarCredential.findUnique({
+      where: { businessId }
+    });
+
+    await service.deleteEvent(eventId, credential?.calendarId || 'primary');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[GoogleCalendar] Failed to delete event:', error.message);
     return { success: false, error: error.message };
   }
 }

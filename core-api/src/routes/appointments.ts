@@ -1,7 +1,12 @@
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import prisma from '../services/prisma.js';
-import { createAppointmentInGoogleCalendar, getGoogleCalendarBusySlots } from '../services/googleCalendar.js';
+import { 
+  createAppointmentInGoogleCalendar, 
+  updateAppointmentInGoogleCalendar,
+  deleteAppointmentFromGoogleCalendar,
+  getGoogleCalendarBusySlots 
+} from '../services/googleCalendar.js';
 
 const router = express.Router();
 
@@ -62,7 +67,9 @@ async function checkAvailability(
   businessId: string,
   scheduledAt: Date,
   durationMinutes: number,
-  excludeAppointmentId?: string
+  excludeAppointmentId?: string,
+  checkGoogleCalendar: boolean = true,
+  excludeGoogleEventId?: string
 ): Promise<{ available: boolean; reason?: string }> {
   const dayOfWeek = scheduledAt.getDay();
   const timeStr = scheduledAt.toTimeString().slice(0, 5);
@@ -131,6 +138,44 @@ async function checkAvailability(
     if (scheduledAt < existingEnd && appointmentEnd > existing.scheduledAt) {
       const conflictTime = existing.scheduledAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
       return { available: false, reason: `Ya existe una cita a las ${conflictTime}` };
+    }
+  }
+
+  if (checkGoogleCalendar) {
+    const dateStr = scheduledAt.toISOString().split('T')[0];
+    const gcalBusy = await getGoogleCalendarBusySlots(businessId, dateStr);
+    
+    if (gcalBusy.success && gcalBusy.busySlots && gcalBusy.busySlots.length > 0) {
+      let existingEventStart: Date | null = null;
+      let existingEventEnd: Date | null = null;
+      
+      if (excludeGoogleEventId && excludeAppointmentId) {
+        const existingAppt = await prisma.appointment.findUnique({
+          where: { id: excludeAppointmentId }
+        });
+        if (existingAppt) {
+          existingEventStart = existingAppt.scheduledAt;
+          existingEventEnd = new Date(existingAppt.scheduledAt.getTime() + existingAppt.durationMinutes * 60000);
+        }
+      }
+      
+      for (const busy of gcalBusy.busySlots) {
+        const busyStart = new Date(busy.start);
+        const busyEnd = new Date(busy.end);
+        
+        if (existingEventStart && existingEventEnd) {
+          const isSameEvent = Math.abs(busyStart.getTime() - existingEventStart.getTime()) < 60000 &&
+                              Math.abs(busyEnd.getTime() - existingEventEnd.getTime()) < 60000;
+          if (isSameEvent) {
+            continue;
+          }
+        }
+        
+        if (scheduledAt < busyEnd && appointmentEnd > busyStart) {
+          const conflictTime = busyStart.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+          return { available: false, reason: `Conflicto con evento de Google Calendar a las ${conflictTime}` };
+        }
+      }
     }
   }
 
@@ -336,7 +381,31 @@ router.post('/', authMiddleware, async (req, res) => {
       reminderMinutes
     );
 
-    res.json(appointment);
+    const gcalResult = await createAppointmentInGoogleCalendar(
+      business.id,
+      {
+        clientName: contactName || 'Cliente',
+        clientPhone: contactPhone.replace(/\D/g, ''),
+        service,
+        dateTime: scheduledAt,
+        durationMinutes: duration,
+        notes
+      },
+      business.timezone || 'America/Lima'
+    );
+
+    let updatedAppointment = appointment;
+    if (gcalResult.success && gcalResult.eventId) {
+      console.log(`[APPOINTMENTS] Created Google Calendar event ${gcalResult.eventId}`);
+      updatedAppointment = await prisma.appointment.update({
+        where: { id: appointment.id },
+        data: { googleEventId: gcalResult.eventId }
+      });
+    } else if (gcalResult.error && gcalResult.error !== 'Google Calendar not connected') {
+      console.error(`[APPOINTMENTS] Google Calendar error: ${gcalResult.error}`);
+    }
+
+    res.json({ ...updatedAppointment, googleCalendarSynced: gcalResult.success });
   } catch (error: any) {
     console.error('[APPOINTMENTS] Error creating:', error);
     res.status(500).json({ error: error.message });
@@ -369,7 +438,14 @@ router.put('/:id', authMiddleware, async (req, res) => {
       const scheduledDate = new Date(scheduledAt);
       const duration = durationMinutes || existing.durationMinutes;
       
-      const availabilityCheck = await checkAvailability(business.id, scheduledDate, duration, id);
+      const availabilityCheck = await checkAvailability(
+        business.id, 
+        scheduledDate, 
+        duration, 
+        id, 
+        true, 
+        existing.googleEventId || undefined
+      );
       if (!availabilityCheck.available) {
         return res.status(400).json({ error: availabilityCheck.reason });
       }
@@ -385,6 +461,28 @@ router.put('/:id', authMiddleware, async (req, res) => {
         contactName
       }
     });
+
+    if (existing.googleEventId) {
+      const gcalResult = await updateAppointmentInGoogleCalendar(
+        business.id,
+        existing.googleEventId,
+        {
+          clientName: contactName || existing.contactName || undefined,
+          clientPhone: existing.contactPhone,
+          service: service || existing.service || undefined,
+          dateTime: scheduledAt || existing.scheduledAt.toISOString(),
+          durationMinutes: durationMinutes || existing.durationMinutes,
+          notes: notes || existing.notes || undefined
+        },
+        business.timezone || 'America/Lima'
+      );
+
+      if (gcalResult.success) {
+        console.log(`[APPOINTMENTS] Updated Google Calendar event ${existing.googleEventId}`);
+      } else if (gcalResult.error !== 'Google Calendar not connected') {
+        console.error(`[APPOINTMENTS] Google Calendar update error: ${gcalResult.error}`);
+      }
+    }
 
     res.json(appointment);
   } catch (error: any) {
@@ -463,6 +561,10 @@ router.post('/:id/cancel', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
+    const existing = await prisma.appointment.findFirst({
+      where: { id, businessId: business.id }
+    });
+
     const appointment = await prisma.appointment.update({
       where: { id, businessId: business.id },
       data: {
@@ -471,6 +573,19 @@ router.post('/:id/cancel', authMiddleware, async (req, res) => {
         cancellationReason: reason
       }
     });
+
+    if (existing?.googleEventId) {
+      const gcalResult = await deleteAppointmentFromGoogleCalendar(
+        business.id,
+        existing.googleEventId
+      );
+
+      if (gcalResult.success) {
+        console.log(`[APPOINTMENTS] Deleted Google Calendar event ${existing.googleEventId} (cancelled)`);
+      } else if (gcalResult.error !== 'Google Calendar not connected') {
+        console.error(`[APPOINTMENTS] Google Calendar delete error: ${gcalResult.error}`);
+      }
+    }
 
     res.json(appointment);
   } catch (error: any) {
@@ -517,6 +632,23 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 
     if (!business) {
       return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const existing = await prisma.appointment.findFirst({
+      where: { id, businessId: business.id }
+    });
+
+    if (existing?.googleEventId) {
+      const gcalResult = await deleteAppointmentFromGoogleCalendar(
+        business.id,
+        existing.googleEventId
+      );
+
+      if (gcalResult.success) {
+        console.log(`[APPOINTMENTS] Deleted Google Calendar event ${existing.googleEventId}`);
+      } else if (gcalResult.error !== 'Google Calendar not connected') {
+        console.error(`[APPOINTMENTS] Google Calendar delete error: ${gcalResult.error}`);
+      }
     }
 
     await prisma.appointment.delete({
