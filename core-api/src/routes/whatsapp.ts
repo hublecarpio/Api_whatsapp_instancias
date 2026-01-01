@@ -25,8 +25,8 @@ function generateWebhookSecret(): string {
 
 const INSTANCE_LIMITS: Record<string, number> = {
   STANDARD: 1,
-  BASIC: 1,
-  PRO: 3,
+  BASIC: 2,
+  PRO: 10,
   ENTERPRISE: 10
 };
 

@@ -291,12 +291,12 @@ export default function InstanceSelector({
         </p>
       )}
 
-      {showAddButton && !isPro && instances.length > 0 && (
+      {showAddButton && !canAddMore && !isPro && instances.length > 0 && (
         <div className="p-4 bg-gradient-to-r from-neon-blue/10 to-purple-500/10 rounded-xl border border-neon-blue/20">
           <p className="text-sm text-gray-300">
-            <span className="font-semibold text-neon-blue">PRO</span> y{' '}
-            <span className="font-semibold text-purple-400">Enterprise</span>{' '}
-            pueden agregar multiples numeros de WhatsApp
+            Has alcanzado el limite de numeros para tu plan.{' '}
+            <span className="font-semibold text-neon-blue">PRO</span>{' '}
+            permite hasta 10 numeros de WhatsApp.
           </p>
         </div>
       )}
