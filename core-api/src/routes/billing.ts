@@ -330,13 +330,50 @@ router.post('/webhook', async (req, res) => {
 router.get('/subscription-status', authMiddleware, async (req: any, res) => {
   try {
     const userId = req.userId;
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    let user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     let nextPayment: Date | null = null;
+    let syncedFromStripe = false;
+
+    // AUTO-SYNC: If user has stripeCustomerId but no stripeSubscriptionId, check Stripe for active subscriptions
+    if (user.stripeCustomerId && !user.stripeSubscriptionId) {
+      try {
+        const subscriptions = await stripe.subscriptions.list({
+          customer: user.stripeCustomerId,
+          status: 'all',
+          limit: 1
+        });
+        
+        if (subscriptions.data.length > 0) {
+          const latestSub = subscriptions.data[0];
+          if (['active', 'trialing'].includes(latestSub.status)) {
+            const trialEnd = latestSub.trial_end ? new Date(latestSub.trial_end * 1000) : null;
+            const priceId = latestSub.items.data[0]?.price?.id || '';
+            const tier = getTierFromPriceId(priceId);
+            
+            user = await prisma.user.update({
+              where: { id: userId },
+              data: {
+                stripeSubscriptionId: latestSub.id,
+                subscriptionStatus: trialEnd && trialEnd > new Date() ? 'TRIAL' : 'ACTIVE',
+                subscriptionTier: tier,
+                trialEndAt: trialEnd,
+                demoPhase: 'TRIAL'
+              }
+            });
+            
+            console.log(`[AUTO-SYNC] User ${userId} subscription synced from Stripe: ${latestSub.id}, tier: ${tier}`);
+            syncedFromStripe = true;
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-syncing subscription from Stripe:', err);
+      }
+    }
 
     if (user.stripeSubscriptionId) {
       try {
@@ -344,6 +381,20 @@ router.get('/subscription-status', authMiddleware, async (req: any, res) => {
         const periodEnd = (subscriptionData as any).current_period_end;
         if (periodEnd) {
           nextPayment = new Date(periodEnd * 1000);
+        }
+        
+        // Also sync tier if subscription exists but tier seems wrong
+        if (['active', 'trialing'].includes(subscriptionData.status)) {
+          const priceId = subscriptionData.items.data[0]?.price?.id || '';
+          const correctTier = getTierFromPriceId(priceId);
+          if (user.subscriptionTier !== correctTier) {
+            user = await prisma.user.update({
+              where: { id: userId },
+              data: { subscriptionTier: correctTier }
+            });
+            console.log(`[TIER-SYNC] User ${userId} tier corrected: ${user.subscriptionTier} -> ${correctTier}`);
+            syncedFromStripe = true;
+          }
         }
       } catch (err) {
         console.error('Error fetching subscription from Stripe:', err);
@@ -379,7 +430,8 @@ router.get('/subscription-status', authMiddleware, async (req: any, res) => {
       hasSubscription: !!user.stripeSubscriptionId,
       proBonusExpiresAt: user.proBonusExpiresAt,
       hasActiveBonus,
-      subscriptionTier: user.subscriptionTier
+      subscriptionTier: user.subscriptionTier,
+      syncedFromStripe
     });
   } catch (error: any) {
     console.error('Error fetching subscription status:', error);
