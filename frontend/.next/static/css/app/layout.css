@@ -962,6 +962,9 @@ body.glass-mode .mobile-drawer {
 .z-\[9999\] {
   z-index: 9999;
 }
+.z-\[100\] {
+  z-index: 100;
+}
 .col-span-1 {
   grid-column: span 1 / span 1;
 }

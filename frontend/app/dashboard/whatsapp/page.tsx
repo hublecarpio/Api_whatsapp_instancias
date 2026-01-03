@@ -1249,8 +1249,8 @@ export default function WhatsAppPage() {
                   )}
 
                   {showAdvancedWebhook && (
-                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4">
-                      <div className="bg-dark-card/95 backdrop-blur-sm border border-dark-border rounded-lg p-3 sm:p-4 w-full max-w-xs sm:max-w-sm mx-auto">
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-2 sm:p-4" style={{ left: 0, top: 0, right: 0, bottom: 0 }}>
+                      <div className="bg-dark-card/95 backdrop-blur-sm border border-dark-border rounded-lg p-3 sm:p-4 w-full max-w-xs sm:max-w-sm shadow-xl">
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="text-xs sm:text-sm font-semibold text-white">Eventos del Webhook</h3>
                           <button
