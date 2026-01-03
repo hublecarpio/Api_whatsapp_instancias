@@ -1,0 +1,186 @@
+ROADMAP BACKEND — META COEXISTENCE (EFFIcore)
+Objetivo
+
+Permitir que clientes conecten su número de WhatsApp Business existente a Efficore vía Meta Cloud API usando el flujo oficial de Embedded Signup + Coexistence, soportando múltiples clientes (multi-tenant), de forma segura y escalable.
+
+FASE 0 — Prerrequisitos
+0.1 Variables de entorno
+META_APP_ID=
+META_APP_SECRET=
+META_REDIRECT_URI=https://api.efficore.com/auth/meta/callback
+META_WEBHOOK_VERIFY_TOKEN=
+META_SYSTEM_USER_TOKEN=
+
+FASE 1 — Autenticación Meta (OAuth)
+Endpoint: GET /auth/meta/start
+
+Redirige al usuario a Meta OAuth:
+
+https://www.facebook.com/v19.0/dialog/oauth?
+client_id={META_APP_ID}
+&redirect_uri={META_REDIRECT_URI}
+&scope=business_management,whatsapp_business_management,whatsapp_business_messaging
+&response_type=code
+
+Endpoint: GET /auth/meta/callback
+
+Recibe ?code=
+
+Intercambia por access_token:
+
+POST https://graph.facebook.com/v19.0/oauth/access_token
+{
+  client_id,
+  client_secret,
+  redirect_uri,
+  code
+}
+
+
+Devuelve user_access_token
+
+Guardar token temporalmente (session o redis).
+
+FASE 2 — Embedded Signup + Coexistence
+Endpoint: POST /meta/onboarding/start
+
+Usa el user_access_token para llamar:
+
+POST /v19.0/embedded_signup
+
+
+Meta devuelve URL con QR embebido → frontend lo renderiza.
+
+Usuario escanea QR desde su WhatsApp Business App.
+
+Endpoint: POST /meta/onboarding/complete
+
+Meta redirige con:
+
+business_id
+
+waba_id
+
+phone_number_id
+
+Guardar en DB.
+
+Activar coexistencia:
+POST /v19.0/{phone_number_id}
+{
+  "is_coexistence_enabled": true
+}
+
+FASE 3 — Modelo de datos
+Tabla: whatsapp_instances
+id (uuid)
+customer_id (uuid)
+provider ('meta_coexist')
+business_id
+waba_id
+phone_number_id
+display_phone
+quality_rating
+tier
+status
+created_at
+
+Tabla: whatsapp_tokens
+instance_id
+user_access_token (encrypted)
+system_access_token (encrypted)
+expires_at
+
+FASE 4 — Webhooks
+Endpoint: POST /webhooks/meta
+
+Verificación:
+
+GET /webhooks/meta?hub.mode=subscribe&hub.verify_token=...
+
+
+Procesar:
+
+mensajes entrantes
+
+status delivery
+
+quality updates
+
+FASE 5 — Envío de mensajes
+Endpoint interno: POST /whatsapp/send
+
+Input:
+
+{
+  "instance_id": "...",
+  "to": "+519999...",
+  "type": "text",
+  "body": "Hola"
+}
+
+
+Backend:
+
+Recupera phone_number_id
+
+Recupera token
+
+Llama a:
+
+POST /v19.0/{phone_number_id}/messages
+
+FASE 6 — Seguridad
+
+Encriptar tokens en DB (AES o KMS)
+
+Rotar tokens cada 60 días
+
+Scoping por customer_id
+
+Rate limit por instancia
+
+FASE 7 — Observabilidad
+
+Log por request Meta
+
+Log por error de envío
+
+Webhook retry queue (Redis / SQS)
+
+Dead-letter para fallos
+
+FASE 8 — Estados de instancia
+Estado	Significado
+pending	onboarding iniciado
+active	lista
+revoked	token revocado
+blocked	por Meta
+disabled	por admin
+FASE 9 — Checklist QA
+
+Conectar 2 números distintos
+
+Enviar desde ambos
+
+Verificar coexistencia activa
+
+Verificar que app del cliente sigue funcionando
+
+Desconectar uno y validar aislamiento
+
+OUTPUT para el agente Replit
+
+Dale este resumen como prompt:
+
+Implementa el backend para soportar conexión multi-tenant de WhatsApp Business vía Meta Cloud usando Embedded Signup + Coexistence. Debe incluir OAuth Meta, onboarding QR, activación coexistence, persistencia segura de credenciales por cliente, webhooks, envío de mensajes y control de estado. El sistema debe soportar múltiples clientes y números con aislamiento completo.
+
+Resultado esperado
+
+Cuando esto esté listo:
+
+El frontend solo llama /auth/meta/start
+
+Muestra QR
+
+Y luego todo es automático
