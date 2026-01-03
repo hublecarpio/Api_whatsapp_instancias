@@ -81,6 +81,7 @@ export async function dispatchWebhook(
         select: {
           webhookUrl: true,
           webhookSecret: true,
+          webhookEvents: true,
           phoneNumber: true
         }
       });
@@ -88,8 +89,7 @@ export async function dispatchWebhook(
       if (instance?.webhookUrl) {
         console.log(`[Webhook] Using instance-level webhook for ${instance.phoneNumber}`);
         webhookUrl = instance.webhookUrl;
-        // Instance uses default webhook events (all events)
-        webhookEvents = [];
+        webhookEvents = instance.webhookEvents || [];
         webhookSecret = instance.webhookSecret;
       }
     }

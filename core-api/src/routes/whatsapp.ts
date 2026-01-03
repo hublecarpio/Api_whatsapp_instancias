@@ -268,7 +268,7 @@ router.put('/instances/:instanceId/webhook', requireEmailVerified, async (req: A
   try {
     const { instanceId } = req.params;
     const { businessId } = req.query;
-    const { webhookUrl } = req.body;
+    const { webhookUrl, webhookEvents } = req.body;
     
     if (!businessId) {
       return res.status(400).json({ error: 'businessId is required' });
@@ -289,14 +289,29 @@ router.put('/instances/:instanceId/webhook', requireEmailVerified, async (req: A
     
     const webhookSecret = instance.webhookSecret || generateWebhookSecret();
     
-    await prisma.whatsAppInstance.update({
+    const validEvents = ['user_message', 'agent_message', 'stage_change', 'state_change', 'tool_call'];
+    const filteredEvents = Array.isArray(webhookEvents) 
+      ? webhookEvents.filter((e: string) => validEvents.includes(e))
+      : undefined;
+    
+    const updateData: any = { 
+      webhookUrl: webhookUrl || null, 
+      webhookSecret 
+    };
+    
+    if (filteredEvents !== undefined) {
+      updateData.webhookEvents = filteredEvents;
+    }
+    
+    const updated = await prisma.whatsAppInstance.update({
       where: { id: instance.id },
-      data: { webhookUrl: webhookUrl || null, webhookSecret }
+      data: updateData
     });
     
     res.json({
-      webhookUrl: webhookUrl || null,
-      webhookSecret,
+      webhookUrl: updated.webhookUrl,
+      webhookSecret: updated.webhookSecret,
+      webhookEvents: updated.webhookEvents,
       message: 'Webhook configuration updated'
     });
   } catch (error: any) {

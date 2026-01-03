@@ -372,6 +372,7 @@ model WhatsAppInstance {
   apiKeyPrefix      String?
   webhookUrl        String?
   webhookSecret     String?
+  webhookEvents     String[]          @default([])
 
   business         Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   metaCredential   MetaCredential?
