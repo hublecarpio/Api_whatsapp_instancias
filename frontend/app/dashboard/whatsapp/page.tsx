@@ -1249,37 +1249,37 @@ export default function WhatsAppPage() {
                   )}
 
                   {showAdvancedWebhook && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                      <div className="bg-dark-card border border-dark-border rounded-lg p-4 w-full max-w-md">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-semibold text-white">Eventos del Webhook</h3>
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4">
+                      <div className="bg-dark-card/95 backdrop-blur-sm border border-dark-border rounded-lg p-3 sm:p-4 w-full max-w-xs sm:max-w-sm mx-auto">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-xs sm:text-sm font-semibold text-white">Eventos del Webhook</h3>
                           <button
                             onClick={() => setShowAdvancedWebhook(false)}
-                            className="text-gray-400 hover:text-white"
+                            className="text-gray-400 hover:text-white text-lg leading-none"
                           >
                             ✕
                           </button>
                         </div>
                         
-                        <p className="text-xs text-gray-400 mb-3">
-                          Selecciona los eventos que quieres recibir. Si no seleccionas ninguno, recibirás todos.
+                        <p className="text-[10px] sm:text-xs text-gray-400 mb-2">
+                          Selecciona los eventos a recibir. Sin selección = todos.
                         </p>
                         
-                        <div className="space-y-2 mb-4">
+                        <div className="space-y-0.5 mb-3">
                           {WEBHOOK_EVENTS.map(event => (
                             <label 
                               key={event.id}
-                              className="flex items-start gap-3 p-2 rounded hover:bg-dark-hover cursor-pointer"
+                              className="flex items-center gap-2 py-1.5 px-1.5 rounded hover:bg-dark-hover cursor-pointer"
                             >
                               <input
                                 type="checkbox"
                                 checked={webhookEventsInput.includes(event.id)}
                                 onChange={() => toggleWebhookEvent(event.id)}
-                                className="mt-0.5 rounded border-dark-border bg-dark-bg text-neon-blue focus:ring-neon-blue"
+                                className="w-3.5 h-3.5 rounded border-dark-border bg-dark-bg text-neon-blue focus:ring-neon-blue focus:ring-1"
                               />
-                              <div>
-                                <span className="text-sm text-white">{event.label}</span>
-                                <p className="text-xs text-gray-500">{event.desc}</p>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-xs sm:text-sm text-white block">{event.label}</span>
+                                <span className="text-[10px] text-gray-500 block truncate">{event.desc}</span>
                               </div>
                             </label>
                           ))}
@@ -1289,9 +1289,9 @@ export default function WhatsAppPage() {
                           <button
                             onClick={() => handleSaveWebhook(true)}
                             disabled={savingWebhook}
-                            className="flex-1 text-xs px-3 py-2 bg-neon-blue text-dark-bg rounded font-medium hover:bg-cyan-400 disabled:opacity-50"
+                            className="flex-1 text-xs px-2 py-1.5 bg-neon-blue text-dark-bg rounded font-medium hover:bg-cyan-400 disabled:opacity-50"
                           >
-                            {savingWebhook ? 'Guardando...' : 'Guardar eventos'}
+                            {savingWebhook ? '...' : 'Guardar'}
                           </button>
                           <button
                             onClick={() => {
@@ -1299,7 +1299,7 @@ export default function WhatsAppPage() {
                               handleSaveWebhook(true);
                             }}
                             disabled={savingWebhook}
-                            className="text-xs px-3 py-2 bg-gray-600/20 text-gray-400 rounded hover:bg-gray-600/30 disabled:opacity-50"
+                            className="text-xs px-2 py-1.5 bg-gray-600/20 text-gray-400 rounded hover:bg-gray-600/30 disabled:opacity-50"
                           >
                             Todos
                           </button>
