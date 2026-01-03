@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
   
   if (request.nextUrl.pathname.startsWith('/api/')) {
     const apiUrl = getCoreApiUrl();
-    const path = request.nextUrl.pathname.replace('/api', '');
+    const path = request.nextUrl.pathname;
     const targetUrl = `${apiUrl}${path}${request.nextUrl.search}`;
     
     try {

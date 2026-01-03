@@ -175,7 +175,14 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
     
     if (instance.provider === 'BAILEYS') {
       const waApiUrl = process.env.WA_API_URL || 'http://localhost:8080';
-      const baileysInstanceId = instance.instanceId;
+      const baileysInstanceId = instance.instanceBackendId;
+      
+      if (!baileysInstanceId) {
+        return res.status(500).json({ 
+          error: 'Instancia Baileys no configurada correctamente',
+          hint: 'La instancia no tiene un backend ID asignado. Por favor, recrea la instancia.'
+        });
+      }
       
       let endpoint = `/instances/${baileysInstanceId}/sendMessage`;
       let payload: any = {
@@ -206,7 +213,7 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
       await prisma.messageLog.create({
         data: {
           businessId: business.id,
-          instanceId: instance.instanceId,
+          instanceId: instance.id,
           sender: instance.phoneNumber || business.id,
           recipient: cleanTo,
           message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
@@ -306,7 +313,7 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
       await prisma.messageLog.create({
         data: {
           businessId: business.id,
-          instanceId: instance.instanceBackendId || instance.id,
+          instanceId: instance.id,
           sender: instance.phoneNumber || business.id,
           recipient: cleanTo,
           message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),

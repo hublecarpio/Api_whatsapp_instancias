@@ -4,12 +4,16 @@ const nextConfig = {
   output: 'standalone',
   async rewrites() {
     const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${coreApiUrl}/:path*`
-      }
-    ];
+    return {
+      beforeFiles: [
+        {
+          source: '/api/v1/:path*',
+          destination: `${coreApiUrl}/api/v1/:path*`
+        }
+      ],
+      afterFiles: [],
+      fallback: []
+    };
   }
 };
 
