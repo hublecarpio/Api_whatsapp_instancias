@@ -150,14 +150,16 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
       });
       
       // Dispatch user_message webhook for Meta Cloud incoming messages
-      console.log(`[META WEBHOOK] Dispatching user_message webhook for business ${instance.businessId}, contact ${msg.from}`);
+      console.log(`[META WEBHOOK] Dispatching user_message webhook for business ${instance.businessId}, contact ${msg.from}, instance ${instance.id}`);
       dispatchUserMessage(
         instance.businessId,
         msg.from,
         msg.pushName || '',
         msg.caption || msg.text || '',
         msg.type,
-        mediaUrl
+        mediaUrl,
+        undefined,
+        instance.id
       ).catch(err => console.error('[META WEBHOOK] Failed to dispatch user_message webhook:', err.message));
     }
   } catch (error: any) {

@@ -64,10 +64,35 @@ async function sendWithRetry(
 export async function dispatchWebhook(
   businessId: string,
   event: string,
-  data: Record<string, any>
+  data: Record<string, any>,
+  instanceId?: string
 ): Promise<{ success: boolean; reason?: string; [key: string]: any }> {
   try {
-    console.log(`[Webhook] Attempting dispatch for business ${businessId}, event: ${event}`);
+    console.log(`[Webhook] Attempting dispatch for business ${businessId}, event: ${event}${instanceId ? `, instance: ${instanceId}` : ''}`);
+    
+    // First, try to get webhook from instance if instanceId is provided
+    let webhookUrl: string | null = null;
+    let webhookEvents: string[] = [];
+    let webhookSecret: string | null = null;
+    
+    if (instanceId) {
+      const instance = await prisma.whatsAppInstance.findUnique({
+        where: { id: instanceId },
+        select: {
+          webhookUrl: true,
+          webhookSecret: true,
+          phoneNumber: true
+        }
+      });
+      
+      if (instance?.webhookUrl) {
+        console.log(`[Webhook] Using instance-level webhook for ${instance.phoneNumber}`);
+        webhookUrl = instance.webhookUrl;
+        // Instance uses default webhook events (all events)
+        webhookEvents = [];
+        webhookSecret = instance.webhookSecret;
+      }
+    }
     
     const business = await prisma.business.findUnique({
       where: { id: businessId },
@@ -85,7 +110,14 @@ export async function dispatchWebhook(
       return { success: false, reason: 'business_not_found' };
     }
     
-    if (!business.webhookUrl) {
+    // Fall back to business-level webhook if no instance webhook
+    if (!webhookUrl) {
+      webhookUrl = business.webhookUrl;
+      webhookEvents = business.webhookEvents;
+      webhookSecret = business.webhookSecret;
+    }
+    
+    if (!webhookUrl) {
       console.log(`[Webhook] No webhookUrl configured for business ${business.name} (${businessId})`);
       return { success: false, reason: 'no_webhook_url' };
     }
@@ -119,8 +151,8 @@ export async function dispatchWebhook(
     }
 
     const normalizedEvent = normalizeEventName(event);
-    const allowedEvents = business.webhookEvents.length > 0 
-      ? business.webhookEvents.map(normalizeEventName)
+    const allowedEvents = webhookEvents.length > 0 
+      ? webhookEvents.map(normalizeEventName)
       : DEFAULT_WEBHOOK_EVENTS;
     
     if (!allowedEvents.includes(normalizedEvent)) {
@@ -132,11 +164,14 @@ export async function dispatchWebhook(
       event,
       timestamp: new Date().toISOString(),
       businessId,
-      data
+      data: {
+        ...data,
+        instanceId: instanceId || undefined
+      }
     };
 
     const payloadString = JSON.stringify(payload);
-    const signature = generateSignature(payloadString, business.webhookSecret || '');
+    const signature = generateSignature(payloadString, webhookSecret || '');
 
     const headers = {
       'Content-Type': 'application/json',
@@ -144,14 +179,14 @@ export async function dispatchWebhook(
       'X-Webhook-Event': event
     };
 
-    console.log(`[Webhook] Sending to ${business.webhookUrl}...`);
-    const success = await sendWithRetry(business.webhookUrl, payload, headers, 3);
+    console.log(`[Webhook] Sending to ${webhookUrl}...`);
+    const success = await sendWithRetry(webhookUrl, payload, headers, 3);
     
     if (success) {
-      console.log(`[Webhook] Successfully dispatched ${event} to ${business.webhookUrl}`);
+      console.log(`[Webhook] Successfully dispatched ${event} to ${webhookUrl}`);
       return { success: true };
     } else {
-      console.error(`[Webhook] Failed to deliver ${event} to ${business.webhookUrl} after all retries`);
+      console.error(`[Webhook] Failed to deliver ${event} to ${webhookUrl} after all retries`);
       return { success: false, reason: 'delivery_failed' };
     }
   } catch (error: any) {
@@ -167,7 +202,8 @@ export async function dispatchUserMessage(
   message: string,
   messageType: string = 'text',
   mediaUrl?: string,
-  mediaDetails?: Record<string, any>
+  mediaDetails?: Record<string, any>,
+  instanceId?: string
 ): Promise<void> {
   await dispatchWebhook(businessId, 'user_message', {
     contactPhone,
@@ -176,7 +212,7 @@ export async function dispatchUserMessage(
     messageType,
     mediaUrl,
     mediaDetails
-  });
+  }, instanceId);
 }
 
 export async function dispatchAgentMessage(
@@ -184,14 +220,15 @@ export async function dispatchAgentMessage(
   contactPhone: string,
   response: string,
   mediaUrls?: string[],
-  toolsUsed?: string[]
+  toolsUsed?: string[],
+  instanceId?: string
 ): Promise<void> {
   await dispatchWebhook(businessId, 'agent_message', {
     contactPhone,
     response,
     mediaUrls,
     toolsUsed
-  });
+  }, instanceId);
 }
 
 export async function dispatchStateChange(
@@ -199,14 +236,15 @@ export async function dispatchStateChange(
   contactPhone: string,
   changeType: 'stage' | 'tag' | 'data',
   oldValue: any,
-  newValue: any
+  newValue: any,
+  instanceId?: string
 ): Promise<void> {
   await dispatchWebhook(businessId, 'state_change', {
     contactPhone,
     changeType,
     oldValue,
     newValue
-  });
+  }, instanceId);
 }
 
 export async function dispatchToolCall(
@@ -215,7 +253,8 @@ export async function dispatchToolCall(
   toolName: string,
   input: Record<string, any>,
   output: Record<string, any>,
-  success: boolean
+  success: boolean,
+  instanceId?: string
 ): Promise<void> {
   await dispatchWebhook(businessId, 'tool_call', {
     contactPhone,
@@ -223,18 +262,19 @@ export async function dispatchToolCall(
     input,
     output,
     success
-  });
+  }, instanceId);
 }
 
 export async function dispatchStageChange(
   businessId: string,
   contactPhone: string,
   oldStage: string | null,
-  newStage: string
+  newStage: string,
+  instanceId?: string
 ): Promise<void> {
   await dispatchWebhook(businessId, 'stage_change', {
     contactPhone,
     oldStage,
     newStage
-  });
+  }, instanceId);
 }

@@ -344,7 +344,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           
           // Dispatch user_message webhook for incoming messages
           if (!isFromMe) {
-            console.log(`[WEBHOOK] Dispatching user_message webhook for business ${businessId}, contact ${contactPhone}`);
+            console.log(`[WEBHOOK] Dispatching user_message webhook for business ${businessId}, contact ${contactPhone}, instance ${instance?.id}`);
             dispatchUserMessage(
               businessId,
               contactPhone,
@@ -352,7 +352,8 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               mediaAnalysis ? `${data.text || ''}\n[Media: ${mediaAnalysis}]` : (data.text || ''),
               mediaType || 'text',
               data.mediaUrl,
-              mediaAnalysis ? { analysis: mediaAnalysis } : undefined
+              mediaAnalysis ? { analysis: mediaAnalysis } : undefined,
+              instance?.id
             ).catch(err => console.error('[WEBHOOK] Failed to dispatch user_message webhook:', err.message));
           }
           

@@ -250,7 +250,8 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
         cleanTo,
         message || '',
         mediaUrl ? [mediaUrl] : undefined,
-        ['external_api']
+        ['external_api'],
+        instance.id
       );
       
       await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API a ${cleanTo}`, {
@@ -350,7 +351,8 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
         cleanTo,
         message || '',
         mediaUrl ? [mediaUrl] : undefined,
-        ['external_api']
+        ['external_api'],
+        instance.id
       );
       
       await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API META a ${cleanTo}`, {

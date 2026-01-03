@@ -1294,7 +1294,8 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
       contactPhone,
       aiResponse,
       undefined,
-      toolsExecuted.length > 0 ? toolsExecuted : undefined
+      toolsExecuted.length > 0 ? toolsExecuted : undefined,
+      instanceId
     ).catch(err => console.error('[AI Worker] Failed to dispatch agent_message webhook:', err.message));
   }
   

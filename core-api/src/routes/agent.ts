@@ -858,7 +858,8 @@ async function processWithAgentV2(
         contactPhone,
         aiResponse,
         sentMedia.length > 0 ? sentMedia.map((m: any) => m.url) : undefined,
-        undefined
+        undefined,
+        instance?.id
       ).catch(err => console.error('[Agent V2] Failed to dispatch agent_message webhook:', err.message));
       
       // Schedule follow-up after sending response
@@ -1968,7 +1969,8 @@ async function processWithAgent(
         contactPhone,
         aiResponse,
         sentMedia.length > 0 ? sentMedia.map(m => m.url) : undefined,
-        undefined
+        undefined,
+        instance?.id
       ).catch(err => console.error('[Agent V1] Failed to dispatch agent_message webhook:', err.message));
       
       // Schedule follow-up after sending response
