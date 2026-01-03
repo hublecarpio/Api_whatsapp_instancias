@@ -1,4 +1,4 @@
 {
-  "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
+  "/login/page": "app/login/page.js",
   "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js"
 }
