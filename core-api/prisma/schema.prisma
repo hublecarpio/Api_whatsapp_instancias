@@ -350,6 +350,7 @@ model GoogleCalendarCredential {
 enum WhatsAppProvider {
   BAILEYS
   META_CLOUD
+  META_COEXIST
 }
 
 model WhatsAppInstance {
@@ -374,9 +375,10 @@ model WhatsAppInstance {
   webhookSecret     String?
   webhookEvents     String[]          @default([])
 
-  business         Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  metaCredential   MetaCredential?
-  history          WhatsAppInstanceHistory[]
+  business              Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  metaCredential        MetaCredential?
+  metaCoexistCredential MetaCoexistCredential?
+  history               WhatsAppInstanceHistory[]
   reminders        Reminder[]
   appointments     Appointment[]
   broadcasts       BroadcastCampaign[]
@@ -437,6 +439,42 @@ model MetaCredential {
 
   instance  WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   templates MetaTemplate[]
+}
+
+enum MetaCoexistStatus {
+  PENDING
+  AWAITING_QR
+  CONNECTED
+  ACTIVE
+  REVOKED
+  BLOCKED
+  DISABLED
+}
+
+model MetaCoexistCredential {
+  id                   String             @id @default(uuid())
+  instanceId           String             @unique
+  wabaId               String
+  metaBusinessId       String
+  phoneNumberId        String
+  displayPhone         String?
+  userAccessToken      String
+  systemAccessToken    String?
+  tokenExpiresAt       DateTime?
+  webhookVerifyToken   String             @default(uuid())
+  coexistenceEnabled   Boolean            @default(false)
+  coexistStatus        MetaCoexistStatus  @default(PENDING)
+  qualityRating        String?
+  messagingTier        String?
+  sessionId            String?
+  lastSyncAt           DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  instance  WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([wabaId])
+  @@index([phoneNumberId])
 }
 
 model MetaTemplate {

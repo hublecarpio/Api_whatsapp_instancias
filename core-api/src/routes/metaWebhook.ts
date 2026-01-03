@@ -7,6 +7,8 @@ import { dispatchUserMessage } from '../services/webhookService.js';
 
 const router = Router();
 
+type MetaProviderType = 'META_CLOUD' | 'META_COEXIST';
+
 router.get('/:instanceId', async (req: Request, res: Response) => {
   try {
     const { instanceId } = req.params;
@@ -22,25 +24,43 @@ router.get('/:instanceId', async (req: Request, res: Response) => {
 
     const instance = await prisma.whatsAppInstance.findUnique({
       where: { id: instanceId },
-      include: { metaCredential: true }
+      include: { 
+        metaCredential: true,
+        metaCoexistCredential: true
+      }
     });
 
-    if (!instance || instance.provider !== 'META_CLOUD') {
-      console.error('Instance not found or not META_CLOUD:', instanceId);
+    if (!instance) {
+      console.error('Instance not found:', instanceId);
       return res.status(404).send('Instance not found');
     }
 
-    if (!instance.metaCredential) {
-      console.error('Meta credential not found for instance:', instanceId);
+    const isMetaCloud = instance.provider === 'META_CLOUD';
+    const isMetaCoexist = instance.provider === 'META_COEXIST';
+
+    if (!isMetaCloud && !isMetaCoexist) {
+      console.error('Instance not a Meta provider:', instanceId, instance.provider);
+      return res.status(404).send('Instance not found');
+    }
+
+    let expectedToken: string | undefined;
+    if (isMetaCloud && instance.metaCredential) {
+      expectedToken = instance.metaCredential.webhookVerifyToken;
+    } else if (isMetaCoexist && instance.metaCoexistCredential) {
+      expectedToken = instance.metaCoexistCredential.webhookVerifyToken;
+    }
+
+    if (!expectedToken) {
+      console.error('No credentials found for instance:', instanceId);
       return res.status(404).send('Credentials not found');
     }
 
-    if (token !== instance.metaCredential.webhookVerifyToken) {
-      console.error('Invalid verify token:', { expected: instance.metaCredential.webhookVerifyToken, received: token });
+    if (token !== expectedToken) {
+      console.error('Invalid verify token:', { expected: expectedToken, received: token });
       return res.status(403).send('Invalid verify token');
     }
 
-    console.log('Meta webhook verified successfully for instance:', instanceId);
+    console.log('Meta webhook verified successfully for instance:', instanceId, instance.provider);
     res.status(200).send(challenge);
   } catch (error: any) {
     console.error('Meta webhook verification error:', error);
@@ -61,17 +81,41 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
       where: { id: instanceId },
       include: { 
         metaCredential: true,
+        metaCoexistCredential: true,
         business: true
       }
     });
 
-    if (!instance || instance.provider !== 'META_CLOUD') {
-      console.error('Instance not found or not META_CLOUD:', instanceId);
+    if (!instance) {
+      console.error('Instance not found:', instanceId);
       return;
     }
 
-    if (!instance.metaCredential) {
-      console.error('Meta credential not found for instance:', instanceId);
+    const isMetaCloud = instance.provider === 'META_CLOUD';
+    const isMetaCoexist = instance.provider === 'META_COEXIST';
+
+    if (!isMetaCloud && !isMetaCoexist) {
+      console.error('Instance not a Meta provider:', instanceId, instance.provider);
+      return;
+    }
+
+    let accessToken: string;
+    let phoneNumberId: string;
+    let businessId: string;
+    let providerType: MetaProviderType;
+
+    if (isMetaCloud && instance.metaCredential) {
+      accessToken = instance.metaCredential.accessToken;
+      phoneNumberId = instance.metaCredential.phoneNumberId;
+      businessId = instance.metaCredential.businessId;
+      providerType = 'META_CLOUD';
+    } else if (isMetaCoexist && instance.metaCoexistCredential) {
+      accessToken = instance.metaCoexistCredential.systemAccessToken || instance.metaCoexistCredential.userAccessToken;
+      phoneNumberId = instance.metaCoexistCredential.phoneNumberId;
+      businessId = instance.metaCoexistCredential.metaBusinessId;
+      providerType = 'META_COEXIST';
+    } else {
+      console.error('No credentials found for instance:', instanceId);
       return;
     }
 
@@ -81,22 +125,22 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
       return;
     }
 
-    if (parsed.phoneNumberId !== instance.metaCredential.phoneNumberId) {
+    if (parsed.phoneNumberId !== phoneNumberId) {
       console.error('Phone number ID mismatch:', { 
-        expected: instance.metaCredential.phoneNumberId, 
+        expected: phoneNumberId, 
         received: parsed.phoneNumberId 
       });
       return;
     }
 
     const metaService = new MetaCloudService({
-      accessToken: instance.metaCredential.accessToken,
-      phoneNumberId: instance.metaCredential.phoneNumberId,
-      businessId: instance.metaCredential.businessId
+      accessToken,
+      phoneNumberId,
+      businessId
     });
 
     for (const msg of parsed.messages) {
-      console.log('Processing Meta message:', { 
+      console.log(`Processing ${providerType} message:`, { 
         from: msg.from, 
         type: msg.type,
         businessId: instance.businessId 
@@ -135,7 +179,7 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
       await processIncomingMessage({
         businessId: instance.businessId,
         instanceId: instance.id,
-        provider: 'META_CLOUD',
+        provider: providerType,
         from: msg.from,
         pushName: msg.pushName,
         messageId: msg.messageId,
@@ -149,7 +193,6 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
         location: msg.location
       });
       
-      // Dispatch user_message webhook for Meta Cloud incoming messages
       console.log(`[META WEBHOOK] Dispatching user_message webhook for business ${instance.businessId}, contact ${msg.from}, instance ${instance.id}`);
       dispatchUserMessage(
         instance.businessId,

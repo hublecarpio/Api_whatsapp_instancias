@@ -10,7 +10,7 @@ const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-age
 export interface IncomingMessage {
   businessId: string;
   instanceId: string;
-  provider: 'BAILEYS' | 'META_CLOUD';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
   from: string;
   pushName: string;
   messageId: string;
@@ -198,7 +198,10 @@ export async function sendProviderMessage(options: {
 
   const instance = await prisma.whatsAppInstance.findUnique({
     where: { id: instanceId },
-    include: { metaCredential: true }
+    include: { 
+      metaCredential: true,
+      metaCoexistCredential: true
+    }
   });
 
   if (!instance) {
@@ -220,6 +223,28 @@ export async function sendProviderMessage(options: {
         accessToken: instance.metaCredential.accessToken,
         phoneNumberId: instance.metaCredential.phoneNumberId,
         businessId: instance.metaCredential.businessId
+      });
+
+      await metaService.sendMessage({
+        to: cleanPhone,
+        text,
+        mediaUrl,
+        mediaType,
+        caption,
+        filename
+      });
+    } else if (instance.provider === 'META_COEXIST') {
+      if (!instance.metaCoexistCredential) {
+        console.error('Meta Coexist credentials not found for instance:', instanceId);
+        return false;
+      }
+
+      const { MetaCloudService } = await import('./metaCloud.js');
+      const token = instance.metaCoexistCredential.systemAccessToken || instance.metaCoexistCredential.userAccessToken;
+      const metaService = new MetaCloudService({
+        accessToken: token,
+        phoneNumberId: instance.metaCoexistCredential.phoneNumberId,
+        businessId: instance.metaCoexistCredential.metaBusinessId
       });
 
       await metaService.sendMessage({

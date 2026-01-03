@@ -17,7 +17,10 @@ The platform employs a microservices-like architecture with a **Frontend (Next.j
 
 **Technical Implementations**:
 *   **AI Pipeline**: Processes WhatsApp messages using business context, conversation history, and OpenAI API.
-*   **Multi-Provider WhatsApp**: Supports Baileys (WhatsApp Web) and Meta Cloud API, including template messages and webhooks.
+*   **Multi-Provider WhatsApp**: Supports three connection modes:
+    *   **Baileys** (WhatsApp Web): QR-based connection for personal/business WhatsApp numbers.
+    *   **Meta Cloud API**: Official WABA with full API control and template messages.
+    *   **Meta Coexistence**: Connect existing WhatsApp Business App numbers via Embedded Signup + Coexistence flow. Allows clients to keep using their WhatsApp Business App while also sending/receiving via Cloud API.
 *   **AI Agent System**:
     *   **Agent V2 (Python/LangGraph)**: Advanced multi-agent system with a 3-brain architecture (Vendor → Observer → Refiner), 5 executable tools, Redis-backed memory, OpenAI embeddings for semantic product search, and dynamic learning. Features a state-governed architecture (`CommercialState`, `EtapaComercial`) and ReAct retry mechanism.
     *   **Custom Tools Support**: Allows AI agents to call external POST endpoints with dynamic parameter interpolation and native OpenAI function calling for both Agent V1 (Node.js) and Agent V2 (Python).
@@ -70,3 +73,27 @@ The platform employs a microservices-like architecture with a **Frontend (Next.j
 *   **Stripe**: Payment gateway for billing.
 *   **Nodemailer**: For email sending.
 *   **Google Gemini API**: For multimedia processing.
+
+## Environment Variables for Meta Coexistence
+
+To enable Meta Coexistence (Embedded Signup + Coexistence flow), configure these environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `META_APP_ID` | Meta App ID from Facebook Developer Console | Yes |
+| `META_APP_SECRET` | Meta App Secret from Facebook Developer Console | Yes |
+| `META_COEXIST_REDIRECT_URI` | OAuth callback URL (default: `{API_URL}/auth/meta-coexist/callback`) | No |
+| `META_WEBHOOK_VERIFY_TOKEN` | Token for Meta webhook verification | No |
+
+### Meta Coexistence API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth/meta-coexist/start` | GET | Initiate OAuth flow for Meta Coexistence |
+| `/auth/meta-coexist/callback` | GET | OAuth callback handler |
+| `/auth/meta-coexist/setup` | POST | Complete setup with selected phone number |
+| `/auth/meta-coexist/activate/:instanceId` | POST | Activate coexistence mode |
+| `/auth/meta-coexist/status/:instanceId` | GET | Check coexistence status |
+| `/auth/meta-coexist/wabas` | GET | List available WABAs |
+| `/auth/meta-coexist/phone-numbers` | GET | List phone numbers in a WABA |
+| `/auth/meta-coexist/disconnect/:instanceId` | POST | Disconnect Meta Coexistence |
