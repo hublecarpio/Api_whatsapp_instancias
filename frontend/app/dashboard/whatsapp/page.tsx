@@ -1286,25 +1286,13 @@ export default function WhatsAppPage() {
                           ))}
                         </div>
                         
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleSaveWebhook(true)}
-                            disabled={savingWebhook}
-                            className="flex-1 text-xs px-2 py-1.5 bg-neon-blue text-dark-bg rounded font-medium hover:bg-cyan-400 disabled:opacity-50"
-                          >
-                            {savingWebhook ? '...' : 'Guardar'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setWebhookEventsInput([]);
-                              handleSaveWebhook(true);
-                            }}
-                            disabled={savingWebhook}
-                            className="text-xs px-2 py-1.5 bg-gray-600/20 text-gray-400 rounded hover:bg-gray-600/30 disabled:opacity-50"
-                          >
-                            Todos
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleSaveWebhook(true)}
+                          disabled={savingWebhook}
+                          className="w-full text-xs px-2 py-1.5 bg-neon-blue text-dark-bg rounded font-medium hover:bg-cyan-400 disabled:opacity-50"
+                        >
+                          {savingWebhook ? '...' : 'Guardar'}
+                        </button>
                       </div>
                     </div>,
                     document.body
