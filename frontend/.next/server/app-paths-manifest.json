@@ -2,6 +2,6 @@
   "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
   "/dashboard/prompt/page": "app/dashboard/prompt/page.js",
   "/dashboard/api-docs/page": "app/dashboard/api-docs/page.js",
-  "/dashboard/business/page": "app/dashboard/business/page.js",
-  "/dashboard/products/page": "app/dashboard/products/page.js"
+  "/dashboard/products/page": "app/dashboard/products/page.js",
+  "/dashboard/billing/page": "app/dashboard/billing/page.js"
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { useInstanceStore, WhatsAppInstance } from '@/store/instance';
@@ -1248,9 +1249,9 @@ export default function WhatsAppPage() {
                     </div>
                   )}
 
-                  {showAdvancedWebhook && (
-                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-2 sm:p-4" style={{ left: 0, top: 0, right: 0, bottom: 0 }}>
-                      <div className="bg-dark-card/95 backdrop-blur-sm border border-dark-border rounded-lg p-3 sm:p-4 w-full max-w-xs sm:max-w-sm shadow-xl">
+                  {showAdvancedWebhook && typeof document !== 'undefined' && createPortal(
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-2 sm:p-4">
+                      <div className="bg-dark-card/95 backdrop-blur-sm border border-dark-border rounded-lg p-3 sm:p-4 w-full max-w-xs sm:max-w-sm shadow-2xl">
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="text-xs sm:text-sm font-semibold text-white">Eventos del Webhook</h3>
                           <button
@@ -1305,7 +1306,8 @@ export default function WhatsAppPage() {
                           </button>
                         </div>
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
 
                   <div className="mt-3 pt-3 border-t border-dark-border">
