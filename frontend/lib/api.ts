@@ -188,8 +188,8 @@ export const waApi = {
     api.get(`/wa/instances/${instanceId}/api-config?businessId=${businessId}`),
   instanceRegenerateApiKey: (instanceId: string, businessId: string) => 
     api.post(`/wa/instances/${instanceId}/regenerate-api-key?businessId=${businessId}`),
-  instanceUpdateWebhook: (instanceId: string, businessId: string, webhookUrl: string | null) => 
-    api.put(`/wa/instances/${instanceId}/webhook?businessId=${businessId}`, { webhookUrl }),
+  instanceUpdateWebhook: (instanceId: string, businessId: string, webhookUrl: string | null, webhookEvents?: string[]) => 
+    api.put(`/wa/instances/${instanceId}/webhook?businessId=${businessId}`, { webhookUrl, webhookEvents }),
   updateInstance: (instanceId: string, businessId: string, data: { name?: string; businessObjective?: 'SALES' | 'APPOINTMENTS'; botEnabled?: boolean }) => 
     api.put(`/wa/instances/${instanceId}?businessId=${businessId}`, data),
   

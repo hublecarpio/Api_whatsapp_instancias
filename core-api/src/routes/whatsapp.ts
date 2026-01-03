@@ -176,6 +176,7 @@ router.get('/instances/:instanceId/api-config', async (req: AuthRequest, res: Re
       apiKeyPrefix: instance.apiKeyPrefix,
       webhookUrl: instance.webhookUrl,
       webhookSecret: instance.webhookSecret,
+      webhookEvents: instance.webhookEvents || [],
       hasApiKey: !!instance.apiKeyHash
     });
   } catch (error: any) {

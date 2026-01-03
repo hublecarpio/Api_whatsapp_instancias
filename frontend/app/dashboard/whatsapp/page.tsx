@@ -97,6 +97,7 @@ export default function WhatsAppPage() {
     apiKeyPrefix: string | null;
     webhookUrl: string | null;
     webhookSecret: string | null;
+    webhookEvents: string[];
     hasApiKey: boolean;
   } | null>(null);
   const [apiConfigLoading, setApiConfigLoading] = useState(false);
@@ -106,6 +107,8 @@ export default function WhatsAppPage() {
   const [webhookUrlInput, setWebhookUrlInput] = useState('');
   const [savingWebhook, setSavingWebhook] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showAdvancedWebhook, setShowAdvancedWebhook] = useState(false);
+  const [webhookEventsInput, setWebhookEventsInput] = useState<string[]>([]);
   
   const [metaForm, setMetaForm] = useState<MetaFormData>({
     name: '',
@@ -132,6 +135,7 @@ export default function WhatsAppPage() {
       const response = await waApi.instanceApiConfig(selectedInstanceId, currentBusiness.id);
       setApiConfig(response.data);
       setWebhookUrlInput(response.data.webhookUrl || '');
+      setWebhookEventsInput(response.data.webhookEvents || []);
     } catch (err) {
       console.error('Failed to fetch API config:', err);
       setApiConfig(null);
@@ -157,13 +161,20 @@ export default function WhatsAppPage() {
     }
   };
 
-  const handleSaveWebhook = async () => {
+  const handleSaveWebhook = async (saveEvents = false) => {
     if (!currentBusiness || !selectedInstanceId) return;
     setSavingWebhook(true);
     try {
-      const response = await waApi.instanceUpdateWebhook(selectedInstanceId, currentBusiness.id, webhookUrlInput || null);
-      setApiConfig(prev => prev ? { ...prev, webhookUrl: response.data.webhookUrl, webhookSecret: response.data.webhookSecret } : null);
+      const eventsToSend = saveEvents ? webhookEventsInput : undefined;
+      const response = await waApi.instanceUpdateWebhook(selectedInstanceId, currentBusiness.id, webhookUrlInput || null, eventsToSend);
+      setApiConfig(prev => prev ? { 
+        ...prev, 
+        webhookUrl: response.data.webhookUrl, 
+        webhookSecret: response.data.webhookSecret,
+        webhookEvents: response.data.webhookEvents || []
+      } : null);
       setEditingWebhook(false);
+      setShowAdvancedWebhook(false);
       addEvent('success', 'Webhook actualizado');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al guardar webhook');
@@ -171,6 +182,20 @@ export default function WhatsAppPage() {
       setSavingWebhook(false);
     }
   };
+  
+  const toggleWebhookEvent = (event: string) => {
+    setWebhookEventsInput(prev => 
+      prev.includes(event) ? prev.filter(e => e !== event) : [...prev, event]
+    );
+  };
+  
+  const WEBHOOK_EVENTS = [
+    { id: 'user_message', label: 'Mensaje del usuario', desc: 'Cuando un contacto envía un mensaje' },
+    { id: 'agent_message', label: 'Mensaje del agente', desc: 'Cuando el AI o tu equipo responde' },
+    { id: 'stage_change', label: 'Cambio de etapa', desc: 'Cuando cambia la etapa del lead' },
+    { id: 'state_change', label: 'Cambio de estado', desc: 'Cuando cambia el estado del contacto' },
+    { id: 'tool_call', label: 'Ejecución de herramienta', desc: 'Cuando el AI ejecuta una herramienta' }
+  ];
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
@@ -1157,7 +1182,7 @@ export default function WhatsAppPage() {
                         />
                         <div className="flex gap-2">
                           <button
-                            onClick={handleSaveWebhook}
+                            onClick={() => handleSaveWebhook(false)}
                             disabled={savingWebhook}
                             className="text-xs px-2 py-1 bg-accent-success/20 text-accent-success rounded hover:bg-accent-success/30 disabled:opacity-50"
                           >
@@ -1202,6 +1227,83 @@ export default function WhatsAppPage() {
                         >
                           {copiedField === 'webhookSecret' ? '✓' : '📋'}
                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {apiConfig.webhookUrl && (
+                    <div>
+                      <button
+                        onClick={() => {
+                          setWebhookEventsInput(apiConfig.webhookEvents || []);
+                          setShowAdvancedWebhook(true);
+                        }}
+                        className="text-xs text-neon-blue hover:text-cyan-400 flex items-center gap-1"
+                      >
+                        <span>⚙️</span> Opciones avanzadas
+                        {apiConfig.webhookEvents.length > 0 && (
+                          <span className="text-gray-500">({apiConfig.webhookEvents.length} eventos)</span>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {showAdvancedWebhook && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                      <div className="bg-dark-card border border-dark-border rounded-lg p-4 w-full max-w-md">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-sm font-semibold text-white">Eventos del Webhook</h3>
+                          <button
+                            onClick={() => setShowAdvancedWebhook(false)}
+                            className="text-gray-400 hover:text-white"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        
+                        <p className="text-xs text-gray-400 mb-3">
+                          Selecciona los eventos que quieres recibir. Si no seleccionas ninguno, recibirás todos.
+                        </p>
+                        
+                        <div className="space-y-2 mb-4">
+                          {WEBHOOK_EVENTS.map(event => (
+                            <label 
+                              key={event.id}
+                              className="flex items-start gap-3 p-2 rounded hover:bg-dark-hover cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={webhookEventsInput.includes(event.id)}
+                                onChange={() => toggleWebhookEvent(event.id)}
+                                className="mt-0.5 rounded border-dark-border bg-dark-bg text-neon-blue focus:ring-neon-blue"
+                              />
+                              <div>
+                                <span className="text-sm text-white">{event.label}</span>
+                                <p className="text-xs text-gray-500">{event.desc}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSaveWebhook(true)}
+                            disabled={savingWebhook}
+                            className="flex-1 text-xs px-3 py-2 bg-neon-blue text-dark-bg rounded font-medium hover:bg-cyan-400 disabled:opacity-50"
+                          >
+                            {savingWebhook ? 'Guardando...' : 'Guardar eventos'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setWebhookEventsInput([]);
+                              handleSaveWebhook(true);
+                            }}
+                            disabled={savingWebhook}
+                            className="text-xs px-3 py-2 bg-gray-600/20 text-gray-400 rounded hover:bg-gray-600/30 disabled:opacity-50"
+                          >
+                            Todos
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
