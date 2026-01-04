@@ -38,7 +38,8 @@ export default function InstanceSelector({
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [newInstanceName, setNewInstanceName] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<'BAILEYS' | 'META_CLOUD'>('BAILEYS');
+  const [selectedProvider, setSelectedProvider] = useState<'BAILEYS' | 'META_CLOUD' | 'META_COEXIST'>('BAILEYS');
+  const [startingCoexist, setStartingCoexist] = useState(false);
   const [copyFromInstance, setCopyFromInstance] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [countryCode, setCountryCode] = useState('+51');
@@ -98,7 +99,7 @@ export default function InstanceSelector({
       const response = await waApi.addInstance({
         businessId,
         name: newInstanceName || undefined,
-        provider: selectedProvider,
+        provider: selectedProvider as 'BAILEYS' | 'META_CLOUD',
         phoneNumber: fullPhone,
         copyFromInstanceId: copyFromInstance || undefined
       });
@@ -140,6 +141,27 @@ export default function InstanceSelector({
       setAddError(error.response?.data?.error || 'Error al eliminar instancia');
     } finally {
       setDeleteLoading(null);
+    }
+  };
+
+  const handleStartCoexistence = async () => {
+    if (!businessId) return;
+    
+    setStartingCoexist(true);
+    setAddError('');
+    
+    try {
+      const response = await waApi.startMetaCoexist(businessId);
+      const authUrl = response.data.redirectUrl || response.data.authUrl;
+      if (authUrl) {
+        window.location.href = authUrl;
+      } else {
+        throw new Error('No se recibio URL de autorizacion');
+      }
+    } catch (error: any) {
+      setAddError(error.response?.data?.error || 'Error al iniciar Meta Coexistence');
+    } finally {
+      setStartingCoexist(false);
     }
   };
 
@@ -329,7 +351,7 @@ export default function InstanceSelector({
               <label className="block text-sm font-medium text-gray-400 mb-2">
                 Tipo de conexion
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <button
                   type="button"
                   onClick={() => setSelectedProvider('BAILEYS')}
@@ -340,8 +362,8 @@ export default function InstanceSelector({
                   }`}
                 >
                   <div className="text-2xl mb-1">📱</div>
-                  <div className="font-medium text-white">WhatsApp QR</div>
-                  <div className="text-xs text-gray-400">Escanea con tu celular</div>
+                  <div className="font-medium text-white text-sm">WhatsApp QR</div>
+                  <div className="text-xs text-gray-400">Escanea con QR</div>
                 </button>
                 <button
                   type="button"
@@ -353,8 +375,21 @@ export default function InstanceSelector({
                   }`}
                 >
                   <div className="text-2xl mb-1">☁️</div>
-                  <div className="font-medium text-white">Meta Cloud</div>
-                  <div className="text-xs text-gray-400">API oficial de Meta</div>
+                  <div className="font-medium text-white text-sm">Meta Cloud</div>
+                  <div className="text-xs text-gray-400">API oficial</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvider('META_COEXIST')}
+                  className={`p-4 rounded-xl border-2 transition-all text-center ${
+                    selectedProvider === 'META_COEXIST'
+                      ? 'border-purple-500 bg-purple-500/10'
+                      : 'border-dark-border hover:border-gray-600'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">🔗</div>
+                  <div className="font-medium text-white text-sm">Coexistence</div>
+                  <div className="text-xs text-gray-400">Via Facebook</div>
                 </button>
               </div>
             </div>
@@ -413,6 +448,14 @@ export default function InstanceSelector({
               </div>
             )}
             
+            {selectedProvider === 'META_COEXIST' && (
+              <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <p className="text-sm text-purple-300">
+                  Seras redirigido a Facebook para autorizar el acceso a tu WhatsApp Business App.
+                </p>
+              </div>
+            )}
+            
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
@@ -428,11 +471,15 @@ export default function InstanceSelector({
               </button>
               <button
                 type="button"
-                onClick={handleAddInstance}
-                disabled={addLoading}
-                className="flex-1 btn-primary disabled:opacity-50"
+                onClick={selectedProvider === 'META_COEXIST' ? handleStartCoexistence : handleAddInstance}
+                disabled={addLoading || startingCoexist}
+                className={`flex-1 disabled:opacity-50 ${
+                  selectedProvider === 'META_COEXIST' 
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors' 
+                    : 'btn-primary'
+                }`}
               >
-                {addLoading ? 'Agregando...' : 'Agregar'}
+                {startingCoexist ? 'Conectando...' : addLoading ? 'Agregando...' : selectedProvider === 'META_COEXIST' ? 'Conectar con Facebook' : 'Agregar'}
               </button>
             </div>
           </div>
