@@ -30,20 +30,60 @@ router.get('/start', async (req: Request, res: Response) => {
     const { businessId, instanceId } = req.query;
     const userId = (req as any).user?.id;
 
-    if (!businessId || !instanceId) {
-      return res.status(400).json({ error: 'businessId and instanceId are required' });
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
     }
 
-    const instance = await prisma.whatsAppInstance.findFirst({
-      where: {
-        id: instanceId as string,
-        businessId: businessId as string,
-        business: { userId }
-      }
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
     });
 
-    if (!instance) {
-      return res.status(404).json({ error: 'Instance not found or access denied' });
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found or access denied' });
+    }
+
+    let instance;
+    
+    if (instanceId) {
+      instance = await prisma.whatsAppInstance.findFirst({
+        where: {
+          id: instanceId as string,
+          businessId: businessId as string,
+          business: { userId }
+        }
+      });
+
+      if (!instance) {
+        return res.status(404).json({ error: 'Instance not found or access denied' });
+      }
+    } else {
+      const existingInstances = await prisma.whatsAppInstance.count({
+        where: { businessId: businessId as string }
+      });
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { subscriptionTier: true, isPro: true }
+      });
+
+      const tier = user?.subscriptionTier || 'BASIC';
+      const isPro = user?.isPro || false;
+      const maxInstances = isPro || tier === 'PRO' || tier === 'ENTERPRISE' ? 10 : 2;
+
+      if (existingInstances >= maxInstances) {
+        return res.status(400).json({ 
+          error: `Has alcanzado el limite de ${maxInstances} instancias para tu plan ${tier}` 
+        });
+      }
+
+      instance = await prisma.whatsAppInstance.create({
+        data: {
+          businessId: businessId as string,
+          provider: 'META_COEXIST',
+          status: 'pending_credentials',
+          name: `WhatsApp Coexist ${existingInstances + 1}`
+        }
+      });
     }
 
     const config = MetaCoexistService.getMetaCoexistConfig();
@@ -52,14 +92,14 @@ router.get('/start', async (req: Request, res: Response) => {
     const state = uuidv4();
     pendingOAuthStates.set(state, {
       businessId: businessId as string,
-      instanceId: instanceId as string,
+      instanceId: instance.id,
       userId,
       expiresAt: Date.now() + 10 * 60 * 1000
     });
 
     const authUrl = service.getOAuthUrl(state);
 
-    res.json({ authUrl, state });
+    res.json({ redirectUrl: authUrl, state, instanceId: instance.id });
   } catch (error: any) {
     console.error('[META_COEXIST] OAuth start error:', error);
     res.status(500).json({ error: 'Failed to start OAuth flow' });
@@ -310,18 +350,34 @@ router.get('/status/:instanceId', async (req: Request, res: Response) => {
 
 router.get('/wabas', async (req: Request, res: Response) => {
   try {
-    const { userAccessToken, metaBusinessId } = req.query;
+    const { session, metaBusinessId } = req.query;
 
-    if (!userAccessToken || !metaBusinessId) {
-      return res.status(400).json({ error: 'Missing userAccessToken or metaBusinessId' });
+    if (!session) {
+      return res.status(400).json({ error: 'Missing session token' });
+    }
+
+    const sessionData = pendingTokens.get(session as string);
+    if (!sessionData) {
+      return res.status(404).json({ error: 'Session expired' });
     }
 
     const config = MetaCoexistService.getMetaCoexistConfig();
     const service = new MetaCoexistService(config);
 
-    const wabas = await service.getWABAs(userAccessToken as string, metaBusinessId as string);
+    if (metaBusinessId) {
+      const wabas = await service.getWABAs(sessionData.userAccessToken, metaBusinessId as string);
+      res.json({ wabas });
+    } else {
+      const businesses = await service.getConnectedBusinesses(sessionData.userAccessToken);
+      const allWabas: any[] = [];
+      
+      for (const business of businesses) {
+        const wabas = await service.getWABAs(sessionData.userAccessToken, business.id);
+        allWabas.push(...wabas);
+      }
 
-    res.json({ wabas });
+      res.json({ wabas: allWabas });
+    }
   } catch (error: any) {
     console.error('[META_COEXIST] WABAs error:', error);
     res.status(500).json({ error: 'Failed to get WABAs' });
@@ -330,16 +386,21 @@ router.get('/wabas', async (req: Request, res: Response) => {
 
 router.get('/phone-numbers', async (req: Request, res: Response) => {
   try {
-    const { userAccessToken, wabaId } = req.query;
+    const { session, wabaId } = req.query;
 
-    if (!userAccessToken || !wabaId) {
-      return res.status(400).json({ error: 'Missing userAccessToken or wabaId' });
+    if (!session || !wabaId) {
+      return res.status(400).json({ error: 'Missing session or wabaId' });
+    }
+
+    const sessionData = pendingTokens.get(session as string);
+    if (!sessionData) {
+      return res.status(404).json({ error: 'Session expired' });
     }
 
     const config = MetaCoexistService.getMetaCoexistConfig();
     const service = new MetaCoexistService(config);
 
-    const phoneNumbers = await service.getPhoneNumbers(userAccessToken as string, wabaId as string);
+    const phoneNumbers = await service.getPhoneNumbers(sessionData.userAccessToken, wabaId as string);
 
     res.json({ phoneNumbers });
   } catch (error: any) {

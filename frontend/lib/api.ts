@@ -205,7 +205,28 @@ export const waApi = {
   validate: (businessId: string) => api.post(`/wa/${businessId}/validate`),
   getGroups: (businessId: string) => api.get(`/wa/${businessId}/groups`),
   getGroupParticipants: (businessId: string, groupId: string) => 
-    api.get(`/wa/${businessId}/groups/${encodeURIComponent(groupId)}/participants`)
+    api.get(`/wa/${businessId}/groups/${encodeURIComponent(groupId)}/participants`),
+  
+  startMetaCoexist: (businessId: string, instanceId?: string) => 
+    api.get(`/auth/meta-coexist/start?businessId=${businessId}${instanceId ? `&instanceId=${instanceId}` : ''}`),
+  getMetaCoexistSession: (sessionToken: string) => 
+    api.get(`/auth/meta-coexist/session/${sessionToken}`),
+  setupMetaCoexist: (data: {
+    sessionToken: string;
+    metaBusinessId: string;
+    wabaId: string;
+    phoneNumberId: string;
+  }) => api.post('/auth/meta-coexist/setup', data),
+  activateMetaCoexist: (instanceId: string) => 
+    api.post(`/auth/meta-coexist/activate/${instanceId}`),
+  getMetaCoexistStatus: (instanceId: string) => 
+    api.get(`/auth/meta-coexist/status/${instanceId}`),
+  getMetaCoexistWabas: (sessionToken: string, metaBusinessId?: string) => 
+    api.get(`/auth/meta-coexist/wabas?session=${sessionToken}${metaBusinessId ? `&metaBusinessId=${metaBusinessId}` : ''}`),
+  getMetaCoexistPhoneNumbers: (sessionToken: string, wabaId: string) => 
+    api.get(`/auth/meta-coexist/phone-numbers?session=${sessionToken}&wabaId=${wabaId}`),
+  disconnectMetaCoexist: (instanceId: string) => 
+    api.post(`/auth/meta-coexist/disconnect/${instanceId}`)
 };
 
 export const messageApi = {

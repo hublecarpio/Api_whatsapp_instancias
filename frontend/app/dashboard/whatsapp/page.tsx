@@ -380,6 +380,32 @@ export default function WhatsAppPage() {
     }
   };
 
+  const handleStartCoexistence = async () => {
+    if (!currentBusiness) return;
+    
+    setLoading(true);
+    setError('');
+    setShowProviderModal(false);
+    addEvent('action', 'Iniciando conexion Meta Coexistence...');
+    
+    try {
+      const response = await waApi.startMetaCoexist(currentBusiness.id);
+      const authUrl = response.data.redirectUrl || response.data.authUrl;
+      if (authUrl) {
+        window.location.href = authUrl;
+      } else {
+        throw new Error('No se recibio URL de autorizacion');
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error || 'Error al iniciar Meta Coexistence';
+      setError(errorMsg);
+      addEvent('error', errorMsg);
+      setShowProviderModal(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUpdateMetaCredentials = async () => {
     if (!currentBusiness || !selectedInstanceId) return;
     
@@ -1122,6 +1148,7 @@ export default function WhatsAppPage() {
             <ul className="text-xs text-gray-400 space-y-1">
               <li><strong className="text-gray-300">Baileys:</strong> Conexion via QR (WhatsApp Web)</li>
               <li><strong className="text-gray-300">Meta Cloud:</strong> API oficial de WhatsApp Business</li>
+              <li><strong className="text-gray-300">Coexistence:</strong> Conecta tu WhatsApp Business App via OAuth</li>
               <li>• <strong className="text-gray-300">QR no carga:</strong> Refrescar</li>
               <li>• <strong className="text-gray-300">QR expiro:</strong> Reiniciar</li>
             </ul>
@@ -1372,10 +1399,10 @@ export default function WhatsAppPage() {
 
       {showProviderModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="card max-w-lg w-full">
+          <div className="card max-w-2xl w-full">
             <h2 className="text-xl font-bold text-white mb-4">Elige el tipo de conexion</h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <button
                 onClick={handleSelectBaileys}
                 disabled={loading}
@@ -1401,6 +1428,20 @@ export default function WhatsAppPage() {
                 <div className="mt-3 flex flex-wrap gap-1">
                   <span className="px-2 py-0.5 bg-neon-blue/20 text-neon-blue rounded text-xs">Oficial</span>
                   <span className="px-2 py-0.5 bg-dark-hover text-gray-400 rounded text-xs">Templates</span>
+                </div>
+              </button>
+
+              <button
+                onClick={handleStartCoexistence}
+                disabled={loading}
+                className="p-4 border-2 border-dark-hover rounded-xl hover:border-purple-500 hover:bg-purple-500/10 transition-all text-left group"
+              >
+                <div className="text-3xl mb-2">🔗</div>
+                <h3 className="font-semibold text-white group-hover:text-purple-400">Coexistence</h3>
+                <p className="text-xs text-gray-400 mt-1">Conecta tu WhatsApp Business App existente via Facebook.</p>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">Facil</span>
+                  <span className="px-2 py-0.5 bg-dark-hover text-gray-400 rounded text-xs">OAuth</span>
                 </div>
               </button>
             </div>
