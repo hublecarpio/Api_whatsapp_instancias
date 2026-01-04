@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../services/prisma';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { 
   MetaCoexistService, 
   createMetaCoexistInstance, 
@@ -25,10 +26,14 @@ setInterval(() => {
   }
 }, 60000);
 
-router.get('/start', async (req: Request, res: Response) => {
+router.get('/start', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, instanceId } = req.query;
-    const userId = (req as any).user?.id;
+    const userId = req.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
 
     if (!businessId) {
       return res.status(400).json({ error: 'businessId is required' });
