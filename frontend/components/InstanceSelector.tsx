@@ -39,7 +39,8 @@ export default function InstanceSelector({
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [newInstanceName, setNewInstanceName] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<'BAILEYS' | 'META_CLOUD'>('BAILEYS');
+  const [selectedProvider, setSelectedProvider] = useState<'BAILEYS' | 'META_CLOUD' | 'META_COEXIST'>('BAILEYS');
+  const [startingCoexist, setStartingCoexist] = useState(false);
   const [copyFromInstance, setCopyFromInstance] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [countryCode, setCountryCode] = useState('+51');
@@ -141,6 +142,27 @@ export default function InstanceSelector({
       setAddError(error.response?.data?.error || 'Error al eliminar instancia');
     } finally {
       setDeleteLoading(null);
+    }
+  };
+
+  const handleStartCoexistence = async () => {
+    if (!businessId) return;
+    
+    setStartingCoexist(true);
+    setAddError('');
+    
+    try {
+      const response = await waApi.startMetaCoexist(businessId);
+      const authUrl = response.data.redirectUrl || response.data.authUrl;
+      if (authUrl) {
+        window.location.href = authUrl;
+      } else {
+        throw new Error('No se recibio URL de autorizacion');
+      }
+    } catch (error: any) {
+      setAddError(error.response?.data?.error || 'Error al iniciar Meta Coexistence');
+    } finally {
+      setStartingCoexist(false);
     }
   };
 
@@ -357,6 +379,19 @@ export default function InstanceSelector({
                   <div className="font-medium text-white text-sm">Meta Cloud</div>
                   <div className="text-xs text-gray-400">Embedded Signup</div>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvider('META_COEXIST')}
+                  className={`p-4 rounded-xl border-2 transition-all text-center ${
+                    selectedProvider === 'META_COEXIST'
+                      ? 'border-purple-500 bg-purple-500/10'
+                      : 'border-dark-border hover:border-gray-600'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">🔗</div>
+                  <div className="font-medium text-white text-sm">Coexistence</div>
+                  <div className="text-xs text-gray-400">Via Facebook OAuth</div>
+                </button>
               </div>
             </div>
             
@@ -429,6 +464,37 @@ export default function InstanceSelector({
                   setAddError('');
                 }}
               />
+            )}
+            
+            {selectedProvider === 'META_COEXIST' && (
+              <>
+                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                  <p className="text-sm text-purple-300">
+                    Seras redirigido a Facebook para autorizar el acceso a tu WhatsApp Business App existente via OAuth.
+                  </p>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setAddError('');
+                      setNewInstanceName('');
+                    }}
+                    className="flex-1 px-4 py-2 bg-dark-surface border border-dark-border rounded-lg hover:bg-dark-hover transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStartCoexistence}
+                    disabled={startingCoexist}
+                    className="flex-1 disabled:opacity-50 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
+                  >
+                    {startingCoexist ? 'Conectando...' : 'Conectar con Facebook'}
+                  </button>
+                </div>
+              </>
             )}
             
             {selectedProvider === 'BAILEYS' && (
