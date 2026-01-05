@@ -448,23 +448,28 @@ export async function getTokenUsageStats(businessId: string, options?: {
   };
 }
 
-export const DEMO_TOKEN_LIMIT = 150000;
+// Token limits per tier - Only 3 tiers: BASIC, PRO, ENTERPRISE
 export const TRIAL_TOKEN_LIMIT = 150000; // Free trial: 150k tokens (no time limit)
-export const BASIC_TOKEN_LIMIT = 1600000;
-export const PRO_TOKEN_LIMIT = 7500000;
+export const BASIC_TOKEN_LIMIT = 1600000; // 1.6M tokens/month
+export const PRO_TOKEN_LIMIT = 5000000; // 5M tokens/month
+export const ENTERPRISE_TOKEN_LIMIT = 50000000; // 50M tokens/month (effectively unlimited)
+export const DEMO_TOKEN_LIMIT = 150000; // Legacy alias
 export const DEMO_DAYS = 2; // Legacy - not used for new token-based trial
 export const TRIAL_DAYS_WITH_CARD = 7; // Trial with card: 7 days free
 
 export function getTokenLimitByTier(tier: string, subscriptionStatus: string): number {
+  // Trial users (not ACTIVE) get trial limit regardless of tier
   if (subscriptionStatus !== 'ACTIVE') {
     return TRIAL_TOKEN_LIMIT;
   }
+  // Active subscription - limit by tier
   switch (tier) {
     case 'BASIC':
       return BASIC_TOKEN_LIMIT;
     case 'PRO':
-    case 'ENTERPRISE':
       return PRO_TOKEN_LIMIT;
+    case 'ENTERPRISE':
+      return ENTERPRISE_TOKEN_LIMIT;
     default:
       return BASIC_TOKEN_LIMIT;
   }
@@ -637,7 +642,8 @@ export async function checkUserTokenLimit(userId: string): Promise<{
   const usage = await getMonthlyTokenUsageForUser(userId, user.subscriptionStatus, tier, user.bonusTokens);
   
   if (usage.isOverLimit) {
-    const limitText = tier === 'PRO' || tier === 'ENTERPRISE' ? '5M' : tier === 'BASIC' ? '1.6M' : '500K';
+    // Limit text per tier: BASIC=1.6M, PRO=5M, ENTERPRISE=50M, TRIAL=150K
+    const limitText = tier === 'ENTERPRISE' ? '50M' : tier === 'PRO' ? '5M' : tier === 'BASIC' ? '1.6M' : '150K';
     return {
       canUseAI: false,
       tokensUsed: usage.totalTokens,

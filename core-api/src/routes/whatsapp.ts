@@ -23,8 +23,8 @@ function generateWebhookSecret(): string {
   return `whs_${crypto.randomBytes(16).toString('hex')}`;
 }
 
+// Only 3 user tiers: BASIC, PRO, ENTERPRISE
 const INSTANCE_LIMITS: Record<string, number> = {
-  STANDARD: 1,
   BASIC: 2,
   PRO: 10,
   ENTERPRISE: 10

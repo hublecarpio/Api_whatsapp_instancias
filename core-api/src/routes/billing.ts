@@ -141,8 +141,8 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
 const processedWebhookEvents: Set<string> = new Set();
 const WEBHOOK_EVENT_TTL = 5 * 60 * 1000;
 
+// Only 3 user tiers: BASIC (default), PRO, ENTERPRISE
 const TIER_PRIORITY: Record<string, number> = {
-  STANDARD: 0,
   BASIC: 1,
   PRO: 2,
   ENTERPRISE: 3
@@ -157,9 +157,9 @@ function getTierFromPriceId(priceId: string): 'BASIC' | 'PRO' | 'ENTERPRISE' {
 function shouldUpdateTier(currentTier: string | null, newTier: string): boolean {
   // Never downgrade ENTERPRISE (manually assigned)
   if (currentTier === 'ENTERPRISE') return false;
-  // Allow upgrade or if current tier is null/unknown
-  const currentPriority = TIER_PRIORITY[currentTier || 'STANDARD'] || 0;
-  const newPriority = TIER_PRIORITY[newTier] || 0;
+  // Allow upgrade or if current tier is null/unknown (default to BASIC priority)
+  const currentPriority = TIER_PRIORITY[currentTier || 'BASIC'] || 1;
+  const newPriority = TIER_PRIORITY[newTier] || 1;
   return newPriority >= currentPriority;
 }
 
