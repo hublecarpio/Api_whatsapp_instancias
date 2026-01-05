@@ -1965,6 +1965,10 @@ body.glass-mode .mobile-drawer {
 .bg-\[\#12121f\]\/80 {
   background-color: rgb(18 18 31 / 0.8);
 }
+.bg-\[\#1877F2\] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(24 119 242 / var(--tw-bg-opacity, 1));
+}
 .bg-\[\#1a1a1a\] {
   --tw-bg-opacity: 1;
   background-color: rgb(26 26 26 / var(--tw-bg-opacity, 1));
@@ -3538,6 +3542,11 @@ html[data-mobile="true"] .glass-sidebar {
 .hover\:border-red-500:hover {
   --tw-border-opacity: 1;
   border-color: rgb(239 68 68 / var(--tw-border-opacity, 1));
+}
+
+.hover\:bg-\[\#166FE5\]:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(22 111 229 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-\[\#22c55e\]:hover {

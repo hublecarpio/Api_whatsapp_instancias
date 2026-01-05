@@ -457,4 +457,177 @@ router.post('/disconnect/:instanceId', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================
+// META EMBEDDED SIGNUP FLOW
+// ============================================
+
+// Get Embedded Signup configuration for frontend
+router.get('/embedded-signup/config', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const appId = process.env.META_APP_ID;
+    const configId = process.env.META_EMBEDDED_SIGNUP_CONFIG_ID;
+    
+    if (!appId) {
+      return res.status(500).json({ error: 'META_APP_ID not configured' });
+    }
+    
+    if (!configId) {
+      return res.status(500).json({ error: 'META_EMBEDDED_SIGNUP_CONFIG_ID not configured' });
+    }
+    
+    res.json({
+      appId,
+      configId,
+      version: 'v21.0'
+    });
+  } catch (error: any) {
+    console.error('[EMBEDDED_SIGNUP] Config error:', error);
+    res.status(500).json({ error: 'Failed to get config' });
+  }
+});
+
+// Handle Embedded Signup completion - receive tokens from frontend
+router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { businessId, code, wabaId, phoneNumberId } = req.body;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    if (!businessId || !code || !wabaId || !phoneNumberId) {
+      return res.status(400).json({ 
+        error: 'Missing required parameters: businessId, code, wabaId, phoneNumberId' 
+      });
+    }
+    
+    console.log('[EMBEDDED_SIGNUP] Completing signup:', { businessId, wabaId, phoneNumberId });
+    
+    // Verify business ownership
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found or access denied' });
+    }
+    
+    // Check instance limits
+    const existingInstances = await prisma.whatsAppInstance.count({
+      where: { businessId }
+    });
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { subscriptionTier: true, isPro: true }
+    });
+    
+    const tier = user?.subscriptionTier || 'BASIC';
+    const isPro = user?.isPro || tier === 'PRO' || tier === 'ENTERPRISE';
+    const maxInstances = isPro ? 10 : 2;
+    
+    if (existingInstances >= maxInstances) {
+      return res.status(400).json({ 
+        error: `Has alcanzado el limite de ${maxInstances} instancias para tu plan ${tier}` 
+      });
+    }
+    
+    // Exchange code for access token
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    
+    if (!appId || !appSecret) {
+      return res.status(500).json({ error: 'Meta app credentials not configured' });
+    }
+    
+    const tokenUrl = `https://graph.facebook.com/v21.0/oauth/access_token?` +
+      `client_id=${appId}&` +
+      `client_secret=${appSecret}&` +
+      `code=${code}`;
+    
+    const axios = (await import('axios')).default;
+    const tokenResponse = await axios.get(tokenUrl);
+    const accessToken = tokenResponse.data.access_token;
+    
+    if (!accessToken) {
+      console.error('[EMBEDDED_SIGNUP] Token exchange failed:', tokenResponse.data);
+      return res.status(400).json({ error: 'Failed to exchange code for access token' });
+    }
+    
+    // Get phone number details from Meta API
+    const phoneDetailsUrl = `https://graph.facebook.com/v21.0/${phoneNumberId}?` +
+      `fields=display_phone_number,verified_name,quality_rating&` +
+      `access_token=${accessToken}`;
+    
+    let displayPhone = '';
+    let verifiedName = '';
+    
+    try {
+      const phoneResponse = await axios.get(phoneDetailsUrl);
+      displayPhone = phoneResponse.data.display_phone_number || '';
+      verifiedName = phoneResponse.data.verified_name || '';
+      console.log('[EMBEDDED_SIGNUP] Phone details:', phoneResponse.data);
+    } catch (phoneError: any) {
+      console.warn('[EMBEDDED_SIGNUP] Could not fetch phone details:', phoneError.message);
+    }
+    
+    // Create WhatsApp instance with META_CLOUD provider
+    const instance = await prisma.whatsAppInstance.create({
+      data: {
+        businessId,
+        name: verifiedName || `WhatsApp Cloud ${existingInstances + 1}`,
+        provider: 'META_CLOUD',
+        status: 'connected',
+        phoneNumber: displayPhone,
+        lastConnection: new Date()
+      }
+    });
+    
+    // Store Meta credentials
+    await prisma.metaCredential.create({
+      data: {
+        instanceId: instance.id,
+        accessToken,
+        businessId: wabaId,
+        phoneNumberId,
+        appId: appId,
+        appSecret: appSecret,
+        webhookVerifyToken: `wh_${require('crypto').randomBytes(16).toString('hex')}`
+      }
+    });
+    
+    // Record instance history
+    await prisma.whatsAppInstanceHistory.create({
+      data: {
+        instanceId: instance.id,
+        businessId,
+        eventType: 'CREATED',
+        newProvider: 'META_CLOUD',
+        newStatus: 'connected',
+        phoneNumber: displayPhone,
+        details: `Created via Meta Embedded Signup (WABA: ${wabaId})`
+      }
+    });
+    
+    console.log('[EMBEDDED_SIGNUP] Instance created successfully:', instance.id);
+    
+    res.json({
+      success: true,
+      instance: {
+        id: instance.id,
+        name: instance.name,
+        phoneNumber: displayPhone,
+        provider: 'META_CLOUD',
+        status: 'connected'
+      }
+    });
+  } catch (error: any) {
+    console.error('[EMBEDDED_SIGNUP] Complete error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: error.response?.data?.error?.message || error.message || 'Failed to complete signup' 
+    });
+  }
+});
+
 export default router;

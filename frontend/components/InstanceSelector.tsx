@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useInstanceStore, WhatsAppInstance, InstanceLimits } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
 import { waApi } from '@/lib/api';
+import MetaEmbeddedSignup from './MetaEmbeddedSignup';
 
 interface InstanceSelectorProps {
   businessId: string;
@@ -38,8 +39,7 @@ export default function InstanceSelector({
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [newInstanceName, setNewInstanceName] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<'BAILEYS' | 'META_CLOUD' | 'META_COEXIST'>('BAILEYS');
-  const [startingCoexist, setStartingCoexist] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<'BAILEYS' | 'META_CLOUD'>('BAILEYS');
   const [copyFromInstance, setCopyFromInstance] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [countryCode, setCountryCode] = useState('+51');
@@ -141,27 +141,6 @@ export default function InstanceSelector({
       setAddError(error.response?.data?.error || 'Error al eliminar instancia');
     } finally {
       setDeleteLoading(null);
-    }
-  };
-
-  const handleStartCoexistence = async () => {
-    if (!businessId) return;
-    
-    setStartingCoexist(true);
-    setAddError('');
-    
-    try {
-      const response = await waApi.startMetaCoexist(businessId);
-      const authUrl = response.data.redirectUrl || response.data.authUrl;
-      if (authUrl) {
-        window.location.href = authUrl;
-      } else {
-        throw new Error('No se recibio URL de autorizacion');
-      }
-    } catch (error: any) {
-      setAddError(error.response?.data?.error || 'Error al iniciar Meta Coexistence');
-    } finally {
-      setStartingCoexist(false);
     }
   };
 
@@ -376,20 +355,7 @@ export default function InstanceSelector({
                 >
                   <div className="text-2xl mb-1">☁️</div>
                   <div className="font-medium text-white text-sm">Meta Cloud</div>
-                  <div className="text-xs text-gray-400">API oficial</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedProvider('META_COEXIST')}
-                  className={`p-4 rounded-xl border-2 transition-all text-center ${
-                    selectedProvider === 'META_COEXIST'
-                      ? 'border-purple-500 bg-purple-500/10'
-                      : 'border-dark-border hover:border-gray-600'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">🔗</div>
-                  <div className="font-medium text-white text-sm">Coexistence</div>
-                  <div className="text-xs text-gray-400">Via Facebook</div>
+                  <div className="text-xs text-gray-400">Embedded Signup</div>
                 </button>
               </div>
             </div>
@@ -425,7 +391,7 @@ export default function InstanceSelector({
               </div>
             )}
             
-            {instances.length > 0 && (
+            {instances.length > 0 && selectedProvider === 'BAILEYS' && (
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">
                   Copiar configuracion de (opcional)
@@ -448,40 +414,47 @@ export default function InstanceSelector({
               </div>
             )}
             
-            {selectedProvider === 'META_COEXIST' && (
-              <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-                <p className="text-sm text-purple-300">
-                  Seras redirigido a Facebook para autorizar el acceso a tu WhatsApp Business App.
-                </p>
-              </div>
-            )}
-            
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
+            {selectedProvider === 'META_CLOUD' && (
+              <MetaEmbeddedSignup
+                businessId={businessId}
+                onSuccess={(instance) => {
+                  fetchInstances();
+                  setShowAddModal(false);
+                  setSelectedInstanceId(instance.id);
+                  onInstanceSelect?.(instance);
+                }}
+                onError={(error) => setAddError(error)}
+                onCancel={() => {
                   setShowAddModal(false);
                   setAddError('');
-                  setNewInstanceName('');
-                  setCopyFromInstance('');
                 }}
-                className="flex-1 px-4 py-2 bg-dark-surface border border-dark-border rounded-lg hover:bg-dark-hover transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={selectedProvider === 'META_COEXIST' ? handleStartCoexistence : handleAddInstance}
-                disabled={addLoading || startingCoexist}
-                className={`flex-1 disabled:opacity-50 ${
-                  selectedProvider === 'META_COEXIST' 
-                    ? 'bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors' 
-                    : 'btn-primary'
-                }`}
-              >
-                {startingCoexist ? 'Conectando...' : addLoading ? 'Agregando...' : selectedProvider === 'META_COEXIST' ? 'Conectar con Facebook' : 'Agregar'}
-              </button>
-            </div>
+              />
+            )}
+            
+            {selectedProvider === 'BAILEYS' && (
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setAddError('');
+                    setNewInstanceName('');
+                    setCopyFromInstance('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-dark-surface border border-dark-border rounded-lg hover:bg-dark-hover transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddInstance}
+                  disabled={addLoading}
+                  className="flex-1 disabled:opacity-50 btn-primary"
+                >
+                  {addLoading ? 'Agregando...' : 'Agregar'}
+                </button>
+              </div>
+            )}
           </div>
         </div>,
         document.body

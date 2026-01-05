@@ -226,7 +226,16 @@ export const waApi = {
   getMetaCoexistPhoneNumbers: (sessionToken: string, wabaId: string) => 
     api.get(`/auth/meta-coexist/phone-numbers?session=${sessionToken}&wabaId=${wabaId}`),
   disconnectMetaCoexist: (instanceId: string) => 
-    api.post(`/auth/meta-coexist/disconnect/${instanceId}`)
+    api.post(`/auth/meta-coexist/disconnect/${instanceId}`),
+  
+  getEmbeddedSignupConfig: () => 
+    api.get('/auth/meta-coexist/embedded-signup/config'),
+  completeEmbeddedSignup: (data: {
+    businessId: string;
+    code: string;
+    wabaId: string;
+    phoneNumberId: string;
+  }) => api.post('/auth/meta-coexist/embedded-signup/complete', data)
 };
 
 export const messageApi = {
