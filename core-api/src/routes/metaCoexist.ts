@@ -131,19 +131,22 @@ setInterval(() => {
 router.get('/callback', async (req: Request, res: Response) => {
   try {
     const { code, state, error, error_description } = req.query;
+    
+    // Use FRONTEND_URL for redirects in production (Docker), fallback to relative for dev
+    const frontendUrl = process.env.FRONTEND_URL || '';
 
     if (error) {
       console.error('[META_COEXIST] OAuth error:', error, error_description);
-      return res.redirect(`/dashboard/whatsapp?error=${encodeURIComponent(error_description as string || 'OAuth failed')}`);
+      return res.redirect(`${frontendUrl}/dashboard/whatsapp?error=${encodeURIComponent(error_description as string || 'OAuth failed')}`);
     }
 
     if (!code || !state) {
-      return res.redirect('/dashboard/whatsapp?error=Missing code or state');
+      return res.redirect(`${frontendUrl}/dashboard/whatsapp?error=Missing code or state`);
     }
 
     const pendingState = pendingOAuthStates.get(state as string);
     if (!pendingState) {
-      return res.redirect('/dashboard/whatsapp?error=Invalid or expired OAuth state');
+      return res.redirect(`${frontendUrl}/dashboard/whatsapp?error=Invalid or expired OAuth state`);
     }
 
     pendingOAuthStates.delete(state as string);
@@ -159,7 +162,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     const businesses = await service.getConnectedBusinesses(userAccessToken);
     
     if (businesses.length === 0) {
-      return res.redirect('/dashboard/whatsapp?error=No businesses found in your Meta account');
+      return res.redirect(`${frontendUrl}/dashboard/whatsapp?error=No businesses found in your Meta account`);
     }
 
     const sessionToken = uuidv4();
@@ -172,12 +175,13 @@ router.get('/callback', async (req: Request, res: Response) => {
     });
 
     res.redirect(
-      `/dashboard/whatsapp/meta-coexist-setup?` +
+      `${frontendUrl}/dashboard/whatsapp/meta-coexist-setup?` +
       `session=${sessionToken}`
     );
   } catch (error: any) {
     console.error('[META_COEXIST] OAuth callback error:', error);
-    res.redirect(`/dashboard/whatsapp?error=${encodeURIComponent(error.message || 'OAuth callback failed')}`);
+    const frontendUrl = process.env.FRONTEND_URL || '';
+    res.redirect(`${frontendUrl}/dashboard/whatsapp?error=${encodeURIComponent(error.message || 'OAuth callback failed')}`);
   }
 });
 

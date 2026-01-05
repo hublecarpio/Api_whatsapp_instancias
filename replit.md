@@ -84,6 +84,7 @@ To enable Meta Coexistence (Embedded Signup + Coexistence flow), configure these
 | `META_APP_SECRET` | Meta App Secret from Facebook Developer Console | Yes |
 | `META_COEXIST_REDIRECT_URI` | OAuth callback URL (default: `{API_URL}/auth/meta-coexist/callback`) | No |
 | `META_WEBHOOK_VERIFY_TOKEN` | Token for Meta webhook verification | No |
+| `FRONTEND_URL` | Frontend URL for OAuth callback redirects in production (e.g., `https://app.efficore.es`) | Yes (production) |
 
 ### Meta Coexistence API Endpoints
 
