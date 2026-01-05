@@ -189,7 +189,14 @@ export default function InstanceSelector({
         </select>
         {showAddButton && canAddMore && (
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setSelectedProvider('BAILEYS');
+              setNewInstanceName('');
+              setCopyFromInstance('');
+              setPhoneNumber('');
+              setAddError('');
+              setShowAddModal(true);
+            }}
             className="p-2 text-neon-blue hover:bg-neon-blue/10 rounded-lg transition-colors"
             title="Agregar numero"
           >
@@ -222,7 +229,14 @@ export default function InstanceSelector({
           <p>No tienes numeros de WhatsApp configurados</p>
           {showAddButton && (
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+                setSelectedProvider('BAILEYS');
+                setNewInstanceName('');
+                setCopyFromInstance('');
+                setPhoneNumber('');
+                setAddError('');
+                setShowAddModal(true);
+              }}
               className="mt-4 btn-primary"
             >
               Agregar primer numero
@@ -298,7 +312,14 @@ export default function InstanceSelector({
 
       {showAddButton && canAddMore && instances.length > 0 && (
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setSelectedProvider('BAILEYS');
+            setNewInstanceName('');
+            setCopyFromInstance('');
+            setPhoneNumber('');
+            setAddError('');
+            setShowAddModal(true);
+          }}
           className="w-full p-4 border-2 border-dashed border-dark-border rounded-xl text-gray-400 hover:border-neon-blue hover:text-neon-blue transition-colors flex items-center justify-center gap-2"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
