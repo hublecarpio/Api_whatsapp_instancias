@@ -1916,6 +1916,10 @@ body.glass-mode .mobile-drawer {
 .border-orange-500\/30 {
   border-color: rgb(249 115 22 / 0.3);
 }
+.border-purple-400 {
+  --tw-border-opacity: 1;
+  border-color: rgb(192 132 252 / var(--tw-border-opacity, 1));
+}
 .border-purple-500 {
   --tw-border-opacity: 1;
   border-color: rgb(168 85 247 / var(--tw-border-opacity, 1));

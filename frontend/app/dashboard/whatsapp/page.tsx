@@ -235,7 +235,7 @@ export default function WhatsAppPage() {
         });
       }
       
-      if ((newStatus === 'pending_qr' || newStatus === 'requires_qr') && response.data.provider !== 'META_CLOUD') {
+      if ((newStatus === 'pending_qr' || newStatus === 'requires_qr') && response.data.provider !== 'META_CLOUD' && response.data.provider !== 'META_COEXIST') {
         let qrResponse;
         if (selectedInstanceId) {
           qrResponse = await waApi.instanceQr(selectedInstanceId, currentBusiness.id);
@@ -604,6 +604,13 @@ export default function WhatsAppPage() {
         </span>
       );
     }
+    if (provider === 'META_COEXIST') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
+          <span>🔗</span> Meta Coexist
+        </span>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-accent-success/20 text-accent-success">
         <span>📲</span> Baileys
@@ -752,7 +759,7 @@ export default function WhatsAppPage() {
               setStatus(instance.status);
               setProvider(instance.provider);
               setPhoneNumber(instance.phoneNumber || '');
-              if ((instance.status === 'pending_qr' || instance.status === 'requires_qr') && instance.provider !== 'META_CLOUD') {
+              if ((instance.status === 'pending_qr' || instance.status === 'requires_qr') && instance.provider !== 'META_CLOUD' && instance.provider !== 'META_COEXIST') {
                 waApi.qr(currentBusiness.id).then(res => setQrCode(res.data.qr || '')).catch(() => {});
               }
             }}
@@ -795,6 +802,35 @@ export default function WhatsAppPage() {
                     {loading ? 'Creando...' : 'Crear instancia'}
                   </button>
                 )}
+              </div>
+            )}
+
+            {status === 'pending_credentials' && provider === 'META_COEXIST' && (
+              <div className="py-4">
+                <div className="text-center mb-4">
+                  <div className="text-3xl mb-2">🔗</div>
+                  <h2 className="text-lg font-semibold text-white mb-1">Configurando Meta Coexistence</h2>
+                  <p className="text-gray-400 text-sm">Tu conexion via Facebook OAuth se esta procesando</p>
+                </div>
+                
+                <div className="max-w-md mx-auto">
+                  <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4 mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-400"></div>
+                      <p className="text-sm text-purple-300">Esperando confirmacion de Facebook...</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleDelete}
+                      disabled={actionLoading !== null}
+                      className="btn btn-danger flex-1"
+                    >
+                      {actionLoading === 'delete' ? '...' : 'Cancelar y eliminar'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -888,7 +924,7 @@ export default function WhatsAppPage() {
               </div>
             )}
 
-            {(status === 'pending_qr' || status === 'requires_qr') && provider !== 'META_CLOUD' && (
+            {(status === 'pending_qr' || status === 'requires_qr') && provider !== 'META_CLOUD' && provider !== 'META_COEXIST' && (
               <div className="py-2">
                 <div className="text-center mb-3">
                   <h2 className="text-lg font-semibold text-white">Escanea el codigo QR</h2>
@@ -971,6 +1007,31 @@ export default function WhatsAppPage() {
                     </div>
                   </div>
                 )}
+
+                {provider === 'META_COEXIST' && (
+                  <div className="bg-purple-500/10 border border-purple-500/30 p-3 rounded-lg mb-4">
+                    <h3 className="text-sm font-semibold text-purple-400 mb-2">Meta Coexistence Activo</h3>
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-400">
+                        Tu WhatsApp Business App esta conectada via Meta Coexistence. 
+                        Puedes enviar y recibir mensajes a traves del API mientras mantienes el uso de tu app de WhatsApp Business.
+                      </p>
+                      {metaInfo && (
+                        <div className="mt-2 pt-2 border-t border-purple-500/20">
+                          {metaInfo.verifiedName && (
+                            <p className="text-xs text-purple-300">Nombre verificado: {metaInfo.verifiedName}</p>
+                          )}
+                          {metaInfo.qualityRating && (
+                            <p className="text-xs text-purple-300">Calidad: {metaInfo.qualityRating}</p>
+                          )}
+                          {metaInfo.messagingTier && (
+                            <p className="text-xs text-purple-300">Limite de mensajes: {metaInfo.messagingTier}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 
                 <div className="mt-4 pt-4 border-t border-dark-border">
                   <div className="flex items-center gap-2 mb-3">
@@ -978,6 +1039,10 @@ export default function WhatsAppPage() {
                     {provider === 'META_CLOUD' ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-neon-blue/20 text-neon-blue">
                         ☁️ Meta Cloud
+                      </span>
+                    ) : provider === 'META_COEXIST' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
+                        🔗 Meta Coexist
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-accent-success/20 text-accent-success">
@@ -997,6 +1062,13 @@ export default function WhatsAppPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                         Editar credenciales
+                      </button>
+                    ) : provider === 'META_COEXIST' ? (
+                      <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {actionLoading === 'restart' ? '...' : 'Sincronizar'}
                       </button>
                     ) : (
                       <>
@@ -1030,6 +1102,8 @@ export default function WhatsAppPage() {
                       <h2 className="font-semibold text-white">Conexion perdida</h2>
                       {provider === 'META_CLOUD' ? (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-neon-blue/20 text-neon-blue">Meta Cloud</span>
+                      ) : provider === 'META_COEXIST' ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">Meta Coexist</span>
                       ) : (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-accent-success/20 text-accent-success">Baileys</span>
                       )}
@@ -1037,6 +1111,8 @@ export default function WhatsAppPage() {
                     <p className="text-xs text-gray-400">
                       {provider === 'META_CLOUD' 
                         ? 'Verifica las credenciales de Meta o elimina para configurar de nuevo'
+                        : provider === 'META_COEXIST'
+                        ? 'La conexion con Facebook se perdio. Elimina para reconectar via OAuth.'
                         : 'Reconecta escaneando el QR o elimina para empezar de nuevo'}
                     </p>
                   </div>
@@ -1053,6 +1129,13 @@ export default function WhatsAppPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                       Revisar credenciales
+                    </button>
+                  ) : provider === 'META_COEXIST' ? (
+                    <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      {actionLoading === 'delete' ? '...' : 'Eliminar y reconectar'}
                     </button>
                   ) : (
                     <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-primary btn-sm flex items-center gap-1">
