@@ -26,10 +26,11 @@ async function checkWindowStatus(businessId: string, contactPhone: string): Prom
 }> {
   const instance = await prisma.whatsAppInstance.findFirst({
     where: { businessId },
-    include: { metaCredential: true }
+    include: { metaCredential: true, metaCoexistCredential: true }
   });
   
-  if (!instance || instance.provider !== 'META_CLOUD') {
+  // Both META_CLOUD and META_COEXIST use Meta Graph API and require templates outside 24h window
+  if (!instance || (instance.provider !== 'META_CLOUD' && instance.provider !== 'META_COEXIST')) {
     return { requiresTemplate: false, provider: instance?.provider || null, hoursSinceLastMessage: null };
   }
   
@@ -46,7 +47,7 @@ async function checkWindowStatus(businessId: string, contactPhone: string): Prom
   
   if (!lastInboundMessage) {
     console.log(`[REMINDER] No inbound message found for ${cleanPhone} - requiresTemplate=true`);
-    return { requiresTemplate: true, provider: 'META_CLOUD', hoursSinceLastMessage: null };
+    return { requiresTemplate: true, provider: instance.provider, hoursSinceLastMessage: null };
   }
   
   const hoursSinceLastMessage = (Date.now() - lastInboundMessage.createdAt.getTime()) / (1000 * 60 * 60);
@@ -54,20 +55,27 @@ async function checkWindowStatus(businessId: string, contactPhone: string): Prom
   
   console.log(`[REMINDER] Window check for ${cleanPhone}: ${hoursSinceLastMessage.toFixed(2)}h since last inbound, requiresTemplate=${requiresTemplate}`);
   
-  return { requiresTemplate, provider: 'META_CLOUD', hoursSinceLastMessage };
+  return { requiresTemplate, provider: instance.provider, hoursSinceLastMessage };
 }
 
 async function getDefaultTemplate(businessId: string): Promise<TemplateData | null> {
   const instance = await prisma.whatsAppInstance.findFirst({
-    where: { businessId, provider: 'META_CLOUD' },
-    include: { metaCredential: true }
+    where: { businessId, provider: { in: ['META_CLOUD', 'META_COEXIST'] } },
+    include: { metaCredential: true, metaCoexistCredential: true }
   });
   
-  if (!instance?.metaCredential) return null;
+  // Check for credentials from either provider
+  const credential = instance?.metaCredential || instance?.metaCoexistCredential;
+  if (!instance || !credential) return null;
+  
+  // For templates, we need metaCredential (templates are stored per metaCredential)
+  // Note: META_COEXIST might share templates with META_CLOUD credential if linked
+  const credentialId = instance.metaCredential?.id;
+  if (!credentialId) return null;
   
   const template = await prisma.metaTemplate.findFirst({
     where: { 
-      credentialId: instance.metaCredential.id,
+      credentialId,
       status: 'APPROVED',
       category: { in: ['MARKETING', 'UTILITY'] }
     },
@@ -355,7 +363,7 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
   let message = reminder.messageTemplate || reminder.generatedMessage;
   let usedTemplate: TemplateData | null = null;
   
-  if (windowStatus.requiresTemplate && windowStatus.provider === 'META_CLOUD') {
+  if (windowStatus.requiresTemplate && (windowStatus.provider === 'META_CLOUD' || windowStatus.provider === 'META_COEXIST')) {
     const templateData = await getDefaultTemplate(businessId);
     if (!templateData) {
       console.log(`No approved template for Meta Cloud business ${businessId}`);
@@ -388,19 +396,38 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
   
   const cleanPhone = contactPhone.replace(/\D/g, '');
   
-  if (instance.provider === 'META_CLOUD') {
-    const metaCred = await prisma.metaCredential.findFirst({
-      where: { instanceId: instance.id }
-    });
+  // Handle Meta Cloud API (both META_CLOUD and META_COEXIST)
+  if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+    let accessToken: string;
+    let phoneNumberId: string;
+    let businessId: string;
     
-    if (!metaCred) {
-      throw new Error(`No Meta credentials for instance ${instance.id}`);
+    if (instance.provider === 'META_COEXIST') {
+      const coexistCred = await prisma.metaCoexistCredential.findFirst({
+        where: { instanceId: instance.id }
+      });
+      if (!coexistCred) {
+        throw new Error(`No Meta Coexist credentials for instance ${instance.id}`);
+      }
+      accessToken = coexistCred.systemAccessToken || coexistCred.userAccessToken;
+      phoneNumberId = coexistCred.phoneNumberId;
+      businessId = coexistCred.metaBusinessId;
+    } else {
+      const metaCred = await prisma.metaCredential.findFirst({
+        where: { instanceId: instance.id }
+      });
+      if (!metaCred) {
+        throw new Error(`No Meta Cloud credentials for instance ${instance.id}`);
+      }
+      accessToken = metaCred.accessToken;
+      phoneNumberId = metaCred.phoneNumberId;
+      businessId = metaCred.businessId;
     }
     
     const metaService = new MetaCloudService({
-      accessToken: metaCred.accessToken,
-      phoneNumberId: metaCred.phoneNumberId,
-      businessId: metaCred.businessId
+      accessToken,
+      phoneNumberId,
+      businessId
     });
     
     if (usedTemplate) {

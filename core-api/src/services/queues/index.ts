@@ -65,7 +65,7 @@ export interface WhatsAppIncomingJobData {
   timestamp: number;
   mediaUrl?: string;
   mediaType?: string;
-  provider: 'BAILEYS' | 'META_CLOUD';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
 }
 
 export interface InactivityCheckJobData {

@@ -1326,13 +1326,15 @@ async function sendWhatsAppResponse(
     
     const sentMedia: Array<{ type: string; url?: string }> = [];
     
-    if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
-      console.log(`[AI Worker] Sending via Meta Cloud API to ${cleanPhone}`);
+    // Handle Meta Cloud API (both META_CLOUD and META_COEXIST use Meta Graph API)
+    const metaCredential = instance.metaCredential || instance.metaCoexistCredential;
+    if ((instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') && metaCredential) {
+      console.log(`[AI Worker] Sending via Meta Cloud API (${instance.provider}) to ${cleanPhone}`);
       const { MetaCloudService } = await import('../metaCloud.js');
       const metaService = new MetaCloudService({
-        accessToken: instance.metaCredential.accessToken,
-        phoneNumberId: instance.metaCredential.phoneNumberId,
-        businessId: instance.metaCredential.businessId
+        accessToken: metaCredential.accessToken,
+        phoneNumberId: metaCredential.phoneNumberId,
+        businessId: metaCredential.businessId
       });
       
       for (let i = 0; i < events.length; i++) {
