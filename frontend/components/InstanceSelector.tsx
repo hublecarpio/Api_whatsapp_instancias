@@ -467,34 +467,21 @@ export default function InstanceSelector({
             )}
             
             {selectedProvider === 'META_COEXIST' && (
-              <>
-                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-                  <p className="text-sm text-purple-300">
-                    Seras redirigido a Facebook para autorizar el acceso a tu WhatsApp Business App existente via OAuth.
-                  </p>
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddModal(false);
-                      setAddError('');
-                      setNewInstanceName('');
-                    }}
-                    className="flex-1 px-4 py-2 bg-dark-surface border border-dark-border rounded-lg hover:bg-dark-hover transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleStartCoexistence}
-                    disabled={startingCoexist}
-                    className="flex-1 disabled:opacity-50 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
-                  >
-                    {startingCoexist ? 'Conectando...' : 'Conectar con Facebook'}
-                  </button>
-                </div>
-              </>
+              <MetaEmbeddedSignup
+                businessId={businessId}
+                provider="META_COEXIST"
+                onSuccess={(instance) => {
+                  fetchInstances();
+                  setShowAddModal(false);
+                  setSelectedInstanceId(instance.id);
+                  onInstanceSelect?.(instance);
+                }}
+                onError={(error) => setAddError(error)}
+                onCancel={() => {
+                  setShowAddModal(false);
+                  setAddError('');
+                }}
+              />
             )}
             
             {selectedProvider === 'BAILEYS' && (

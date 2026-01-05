@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 import prisma from '../services/prisma';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { 
@@ -490,7 +491,7 @@ router.get('/embedded-signup/config', authMiddleware, async (req: AuthRequest, r
 router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
-    const { businessId, code, wabaId, phoneNumberId } = req.body;
+    const { businessId, code, wabaId, phoneNumberId, provider = 'META_CLOUD' } = req.body;
     
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -502,7 +503,11 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
       });
     }
     
-    console.log('[EMBEDDED_SIGNUP] Completing signup:', { businessId, wabaId, phoneNumberId });
+    // Validate provider
+    const validProviders = ['META_CLOUD', 'META_COEXIST'];
+    const selectedProvider = validProviders.includes(provider) ? provider : 'META_CLOUD';
+    
+    console.log('[EMBEDDED_SIGNUP] Completing signup:', { businessId, wabaId, phoneNumberId, provider: selectedProvider });
     
     // Verify business ownership
     const business = await prisma.business.findFirst({
@@ -572,30 +577,63 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
       console.warn('[EMBEDDED_SIGNUP] Could not fetch phone details:', phoneError.message);
     }
     
-    // Create WhatsApp instance with META_CLOUD provider
+    // Create WhatsApp instance with selected provider
+    const instanceName = verifiedName || `WhatsApp ${selectedProvider === 'META_COEXIST' ? 'Coexist' : 'Cloud'} ${existingInstances + 1}`;
+    
     const instance = await prisma.whatsAppInstance.create({
       data: {
         businessId,
-        name: verifiedName || `WhatsApp Cloud ${existingInstances + 1}`,
-        provider: 'META_CLOUD',
+        name: instanceName,
+        provider: selectedProvider,
         status: 'connected',
         phoneNumber: displayPhone,
         lastConnection: new Date()
       }
     });
     
-    // Store Meta credentials
-    await prisma.metaCredential.create({
-      data: {
-        instanceId: instance.id,
-        accessToken,
-        businessId: wabaId,
-        phoneNumberId,
-        appId: appId,
-        appSecret: appSecret,
-        webhookVerifyToken: `wh_${require('crypto').randomBytes(16).toString('hex')}`
+    // Store credentials based on provider type
+    if (selectedProvider === 'META_COEXIST') {
+      // Store Meta Coexist credentials
+      await prisma.metaCoexistCredential.create({
+        data: {
+          instanceId: instance.id,
+          wabaId,
+          metaBusinessId: wabaId,
+          phoneNumberId,
+          displayPhone,
+          userAccessToken: accessToken,
+          systemAccessToken: accessToken,
+          coexistenceEnabled: true,
+          coexistStatus: 'ACTIVE',
+          qualityRating: 'GREEN',
+          lastSyncAt: new Date()
+        }
+      });
+      
+      // Try to enable coexistence on Meta's side
+      try {
+        const coexistUrl = `https://graph.facebook.com/v21.0/${phoneNumberId}`;
+        await axios.post(coexistUrl, { is_coexistence_enabled: true }, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        console.log('[EMBEDDED_SIGNUP] Coexistence enabled on Meta side');
+      } catch (coexistError: any) {
+        console.warn('[EMBEDDED_SIGNUP] Could not enable coexistence (may already be enabled):', coexistError.message);
       }
-    });
+    } else {
+      // Store Meta Cloud credentials
+      await prisma.metaCredential.create({
+        data: {
+          instanceId: instance.id,
+          accessToken,
+          businessId: wabaId,
+          phoneNumberId,
+          appId: appId,
+          appSecret: appSecret,
+          webhookVerifyToken: `wh_${require('crypto').randomBytes(16).toString('hex')}`
+        }
+      });
+    }
     
     // Record instance history
     await prisma.whatsAppInstanceHistory.create({
@@ -603,14 +641,14 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
         instanceId: instance.id,
         businessId,
         eventType: 'CREATED',
-        newProvider: 'META_CLOUD',
+        newProvider: selectedProvider,
         newStatus: 'connected',
         phoneNumber: displayPhone,
-        details: `Created via Meta Embedded Signup (WABA: ${wabaId})`
+        details: `Created via Meta Embedded Signup - ${selectedProvider} (WABA: ${wabaId})`
       }
     });
     
-    console.log('[EMBEDDED_SIGNUP] Instance created successfully:', instance.id);
+    console.log('[EMBEDDED_SIGNUP] Instance created successfully:', instance.id, 'provider:', selectedProvider);
     
     res.json({
       success: true,
@@ -618,7 +656,7 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
         id: instance.id,
         name: instance.name,
         phoneNumber: displayPhone,
-        provider: 'META_CLOUD',
+        provider: selectedProvider,
         status: 'connected'
       }
     });

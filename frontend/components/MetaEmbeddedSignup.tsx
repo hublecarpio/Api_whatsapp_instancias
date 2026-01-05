@@ -12,6 +12,7 @@ declare global {
 
 interface MetaEmbeddedSignupProps {
   businessId: string;
+  provider?: 'META_CLOUD' | 'META_COEXIST';
   onSuccess: (instance: any) => void;
   onError: (error: string) => void;
   onCancel: () => void;
@@ -19,6 +20,7 @@ interface MetaEmbeddedSignupProps {
 
 export default function MetaEmbeddedSignup({
   businessId,
+  provider = 'META_CLOUD',
   onSuccess,
   onError,
   onCancel
@@ -111,7 +113,8 @@ export default function MetaEmbeddedSignup({
               businessId,
               code,
               wabaId,
-              phoneNumberId
+              phoneNumberId,
+              provider
             });
 
             if (result.data.success) {
@@ -165,21 +168,28 @@ export default function MetaEmbeddedSignup({
     );
   }
 
+  const isCoexist = provider === 'META_COEXIST';
+  
   return (
     <div className="space-y-4">
-      <div className="p-4 bg-neon-blue/10 border border-neon-blue/30 rounded-lg">
+      <div className={`p-4 ${isCoexist ? 'bg-purple-500/10 border-purple-500/30' : 'bg-neon-blue/10 border-neon-blue/30'} border rounded-lg`}>
         <h4 className="font-medium text-white mb-2 flex items-center gap-2">
-          <span className="text-xl">☁️</span>
-          Meta Cloud API - Embedded Signup
+          <span className="text-xl">{isCoexist ? '🔗' : '☁️'}</span>
+          {isCoexist ? 'Meta Coexistence - Embedded Signup' : 'Meta Cloud API - Embedded Signup'}
         </h4>
         <p className="text-sm text-gray-300 mb-3">
-          Conecta tu numero de WhatsApp Business existente usando el flujo oficial de Meta.
-          Meta manejara la verificacion y vinculacion de tu numero.
+          {isCoexist 
+            ? 'Conecta tu numero de WhatsApp Business App existente al API Cloud manteniendo el uso de la App.'
+            : 'Conecta tu numero de WhatsApp Business existente usando el flujo oficial de Meta.'}
+          {' '}Meta manejara la verificacion y vinculacion de tu numero.
         </p>
         <ul className="text-xs text-gray-400 space-y-1 mb-4">
           <li>• Tu numero debe estar activo en WhatsApp Business App</li>
-          <li>• Meta te pedira confirmar desde tu telefono o con QR</li>
-          <li>• Podras seguir usando la App y la API simultaneamente</li>
+          <li>• Meta te pedira confirmar desde tu telefono o escanear QR</li>
+          <li>• {isCoexist 
+            ? 'Podras usar la App y el API Cloud simultaneamente (Coexistence)'
+            : 'Podras enviar y recibir mensajes via Cloud API'}
+          </li>
         </ul>
       </div>
 
@@ -199,7 +209,7 @@ export default function MetaEmbeddedSignup({
         <button
           onClick={handleEmbeddedSignup}
           disabled={!sdkLoaded || connecting}
-          className="flex-1 bg-[#1877F2] hover:bg-[#166FE5] text-white px-4 py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+          className={`flex-1 ${isCoexist ? 'bg-purple-600 hover:bg-purple-700' : 'bg-[#1877F2] hover:bg-[#166FE5]'} text-white px-4 py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2 font-medium`}
         >
           {connecting ? (
             <>
@@ -213,7 +223,7 @@ export default function MetaEmbeddedSignup({
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
-              Conectar con Facebook
+              {isCoexist ? 'Conectar WhatsApp Business App' : 'Conectar con Facebook'}
             </>
           )}
         </button>

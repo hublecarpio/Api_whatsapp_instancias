@@ -235,6 +235,7 @@ export const waApi = {
     code: string;
     wabaId: string;
     phoneNumberId: string;
+    provider?: 'META_CLOUD' | 'META_COEXIST';
   }) => api.post('/auth/meta-coexist/embedded-signup/complete', data)
 };
 
