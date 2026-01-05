@@ -173,9 +173,11 @@ export const waApi = {
     phoneNumber?: string;
     copyFromInstanceId?: string;
     metaCredentials?: {
+      appId: string;
+      appSecret: string;
       accessToken: string;
       phoneNumberId: string;
-      wabaId?: string;
+      wabaId: string;
     };
   }) => api.post('/wa/instances/add', data),
   deleteInstance: (instanceId: string, businessId: string) => 

@@ -49,6 +49,9 @@ export default function InstanceSelector({
   const [metaAccessToken, setMetaAccessToken] = useState('');
   const [metaPhoneNumberId, setMetaPhoneNumberId] = useState('');
   const [metaWabaId, setMetaWabaId] = useState('');
+  const [metaAppId, setMetaAppId] = useState('');
+  const [metaAppSecret, setMetaAppSecret] = useState('');
+  const [metaPhoneNumber, setMetaPhoneNumber] = useState('');
   
   const COUNTRY_CODES = [
     { code: '+51', country: 'Peru', flag: '🇵🇪' },
@@ -93,8 +96,8 @@ export default function InstanceSelector({
     }
     
     if (selectedProvider === 'META_CLOUD') {
-      if (!metaAccessToken || !metaPhoneNumberId) {
-        setAddError('Access Token y Phone Number ID son obligatorios');
+      if (!metaAppId || !metaAppSecret || !metaWabaId || !metaPhoneNumberId || !metaPhoneNumber || !metaAccessToken) {
+        setAddError('Todos los campos son obligatorios para Meta Cloud');
         return;
       }
     }
@@ -104,7 +107,9 @@ export default function InstanceSelector({
     
     const fullPhone = selectedProvider === 'BAILEYS' 
       ? `${countryCode.replace('+', '')}${phoneNumber.replace(/\D/g, '')}`
-      : undefined;
+      : selectedProvider === 'META_CLOUD' 
+        ? metaPhoneNumber 
+        : undefined;
     
     try {
       const response = await waApi.addInstance({
@@ -114,9 +119,11 @@ export default function InstanceSelector({
         phoneNumber: fullPhone,
         copyFromInstanceId: copyFromInstance || undefined,
         metaCredentials: selectedProvider === 'META_CLOUD' ? {
+          appId: metaAppId,
+          appSecret: metaAppSecret,
           accessToken: metaAccessToken,
           phoneNumberId: metaPhoneNumberId,
-          wabaId: metaWabaId || undefined
+          wabaId: metaWabaId
         } : undefined
       });
       
@@ -425,7 +432,7 @@ export default function InstanceSelector({
                 >
                   <div className="text-2xl mb-1">☁️</div>
                   <div className="font-medium text-white text-sm">Meta Cloud</div>
-                  <div className="text-xs text-gray-400">Embedded Signup</div>
+                  <div className="text-xs text-gray-400">Config Manual</div>
                 </button>
                 <button
                   type="button"
@@ -498,26 +505,51 @@ export default function InstanceSelector({
             )}
             
             {selectedProvider === 'META_CLOUD' && (
-              <div className="space-y-4 p-4 bg-dark-surface rounded-xl border border-neon-blue/30">
+              <div className="space-y-4 p-4 bg-dark-surface rounded-xl border border-neon-blue/30 max-h-[60vh] overflow-y-auto">
                 <div className="flex items-center gap-2 text-neon-blue mb-2">
                   <span className="text-xl">☁️</span>
                   <span className="font-medium">Configuracion Meta Cloud API</span>
                 </div>
                 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      App ID <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={metaAppId}
+                      onChange={(e) => setMetaAppId(e.target.value)}
+                      placeholder="ID de tu App de Meta"
+                      className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      App Secret <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={metaAppSecret}
+                      onChange={(e) => setMetaAppSecret(e.target.value)}
+                      placeholder="Secret de tu App de Meta"
+                      className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
+                    />
+                  </div>
+                </div>
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-1">
-                    Access Token <span className="text-red-400">*</span>
+                    WABA ID <span className="text-red-400">*</span>
                   </label>
                   <input
-                    type="password"
-                    value={metaAccessToken}
-                    onChange={(e) => setMetaAccessToken(e.target.value)}
-                    placeholder="Tu access token de Meta"
+                    type="text"
+                    value={metaWabaId}
+                    onChange={(e) => setMetaWabaId(e.target.value)}
+                    placeholder="ID de tu cuenta de WhatsApp Business"
                     className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Obtiene el token desde Meta Business Suite o tu System User
-                  </p>
                 </div>
                 
                 <div>
@@ -528,22 +560,38 @@ export default function InstanceSelector({
                     type="text"
                     value={metaPhoneNumberId}
                     onChange={(e) => setMetaPhoneNumberId(e.target.value)}
-                    placeholder="Ej: 123456789012345"
+                    placeholder="ID del numero de telefono en Meta"
                     className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
                   />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-1">
-                    WABA ID (opcional)
+                    Numero de WhatsApp <span className="text-red-400">*</span>
                   </label>
                   <input
-                    type="text"
-                    value={metaWabaId}
-                    onChange={(e) => setMetaWabaId(e.target.value)}
-                    placeholder="Ej: 123456789012345"
+                    type="tel"
+                    value={metaPhoneNumber}
+                    onChange={(e) => setMetaPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Ej: 51999888777 (con codigo de pais)"
                     className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
                   />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    Access Token <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={metaAccessToken}
+                    onChange={(e) => setMetaAccessToken(e.target.value)}
+                    placeholder="Token de acceso permanente"
+                    className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Obtiene el token desde Meta Business Suite o tu System User
+                  </p>
                 </div>
                 
                 <div className="flex gap-3 pt-2">
@@ -555,6 +603,9 @@ export default function InstanceSelector({
                       setMetaAccessToken('');
                       setMetaPhoneNumberId('');
                       setMetaWabaId('');
+                      setMetaAppId('');
+                      setMetaAppSecret('');
+                      setMetaPhoneNumber('');
                     }}
                     className="flex-1 px-4 py-2 bg-dark-surface border border-dark-border rounded-lg hover:bg-dark-hover transition-colors"
                   >
@@ -563,7 +614,7 @@ export default function InstanceSelector({
                   <button
                     type="button"
                     onClick={handleAddInstance}
-                    disabled={addLoading}
+                    disabled={addLoading || !metaAppId || !metaAppSecret || !metaWabaId || !metaPhoneNumberId || !metaPhoneNumber || !metaAccessToken}
                     className="flex-1 disabled:opacity-50 btn-primary"
                   >
                     {addLoading ? 'Conectando...' : 'Conectar'}

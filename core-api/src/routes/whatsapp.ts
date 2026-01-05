@@ -334,8 +334,8 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     }
     
     if (provider === 'META_CLOUD' && metaCredentials) {
-      if (!metaCredentials.accessToken || !metaCredentials.phoneNumberId) {
-        return res.status(400).json({ error: 'Access Token y Phone Number ID son obligatorios para Meta Cloud' });
+      if (!metaCredentials.appId || !metaCredentials.appSecret || !metaCredentials.accessToken || !metaCredentials.phoneNumberId || !metaCredentials.wabaId) {
+        return res.status(400).json({ error: 'App ID, App Secret, Access Token, Phone Number ID y WABA ID son obligatorios para Meta Cloud' });
       }
     }
     
@@ -367,7 +367,7 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     const instanceWebhookSecret = generateWebhookSecret();
     
     if (provider === 'META_CLOUD') {
-      const hasCredentials = metaCredentials && metaCredentials.accessToken && metaCredentials.phoneNumberId;
+      const hasCredentials = metaCredentials && metaCredentials.appId && metaCredentials.appSecret && metaCredentials.accessToken && metaCredentials.phoneNumberId && metaCredentials.wabaId;
       
       const instance = await prisma.whatsAppInstance.create({
         data: {
@@ -388,9 +388,9 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
             instanceId: instance.id,
             accessToken: metaCredentials.accessToken,
             phoneNumberId: metaCredentials.phoneNumberId,
-            businessId: metaCredentials.wabaId || '',
-            appId: process.env.META_APP_ID || '',
-            appSecret: process.env.META_APP_SECRET || ''
+            businessId: metaCredentials.wabaId,
+            appId: metaCredentials.appId,
+            appSecret: metaCredentials.appSecret
           }
         });
         
