@@ -141,10 +141,26 @@ router.post('/create-checkout-session', authMiddleware, async (req: any, res) =>
 const processedWebhookEvents: Set<string> = new Set();
 const WEBHOOK_EVENT_TTL = 5 * 60 * 1000;
 
-function getTierFromPriceId(priceId: string): 'BASIC' | 'PRO' {
+const TIER_PRIORITY: Record<string, number> = {
+  STANDARD: 0,
+  BASIC: 1,
+  PRO: 2,
+  ENTERPRISE: 3
+};
+
+function getTierFromPriceId(priceId: string): 'BASIC' | 'PRO' | 'ENTERPRISE' {
   if (priceId === PRICE_ID_BASIC) return 'BASIC';
   if (priceId === PRICE_ID_MONTHLY || priceId === PRICE_ID_WEEKLY) return 'PRO';
   return 'BASIC';
+}
+
+function shouldUpdateTier(currentTier: string | null, newTier: string): boolean {
+  // Never downgrade ENTERPRISE (manually assigned)
+  if (currentTier === 'ENTERPRISE') return false;
+  // Allow upgrade or if current tier is null/unknown
+  const currentPriority = TIER_PRIORITY[currentTier || 'STANDARD'] || 0;
+  const newPriority = TIER_PRIORITY[newTier] || 0;
+  return newPriority >= currentPriority;
 }
 
 setInterval(() => {
@@ -196,19 +212,25 @@ router.post('/webhook', async (req, res) => {
               : null;
             
             const priceId = subscription.items.data[0]?.price?.id || '';
-            const tier = tierFromMetadata || getTierFromPriceId(priceId);
+            const stripeTier = tierFromMetadata || getTierFromPriceId(priceId);
+            
+            // Check current user tier to avoid downgrading ENTERPRISE
+            const currentUser = await prisma.user.findUnique({ where: { id: userId }, select: { subscriptionTier: true } });
+            const finalTier = (currentUser && !shouldUpdateTier(currentUser.subscriptionTier, stripeTier)) 
+              ? currentUser.subscriptionTier 
+              : stripeTier;
 
             await prisma.user.update({
               where: { id: userId },
               data: {
                 stripeSubscriptionId: subscriptionId,
                 subscriptionStatus: trialEnd ? 'TRIAL' : 'ACTIVE',
-                subscriptionTier: tier,
+                subscriptionTier: finalTier,
                 trialEndAt: trialEnd,
                 demoPhase: 'TRIAL'
               }
             });
-            console.log(`User ${userId} subscription activated: ${subscriptionId}, tier: ${tier}, demoPhase set to TRIAL`);
+            console.log(`User ${userId} subscription activated: ${subscriptionId}, tier: ${finalTier}${finalTier !== stripeTier ? ' (preserved ENTERPRISE)' : ''}, demoPhase set to TRIAL`);
           }
         }
         break;
@@ -353,20 +375,23 @@ router.get('/subscription-status', authMiddleware, async (req: any, res) => {
           if (['active', 'trialing'].includes(latestSub.status)) {
             const trialEnd = latestSub.trial_end ? new Date(latestSub.trial_end * 1000) : null;
             const priceId = latestSub.items.data[0]?.price?.id || '';
-            const tier = getTierFromPriceId(priceId);
+            const stripeTier = getTierFromPriceId(priceId);
+            
+            // Only update tier if not a downgrade (preserve ENTERPRISE)
+            const newTier = shouldUpdateTier(user.subscriptionTier, stripeTier) ? stripeTier : user.subscriptionTier;
             
             user = await prisma.user.update({
               where: { id: userId },
               data: {
                 stripeSubscriptionId: latestSub.id,
                 subscriptionStatus: trialEnd && trialEnd > new Date() ? 'TRIAL' : 'ACTIVE',
-                subscriptionTier: tier,
+                subscriptionTier: newTier,
                 trialEndAt: trialEnd,
                 demoPhase: 'TRIAL'
               }
             });
             
-            console.log(`[AUTO-SYNC] User ${userId} subscription synced from Stripe: ${latestSub.id}, tier: ${tier}`);
+            console.log(`[AUTO-SYNC] User ${userId} subscription synced from Stripe: ${latestSub.id}, tier: ${newTier}${newTier !== stripeTier ? ' (preserved from ' + user.subscriptionTier + ')' : ''}`);
             syncedFromStripe = true;
           }
         }
@@ -383,17 +408,20 @@ router.get('/subscription-status', authMiddleware, async (req: any, res) => {
           nextPayment = new Date(periodEnd * 1000);
         }
         
-        // Also sync tier if subscription exists but tier seems wrong
+        // Sync tier if subscription exists but tier seems wrong (never downgrade ENTERPRISE)
         if (['active', 'trialing'].includes(subscriptionData.status)) {
           const priceId = subscriptionData.items.data[0]?.price?.id || '';
           const correctTier = getTierFromPriceId(priceId);
-          if (user.subscriptionTier !== correctTier) {
+          if (user.subscriptionTier !== correctTier && shouldUpdateTier(user.subscriptionTier, correctTier)) {
+            const oldTier = user.subscriptionTier;
             user = await prisma.user.update({
               where: { id: userId },
               data: { subscriptionTier: correctTier }
             });
-            console.log(`[TIER-SYNC] User ${userId} tier corrected: ${user.subscriptionTier} -> ${correctTier}`);
+            console.log(`[TIER-SYNC] User ${userId} tier updated: ${oldTier} -> ${correctTier}`);
             syncedFromStripe = true;
+          } else if (user.subscriptionTier === 'ENTERPRISE') {
+            console.log(`[TIER-SYNC] User ${userId} preserved ENTERPRISE tier (manually assigned)`);
           }
         }
       } catch (err) {
