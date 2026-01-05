@@ -201,7 +201,7 @@ async function processExpiredBuffersLegacy() {
         if (buffer.instanceId) {
           instance = await prisma.whatsAppInstance.findUnique({
             where: { id: buffer.instanceId },
-            include: { metaCredential: true }
+            include: { metaCredential: true, metaCoexistCredential: true }
           });
           console.log(`[BUFFER-WORKER] Using stored instanceId ${buffer.instanceId} for ${bufferKey}`);
         }
@@ -209,7 +209,7 @@ async function processExpiredBuffersLegacy() {
         if (!instance) {
           instance = await prisma.whatsAppInstance.findFirst({
             where: { businessId: buffer.businessId, status: 'connected' },
-            include: { metaCredential: true }
+            include: { metaCredential: true, metaCoexistCredential: true }
           });
           if (instance) {
             console.log(`[BUFFER-WORKER] Fallback to connected instance ${instance.id} for ${bufferKey}`);
@@ -219,7 +219,7 @@ async function processExpiredBuffersLegacy() {
         if (!instance) {
           instance = await prisma.whatsAppInstance.findFirst({
             where: { businessId: buffer.businessId },
-            include: { metaCredential: true }
+            include: { metaCredential: true, metaCoexistCredential: true }
           });
           console.log(`[BUFFER-WORKER] Fallback to any instance for ${bufferKey}`);
         }
@@ -740,13 +740,27 @@ async function processWithAgentV2(
     try {
       let sentMedia: any[] = [];
       
-      if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
-        // Meta Cloud API
+      if ((instance.provider === 'META_CLOUD' && instance.metaCredential) || 
+          (instance.provider === 'META_COEXIST' && instance.metaCoexistCredential)) {
+        // Meta Cloud API or Meta Coexist
+        const isCoexist = instance.provider === 'META_COEXIST';
+        const accessToken = isCoexist 
+          ? (instance.metaCoexistCredential!.systemAccessToken || instance.metaCoexistCredential!.userAccessToken)
+          : instance.metaCredential!.accessToken;
+        const phoneNumberId = isCoexist 
+          ? instance.metaCoexistCredential!.phoneNumberId 
+          : instance.metaCredential!.phoneNumberId;
+        const metaBusinessId = isCoexist 
+          ? instance.metaCoexistCredential!.metaBusinessId 
+          : instance.metaCredential!.businessId;
+        
         const metaService = new MetaCloudService({
-          accessToken: instance.metaCredential.accessToken,
-          phoneNumberId: instance.metaCredential.phoneNumberId,
-          businessId: instance.metaCredential.businessId
+          accessToken,
+          phoneNumberId,
+          businessId: metaBusinessId
         });
+        
+        console.log(`[Agent V2] Sending response via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'} API`);
         
         // Mark message as read AFTER buffer expires (before responding)
         try {
@@ -754,7 +768,7 @@ async function processWithAgentV2(
           let messageIdToMark = providerMessageId;
           
           if (!messageIdToMark) {
-            console.log('[Agent V2] No providerMessageId passed, looking up in DB for:', contactPhone);
+            console.log(`[Agent V2] No providerMessageId passed, looking up in DB for:`, contactPhone);
             const lastInboundMessage = await prisma.messageLog.findFirst({
               where: {
                 businessId: business.id,
@@ -769,7 +783,7 @@ async function processWithAgentV2(
           
           if (messageIdToMark) {
             await metaService.markMessageAsRead(messageIdToMark);
-            console.log('[Agent V2] Meta Cloud message marked as read:', messageIdToMark);
+            console.log(`[Agent V2] ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'} message marked as read:`, messageIdToMark);
           } else {
             console.log('[Agent V2] No providerMessageId available to mark as read');
           }
@@ -777,7 +791,7 @@ async function processWithAgentV2(
           console.log('Could not mark Meta message as read:', readError.message);
         }
         
-        // Send the message via Meta Cloud
+        // Send the message via Meta Cloud/Coexist
         const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
         const finalText = cleanMarkdownForWhatsApp(cleanedText);
         
@@ -811,7 +825,7 @@ async function processWithAgentV2(
             }
             sentMedia.push(media);
           } catch (mediaError: any) {
-            console.error(`[Agent V2] Failed to send media via Meta Cloud: ${media.url}`, mediaError.message);
+            console.error(`[Agent V2] Failed to send media via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'}: ${media.url}`, mediaError.message);
           }
         }
       } else if (backendId) {
@@ -892,7 +906,7 @@ async function processWithAgent(
       policy: true,
       agentPrompts: { include: { tools: { where: { enabled: true } } } },
       products: true,
-      instances: { include: { metaCredential: true } },
+      instances: { include: { metaCredential: true, metaCoexistCredential: true } },
       user: { select: { isPro: true, paymentLinkEnabled: true } }
     }
   });
@@ -1857,12 +1871,25 @@ async function processWithAgent(
     try {
       let sentMedia: MediaItem[] = [];
       
-      if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
-        console.log('[META CLOUD] Sending response via Meta Cloud API');
+      if ((instance.provider === 'META_CLOUD' && instance.metaCredential) ||
+          (instance.provider === 'META_COEXIST' && instance.metaCoexistCredential)) {
+        // Meta Cloud API or Meta Coexist
+        const isCoexist = instance.provider === 'META_COEXIST';
+        const accessToken = isCoexist 
+          ? (instance.metaCoexistCredential!.systemAccessToken || instance.metaCoexistCredential!.userAccessToken)
+          : instance.metaCredential!.accessToken;
+        const phoneNumberId = isCoexist 
+          ? instance.metaCoexistCredential!.phoneNumberId 
+          : instance.metaCredential!.phoneNumberId;
+        const metaBusinessId = isCoexist 
+          ? instance.metaCoexistCredential!.metaBusinessId 
+          : instance.metaCredential!.businessId;
+        
+        console.log(`[${isCoexist ? 'META COEXIST' : 'META CLOUD'}] Sending response via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'} API`);
         const metaService = new MetaCloudService({
-          accessToken: instance.metaCredential.accessToken,
-          phoneNumberId: instance.metaCredential.phoneNumberId,
-          businessId: instance.metaCredential.businessId
+          accessToken,
+          phoneNumberId,
+          businessId: metaBusinessId
         });
         
         // Mark message as read AFTER buffer expires (before responding)
@@ -1871,7 +1898,7 @@ async function processWithAgent(
           let messageIdToMark = providerMessageId;
           
           if (!messageIdToMark) {
-            console.log('[META CLOUD] No providerMessageId passed, looking up in DB for:', contactPhone);
+            console.log(`[${isCoexist ? 'META COEXIST' : 'META CLOUD'}] No providerMessageId passed, looking up in DB for:`, contactPhone);
             const lastInboundMessage = await prisma.messageLog.findFirst({
               where: {
                 businessId,
@@ -1886,9 +1913,9 @@ async function processWithAgent(
           
           if (messageIdToMark) {
             await metaService.markMessageAsRead(messageIdToMark);
-            console.log('[META CLOUD] Message marked as read:', messageIdToMark);
+            console.log(`[${isCoexist ? 'META COEXIST' : 'META CLOUD'}] Message marked as read:`, messageIdToMark);
           } else {
-            console.log('[META CLOUD] No providerMessageId available to mark as read');
+            console.log(`[${isCoexist ? 'META COEXIST' : 'META CLOUD'}] No providerMessageId available to mark as read`);
           }
         } catch (readError: any) {
           console.log('Could not mark Meta message as read:', readError.message);
@@ -1927,7 +1954,7 @@ async function processWithAgent(
             }
             sentMedia.push(media);
           } catch (mediaError: any) {
-            console.error(`Failed to send media via Meta Cloud: ${media.url}`, mediaError.message);
+            console.error(`Failed to send media via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'}: ${media.url}`, mediaError.message);
           }
         }
       } else if (instance.instanceBackendId) {

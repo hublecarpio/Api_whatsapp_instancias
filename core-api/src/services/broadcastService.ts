@@ -105,7 +105,7 @@ export async function sendBroadcastMessage(
     }
     const instance = await prisma.whatsAppInstance.findFirst({
       where: instanceWhere,
-      include: { metaCredential: true }
+      include: { metaCredential: true, metaCoexistCredential: true }
     });
 
     if (!instance) {
@@ -113,17 +113,35 @@ export async function sendBroadcastMessage(
     }
 
     const isMetaCloud = instance.provider === 'META_CLOUD';
+    const isMetaCoexist = instance.provider === 'META_COEXIST';
+    const isMetaProvider = isMetaCloud || isMetaCoexist;
     let usedTemplate = false;
 
-    if (isMetaCloud) {
-      if (!instance.metaCredential) {
-        return { success: false, usedTemplate: false, error: 'Meta credentials not found' };
+    if (isMetaProvider) {
+      let accessToken: string;
+      let phoneNumberId: string;
+      let metaBusinessId: string;
+      
+      if (isMetaCoexist) {
+        if (!instance.metaCoexistCredential) {
+          return { success: false, usedTemplate: false, error: 'Meta Coexist credentials not found' };
+        }
+        accessToken = instance.metaCoexistCredential.systemAccessToken || instance.metaCoexistCredential.userAccessToken;
+        phoneNumberId = instance.metaCoexistCredential.phoneNumberId;
+        metaBusinessId = instance.metaCoexistCredential.metaBusinessId;
+      } else {
+        if (!instance.metaCredential) {
+          return { success: false, usedTemplate: false, error: 'Meta credentials not found' };
+        }
+        accessToken = instance.metaCredential.accessToken;
+        phoneNumberId = instance.metaCredential.phoneNumberId;
+        metaBusinessId = instance.metaCredential.businessId;
       }
 
       const metaService = new MetaCloudService({
-        accessToken: instance.metaCredential.accessToken,
-        phoneNumberId: instance.metaCredential.phoneNumberId,
-        businessId: instance.metaCredential.businessId
+        accessToken,
+        phoneNumberId,
+        businessId: metaBusinessId
       });
 
       const within24h = await isWithin24HourWindow(campaign.businessId, cleanPhone);

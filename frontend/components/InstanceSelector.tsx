@@ -255,7 +255,7 @@ export default function InstanceSelector({
                     <p className="text-sm text-gray-400">
                       {instance.phoneNumber || 'Sin numero'} 
                       <span className="ml-2 text-xs">
-                        ({instance.provider === 'META_CLOUD' ? 'Meta Cloud' : 'Baileys'})
+                        ({instance.provider === 'META_CLOUD' ? 'Meta Cloud' : instance.provider === 'META_COEXIST' ? 'Meta Coexist' : 'Baileys'})
                       </span>
                     </p>
                   </div>

@@ -25,7 +25,7 @@ async function getActiveInstance(businessId: string) {
       isActive: true,
       status: 'connected'
     },
-    include: { metaCredential: true },
+    include: { metaCredential: true, metaCoexistCredential: true },
     orderBy: { lastConnection: 'desc' }
   });
   
@@ -36,7 +36,7 @@ async function getActiveInstance(businessId: string) {
       businessId,
       isActive: true
     },
-    include: { metaCredential: true },
+    include: { metaCredential: true, metaCoexistCredential: true },
     orderBy: { lastConnection: 'desc' }
   });
   
@@ -44,7 +44,7 @@ async function getActiveInstance(businessId: string) {
   
   const anyInstance = await prisma.whatsAppInstance.findFirst({
     where: { businessId },
-    include: { metaCredential: true },
+    include: { metaCredential: true, metaCoexistCredential: true },
     orderBy: { lastConnection: 'desc' }
   });
   
@@ -68,11 +68,12 @@ async function getActiveInstance(businessId: string) {
       return {
         id: waInstance.id,
         businessId,
-        provider: 'BAILEYS',
+        provider: 'BAILEYS' as const,
         instanceBackendId: waInstance.id,
         status: waInstance.status,
         isActive: true,
-        metaCredential: null
+        metaCredential: null,
+        metaCoexistCredential: null
       };
     }
   } catch (err: any) {
@@ -94,7 +95,7 @@ async function checkWindowStatus(businessId: string, contactPhone: string): Prom
     return { requiresTemplate: false, provider: null, hoursSinceLastMessage: null };
   }
   
-  if (instance.provider !== 'META_CLOUD') {
+  if (instance.provider !== 'META_CLOUD' && instance.provider !== 'META_COEXIST') {
     return { requiresTemplate: false, provider: instance.provider, hoursSinceLastMessage: null };
   }
   
@@ -725,27 +726,57 @@ export async function processReminders(): Promise<void> {
       
       const cleanPhone = reminder.contactPhone.replace(/\D/g, '');
       
-      if (instance.provider === 'META_CLOUD') {
-        const metaCred = instance.metaCredential || await prisma.metaCredential.findFirst({
-          where: { instanceId: instance.id }
-        });
+      if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+        const isCoexist = instance.provider === 'META_COEXIST';
         
-        if (!metaCred) {
-          console.log(`[REMINDER] No Meta credentials for instance ${instance.id} - rescheduling`);
-          const retryAt = new Date(Date.now() + 15 * 60 * 1000);
-          await prisma.reminder.update({
-            where: { id: reminder.id },
-            data: { scheduledAt: retryAt, processingAt: null }
+        let accessToken: string;
+        let phoneNumberId: string;
+        let metaBusinessId: string;
+        
+        if (isCoexist) {
+          const coexistCred = instance.metaCoexistCredential || await prisma.metaCoexistCredential.findFirst({
+            where: { instanceId: instance.id }
           });
-          continue;
+          
+          if (!coexistCred) {
+            console.log(`[REMINDER] No Meta Coexist credentials for instance ${instance.id} - rescheduling`);
+            const retryAt = new Date(Date.now() + 15 * 60 * 1000);
+            await prisma.reminder.update({
+              where: { id: reminder.id },
+              data: { scheduledAt: retryAt, processingAt: null }
+            });
+            continue;
+          }
+          
+          accessToken = coexistCred.systemAccessToken || coexistCred.userAccessToken;
+          phoneNumberId = coexistCred.phoneNumberId;
+          metaBusinessId = coexistCred.metaBusinessId;
+        } else {
+          const metaCred = instance.metaCredential || await prisma.metaCredential.findFirst({
+            where: { instanceId: instance.id }
+          });
+          
+          if (!metaCred) {
+            console.log(`[REMINDER] No Meta credentials for instance ${instance.id} - rescheduling`);
+            const retryAt = new Date(Date.now() + 15 * 60 * 1000);
+            await prisma.reminder.update({
+              where: { id: reminder.id },
+              data: { scheduledAt: retryAt, processingAt: null }
+            });
+            continue;
+          }
+          
+          accessToken = metaCred.accessToken;
+          phoneNumberId = metaCred.phoneNumberId;
+          metaBusinessId = metaCred.businessId;
         }
         
-        console.log(`[REMINDER] Sending via Meta Cloud to ${cleanPhone}`);
+        console.log(`[REMINDER] Sending via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'} to ${cleanPhone}`);
         
         const metaService = new MetaCloudService({
-          accessToken: metaCred.accessToken,
-          phoneNumberId: metaCred.phoneNumberId,
-          businessId: metaCred.businessId
+          accessToken,
+          phoneNumberId,
+          businessId: metaBusinessId
         });
         
         if (usedTemplate) {

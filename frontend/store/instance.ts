@@ -5,7 +5,7 @@ export interface WhatsAppInstance {
   id: string;
   businessId: string;
   name: string;
-  provider: 'BAILEYS' | 'META_CLOUD';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
   instanceBackendId?: string;
   phoneNumber?: string;
   status: string;
