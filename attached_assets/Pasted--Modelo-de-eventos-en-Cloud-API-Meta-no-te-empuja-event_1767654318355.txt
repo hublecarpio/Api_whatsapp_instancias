@@ -1,0 +1,185 @@
+🔹 Modelo de eventos en Cloud API
+
+Meta no te “empuja” eventos por número directamente, sino por App → Webhook → Evento con phone_number_id.
+
+Tú registras un solo webhook por app, y todos los números que conectes envían ahí.
+
+Evento típico que recibes:
+{
+  "entry": [
+    {
+      "changes": [
+        {
+          "value": {
+            "metadata": {
+              "phone_number_id": "123456789",
+              "display_phone_number": "51987654321"
+            },
+            "messages": [
+              {
+                "from": "51999988877",
+                "id": "wamid.HBg...",
+                "timestamp": "1700000000",
+                "type": "text",
+                "text": { "body": "Hola" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+Clave:
+value.metadata.phone_number_id
+
+
+Eso identifica qué número recibió el mensaje.
+
+Tú haces:
+
+phone_number_id → cliente → instancia → flujo → CRM
+
+2️⃣ ¿Cómo enrutar correctamente los eventos?
+
+En tu backend:
+
+const phoneNumberId = event.entry[0].changes[0].value.metadata.phone_number_id;
+const instance = await db.instances.findOne({ phone_number_id: phoneNumberId });
+
+
+Y desde ahí:
+
+Sabes de qué cliente es
+
+Qué bot usar
+
+Qué configuración cargar
+
+3️⃣ ¿Cómo se envían mensajes por API?
+Endpoint base:
+POST https://graph.facebook.com/v18.0/{phone_number_id}/messages
+
+
+Con:
+
+Authorization: Bearer {system_user_token}
+Content-Type: application/json
+
+Enviar texto:
+{
+  "messaging_product": "whatsapp",
+  "to": "51999988877",
+  "type": "text",
+  "text": { "body": "Hola 👋" }
+}
+
+Enviar imagen:
+
+Primero subes el archivo:
+
+POST /v18.0/{phone_number_id}/media
+
+
+Luego envías:
+
+{
+  "messaging_product": "whatsapp",
+  "to": "51999988877",
+  "type": "image",
+  "image": {
+    "id": "MEDIA_ID",
+    "caption": "Mira esto"
+  }
+}
+
+Enviar PDF / documento:
+{
+  "messaging_product": "whatsapp",
+  "to": "51999988877",
+  "type": "document",
+  "document": {
+    "id": "MEDIA_ID",
+    "filename": "brochure.pdf"
+  }
+}
+
+Enviar audio:
+{
+  "messaging_product": "whatsapp",
+  "to": "51999988877",
+  "type": "audio",
+  "audio": { "id": "MEDIA_ID" }
+}
+
+4️⃣ ¿Cómo subes multimedia?
+POST /v18.0/{phone_number_id}/media
+
+
+Con multipart/form-data.
+
+Respuesta:
+
+{ "id": "MEDIA_ID" }
+
+
+Ese MEDIA_ID luego se usa para enviar.
+
+5️⃣ ¿Cómo manejas plantillas?
+
+Las plantillas se crean en el Business Manager y luego las envías:
+
+{
+  "messaging_product": "whatsapp",
+  "to": "51999988877",
+  "type": "template",
+  "template": {
+    "name": "bienvenida",
+    "language": { "code": "es" },
+    "components": [...]
+  }
+}
+
+6️⃣ Límite importante
+Límite	Valor
+1 webhook por app	Sí
+Identificación por número	phone_number_id
+Enviar desde varios números	Sí
+Un número por mensaje	Sí
+Reusar media	Sí
+7️⃣ Arquitectura recomendada para Efficore
+Webhook Meta
+     │
+     ▼
+Router (phone_number_id)
+     │
+     ├── Cliente A → Bot A
+     ├── Cliente B → Bot B
+     └── Cliente C → Bot C
+
+
+Base de datos:
+
+Campo	Uso
+phone_number_id	clave primaria
+waba_id	referencia
+cliente_id	dueño
+status	activo/suspendido
+8️⃣ Resumen ejecutivo
+Tema	Cómo funciona
+Eventos entrantes	Webhook único
+Identificación	phone_number_id
+Envío de mensajes	POST /{phone_number_id}/messages
+Multimedia	subir → enviar
+Ruteo	por phone_number_id
+Plantillas	vía template API
+Cierre
+
+Una vez que conectas el número:
+
+Es solo otra “instancia” más en tu sistema
+
+Todo entra por el mismo webhook
+
+Todo sale por su propio phone_number_id
