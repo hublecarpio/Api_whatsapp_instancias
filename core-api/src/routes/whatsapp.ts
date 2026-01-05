@@ -323,7 +323,7 @@ router.put('/instances/:instanceId/webhook', requireEmailVerified, async (req: A
 
 router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, name, provider, phoneNumber, copyFromInstanceId } = req.body;
+    const { businessId, name, provider, phoneNumber, copyFromInstanceId, metaCredentials } = req.body;
     
     if (!businessId) {
       return res.status(400).json({ error: 'businessId is required' });
@@ -331,6 +331,12 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     
     if (provider === 'BAILEYS' && !phoneNumber) {
       return res.status(400).json({ error: 'El numero de telefono es obligatorio para instancias Baileys' });
+    }
+    
+    if (provider === 'META_CLOUD' && metaCredentials) {
+      if (!metaCredentials.accessToken || !metaCredentials.phoneNumberId) {
+        return res.status(400).json({ error: 'Access Token y Phone Number ID son obligatorios para Meta Cloud' });
+      }
     }
     
     const business = await checkBusinessAccess(req.userId!, businessId);
@@ -361,18 +367,44 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     const instanceWebhookSecret = generateWebhookSecret();
     
     if (provider === 'META_CLOUD') {
+      const hasCredentials = metaCredentials && metaCredentials.accessToken && metaCredentials.phoneNumberId;
+      
       const instance = await prisma.whatsAppInstance.create({
         data: {
           businessId,
           name: instanceName,
           provider: 'META_CLOUD',
-          status: 'pending_credentials',
+          status: hasCredentials ? 'connected' : 'pending_credentials',
           phoneNumber: phoneNumber || null,
           apiKeyHash,
           apiKeyPrefix,
           webhookSecret: instanceWebhookSecret
         }
       });
+      
+      if (hasCredentials) {
+        await prisma.metaCredential.create({
+          data: {
+            instanceId: instance.id,
+            accessToken: metaCredentials.accessToken,
+            phoneNumberId: metaCredentials.phoneNumberId,
+            businessId: metaCredentials.wabaId || '',
+            appId: process.env.META_APP_ID || '',
+            appSecret: process.env.META_APP_SECRET || ''
+          }
+        });
+        
+        await recordInstanceEvent({
+          instanceId: instance.id,
+          businessId,
+          eventType: 'CREATED',
+          newProvider: 'META_CLOUD',
+          newStatus: 'connected',
+          details: `New Meta Cloud instance "${instanceName}" created with credentials`
+        });
+        
+        return res.status(201).json({ instance: { ...instance, status: 'connected' }, apiKey });
+      }
       
       await recordInstanceEvent({
         instanceId: instance.id,

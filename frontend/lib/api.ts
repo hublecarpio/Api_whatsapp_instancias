@@ -172,6 +172,11 @@ export const waApi = {
     provider?: 'BAILEYS' | 'META_CLOUD';
     phoneNumber?: string;
     copyFromInstanceId?: string;
+    metaCredentials?: {
+      accessToken: string;
+      phoneNumberId: string;
+      wabaId?: string;
+    };
   }) => api.post('/wa/instances/add', data),
   deleteInstance: (instanceId: string, businessId: string) => 
     api.delete(`/wa/instances/${instanceId}?businessId=${businessId}`),

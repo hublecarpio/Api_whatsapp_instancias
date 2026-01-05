@@ -46,6 +46,9 @@ export default function InstanceSelector({
   const [countryCode, setCountryCode] = useState('+51');
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [metaAccessToken, setMetaAccessToken] = useState('');
+  const [metaPhoneNumberId, setMetaPhoneNumberId] = useState('');
+  const [metaWabaId, setMetaWabaId] = useState('');
   
   const COUNTRY_CODES = [
     { code: '+51', country: 'Peru', flag: '🇵🇪' },
@@ -89,6 +92,13 @@ export default function InstanceSelector({
       return;
     }
     
+    if (selectedProvider === 'META_CLOUD') {
+      if (!metaAccessToken || !metaPhoneNumberId) {
+        setAddError('Access Token y Phone Number ID son obligatorios');
+        return;
+      }
+    }
+    
     setAddLoading(true);
     setAddError('');
     
@@ -102,7 +112,12 @@ export default function InstanceSelector({
         name: newInstanceName || undefined,
         provider: selectedProvider as 'BAILEYS' | 'META_CLOUD',
         phoneNumber: fullPhone,
-        copyFromInstanceId: copyFromInstance || undefined
+        copyFromInstanceId: copyFromInstance || undefined,
+        metaCredentials: selectedProvider === 'META_CLOUD' ? {
+          accessToken: metaAccessToken,
+          phoneNumberId: metaPhoneNumberId,
+          wabaId: metaWabaId || undefined
+        } : undefined
       });
       
       await fetchInstances();
@@ -110,6 +125,9 @@ export default function InstanceSelector({
       setNewInstanceName('');
       setCopyFromInstance('');
       setPhoneNumber('');
+      setMetaAccessToken('');
+      setMetaPhoneNumberId('');
+      setMetaWabaId('');
       
       if (response.data.instance) {
         setSelectedInstanceId(response.data.instance.id);
@@ -195,6 +213,9 @@ export default function InstanceSelector({
               setCopyFromInstance('');
               setPhoneNumber('');
               setAddError('');
+              setMetaAccessToken('');
+              setMetaPhoneNumberId('');
+              setMetaWabaId('');
               setShowAddModal(true);
             }}
             className="p-2 text-neon-blue hover:bg-neon-blue/10 rounded-lg transition-colors"
@@ -235,6 +256,9 @@ export default function InstanceSelector({
                 setCopyFromInstance('');
                 setPhoneNumber('');
                 setAddError('');
+                setMetaAccessToken('');
+                setMetaPhoneNumberId('');
+                setMetaWabaId('');
                 setShowAddModal(true);
               }}
               className="mt-4 btn-primary"
@@ -318,6 +342,9 @@ export default function InstanceSelector({
             setCopyFromInstance('');
             setPhoneNumber('');
             setAddError('');
+            setMetaAccessToken('');
+            setMetaPhoneNumberId('');
+            setMetaWabaId('');
             setShowAddModal(true);
           }}
           className="w-full p-4 border-2 border-dashed border-dark-border rounded-xl text-gray-400 hover:border-neon-blue hover:text-neon-blue transition-colors flex items-center justify-center gap-2"
@@ -471,20 +498,78 @@ export default function InstanceSelector({
             )}
             
             {selectedProvider === 'META_CLOUD' && (
-              <MetaEmbeddedSignup
-                businessId={businessId}
-                onSuccess={(instance) => {
-                  fetchInstances();
-                  setShowAddModal(false);
-                  setSelectedInstanceId(instance.id);
-                  onInstanceSelect?.(instance);
-                }}
-                onError={(error) => setAddError(error)}
-                onCancel={() => {
-                  setShowAddModal(false);
-                  setAddError('');
-                }}
-              />
+              <div className="space-y-4 p-4 bg-dark-surface rounded-xl border border-neon-blue/30">
+                <div className="flex items-center gap-2 text-neon-blue mb-2">
+                  <span className="text-xl">☁️</span>
+                  <span className="font-medium">Configuracion Meta Cloud API</span>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    Access Token <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={metaAccessToken}
+                    onChange={(e) => setMetaAccessToken(e.target.value)}
+                    placeholder="Tu access token de Meta"
+                    className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Obtiene el token desde Meta Business Suite o tu System User
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    Phone Number ID <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={metaPhoneNumberId}
+                    onChange={(e) => setMetaPhoneNumberId(e.target.value)}
+                    placeholder="Ej: 123456789012345"
+                    className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    WABA ID (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={metaWabaId}
+                    onChange={(e) => setMetaWabaId(e.target.value)}
+                    placeholder="Ej: 123456789012345"
+                    className="w-full bg-dark-bg border border-dark-border rounded-lg px-4 py-3 focus:ring-2 focus:ring-neon-blue/50 text-sm"
+                  />
+                </div>
+                
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setAddError('');
+                      setMetaAccessToken('');
+                      setMetaPhoneNumberId('');
+                      setMetaWabaId('');
+                    }}
+                    className="flex-1 px-4 py-2 bg-dark-surface border border-dark-border rounded-lg hover:bg-dark-hover transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddInstance}
+                    disabled={addLoading}
+                    className="flex-1 disabled:opacity-50 btn-primary"
+                  >
+                    {addLoading ? 'Conectando...' : 'Conectar'}
+                  </button>
+                </div>
+              </div>
             )}
             
             {selectedProvider === 'META_COEXIST' && (
