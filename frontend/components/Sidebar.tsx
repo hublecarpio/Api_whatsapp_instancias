@@ -34,7 +34,7 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: '💬' },
     { href: '/dashboard/prompt', label: 'Agente IA', icon: '🤖' },
-    ...(instanceProvider === 'META_CLOUD' ? [{ href: '/dashboard/templates', label: 'Templates', icon: '📄' }] : []),
+    ...(['META_CLOUD', 'META_COEXIST'].includes(instanceProvider || '') ? [{ href: '/dashboard/templates', label: 'Templates', icon: '📄' }] : []),
   ];
   
   const salesLinks = [

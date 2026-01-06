@@ -51,7 +51,7 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
   const baseLinks = [
     { href: '/dashboard/business', label: 'Mi Empresa', icon: '🏢' },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: '💬' },
-    ...(instanceProvider === 'META_CLOUD' ? [{ href: '/dashboard/templates', label: 'Templates', icon: '📄' }] : []),
+    ...(['META_CLOUD', 'META_COEXIST'].includes(instanceProvider || '') ? [{ href: '/dashboard/templates', label: 'Templates', icon: '📄' }] : []),
   ];
   
   const salesLinks = [

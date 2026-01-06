@@ -555,7 +555,7 @@ export default function ChatPage() {
   };
 
   useEffect(() => {
-    if (windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen) {
+    if (['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen) {
       fetchTemplates();
     }
   }, [windowStatus, currentBusiness]);
@@ -589,14 +589,14 @@ export default function ChatPage() {
     setNewChatUseTemplate(false);
     setSelectedNewChatTemplate(null);
     fetchInstanceProvider();
-    if (instanceProvider === 'META_CLOUD') {
+    if (['META_CLOUD', 'META_COEXIST'].includes(instanceProvider || '')) {
       fetchNewChatTemplates();
     }
     setShowNewChatModal(true);
   };
 
   useEffect(() => {
-    if (showNewChatModal && instanceProvider === 'META_CLOUD') {
+    if (showNewChatModal && ['META_CLOUD', 'META_COEXIST'].includes(instanceProvider || '')) {
       fetchNewChatTemplates();
     }
   }, [showNewChatModal, instanceProvider]);
@@ -1212,7 +1212,7 @@ export default function ChatPage() {
                     >
                       {contactRemindersPaused ? '⏸️ Rec off' : '🔔 Rec'}
                     </button>
-                    {windowStatus?.provider === 'META_CLOUD' && (
+                    {['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && (
                       <span className={`text-xs px-1.5 py-0.5 rounded ${windowStatus.windowOpen ? 'bg-neon-blue/20 text-neon-blue' : 'bg-accent-warning/20 text-accent-warning'}`}>
                         {windowStatus.windowOpen ? `📬 ${windowStatus.hoursRemaining}h` : '📭 Template'}
                       </span>
@@ -1391,10 +1391,10 @@ export default function ChatPage() {
               <form onSubmit={handleSend} className="p-3 border-t border-dark-border bg-dark-card safe-area-pb">
                 <div className="flex items-center gap-2">
                   <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx" />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-shrink-0 p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-full transition-colors" disabled={sending || (windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen)}>
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-shrink-0 p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-full transition-colors" disabled={sending || (['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen)}>
                     <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
-                  <button type="button" onClick={isRecording ? handleStopRecording : handleStartRecording} className={`flex-shrink-0 p-2.5 rounded-full transition-colors ${isRecording ? 'bg-accent-error text-white animate-pulse' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`} disabled={(sending && !isRecording) || (windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen)}>
+                  <button type="button" onClick={isRecording ? handleStopRecording : handleStartRecording} className={`flex-shrink-0 p-2.5 rounded-full transition-colors ${isRecording ? 'bg-accent-error text-white animate-pulse' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`} disabled={(sending && !isRecording) || (['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen)}>
                     <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
                   </button>
                   <input 
@@ -1404,14 +1404,14 @@ export default function ChatPage() {
                     onChange={(e) => setNewMessage(e.target.value)} 
                     onFocus={handleInputFocus}
                     onBlur={handleInputBlur}
-                    placeholder={windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen ? "Ventana cerrada - usa plantilla" : "Escribe un mensaje..."} 
+                    placeholder={['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen ? "Ventana cerrada - usa plantilla" : "Escribe un mensaje..."} 
                     className="flex-1 min-w-0 px-4 py-2.5 bg-dark-surface border border-dark-border rounded-full text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue/50 text-sm sm:text-base" 
-                    disabled={sending || (windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen)}
+                    disabled={sending || (['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen)}
                     enterKeyHint="send"
                     autoComplete="off"
                     autoCorrect="on"
                   />
-                  {windowStatus?.provider === 'META_CLOUD' && !windowStatus?.windowOpen ? (
+                  {['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen ? (
                     <button 
                       type="button" 
                       onClick={() => setShowTemplateModal(true)}
@@ -1557,7 +1557,7 @@ export default function ChatPage() {
                 <p className="text-xs text-gray-500 mt-1">Incluye el codigo de pais sin + ni espacios</p>
               </div>
 
-              {instanceProvider === 'META_CLOUD' && newChatTemplates.length > 0 && (
+              {['META_CLOUD', 'META_COEXIST'].includes(instanceProvider || '') && newChatTemplates.length > 0 && (
                 <div>
                   <label className="flex items-center gap-2 text-sm text-gray-400 mb-2">
                     <input
@@ -1570,7 +1570,7 @@ export default function ChatPage() {
                       }}
                       className="w-4 h-4 rounded bg-dark-surface border-dark-border text-neon-blue focus:ring-neon-blue"
                     />
-                    Usar plantilla (Meta Cloud)
+                    Usar plantilla (Meta)
                   </label>
                   {newChatUseTemplate && (
                     <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -1660,9 +1660,9 @@ export default function ChatPage() {
                 )}
               </button>
 
-              {instanceProvider === 'META_CLOUD' && (
+              {['META_CLOUD', 'META_COEXIST'].includes(instanceProvider || '') && (
                 <p className="text-xs text-gray-500 text-center">
-                  Para numeros nuevos en Meta Cloud, usa una plantilla aprobada
+                  Para numeros nuevos, usa una plantilla aprobada
                 </p>
               )}
             </div>
