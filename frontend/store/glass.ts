@@ -12,10 +12,12 @@ interface BrandingSettings {
 
 interface GlassState {
   glassMode: boolean;
+  enableMetaCoexist: boolean;
   brandingEnabled: boolean;
   loading: boolean;
   branding: BrandingSettings;
   setGlassMode: (mode: boolean) => void;
+  setEnableMetaCoexist: (enabled: boolean) => void;
   setBrandingEnabled: (enabled: boolean) => void;
   setBranding: (branding: Partial<BrandingSettings>) => void;
   fetchSettings: () => Promise<void>;
@@ -33,10 +35,12 @@ const defaultBranding: BrandingSettings = {
 
 export const useGlassStore = create<GlassState>((set) => ({
   glassMode: false,
+  enableMetaCoexist: false,
   brandingEnabled: true,
   loading: true,
   branding: defaultBranding,
   setGlassMode: (mode) => set({ glassMode: mode }),
+  setEnableMetaCoexist: (enabled) => set({ enableMetaCoexist: enabled }),
   setBrandingEnabled: (enabled) => set({ brandingEnabled: enabled }),
   setBranding: (branding) => set((state) => ({ 
     branding: { ...state.branding, ...branding } 
@@ -49,6 +53,7 @@ export const useGlassStore = create<GlassState>((set) => ({
         const brandingEnabled = data.brandingEnabled ?? true;
         set({ 
           glassMode: data.glassMode ?? false,
+          enableMetaCoexist: data.enableMetaCoexist ?? false,
           brandingEnabled,
           branding: brandingEnabled ? {
             appName: data.appName ?? 'EfficoreChat',

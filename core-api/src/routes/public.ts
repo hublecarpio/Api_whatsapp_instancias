@@ -143,6 +143,7 @@ router.get('/ui-settings', async (req: Request, res: Response) => {
       where: { id: 'default' },
       select: { 
         glassMode: true,
+        enableMetaCoexist: true,
         appName: true,
         appTagline: true,
         logoUrl: true,
@@ -155,6 +156,7 @@ router.get('/ui-settings', async (req: Request, res: Response) => {
     
     res.json({
       glassMode: settings?.glassMode ?? false,
+      enableMetaCoexist: settings?.enableMetaCoexist ?? false,
       appName: settings?.appName ?? 'Effi',
       appTagline: settings?.appTagline ?? 'WhatsApp AI Platform',
       logoUrl: settings?.logoUrl ?? null,
@@ -167,6 +169,7 @@ router.get('/ui-settings', async (req: Request, res: Response) => {
     console.error('Error fetching UI settings:', error);
     res.json({ 
       glassMode: false,
+      enableMetaCoexist: false,
       appName: 'Effi',
       appTagline: 'WhatsApp AI Platform',
       logoUrl: null,

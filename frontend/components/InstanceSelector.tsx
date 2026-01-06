@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useInstanceStore, WhatsAppInstance, InstanceLimits } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
+import { useGlassStore } from '@/store/glass';
 import { waApi } from '@/lib/api';
 import MetaEmbeddedSignup from './MetaEmbeddedSignup';
 
@@ -403,52 +404,10 @@ export default function InstanceSelector({
               />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">
-                Tipo de conexion
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSelectedProvider('BAILEYS')}
-                  className={`p-4 rounded-xl border-2 transition-all text-center ${
-                    selectedProvider === 'BAILEYS'
-                      ? 'border-neon-blue bg-neon-blue/10'
-                      : 'border-dark-border hover:border-gray-600'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">📱</div>
-                  <div className="font-medium text-white text-sm">WhatsApp QR</div>
-                  <div className="text-xs text-gray-400">Escanea con QR</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedProvider('META_CLOUD')}
-                  className={`p-4 rounded-xl border-2 transition-all text-center ${
-                    selectedProvider === 'META_CLOUD'
-                      ? 'border-neon-blue bg-neon-blue/10'
-                      : 'border-dark-border hover:border-gray-600'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">☁️</div>
-                  <div className="font-medium text-white text-sm">Meta Cloud</div>
-                  <div className="text-xs text-gray-400">Config Manual</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedProvider('META_COEXIST')}
-                  className={`p-4 rounded-xl border-2 transition-all text-center ${
-                    selectedProvider === 'META_COEXIST'
-                      ? 'border-purple-500 bg-purple-500/10'
-                      : 'border-dark-border hover:border-gray-600'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">🔗</div>
-                  <div className="font-medium text-white text-sm">Coexistence</div>
-                  <div className="text-xs text-gray-400">Via Facebook OAuth</div>
-                </button>
-              </div>
-            </div>
+            <ProviderSelector 
+              selectedProvider={selectedProvider} 
+              setSelectedProvider={setSelectedProvider} 
+            />
             
             {selectedProvider === 'BAILEYS' && (
               <div>
@@ -742,6 +701,67 @@ export default function InstanceSelector({
         </div>,
         document.body
       )}
+    </div>
+  );
+}
+
+function ProviderSelector({ 
+  selectedProvider, 
+  setSelectedProvider 
+}: { 
+  selectedProvider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
+  setSelectedProvider: (provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST') => void;
+}) {
+  const { enableMetaCoexist } = useGlassStore();
+  
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-400 mb-2">
+        Tipo de conexion
+      </label>
+      <div className={`grid gap-3 ${enableMetaCoexist ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <button
+          type="button"
+          onClick={() => setSelectedProvider('BAILEYS')}
+          className={`p-4 rounded-xl border-2 transition-all text-center ${
+            selectedProvider === 'BAILEYS'
+              ? 'border-neon-blue bg-neon-blue/10'
+              : 'border-dark-border hover:border-gray-600'
+          }`}
+        >
+          <div className="text-2xl mb-1">📱</div>
+          <div className="font-medium text-white text-sm">WhatsApp QR</div>
+          <div className="text-xs text-gray-400">Escanea con QR</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedProvider('META_CLOUD')}
+          className={`p-4 rounded-xl border-2 transition-all text-center ${
+            selectedProvider === 'META_CLOUD'
+              ? 'border-neon-blue bg-neon-blue/10'
+              : 'border-dark-border hover:border-gray-600'
+          }`}
+        >
+          <div className="text-2xl mb-1">☁️</div>
+          <div className="font-medium text-white text-sm">Meta Cloud</div>
+          <div className="text-xs text-gray-400">Config Manual</div>
+        </button>
+        {enableMetaCoexist && (
+          <button
+            type="button"
+            onClick={() => setSelectedProvider('META_COEXIST')}
+            className={`p-4 rounded-xl border-2 transition-all text-center ${
+              selectedProvider === 'META_COEXIST'
+                ? 'border-purple-500 bg-purple-500/10'
+                : 'border-dark-border hover:border-gray-600'
+            }`}
+          >
+            <div className="text-2xl mb-1">🔗</div>
+            <div className="font-medium text-white text-sm">Coexistence</div>
+            <div className="text-xs text-gray-400">Via Facebook OAuth</div>
+          </button>
+        )}
+      </div>
     </div>
   );
 }

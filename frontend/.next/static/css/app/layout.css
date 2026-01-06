@@ -2851,6 +2851,10 @@ body.glass-mode .mobile-drawer {
   --tw-text-opacity: 1;
   color: rgb(234 179 8 / var(--tw-text-opacity, 1));
 }
+.text-purple-500 {
+  --tw-text-opacity: 1;
+  color: rgb(168 85 247 / var(--tw-text-opacity, 1));
+}
 .underline {
   text-decoration-line: underline;
 }
@@ -3946,6 +3950,11 @@ html[data-mobile="true"] .glass-sidebar {
 
 .focus\:ring-neon-blue\/50:focus {
   --tw-ring-color: rgb(0 212 255 / 0.5);
+}
+
+.focus\:ring-purple-500:focus {
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(168 85 247 / var(--tw-ring-opacity, 1));
 }
 
 .focus\:ring-offset-0:focus {

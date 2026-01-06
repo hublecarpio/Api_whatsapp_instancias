@@ -1761,6 +1761,7 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
       maxTokensPerRequest,
       enableGPT5Features,
       glassMode,
+      enableMetaCoexist,
       appName,
       appTagline,
       logoUrl,
@@ -1853,6 +1854,13 @@ router.patch('/platform-settings', superAdminMiddleware, async (req: SuperAdminR
         return res.status(400).json({ error: 'glassMode must be a boolean' });
       }
       updates.glassMode = glassMode;
+    }
+    
+    if (enableMetaCoexist !== undefined) {
+      if (typeof enableMetaCoexist !== 'boolean') {
+        return res.status(400).json({ error: 'enableMetaCoexist must be a boolean' });
+      }
+      updates.enableMetaCoexist = enableMetaCoexist;
     }
     
     if (appName !== undefined) {

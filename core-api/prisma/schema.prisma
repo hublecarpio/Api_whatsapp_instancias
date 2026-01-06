@@ -1119,6 +1119,7 @@ model PlatformSettings {
   maxTokensPerRequest   Int             @default(4096)
   enableGPT5Features    Boolean         @default(true)
   glassMode             Boolean         @default(false)
+  enableMetaCoexist     Boolean         @default(false)
   brandingEnabled       Boolean         @default(true)
   appName               String          @default("EfficoreChat")
   appTagline            String          @default("WhatsApp Business Platform")

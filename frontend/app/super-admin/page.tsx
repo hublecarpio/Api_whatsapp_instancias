@@ -1207,6 +1207,29 @@ function SystemTab({ token }: { token: string }) {
             </div>
 
             <div className="pt-4 border-t border-dark-border">
+              <h4 className="text-sm font-medium text-gray-400 mb-3">Proveedores de WhatsApp</h4>
+              <div className="flex items-center gap-4 mb-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={aiSettings.enableMetaCoexist || false}
+                    onChange={(e) => handleAiSettingChange('enableMetaCoexist', e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-600 bg-dark-card text-purple-500 focus:ring-purple-500"
+                    disabled={saving}
+                  />
+                  <div>
+                    <span className="text-gray-300">Meta Coexistence (Embedded Signup)</span>
+                    <p className="text-xs text-gray-500">Permite conectar numeros de WhatsApp Business App via Facebook OAuth. Requiere aprobacion de Meta.</p>
+                  </div>
+                </label>
+              </div>
+              <div className="text-xs text-gray-500 bg-dark-hover/50 rounded-lg p-3">
+                <strong>Nota:</strong> Esta opcion requiere que tu App de Meta tenga habilitado el flujo de "WhatsApp Business App onboarding" 
+                en la configuracion de Embedded Signup. Contacta a Meta para solicitar esta funcionalidad.
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-dark-border">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h4 className="text-sm font-medium text-gray-400">Branding / White-Label</h4>
