@@ -491,15 +491,15 @@ router.get('/embedded-signup/config', authMiddleware, async (req: AuthRequest, r
 router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
-    const { businessId, code, wabaId, phoneNumberId, provider = 'META_CLOUD' } = req.body;
+    let { businessId, code, wabaId, phoneNumberId, provider = 'META_CLOUD' } = req.body;
     
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    if (!businessId || !code || !wabaId || !phoneNumberId) {
+    if (!businessId || !code) {
       return res.status(400).json({ 
-        error: 'Missing required parameters: businessId, code, wabaId, phoneNumberId' 
+        error: 'Missing required parameters: businessId, code' 
       });
     }
     
@@ -558,6 +558,51 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
     if (!accessToken) {
       console.error('[EMBEDDED_SIGNUP] Token exchange failed:', tokenResponse.data);
       return res.status(400).json({ error: 'Failed to exchange code for access token' });
+    }
+    
+    // If wabaId or phoneNumberId not provided, fetch from Graph API
+    if (!wabaId || !phoneNumberId) {
+      console.log('[EMBEDDED_SIGNUP] wabaId/phoneNumberId not provided, fetching from Graph API...');
+      try {
+        // Get shared WABAs for this token
+        const sharedWabasUrl = `https://graph.facebook.com/v21.0/debug_token?` +
+          `input_token=${accessToken}&access_token=${appId}|${appSecret}`;
+        
+        const debugResponse = await axios.get(sharedWabasUrl);
+        console.log('[EMBEDDED_SIGNUP] Token debug info:', JSON.stringify(debugResponse.data, null, 2));
+        
+        const granularScopes = debugResponse.data?.data?.granular_scopes || [];
+        const wabaScope = granularScopes.find((s: any) => s.scope === 'whatsapp_business_management');
+        const targetWabas = wabaScope?.target_ids || [];
+        
+        if (targetWabas.length > 0 && !wabaId) {
+          wabaId = targetWabas[0];
+          console.log('[EMBEDDED_SIGNUP] Found WABA from token:', wabaId);
+        }
+        
+        // If we have wabaId but no phoneNumberId, get phone numbers from WABA
+        if (wabaId && !phoneNumberId) {
+          const phoneNumbersUrl = `https://graph.facebook.com/v21.0/${wabaId}/phone_numbers?` +
+            `access_token=${accessToken}`;
+          
+          const phoneNumbersResponse = await axios.get(phoneNumbersUrl);
+          const phoneNumbers = phoneNumbersResponse.data?.data || [];
+          
+          if (phoneNumbers.length > 0) {
+            phoneNumberId = phoneNumbers[0].id;
+            console.log('[EMBEDDED_SIGNUP] Found phone number from WABA:', phoneNumberId);
+          }
+        }
+      } catch (fetchError: any) {
+        console.error('[EMBEDDED_SIGNUP] Error fetching WABA/phone from API:', fetchError.response?.data || fetchError.message);
+      }
+    }
+    
+    // Final validation
+    if (!wabaId || !phoneNumberId) {
+      return res.status(400).json({ 
+        error: 'No se pudo obtener la informacion de WhatsApp Business. Intenta de nuevo o verifica que completaste todo el flujo de Meta.' 
+      });
     }
     
     // Get phone number details from Meta API

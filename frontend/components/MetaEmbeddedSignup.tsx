@@ -18,6 +18,12 @@ interface MetaEmbeddedSignupProps {
   onCancel: () => void;
 }
 
+interface SessionInfoData {
+  waba_id?: string;
+  phone_number_id?: string;
+  business_id?: string;
+}
+
 export default function MetaEmbeddedSignup({
   businessId,
   provider = 'META_CLOUD',
@@ -33,6 +39,40 @@ export default function MetaEmbeddedSignup({
   const [error, setError] = useState('');
   const connectingRef = useRef(false);
   const sdkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionInfoRef = useRef<SessionInfoData>({});
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') {
+        return;
+      }
+      
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        console.log('[MetaEmbeddedSignup] Message from Meta:', data);
+        
+        if (data.type === 'WA_EMBEDDED_SIGNUP') {
+          if (data.event === 'FINISH') {
+            const sessionInfo = data.data;
+            console.log('[MetaEmbeddedSignup] Session info received:', sessionInfo);
+            sessionInfoRef.current = {
+              waba_id: sessionInfo.waba_id,
+              phone_number_id: sessionInfo.phone_number_id,
+              business_id: sessionInfo.current_business_id
+            };
+          } else if (data.event === 'CANCEL') {
+            console.log('[MetaEmbeddedSignup] User cancelled embedded signup');
+          } else if (data.event === 'ERROR') {
+            console.error('[MetaEmbeddedSignup] Embedded signup error:', data.data);
+          }
+        }
+      } catch (e) {
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -158,17 +198,21 @@ export default function MetaEmbeddedSignup({
           
           if (response.authResponse) {
             const { code } = response.authResponse;
-            const wabaId = response.authResponse.waba_id;
-            const phoneNumberId = response.authResponse.phone_number_id;
+            const wabaIdFromAuth = response.authResponse.waba_id;
+            const phoneNumberIdFromAuth = response.authResponse.phone_number_id;
+            
+            const wabaId = wabaIdFromAuth || sessionInfoRef.current.waba_id;
+            const phoneNumberId = phoneNumberIdFromAuth || sessionInfoRef.current.phone_number_id;
 
             console.log('[MetaEmbeddedSignup] Auth response data:', { 
               hasCode: !!code, 
               wabaId, 
-              phoneNumberId 
+              phoneNumberId,
+              fromSessionInfo: !wabaIdFromAuth && !!sessionInfoRef.current.waba_id
             });
 
-            if (!code || !wabaId || !phoneNumberId) {
-              setError('No se recibieron todos los datos necesarios de Meta. Asegurate de completar todo el flujo.');
+            if (!code) {
+              setError('No se recibio el codigo de autorizacion de Meta.');
               connectingRef.current = false;
               setConnecting(false);
               return;
@@ -180,8 +224,8 @@ export default function MetaEmbeddedSignup({
                 const result = await waApi.completeEmbeddedSignup({
                   businessId,
                   code,
-                  wabaId,
-                  phoneNumberId,
+                  wabaId: wabaId || undefined,
+                  phoneNumberId: phoneNumberId || undefined,
                   provider
                 });
 
@@ -200,6 +244,7 @@ export default function MetaEmbeddedSignup({
               } finally {
                 connectingRef.current = false;
                 setConnecting(false);
+                sessionInfoRef.current = {};
               }
             })();
           } else {
