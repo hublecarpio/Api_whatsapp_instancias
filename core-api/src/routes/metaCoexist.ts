@@ -1157,6 +1157,83 @@ router.post('/webhook-test/:instanceId', authMiddleware, async (req: AuthRequest
   }
 });
 
+// Re-register webhook for an existing instance (for instances that were created before the fix)
+router.post('/webhook-register/:instanceId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const userId = req.userId;
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { 
+        id: instanceId, 
+        business: { userId } 
+      },
+      include: { 
+        metaCoexistCredential: true
+      }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    if (!instance.metaCoexistCredential) {
+      return res.status(400).json({ error: 'Instance does not have Meta Coexist credentials' });
+    }
+    
+    const credential = instance.metaCoexistCredential;
+    
+    if (!credential.wabaId) {
+      return res.status(400).json({ 
+        error: 'WABA ID is missing',
+        suggestion: 'Reconnect the instance through the Meta Coexistence flow'
+      });
+    }
+    
+    const token = credential.systemAccessToken || credential.userAccessToken;
+    if (!token) {
+      return res.status(400).json({ error: 'No access token available' });
+    }
+    
+    const config = MetaCoexistService.getMetaCoexistConfig();
+    const service = new MetaCoexistService(config);
+    
+    const apiUrl = process.env.API_URL || 'https://api.efficore.es';
+    const webhookUrl = `${apiUrl}/webhook/meta`;
+    
+    try {
+      const registered = await service.registerWebhook(token, credential.wabaId, webhookUrl);
+      
+      res.json({
+        success: registered,
+        wabaId: credential.wabaId,
+        phoneNumberId: credential.phoneNumberId,
+        webhookUrl,
+        message: registered 
+          ? 'Webhook registered successfully! Meta will now send events to your endpoint.'
+          : 'Registration request sent but success status unclear'
+      });
+    } catch (regError: any) {
+      console.error('[META_COEXIST] Webhook registration error:', regError.response?.data || regError.message);
+      
+      res.status(400).json({
+        success: false,
+        error: 'Failed to register webhook with Meta',
+        details: regError.response?.data || regError.message,
+        troubleshooting: [
+          'Check that the access token is still valid',
+          'Verify the WABA ID is correct',
+          'Ensure the webhook URL is publicly accessible',
+          'Try reconnecting the instance through OAuth'
+        ]
+      });
+    }
+  } catch (error: any) {
+    console.error('[WEBHOOK] Register error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Verify Meta can reach our webhook (manual trigger)
 router.get('/webhook-verify', async (req: Request, res: Response) => {
   const mode = req.query['hub.mode'];

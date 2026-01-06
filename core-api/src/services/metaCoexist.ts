@@ -407,6 +407,22 @@ export async function activateCoexistence(instanceId: string): Promise<boolean> 
   const enabled = await service.enableCoexistence(token, credential.phoneNumberId);
 
   if (enabled) {
+    // CRITICAL: Register the app to receive webhooks for this WABA
+    const apiUrl = process.env.API_URL || 'https://api.efficore.es';
+    const webhookUrl = `${apiUrl}/webhook/meta`;
+    
+    try {
+      const webhookRegistered = await service.registerWebhook(token, credential.wabaId, webhookUrl);
+      console.log(`[META_COEXIST] Webhook registration for WABA ${credential.wabaId}: ${webhookRegistered ? 'SUCCESS' : 'FAILED'}`);
+      
+      if (!webhookRegistered) {
+        console.warn('[META_COEXIST] Webhook registration failed, but coexistence is enabled. Webhooks may not work.');
+      }
+    } catch (webhookError: any) {
+      console.error('[META_COEXIST] Webhook registration error:', webhookError.response?.data || webhookError.message);
+      // Don't fail activation if webhook registration fails - user can manually configure
+    }
+
     await prisma.$transaction([
       prisma.metaCoexistCredential.update({
         where: { instanceId },
