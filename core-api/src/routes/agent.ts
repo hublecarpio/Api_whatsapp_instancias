@@ -732,8 +732,22 @@ async function processWithAgentV2(
   
   const aiResponse = result.response || '';
   
-  // Send response to WhatsApp
-  const instance = business.instances?.[0];
+  // Send response to WhatsApp - find the correct instance based on instanceBackendId
+  let instance = business.instances?.find((i: any) => i.instanceBackendId === instanceBackendId);
+  if (!instance && instanceBackendId) {
+    // Try to find by partial match (biz_XXXXXXXX format)
+    instance = business.instances?.find((i: any) => 
+      instanceBackendId.includes(i.id.substring(0, 8)) || 
+      i.instanceBackendId?.includes(instanceBackendId.substring(4))
+    );
+  }
+  if (!instance) {
+    // Fallback to first instance only if no specific instanceBackendId was provided
+    instance = business.instances?.[0];
+    if (instanceBackendId) {
+      console.warn(`[Agent V2] Could not find instance with backendId ${instanceBackendId}, falling back to first instance (${instance?.provider})`);
+    }
+  }
   const backendId = instanceBackendId || instance?.instanceBackendId;
   
   if (aiResponse && instance) {
@@ -920,23 +934,53 @@ async function processWithAgent(
   }
   
   if (business.agentVersion === 'v2') {
-    let instance = business.instances?.[0];
-    let backendId = instanceBackendIdParam || instance?.instanceBackendId;
+    // Find the correct instance - prioritize instanceId if provided
+    let instance: any = null;
+    let backendId = instanceBackendIdParam;
+    
+    // First, try to find by instanceId (most accurate)
+    if (instanceId) {
+      instance = business.instances?.find((i: any) => i.id === instanceId);
+      if (instance) {
+        backendId = backendId || instance.instanceBackendId;
+        console.log(`[Agent V2] Found instance by ID: ${instanceId} (provider: ${instance.provider})`);
+      }
+    }
+    
+    // Second, try to find by instanceBackendId
+    if (!instance && instanceBackendIdParam) {
+      instance = business.instances?.find((i: any) => i.instanceBackendId === instanceBackendIdParam);
+      if (instance) {
+        console.log(`[Agent V2] Found instance by backendId: ${instanceBackendIdParam} (provider: ${instance.provider})`);
+      }
+    }
+    
+    // Third, try to find by provider if specified
+    if (!instance && provider) {
+      instance = business.instances?.find((i: any) => i.provider === provider);
+      if (instance) {
+        backendId = backendId || instance.instanceBackendId;
+        console.log(`[Agent V2] Found instance by provider: ${provider}`);
+      }
+    }
+    
+    // Fallback to first instance only if nothing else matched
+    if (!instance) {
+      instance = business.instances?.[0];
+      backendId = backendId || instance?.instanceBackendId;
+      if (instanceId || instanceBackendIdParam || provider) {
+        console.warn(`[Agent V2] Could not find specific instance, falling back to first (${instance?.provider})`);
+      }
+    }
     
     // Fallback: generate backendId dynamically if still null
     if (!backendId && instanceId) {
-      const foundInstance = business.instances?.find((i: any) => i.id === instanceId);
-      if (foundInstance) {
-        instance = foundInstance;
-        backendId = foundInstance.instanceBackendId;
-      } else {
-        const dbInstance = await prisma.whatsAppInstance.findUnique({
-          where: { id: instanceId }
-        });
-        if (dbInstance && dbInstance.instanceBackendId) {
-          backendId = dbInstance.instanceBackendId;
-          console.log(`[Agent V2] Instance loaded from DB: ${instanceId} -> backendId: ${backendId}`);
-        }
+      const dbInstance = await prisma.whatsAppInstance.findUnique({
+        where: { id: instanceId }
+      });
+      if (dbInstance && dbInstance.instanceBackendId) {
+        backendId = dbInstance.instanceBackendId;
+        console.log(`[Agent V2] Instance loaded from DB: ${instanceId} -> backendId: ${backendId}`);
       }
     }
     
