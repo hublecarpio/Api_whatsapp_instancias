@@ -1,0 +1,100 @@
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": true,
+  "type": "text",
+  "text": "Oe"
+}
+[WEBHOOK] Instance for business 05c6a9cb-5454-47ea-8750-122e84880400: id=496f4020-5481-45a6-8277-8cd327222789, backendId=biz_05c6a9cb, provider=BAILEYS
+[WEBHOOK] Resolved LID 51941334253@s.whatsapp.net -> 51941334253, updated 1 pending messages
+[ExpiredBuffer] Checking for expired buffers...
+Webhook received for business 05c6a9cb-5454-47ea-8750-122e84880400: message.status
+Webhook payload: {
+  "messageId": "A5CB481D992BF49442EA9F33DB486EEF",
+  "remoteJid": "68737210310773@lid",
+  "status": "delivered",
+  "statusCode": 3
+}
+Webhook received for business 05c6a9cb-5454-47ea-8750-122e84880400: message.received
+Webhook payload: {
+  "from": "68737210310773@lid",
+  "sender": "51941334253@s.whatsapp.net",
+  "pushName": "Riskyboy",
+  "phoneNumber": "51941334253",
+  "messageId": "A569F32504C062924A22FBAB276C3D4C",
+  "timestamp": 1767681516,
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": true,
+  "type": "text",
+  "text": "No me jodas"
+}
+[WEBHOOK] Instance for business 05c6a9cb-5454-47ea-8750-122e84880400: id=496f4020-5481-45a6-8277-8cd327222789, backendId=biz_05c6a9cb, provider=BAILEYS
+[WEBHOOK] Resolved LID 51941334253@s.whatsapp.net -> 51941334253, updated 1 pending messages
+Webhook received for business 05c6a9cb-5454-47ea-8750-122e84880400: message.status
+Webhook payload: {
+  "messageId": "A569F32504C062924A22FBAB276C3D4C",
+  "remoteJid": "68737210310773@lid",
+  "status": "delivered",
+  "statusCode": 3
+}
+[ExpiredBuffer] Checking for expired buffers...
+Webhook received for business 05c6a9cb-5454-47ea-8750-122e84880400: message.received
+Webhook payload: {
+  "from": "68737210310773@lid",
+  "sender": "51941334253@s.whatsapp.net",
+  "pushName": "Riskyboy",
+  "phoneNumber": "51941334253",
+  "messageId": "A5D87626C801334B723D5DBB306087CC",
+  "timestamp": 1767681522,
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": true,
+  "type": "text",
+  "text": "No me digas que el que durmió en el sillon"
+}
+[WEBHOOK] Instance for business 05c6a9cb-5454-47ea-8750-122e84880400: id=496f4020-5481-45a6-8277-8cd327222789, backendId=biz_05c6a9cb, provider=BAILEYS
+[WEBHOOK] Resolved LID 51941334253@s.whatsapp.net -> 51941334253, updated 1 pending messages
+Webhook received for business 05c6a9cb-5454-47ea-8750-122e84880400: message.status
+Webhook payload: {
+  "messageId": "A5D87626C801334B723D5DBB306087CC",
+  "remoteJid": "68737210310773@lid",
+  "status": "delivered",
+  "statusCode": 3
+}
+Webhook received for business meta: undefined
+Webhook payload: undefined
+Business meta not found
+Webhook received for business meta: undefined
+Webhook payload: undefined
+Business meta not found
+Webhook received for business 05c6a9cb-5454-47ea-8750-122e84880400: message.received
+Webhook payload: {
+  "from": "68737210310773@lid",
+  "sender": "51941334253@s.whatsapp.net",
+  "pushName": "Riskyboy",
+  "phoneNumber": "51941334253",
+  "messageId": "A5B1F776477E1D7728C32074994AD321",
+  "timestamp": 1767681524,
+  "isGroup": false,
+  "isLid": true,
+  "isFromMe": true,
+  "type": "text",
+  "text": "Es chang"
+}
+[WEBHOOK] Instance for business 05c6a9cb-5454-47ea-8750-122e84880400: id=496f4020-5481-45a6-8277-8cd327222789, backendId=biz_05c6a9cb, provider=BAILEYS
+[WEBHOOK] Resolved LID 51941334253@s.whatsapp.net -> 51941334253, updated 1 pending messages
+Webhook received for business meta: undefined
+Webhook payload: undefined
+Business meta not found
+[ExpiredBuffer] Checking for expired buffers...
+Webhook received for business meta: undefined
+Webhook payload: undefined
+Business meta not found
+Webhook received for business 05c6a9cb-5454-47ea-8750-122e84880400: message.status
+Webhook payload: {
+  "messageId": "A5B1F776477E1D7728C32074994AD321",
+  "remoteJid": "68737210310773@lid",
+  "status": "delivered",
+  "statusCode": 3
+}
+[ExpiredBuffer] Checking for expired buffers...
