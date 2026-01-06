@@ -1,0 +1,20 @@
+ => ERROR [builder 9/9] RUN npm run build                                                                                                                             13.6s 
+------                                                                                                                                                                      
+ > [builder 9/9] RUN npm run build:                                                                                                                                         
+0.533                                                                                                                                                                       
+0.533 > core-api@1.0.0 build                                                                                                                                                
+0.533 > tsc                                                                                                                                                                 
+0.533                                                                                                                                                                       
+13.52 src/services/logger.ts(1,18): error TS2307: Cannot find module 'pino' or its corresponding type declarations.                                                         
+13.52 src/services/logger.ts(9,13): error TS7006: Parameter 'label' implicitly has an 'any' type.                                                                           
+------                                                                                                                                                                      
+Dockerfile:15
+--------------------
+  13 |     
+  14 |     RUN npx prisma generate
+  15 | >>> RUN npm run build
+  16 |     
+  17 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
+The push refers to repository [docker.io/iamhuble/whatsapp-saas-frontend]

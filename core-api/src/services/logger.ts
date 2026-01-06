@@ -6,7 +6,7 @@ const logLevel = process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug');
 export const logger = pino({
   level: logLevel,
   formatters: {
-    level: (label) => ({ level: label }),
+    level: (label: string) => ({ level: label }),
     bindings: () => ({})
   },
   timestamp: pino.stdTimeFunctions.isoTime,
