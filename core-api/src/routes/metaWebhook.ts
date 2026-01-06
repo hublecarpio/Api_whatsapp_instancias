@@ -45,7 +45,8 @@ async function findInstanceByPhoneNumberId(phoneNumberId: string) {
       instance: metaCoexistCredential.instance,
       accessToken: metaCoexistCredential.systemAccessToken || metaCoexistCredential.userAccessToken,
       phoneNumberId: metaCoexistCredential.phoneNumberId,
-      businessId: metaCoexistCredential.metaBusinessId,
+      businessId: metaCoexistCredential.wabaId,
+      platformBusinessId: metaCoexistCredential.instance.businessId,
       providerType: 'META_COEXIST' as MetaProviderType
     };
   }
@@ -174,7 +175,17 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const payload: MetaWebhookPayload = req.body;
     
-    console.log('[META WEBHOOK] Centralized event received:', { object: payload.object });
+    console.log('[META WEBHOOK] Centralized event received:', JSON.stringify({
+      object: payload.object,
+      entryCount: payload.entry?.length,
+      firstEntryId: payload.entry?.[0]?.id,
+      changes: payload.entry?.[0]?.changes?.map(c => ({
+        field: c.field,
+        phoneNumberId: c.value?.metadata?.phone_number_id,
+        messageCount: c.value?.messages?.length || 0,
+        statusCount: c.value?.statuses?.length || 0
+      }))
+    }, null, 2));
     
     res.status(200).send('EVENT_RECEIVED');
     
