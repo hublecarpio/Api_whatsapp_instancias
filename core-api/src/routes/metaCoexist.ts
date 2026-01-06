@@ -919,4 +919,264 @@ router.get('/webhook-lookup/:phoneNumberId', authMiddleware, async (req: AuthReq
   }
 });
 
+// ============================================
+// WEBHOOK AUTO-CONFIGURATION ENDPOINTS
+// ============================================
+
+const META_API_VERSION = 'v21.0';
+
+// Check current webhook subscriptions for the Meta App
+router.get('/webhook-subscriptions', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    
+    if (!appId || !appSecret) {
+      return res.status(500).json({ 
+        error: 'META_APP_ID or META_APP_SECRET not configured',
+        configured: false
+      });
+    }
+    
+    // Get app access token
+    const appAccessToken = `${appId}|${appSecret}`;
+    
+    // Fetch current subscriptions
+    const subscriptionsUrl = `https://graph.facebook.com/${META_API_VERSION}/${appId}/subscriptions`;
+    const response = await axios.get(subscriptionsUrl, {
+      params: { access_token: appAccessToken }
+    });
+    
+    const wabaSubscription = response.data.data?.find(
+      (sub: any) => sub.object === 'whatsapp_business_account'
+    );
+    
+    if (!wabaSubscription) {
+      return res.json({
+        subscribed: false,
+        message: 'No webhook subscription found for whatsapp_business_account',
+        allSubscriptions: response.data.data || []
+      });
+    }
+    
+    // Check if messages field is subscribed
+    const messagesField = wabaSubscription.fields?.find(
+      (f: any) => f.name === 'messages'
+    );
+    
+    res.json({
+      subscribed: true,
+      active: wabaSubscription.active,
+      callbackUrl: wabaSubscription.callback_url,
+      fields: wabaSubscription.fields || [],
+      hasMessagesField: !!messagesField,
+      recommendation: !messagesField 
+        ? 'The "messages" field is not subscribed. Use POST /webhook-subscribe to fix this.'
+        : 'Webhook is properly configured'
+    });
+  } catch (error: any) {
+    console.error('[WEBHOOK] Check subscriptions error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Failed to check webhook subscriptions',
+      details: error.response?.data || error.message
+    });
+  }
+});
+
+// Subscribe webhook fields programmatically
+router.post('/webhook-subscribe', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    const webhookVerifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || 'efficore_webhook_token_2024';
+    
+    if (!appId || !appSecret) {
+      return res.status(500).json({ 
+        error: 'META_APP_ID or META_APP_SECRET not configured'
+      });
+    }
+    
+    // Determine webhook URL
+    const apiUrl = process.env.API_URL || process.env.REPL_URL || 'https://api.efficore.es';
+    const callbackUrl = `${apiUrl}/webhook/meta`;
+    
+    const appAccessToken = `${appId}|${appSecret}`;
+    
+    // Subscribe to webhook
+    const subscribeUrl = `https://graph.facebook.com/${META_API_VERSION}/${appId}/subscriptions`;
+    
+    const subscribeData = {
+      object: 'whatsapp_business_account',
+      callback_url: callbackUrl,
+      verify_token: webhookVerifyToken,
+      fields: 'messages,message_template_status_update,account_update,phone_number_quality_update',
+      access_token: appAccessToken
+    };
+    
+    console.log('[WEBHOOK] Subscribing to webhook:', {
+      callbackUrl,
+      fields: subscribeData.fields
+    });
+    
+    const response = await axios.post(subscribeUrl, null, { params: subscribeData });
+    
+    res.json({
+      success: response.data.success === true,
+      callbackUrl,
+      verifyToken: webhookVerifyToken,
+      subscribedFields: subscribeData.fields.split(','),
+      message: response.data.success 
+        ? 'Webhook subscribed successfully! Meta will now send events to your endpoint.'
+        : 'Subscription request sent but success status unclear',
+      rawResponse: response.data
+    });
+  } catch (error: any) {
+    console.error('[WEBHOOK] Subscribe error:', error.response?.data || error.message);
+    
+    // Check if it's a verification failure
+    const errorData = error.response?.data?.error;
+    if (errorData?.error_subcode === 2200 || errorData?.message?.includes('verify')) {
+      return res.status(400).json({
+        error: 'Webhook verification failed',
+        message: 'Meta could not verify your webhook endpoint. Make sure your server is running and publicly accessible.',
+        details: errorData,
+        troubleshooting: [
+          'Ensure https://api.efficore.es/webhook/meta is accessible',
+          'Check that META_WEBHOOK_VERIFY_TOKEN matches in your environment',
+          'Verify SSL certificate is valid',
+          'Check server logs for verification attempts'
+        ]
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to subscribe webhook',
+      details: error.response?.data || error.message
+    });
+  }
+});
+
+// Test webhook connectivity by sending a test event
+router.post('/webhook-test/:instanceId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const userId = req.userId;
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { 
+        id: instanceId, 
+        business: { userId } 
+      },
+      include: { 
+        business: true,
+        metaCoexistCredential: true
+      }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    if (!instance.metaCoexistCredential?.phoneNumberId) {
+      return res.status(400).json({ 
+        error: 'Instance does not have a phoneNumberId configured',
+        suggestion: 'Use POST /repair/:instanceId to set the phoneNumberId first'
+      });
+    }
+    
+    // Simulate a Meta webhook event to test the flow
+    const testPayload = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        id: instance.metaCoexistCredential.wabaId || 'test_waba_id',
+        changes: [{
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: {
+              display_phone_number: instance.metaCoexistCredential.displayPhone || instance.phoneNumber,
+              phone_number_id: instance.metaCoexistCredential.phoneNumberId
+            },
+            statuses: [{
+              id: `test_${Date.now()}`,
+              status: 'delivered',
+              timestamp: Math.floor(Date.now() / 1000).toString(),
+              recipient_id: '0000000000',
+              conversation: {
+                id: `test_conversation_${Date.now()}`,
+                origin: { type: 'service' }
+              }
+            }]
+          },
+          field: 'messages'
+        }]
+      }]
+    };
+    
+    // Send to our own webhook endpoint to test the full flow
+    const apiUrl = process.env.API_URL || process.env.REPL_URL || 'https://api.efficore.es';
+    const webhookUrl = `${apiUrl}/webhook/meta`;
+    
+    const startTime = Date.now();
+    
+    try {
+      const testResponse = await axios.post(webhookUrl, testPayload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+      
+      const duration = Date.now() - startTime;
+      
+      res.json({
+        success: true,
+        message: 'Test webhook event sent successfully',
+        phoneNumberId: instance.metaCoexistCredential.phoneNumberId,
+        webhookUrl,
+        responseTime: `${duration}ms`,
+        webhookResponse: testResponse.status
+      });
+    } catch (webhookError: any) {
+      const duration = Date.now() - startTime;
+      
+      res.json({
+        success: false,
+        message: 'Webhook endpoint is not responding correctly',
+        phoneNumberId: instance.metaCoexistCredential.phoneNumberId,
+        webhookUrl,
+        responseTime: `${duration}ms`,
+        error: webhookError.message,
+        troubleshooting: [
+          'Check if the webhook endpoint is publicly accessible',
+          'Verify SSL certificate is valid',
+          'Check server logs for errors'
+        ]
+      });
+    }
+  } catch (error: any) {
+    console.error('[WEBHOOK] Test error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verify Meta can reach our webhook (manual trigger)
+router.get('/webhook-verify', async (req: Request, res: Response) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  
+  const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN || 'efficore_webhook_token_2024';
+  
+  if (mode === 'subscribe' && token === expectedToken) {
+    console.log('[WEBHOOK] Verification successful');
+    return res.status(200).send(challenge);
+  }
+  
+  // Return status info when accessed without verification params
+  res.json({
+    status: 'Webhook verification endpoint active',
+    expectedToken: expectedToken.substring(0, 8) + '...',
+    mainWebhookUrl: '/webhook/meta',
+    usage: 'Meta will call this endpoint with hub.mode=subscribe, hub.verify_token, and hub.challenge'
+  });
+});
+
 export default router;
