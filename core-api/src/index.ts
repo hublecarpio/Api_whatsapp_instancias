@@ -37,6 +37,9 @@ import { startReminderWorker as startLegacyReminderWorker } from './services/rem
 
 dotenv.config();
 
+const BUILD_VERSION = 'v2.1.0-20260106';
+const BUILD_TIMESTAMP = '2026-01-06T06:45:00Z';
+
 let bullmqModules: {
   scheduleInactivityChecks: () => Promise<void>;
   closeQueues: () => Promise<void>;
@@ -67,8 +70,10 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.json({
     name: 'Core API - WhatsApp SaaS',
-    version: '1.0.0',
+    version: BUILD_VERSION,
+    buildTimestamp: BUILD_TIMESTAMP,
     status: 'running',
+    routeOrder: 'META_WEBHOOK_FIRST',
     endpoints: {
       auth: '/auth/*',
       business: '/business/*',
@@ -82,6 +87,17 @@ app.get('/', (req, res) => {
       metaWebhook: '/webhook/meta/*',
       tags: '/tags/*'
     }
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    version: BUILD_VERSION,
+    buildTimestamp: BUILD_TIMESTAMP,
+    routeOrder: 'META_WEBHOOK_FIRST',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -216,6 +232,11 @@ process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
 app.listen(Number(PORT), '0.0.0.0', () => {
-  console.log(`🚀 Core API running at http://0.0.0.0:${PORT}`);
+  console.log('================================================================================');
+  console.log(`🚀 Core API ${BUILD_VERSION} starting...`);
+  console.log(`   Build Timestamp: ${BUILD_TIMESTAMP}`);
+  console.log(`   Route Order: /webhook/meta BEFORE /webhook/:businessId ✓`);
+  console.log(`   Server: http://0.0.0.0:${PORT}`);
+  console.log('================================================================================');
   initializeWorkers();
 });
