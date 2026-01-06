@@ -41,6 +41,7 @@ async function validateApiKey(req: ApiKeyRequest, res: Response, next: NextFunct
       where: { apiKeyHash },
       include: {
         metaCredential: true,
+        metaCoexistCredential: true,
         business: {
           include: {
             user: {
@@ -87,7 +88,8 @@ async function validateApiKey(req: ApiKeyRequest, res: Response, next: NextFunct
           },
           take: 1,
           include: {
-            metaCredential: true
+            metaCredential: true,
+            metaCoexistCredential: true
           }
         },
         user: {
@@ -356,6 +358,110 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
       );
       
       await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API META a ${cleanTo}`, {
+        businessId: business.id,
+        details: { to: cleanTo, hasMedia: !!mediaUrl, messageId }
+      });
+      
+      res.json({
+        success: true,
+        messageId,
+        to: cleanTo
+      });
+    } else if (instance.provider === 'META_COEXIST') {
+      const coexistCred = instance.metaCoexistCredential;
+      
+      if (!coexistCred) {
+        return res.status(400).json({ error: 'Instancia META Coexist no configurada correctamente' });
+      }
+      
+      const accessToken = coexistCred.systemAccessToken || coexistCred.userAccessToken;
+      const phoneNumberId = coexistCred.phoneNumberId;
+      
+      if (!accessToken || !phoneNumberId) {
+        return res.status(400).json({ 
+          error: 'Credenciales META Coexist incompletas',
+          hint: 'Falta phoneNumberId - use el endpoint de reparación para configurarlo'
+        });
+      }
+      
+      let payload: any;
+      
+      if (mediaUrl) {
+        const type = mediaType || 'image';
+        payload = {
+          messaging_product: 'whatsapp',
+          to: cleanTo,
+          type,
+          [type]: {
+            link: mediaUrl,
+            caption: message || undefined
+          }
+        };
+      } else {
+        payload = {
+          messaging_product: 'whatsapp',
+          to: cleanTo,
+          type: 'text',
+          text: { body: message }
+        };
+      }
+      
+      const response = await axios.post(
+        `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      const messageId = response.data.messages?.[0]?.id;
+      
+      await prisma.messageLog.create({
+        data: {
+          businessId: business.id,
+          instanceId: instance.id,
+          sender: instance.phoneNumber || business.id,
+          recipient: cleanTo,
+          message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
+          direction: 'OUTGOING',
+          mediaUrl: mediaUrl || null,
+          providerMessageId: messageId,
+          metadata: { source: 'external_api', provider: 'META_COEXIST', mediaType }
+        }
+      });
+      
+      const now = new Date();
+      await prisma.contact.upsert({
+        where: {
+          businessId_phone: { businessId: business.id, phone: cleanTo }
+        },
+        create: {
+          businessId: business.id,
+          phone: cleanTo,
+          name: cleanTo,
+          firstMessageAt: now,
+          lastMessageAt: now,
+          messageCount: 1
+        },
+        update: {
+          lastMessageAt: now,
+          messageCount: { increment: 1 }
+        }
+      });
+      
+      await dispatchAgentMessage(
+        business.id,
+        cleanTo,
+        message || '',
+        mediaUrl ? [mediaUrl] : undefined,
+        ['external_api'],
+        instance.id
+      );
+      
+      await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API META Coexist a ${cleanTo}`, {
         businessId: business.id,
         details: { to: cleanTo, hasMedia: !!mediaUrl, messageId }
       });
