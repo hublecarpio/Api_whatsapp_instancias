@@ -218,7 +218,9 @@ export default function MetaEmbeddedSignup({
           response_type: 'code',
           override_default_response_type: true,
           extras: {
-            sessionInfoVersion: 2
+            featureType: 'whatsapp_business_app_onboarding',
+            sessionInfoVersion: '3',
+            version: 'v3'
           }
         }
       );

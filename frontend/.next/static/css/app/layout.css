@@ -2811,6 +2811,10 @@ body.glass-mode .mobile-drawer {
 .text-purple-400\/70 {
   color: rgb(192 132 252 / 0.7);
 }
+.text-purple-500 {
+  --tw-text-opacity: 1;
+  color: rgb(168 85 247 / var(--tw-text-opacity, 1));
+}
 .text-red-300 {
   --tw-text-opacity: 1;
   color: rgb(252 165 165 / var(--tw-text-opacity, 1));
@@ -2850,10 +2854,6 @@ body.glass-mode .mobile-drawer {
 .text-yellow-500 {
   --tw-text-opacity: 1;
   color: rgb(234 179 8 / var(--tw-text-opacity, 1));
-}
-.text-purple-500 {
-  --tw-text-opacity: 1;
-  color: rgb(168 85 247 / var(--tw-text-opacity, 1));
 }
 .underline {
   text-decoration-line: underline;
