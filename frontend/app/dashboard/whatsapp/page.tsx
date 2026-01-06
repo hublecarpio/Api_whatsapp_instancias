@@ -1017,7 +1017,39 @@ export default function WhatsAppPage() {
                         Puedes enviar y recibir mensajes a traves del API mientras mantienes el uso de tu app de WhatsApp Business.
                       </p>
                       {metaInfo && (
-                        <div className="mt-2 pt-2 border-t border-purple-500/20">
+                        <div className="mt-2 pt-2 border-t border-purple-500/20 space-y-1">
+                          {metaInfo.displayPhoneNumber && (
+                            <p className="text-xs text-purple-300">Telefono: {metaInfo.displayPhoneNumber}</p>
+                          )}
+                          {metaInfo.phoneNumberId && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-purple-300">Phone Number ID:</span>
+                              <code className="text-xs bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded font-mono">{metaInfo.phoneNumberId}</code>
+                              <button 
+                                onClick={() => copyToClipboard(metaInfo.phoneNumberId, 'phoneNumberId')} 
+                                className="text-purple-400 hover:text-purple-300 text-xs"
+                              >
+                                {copiedField === 'phoneNumberId' ? '✓' : '📋'}
+                              </button>
+                            </div>
+                          )}
+                          {!metaInfo.phoneNumberId && (
+                            <p className="text-xs text-red-400">
+                              ⚠️ Phone Number ID no configurado - Los webhooks no funcionaran hasta que se repare
+                            </p>
+                          )}
+                          {metaInfo.wabaId && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-purple-300">WABA ID:</span>
+                              <code className="text-xs bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded font-mono">{metaInfo.wabaId}</code>
+                              <button 
+                                onClick={() => copyToClipboard(metaInfo.wabaId, 'wabaId')} 
+                                className="text-purple-400 hover:text-purple-300 text-xs"
+                              >
+                                {copiedField === 'wabaId' ? '✓' : '📋'}
+                              </button>
+                            </div>
+                          )}
                           {metaInfo.verifiedName && (
                             <p className="text-xs text-purple-300">Nombre verificado: {metaInfo.verifiedName}</p>
                           )}
