@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import prisma from '../services/prisma';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { superAdminMiddleware, SuperAdminRequest } from '../middleware/superAdmin';
 import { 
   MetaCoexistService, 
   createMetaCoexistInstance, 
@@ -1257,6 +1258,80 @@ router.get('/webhook-verify', async (req: Request, res: Response) => {
     mainWebhookUrl: '/webhook/meta',
     usage: 'Meta will call this endpoint with hub.mode=subscribe, hub.verify_token, and hub.challenge'
   });
+});
+
+// Configure webhook at App level (like n8n does automatically)
+// This only needs to be done ONCE per app, not per instance
+router.post('/configure-app-webhook', authMiddleware, superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const apiUrl = process.env.API_URL || 'https://api.efficore.es';
+    const webhookUrl = `${apiUrl}/webhook/meta`;
+    
+    const config = MetaCoexistService.getMetaCoexistConfig();
+    const service = new MetaCoexistService(config);
+    
+    console.log('[META_COEXIST] Configuring app-level webhook...');
+    
+    // First check current config
+    let currentConfig = null;
+    try {
+      currentConfig = await service.getAppWebhookConfig();
+    } catch (e: any) {
+      console.log('[META_COEXIST] Could not get current config:', e.message);
+    }
+    
+    // Configure the webhook
+    const success = await service.configureAppWebhook(webhookUrl);
+    
+    res.json({
+      success,
+      webhookUrl,
+      verifyToken: config.webhookVerifyToken.substring(0, 8) + '...',
+      previousConfig: currentConfig,
+      message: success 
+        ? 'App webhook configured successfully! Meta will now send all WABA events to this URL.'
+        : 'Configuration sent but status unclear',
+      note: 'This is a one-time setup. All WABAs subscribed to this app will send events here.'
+    });
+  } catch (error: any) {
+    console.error('[META_COEXIST] Configure app webhook error:', error.response?.data || error.message);
+    res.status(400).json({
+      success: false,
+      error: 'Failed to configure app webhook',
+      details: error.response?.data || error.message,
+      troubleshooting: [
+        'Verify META_APP_ID is correct',
+        'Verify META_APP_SECRET is correct',
+        'Check that the webhook URL is publicly accessible via HTTPS'
+      ]
+    });
+  }
+});
+
+// Check current app webhook configuration (Super Admin only)
+router.get('/app-webhook-status', authMiddleware, superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const config = MetaCoexistService.getMetaCoexistConfig();
+    const service = new MetaCoexistService(config);
+    
+    const currentConfig = await service.getAppWebhookConfig();
+    
+    const wabaSubscription = currentConfig.data?.find((sub: any) => sub.object === 'whatsapp_business_account');
+    
+    res.json({
+      appId: config.appId,
+      configured: !!wabaSubscription,
+      currentConfig: wabaSubscription || null,
+      allSubscriptions: currentConfig.data,
+      expectedWebhookUrl: `${process.env.API_URL || 'https://api.efficore.es'}/webhook/meta`
+    });
+  } catch (error: any) {
+    console.error('[META_COEXIST] Get app webhook status error:', error.response?.data || error.message);
+    res.status(400).json({
+      error: 'Failed to get app webhook status',
+      details: error.response?.data || error.message
+    });
+  }
 });
 
 export default router;

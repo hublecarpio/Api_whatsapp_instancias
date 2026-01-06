@@ -187,6 +187,58 @@ export class MetaCoexistService {
     }
   }
 
+  // Configure webhook URL at App level (this is what n8n does automatically)
+  async configureAppWebhook(callbackUrl: string): Promise<boolean> {
+    try {
+      // App Access Token is APP_ID|APP_SECRET
+      const appAccessToken = `${this.config.appId}|${this.config.appSecret}`;
+      
+      console.log('[META_COEXIST] Configuring app-level webhook...');
+      console.log('[META_COEXIST] Callback URL:', callbackUrl);
+      console.log('[META_COEXIST] Verify Token:', this.config.webhookVerifyToken);
+      
+      const response = await axios.post(
+        `${META_API_URL}/${this.config.appId}/subscriptions`,
+        null,
+        {
+          headers: { Authorization: `Bearer ${appAccessToken}` },
+          params: {
+            object: 'whatsapp_business_account',
+            callback_url: callbackUrl,
+            verify_token: this.config.webhookVerifyToken,
+            fields: 'messages'
+          }
+        }
+      );
+
+      console.log('[META_COEXIST] App webhook configuration response:', response.data);
+      return response.data.success === true;
+    } catch (error: any) {
+      console.error('[META_COEXIST] Error configuring app webhook:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  // Check current app webhook configuration
+  async getAppWebhookConfig(): Promise<any> {
+    try {
+      const appAccessToken = `${this.config.appId}|${this.config.appSecret}`;
+      
+      const response = await axios.get(
+        `${META_API_URL}/${this.config.appId}/subscriptions`,
+        {
+          headers: { Authorization: `Bearer ${appAccessToken}` }
+        }
+      );
+
+      console.log('[META_COEXIST] Current app webhook config:', JSON.stringify(response.data, null, 2));
+      return response.data;
+    } catch (error: any) {
+      console.error('[META_COEXIST] Error getting app webhook config:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
   async sendMessage(instanceId: string, payload: MetaMessagePayload): Promise<any> {
     const credential = await prisma.metaCoexistCredential.findUnique({
       where: { instanceId }
