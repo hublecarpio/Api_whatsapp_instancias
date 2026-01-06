@@ -865,11 +865,24 @@ router.get('/instances/:instanceId/qr', async (req: AuthRequest, res: Response) 
     }
     
     const instance = await prisma.whatsAppInstance.findFirst({
-      where: { id: instanceId, businessId: businessId as string }
+      where: { id: instanceId, businessId: businessId as string },
+      include: { metaCoexistCredential: true }
     });
     
     if (!instance) {
       return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    // Meta providers don't use QR codes
+    if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+      const status = instance.provider === 'META_COEXIST' && instance.metaCoexistCredential?.coexistStatus === 'ACTIVE'
+        ? 'connected'
+        : instance.status;
+      return res.json({ 
+        qr: null,
+        status,
+        message: 'Meta providers do not use QR codes. Connection is managed via Meta Business Suite.'
+      });
     }
     
     if (!instance.instanceBackendId) {
@@ -913,13 +926,34 @@ router.post('/instances/:instanceId/restart', async (req: AuthRequest, res: Resp
     }
     
     const instance = await prisma.whatsAppInstance.findFirst({
-      where: { id: instanceId, businessId: businessId as string }
+      where: { id: instanceId, businessId: businessId as string },
+      include: { metaCoexistCredential: true }
     });
     
     if (!instance) {
       return res.status(404).json({ error: 'Instance not found' });
     }
     
+    // META_CLOUD and META_COEXIST don't need backend restart - they use Meta's API directly
+    if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+      // For Meta providers, just update status to reflect it's connected
+      const newStatus = instance.provider === 'META_COEXIST' && instance.metaCoexistCredential?.coexistStatus === 'ACTIVE' 
+        ? 'connected' 
+        : instance.status;
+      
+      await recordInstanceEvent({
+        instanceId: instance.id,
+        businessId: businessId as string,
+        eventType: 'RECONNECTED',
+        previousStatus: instance.status,
+        newStatus,
+        details: `Instance "${instance.name}" sync requested (Meta provider - no restart needed)`
+      });
+      
+      return res.json({ success: true, message: 'Meta instance synced successfully' });
+    }
+    
+    // BAILEYS provider needs backend connection
     if (!instance.instanceBackendId) {
       return res.status(400).json({ error: 'Instance has no backend connection' });
     }
@@ -968,6 +1002,13 @@ router.post('/instances/:instanceId/reset', requireEmailVerified, async (req: Au
     
     if (!instance) {
       return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    // META_CLOUD and META_COEXIST cannot be reset via this endpoint - use disconnect instead
+    if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+      return res.status(400).json({ 
+        error: 'Meta instances cannot be reset. Use the disconnect option to change phone numbers.' 
+      });
     }
     
     if (!instance.instanceBackendId) {
@@ -1416,7 +1457,7 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
     
     const instance = await prisma.whatsAppInstance.findFirst({
       where: instanceWhere,
-      include: { metaCredential: true }
+      include: { metaCredential: true, metaCoexistCredential: true }
     });
     
     if (!instance) {
@@ -1436,6 +1477,32 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
         accessToken: instance.metaCredential.accessToken,
         phoneNumberId: instance.metaCredential.phoneNumberId,
         businessId: instance.metaCredential.businessId
+      });
+      
+      if (imageUrl) {
+        response = await metaService.sendImageMessage(cleanTo, imageUrl, message);
+      } else if (videoUrl) {
+        response = await metaService.sendVideoMessage(cleanTo, videoUrl, message);
+      } else if (audioUrl) {
+        response = await metaService.sendAudioMessage(cleanTo, audioUrl);
+      } else if (fileUrl) {
+        response = await metaService.sendDocumentMessage(cleanTo, fileUrl, fileName, message);
+      } else if (message) {
+        response = await metaService.sendTextMessage(cleanTo, message);
+      }
+    } else if (instance.provider === 'META_COEXIST') {
+      if (!instance.metaCoexistCredential) {
+        return res.status(500).json({ error: 'Meta Coexist credentials not found' });
+      }
+      
+      if (instance.metaCoexistCredential.coexistStatus !== 'ACTIVE') {
+        return res.status(400).json({ error: 'Meta Coexistence is not active. Please complete the setup first.' });
+      }
+      
+      const metaService = new MetaCloudService({
+        accessToken: instance.metaCoexistCredential.userAccessToken,
+        phoneNumberId: instance.metaCoexistCredential.phoneNumberId,
+        businessId: instance.metaCoexistCredential.wabaId
       });
       
       if (imageUrl) {
