@@ -1198,20 +1198,23 @@ router.post('/webhook-register/:instanceId', authMiddleware, async (req: AuthReq
     const config = MetaCoexistService.getMetaCoexistConfig();
     const service = new MetaCoexistService(config);
     
-    const apiUrl = process.env.API_URL || 'https://api.efficore.es';
-    const webhookUrl = `${apiUrl}/webhook/meta`;
-    
     try {
-      const registered = await service.registerWebhook(token, credential.wabaId, webhookUrl);
+      // First check current subscription status
+      const alreadySubscribed = await service.checkWebhookSubscription(token, credential.wabaId);
+      console.log(`[META_COEXIST] Current subscription status for WABA ${credential.wabaId}: ${alreadySubscribed}`);
+      
+      // Register/confirm subscription
+      const registered = await service.registerWebhook(token, credential.wabaId);
       
       res.json({
         success: registered,
         wabaId: credential.wabaId,
         phoneNumberId: credential.phoneNumberId,
-        webhookUrl,
+        wasAlreadySubscribed: alreadySubscribed,
         message: registered 
-          ? 'Webhook registered successfully! Meta will now send events to your endpoint.'
-          : 'Registration request sent but success status unclear'
+          ? 'Webhook subscription activated! Meta will now send events to your app webhook.'
+          : 'Subscription request sent but success status unclear',
+        note: 'Make sure your webhook URL is configured in Facebook Developer Console'
       });
     } catch (regError: any) {
       console.error('[META_COEXIST] Webhook registration error:', regError.response?.data || regError.message);

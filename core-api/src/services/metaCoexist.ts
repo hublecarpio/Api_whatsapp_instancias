@@ -150,25 +150,40 @@ export class MetaCoexistService {
     }
   }
 
-  async registerWebhook(accessToken: string, wabaId: string, callbackUrl: string): Promise<boolean> {
+  async registerWebhook(accessToken: string, wabaId: string): Promise<boolean> {
     try {
+      // The subscribed_apps endpoint just needs to be called with the access token
+      // Webhook URL is configured at the App level in Facebook Developer Console
       const response = await axios.post(
         `${META_API_URL}/${wabaId}/subscribed_apps`,
         null,
         {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          params: {
-            callback_url: callbackUrl,
-            verify_token: this.config.webhookVerifyToken,
-            fields: 'messages'
-          }
+          headers: { Authorization: `Bearer ${accessToken}` }
         }
       );
 
+      console.log('[META_COEXIST] Webhook subscription response:', response.data);
       return response.data.success === true;
     } catch (error: any) {
       console.error('[META_COEXIST] Error registering webhook:', error.response?.data || error.message);
       throw error;
+    }
+  }
+
+  async checkWebhookSubscription(accessToken: string, wabaId: string): Promise<boolean> {
+    try {
+      const response = await axios.get(
+        `${META_API_URL}/${wabaId}/subscribed_apps`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }
+      );
+
+      console.log('[META_COEXIST] Webhook subscription check:', response.data);
+      return response.data.data && response.data.data.length > 0;
+    } catch (error: any) {
+      console.error('[META_COEXIST] Error checking webhook subscription:', error.response?.data || error.message);
+      return false;
     }
   }
 
@@ -408,12 +423,10 @@ export async function activateCoexistence(instanceId: string): Promise<boolean> 
 
   if (enabled) {
     // CRITICAL: Register the app to receive webhooks for this WABA
-    const apiUrl = process.env.API_URL || 'https://api.efficore.es';
-    const webhookUrl = `${apiUrl}/webhook/meta`;
-    
+    // Note: Webhook URL is configured at the App level in Facebook Developer Console
     try {
-      const webhookRegistered = await service.registerWebhook(token, credential.wabaId, webhookUrl);
-      console.log(`[META_COEXIST] Webhook registration for WABA ${credential.wabaId}: ${webhookRegistered ? 'SUCCESS' : 'FAILED'}`);
+      const webhookRegistered = await service.registerWebhook(token, credential.wabaId);
+      console.log(`[META_COEXIST] Webhook subscription for WABA ${credential.wabaId}: ${webhookRegistered ? 'SUCCESS' : 'FAILED'}`);
       
       if (!webhookRegistered) {
         console.warn('[META_COEXIST] Webhook registration failed, but coexistence is enabled. Webhooks may not work.');
