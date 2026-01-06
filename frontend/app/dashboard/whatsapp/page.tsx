@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { useInstanceStore, WhatsAppInstance } from '@/store/instance';
-import { waApi, businessApi } from '@/lib/api';
+import api, { waApi, businessApi } from '@/lib/api';
 import InstanceSelector from '@/components/InstanceSelector';
 
 interface ConnectionEvent {
@@ -576,6 +576,29 @@ export default function WhatsAppPage() {
     }
   };
 
+  const handleRegisterWebhook = async () => {
+    if (!selectedInstanceId) return;
+    
+    setActionLoading('webhook');
+    setError('');
+    addEvent('action', 'Registrando webhooks con Meta...');
+    
+    try {
+      const response = await api.post(`/auth/meta-coexist/webhook-register/${selectedInstanceId}`);
+      if (response.data.success) {
+        addEvent('success', 'Webhooks registrados correctamente. Meta ahora enviara eventos a tu instancia.');
+      } else {
+        addEvent('warning', response.data.message || 'Registro enviado pero estado incierto');
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error || 'Error al registrar webhooks';
+      setError(errorMsg);
+      addEvent('error', errorMsg);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const getStatusBadge = () => {
     const badges: Record<string, { bg: string; dot: string; text: string }> = {
       'not_created': { bg: 'bg-gray-700', dot: 'bg-gray-400', text: 'Sin configurar' },
@@ -1096,12 +1119,20 @@ export default function WhatsAppPage() {
                         Editar credenciales
                       </button>
                     ) : provider === 'META_COEXIST' ? (
-                      <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        {actionLoading === 'restart' ? '...' : 'Sincronizar'}
-                      </button>
+                      <>
+                        <button onClick={handleRegisterWebhook} disabled={actionLoading !== null} className="btn btn-primary btn-sm flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          {actionLoading === 'webhook' ? '...' : 'Activar Webhooks'}
+                        </button>
+                        <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          {actionLoading === 'restart' ? '...' : 'Sincronizar'}
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-secondary btn-sm flex items-center gap-1">
