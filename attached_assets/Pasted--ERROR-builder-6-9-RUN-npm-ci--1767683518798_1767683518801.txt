@@ -1,0 +1,179 @@
+ => ERROR [builder 6/9] RUN npm ci                                                                                                                                     2.2s 
+ => [production  5/12] COPY prisma ./prisma/                                                                                                                           0.0s 
+ => ERROR [production  6/12] RUN npm ci --only=production && npm cache clean --force                                                                                   2.0s
+------                                                                                                                                                                      
+ > [builder 6/9] RUN npm ci:                                                                                                                                                
+2.068 npm error code EUSAGE
+2.069 npm error
+2.069 npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+2.069 npm error
+2.069 npm error Invalid: lock file's pino@10.1.0 does not satisfy pino@8.21.0
+2.069 npm error Missing: pino-pretty@11.3.0 from lock file
+2.069 npm error Missing: fast-redact@3.5.0 from lock file
+2.069 npm error Invalid: lock file's pino-abstract-transport@2.0.0 does not satisfy pino-abstract-transport@1.2.0
+2.069 npm error Invalid: lock file's pino-std-serializers@7.0.0 does not satisfy pino-std-serializers@6.2.2
+2.069 npm error Invalid: lock file's process-warning@5.0.0 does not satisfy process-warning@3.0.0
+2.069 npm error Invalid: lock file's sonic-boom@4.2.0 does not satisfy sonic-boom@3.8.1
+2.069 npm error Invalid: lock file's thread-stream@3.1.0 does not satisfy thread-stream@2.7.0
+2.069 npm error Missing: readable-stream@4.7.0 from lock file
+2.069 npm error Missing: colorette@2.0.20 from lock file
+2.069 npm error Missing: dateformat@4.6.3 from lock file
+2.069 npm error Missing: fast-copy@3.0.2 from lock file
+2.069 npm error Missing: fast-safe-stringify@2.1.1 from lock file
+2.069 npm error Missing: help-me@5.0.0 from lock file
+2.069 npm error Missing: joycon@3.1.1 from lock file
+2.069 npm error Missing: pino-abstract-transport@2.0.0 from lock file
+2.069 npm error Missing: pump@3.0.3 from lock file
+2.069 npm error Missing: readable-stream@4.7.0 from lock file
+2.069 npm error Missing: secure-json-parse@2.7.0 from lock file
+2.069 npm error Missing: sonic-boom@4.2.0 from lock file
+2.069 npm error Missing: strip-json-comments@3.1.1 from lock file
+2.069 npm error Missing: end-of-stream@1.4.5 from lock file
+2.069 npm error Missing: once@1.4.0 from lock file
+2.069 npm error Missing: wrappy@1.0.2 from lock file
+2.069 npm error Missing: abort-controller@3.0.0 from lock file
+2.069 npm error Missing: buffer@6.0.3 from lock file
+2.069 npm error Missing: events@3.3.0 from lock file
+2.069 npm error Missing: process@0.11.10 from lock file
+2.069 npm error Missing: string_decoder@1.3.0 from lock file
+2.069 npm error Missing: event-target-shim@5.0.1 from lock file
+2.069 npm error Missing: ieee754@1.2.1 from lock file
+2.069 npm error Missing: string_decoder@1.3.0 from lock file
+2.069 npm error
+2.069 npm error Clean install a project
+2.069 npm error
+2.069 npm error Usage:
+2.069 npm error npm ci
+2.069 npm error
+2.069 npm error Options:
+2.069 npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+2.069 npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+2.069 npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+2.069 npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+2.069 npm error [--no-bin-links] [--no-fund] [--dry-run]
+2.069 npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+2.069 npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+2.069 npm error
+2.069 npm error aliases: clean-install, ic, install-clean, isntall-clean
+2.069 npm error
+2.069 npm error Run "npm help ci" for more info
+2.073 npm notice
+2.073 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+2.073 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+2.073 npm notice To update run: npm install -g npm@11.7.0
+2.073 npm notice
+2.073 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-01-06T07_06_23_374Z-debug-0.log
+------
+------
+ > [production  6/12] RUN npm ci --only=production && npm cache clean --force:
+0.416 npm warn config only Use `--omit=dev` to omit dev dependencies from the install.
+1.978 npm error code EUSAGE
+1.978 npm error
+1.978 npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+1.978 npm error
+1.978 npm error Invalid: lock file's pino@10.1.0 does not satisfy pino@8.21.0
+1.978 npm error Missing: pino-pretty@11.3.0 from lock file
+1.978 npm error Missing: fast-redact@3.5.0 from lock file
+1.978 npm error Invalid: lock file's pino-abstract-transport@2.0.0 does not satisfy pino-abstract-transport@1.2.0
+1.978 npm error Invalid: lock file's pino-std-serializers@7.0.0 does not satisfy pino-std-serializers@6.2.2
+1.978 npm error Invalid: lock file's process-warning@5.0.0 does not satisfy process-warning@3.0.0
+1.978 npm error Invalid: lock file's sonic-boom@4.2.0 does not satisfy sonic-boom@3.8.1
+1.978 npm error Invalid: lock file's thread-stream@3.1.0 does not satisfy thread-stream@2.7.0
+1.978 npm error Missing: readable-stream@4.7.0 from lock file
+1.978 npm error Missing: colorette@2.0.20 from lock file
+1.978 npm error Missing: dateformat@4.6.3 from lock file
+1.978 npm error Missing: fast-copy@3.0.2 from lock file
+1.978 npm error Missing: fast-safe-stringify@2.1.1 from lock file
+1.978 npm error Missing: help-me@5.0.0 from lock file
+1.978 npm error Missing: joycon@3.1.1 from lock file
+1.978 npm error Missing: pino-abstract-transport@2.0.0 from lock file
+1.978 npm error Missing: pump@3.0.3 from lock file
+1.978 npm error Missing: readable-stream@4.7.0 from lock file
+1.978 npm error Missing: secure-json-parse@2.7.0 from lock file
+1.978 npm error Missing: sonic-boom@4.2.0 from lock file
+1.978 npm error Missing: strip-json-comments@3.1.1 from lock file
+1.978 npm error Missing: end-of-stream@1.4.5 from lock file
+1.978 npm error Missing: once@1.4.0 from lock file
+1.978 npm error Missing: wrappy@1.0.2 from lock file
+1.978 npm error Missing: abort-controller@3.0.0 from lock file
+1.978 npm error Missing: buffer@6.0.3 from lock file
+1.978 npm error Missing: events@3.3.0 from lock file
+1.978 npm error Missing: process@0.11.10 from lock file
+1.978 npm error Missing: string_decoder@1.3.0 from lock file
+1.978 npm error Missing: event-target-shim@5.0.1 from lock file
+1.978 npm error Missing: ieee754@1.2.1 from lock file
+1.978 npm error Missing: string_decoder@1.3.0 from lock file
+1.978 npm error
+1.978 npm error Clean install a project
+1.978 npm error
+1.978 npm error Usage:
+1.978 npm error npm ci
+1.978 npm error
+1.978 npm error Options:
+1.978 npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+1.978 npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+1.978 npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+1.978 npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+1.978 npm error [--no-bin-links] [--no-fund] [--dry-run]
+1.978 npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+1.978 npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+1.978 npm error
+1.978 npm error aliases: clean-install, ic, install-clean, isntall-clean
+1.978 npm error
+1.978 npm error Run "npm help ci" for more info
+1.981 npm notice
+1.981 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+1.981 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+1.981 npm notice To update run: npm install -g npm@11.7.0
+1.981 npm notice
+1.981 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-01-06T07_06_23_379Z-debug-0.log
+------
+Dockerfile:26
+--------------------
+  24 |     COPY prisma ./prisma/
+  25 |     
+  26 | >>> RUN npm ci --only=production && npm cache clean --force
+  27 |     
+  28 |     COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci --only=production && npm cache clean --force" did not complete successfully: exit code: 1
+The push refers to repository [docker.io/iamhuble/whatsapp-saas-core]
+c9820d246995: Layer already exists 
+3394208d48d0: Layer already exists 
+52d48919144c: Layer already exists 
+977ab64197f3: Layer already exists 
+ea83dcc2f9db: Layer already exists 
+84a2c73dfc97: Layer already exists 
+5211d443bc39: Layer already exists 
+0f1d00611242: Layer already exists 
+8a4b902d0f38: Layer already exists 
+a087949ad7c6: Layer already exists 
+a2be16f02f93: Layer already exists 
+6be78693c259: Layer already exists 
+571b9a150b87: Layer already exists 
+c7e70c519c8c: Layer already exists 
+7bb20cf5ef67: Layer already exists 
+latest: digest: sha256:c961ca9db5ac4722c15a1d8f7d2cc29b498c3693da0353ea96d1920382ef42ee size: 3468
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias# git pull
+remote: Enumerating objects: 10, done.
+remote: Counting objects: 100% (10/10), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 6 (delta 4), reused 6 (delta 4), pack-reused 0 (from 0)
+Unpacking objects: 100% (6/6), 6.08 KiB | 346.00 KiB/s, done.
+From https://github.com/hublecarpio/Api_whatsapp_instancias
+   5c761a1b..bc262fd1  main       -> origin/main
+Updating 5c761a1b..bc262fd1
+Fast-forward
+ attached_assets/Pasted--ERROR-builder-6-9-RUN-npm-ci--1767683302373_1767683302374.txt | 140 +++++++++++++++++++++++++++++++
+ core-api/package-lock.json                                                            | 353 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-----------
+ 2 files changed, 443 insertions(+), 50 deletions(-)
+ create mode 100644 attached_assets/Pasted--ERROR-builder-6-9-RUN-npm-ci--1767683302373_1767683302374.txt
+root@srv848431:~/sistema_agent_efficore/Api_whatsapp_instancias#        # Build todas las imágenes sin caché
+        docker build --no-cache -t iamhuble/whatsapp-saas-frontend:latest ./frontend
+        docker build --no-cache -t iamhuble/whatsapp-saas-core:latest ./core-api
+        
+        
+        # Push todas
+        docker push iamhuble/whatsapp-saas-frontend:latest
+        docker push iamhuble/whatsapp-saas-core:latest
+[+] Building 77.6s (18/18) FINISHED                    
