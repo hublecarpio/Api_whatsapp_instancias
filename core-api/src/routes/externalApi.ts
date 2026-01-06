@@ -1230,7 +1230,7 @@ router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: R
       data: {
         businessId: req.businessId!,
         instanceId: req.instanceId,
-        direction: 'outbound',
+        direction: 'OUTGOING',
         recipient: cleanTo,
         message: `[Template: ${template.name}]`,
         metadata: { 
