@@ -491,7 +491,7 @@ router.get('/embedded-signup/config', authMiddleware, async (req: AuthRequest, r
 router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
-    let { businessId, code, wabaId, phoneNumberId, provider = 'META_CLOUD' } = req.body;
+    let { businessId, code, wabaId, phoneNumberId, metaBusinessId, provider = 'META_CLOUD' } = req.body;
     
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -575,6 +575,13 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
         const wabaScope = granularScopes.find((s: any) => s.scope === 'whatsapp_business_management');
         const targetWabas = wabaScope?.target_ids || [];
         
+        // Get Meta Business ID from business_management scope
+        const businessScope = granularScopes.find((s: any) => s.scope === 'business_management');
+        if (businessScope?.target_ids?.length > 0 && !metaBusinessId) {
+          metaBusinessId = businessScope.target_ids[0];
+          console.log('[EMBEDDED_SIGNUP] Found Meta Business ID from token:', metaBusinessId);
+        }
+        
         if (targetWabas.length > 0 && !wabaId) {
           wabaId = targetWabas[0];
           console.log('[EMBEDDED_SIGNUP] Found WABA from token:', wabaId);
@@ -592,6 +599,30 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
             phoneNumberId = phoneNumbers[0].id;
             console.log('[EMBEDDED_SIGNUP] Found phone number from WABA:', phoneNumberId);
           }
+        }
+        
+        // If still no metaBusinessId, try to get it from WABA owner
+        if (wabaId && !metaBusinessId) {
+          try {
+            // Try owner_business_info first
+            const wabaInfoUrl = `https://graph.facebook.com/v21.0/${wabaId}?` +
+              `fields=owner_business_info,business&access_token=${accessToken}`;
+            const wabaInfoResponse = await axios.get(wabaInfoUrl);
+            if (wabaInfoResponse.data?.owner_business_info?.id) {
+              metaBusinessId = wabaInfoResponse.data.owner_business_info.id;
+              console.log('[EMBEDDED_SIGNUP] Found Meta Business ID from WABA owner_business_info:', metaBusinessId);
+            } else if (wabaInfoResponse.data?.business?.id) {
+              metaBusinessId = wabaInfoResponse.data.business.id;
+              console.log('[EMBEDDED_SIGNUP] Found Meta Business ID from WABA business field:', metaBusinessId);
+            }
+          } catch (wabaInfoError: any) {
+            console.warn('[EMBEDDED_SIGNUP] Could not get WABA owner info:', wabaInfoError.message);
+          }
+        }
+        
+        // Log telemetry if metaBusinessId still not found
+        if (!metaBusinessId) {
+          console.warn('[EMBEDDED_SIGNUP] TELEMETRY: metaBusinessId not resolved via Graph API fallback. Using wabaId as fallback identifier.');
         }
       } catch (fetchError: any) {
         console.error('[EMBEDDED_SIGNUP] Error fetching WABA/phone from API:', fetchError.response?.data || fetchError.message);
@@ -643,7 +674,7 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
         data: {
           instanceId: instance.id,
           wabaId,
-          metaBusinessId: wabaId,
+          metaBusinessId: metaBusinessId || wabaId,
           phoneNumberId,
           displayPhone,
           userAccessToken: accessToken,

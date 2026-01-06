@@ -52,13 +52,13 @@ export default function MetaEmbeddedSignup({
         console.log('[MetaEmbeddedSignup] Message from Meta:', data);
         
         if (data.type === 'WA_EMBEDDED_SIGNUP') {
-          if (data.event === 'FINISH') {
+          if (data.event === 'FINISH' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
             const sessionInfo = data.data;
-            console.log('[MetaEmbeddedSignup] Session info received:', sessionInfo);
+            console.log('[MetaEmbeddedSignup] Session info received (event:', data.event, '):', sessionInfo);
             sessionInfoRef.current = {
               waba_id: sessionInfo.waba_id,
               phone_number_id: sessionInfo.phone_number_id,
-              business_id: sessionInfo.current_business_id
+              business_id: sessionInfo.business_id || sessionInfo.current_business_id
             };
           } else if (data.event === 'CANCEL') {
             console.log('[MetaEmbeddedSignup] User cancelled embedded signup');
@@ -204,10 +204,13 @@ export default function MetaEmbeddedSignup({
             const wabaId = wabaIdFromAuth || sessionInfoRef.current.waba_id;
             const phoneNumberId = phoneNumberIdFromAuth || sessionInfoRef.current.phone_number_id;
 
+            const metaBusinessId = sessionInfoRef.current.business_id;
+
             console.log('[MetaEmbeddedSignup] Auth response data:', { 
               hasCode: !!code, 
               wabaId, 
               phoneNumberId,
+              metaBusinessId,
               fromSessionInfo: !wabaIdFromAuth && !!sessionInfoRef.current.waba_id
             });
 
@@ -226,6 +229,7 @@ export default function MetaEmbeddedSignup({
                   code,
                   wabaId: wabaId || undefined,
                   phoneNumberId: phoneNumberId || undefined,
+                  metaBusinessId: metaBusinessId || undefined,
                   provider
                 });
 
