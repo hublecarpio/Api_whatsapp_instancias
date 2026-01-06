@@ -50,7 +50,20 @@ async function getInstanceLimit(userId: string): Promise<{ limit: number; tier: 
     return { limit: 1, tier: 'BASIC', currentCount: 0, businessId: null };
   }
   
-  const tier = user.subscriptionTier || 'BASIC';
+  const activeSubscription = await prisma.subscription.findFirst({
+    where: { 
+      userId, 
+      status: 'ACTIVE',
+      OR: [
+        { endsAt: null },
+        { endsAt: { gt: new Date() } }
+      ]
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { tier: true }
+  });
+  
+  const tier = activeSubscription?.tier || user.subscriptionTier || 'BASIC';
   const limit = INSTANCE_LIMITS[tier] || 1;
   const business = user.businesses[0];
   const currentCount = business?._count?.instances || 0;

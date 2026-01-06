@@ -153,7 +153,7 @@ export default function MetaEmbeddedSignup({
 
     try {
       window.FB.login(
-        async (response: any) => {
+        function(response: any) {
           console.log('[MetaEmbeddedSignup] FB.login response:', response);
           
           if (response.authResponse) {
@@ -174,29 +174,34 @@ export default function MetaEmbeddedSignup({
               return;
             }
 
-            try {
-              console.log('[MetaEmbeddedSignup] Completing signup...');
-              const result = await waApi.completeEmbeddedSignup({
-                businessId,
-                code,
-                wabaId,
-                phoneNumberId,
-                provider
-              });
+            (async () => {
+              try {
+                console.log('[MetaEmbeddedSignup] Completing signup...');
+                const result = await waApi.completeEmbeddedSignup({
+                  businessId,
+                  code,
+                  wabaId,
+                  phoneNumberId,
+                  provider
+                });
 
-              console.log('[MetaEmbeddedSignup] Signup result:', result.data);
+                console.log('[MetaEmbeddedSignup] Signup result:', result.data);
 
-              if (result.data.success) {
-                onSuccess(result.data.instance);
-              } else {
-                throw new Error(result.data.error || 'Error al completar registro');
+                if (result.data.success) {
+                  onSuccess(result.data.instance);
+                } else {
+                  throw new Error(result.data.error || 'Error al completar registro');
+                }
+              } catch (err: any) {
+                const errorMsg = err.response?.data?.error || err.message || 'Error al conectar';
+                console.error('[MetaEmbeddedSignup] Signup error:', errorMsg);
+                setError(errorMsg);
+                onError(errorMsg);
+              } finally {
+                connectingRef.current = false;
+                setConnecting(false);
               }
-            } catch (err: any) {
-              const errorMsg = err.response?.data?.error || err.message || 'Error al conectar';
-              console.error('[MetaEmbeddedSignup] Signup error:', errorMsg);
-              setError(errorMsg);
-              onError(errorMsg);
-            }
+            })();
           } else {
             console.log('[MetaEmbeddedSignup] No authResponse - user cancelled or error');
             if (response.status === 'unknown') {
@@ -204,9 +209,9 @@ export default function MetaEmbeddedSignup({
             } else {
               setError('Autorizacion cancelada o fallida');
             }
+            connectingRef.current = false;
+            setConnecting(false);
           }
-          connectingRef.current = false;
-          setConnecting(false);
         },
         {
           config_id: config.configId,
