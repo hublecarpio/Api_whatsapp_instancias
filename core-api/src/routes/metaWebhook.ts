@@ -71,11 +71,38 @@ async function processWebhookPayload(payload: MetaWebhookPayload) {
   const instanceData = await findInstanceByPhoneNumberId(parsed.phoneNumberId);
   
   if (!instanceData) {
+    const allCoexist = await prisma.metaCoexistCredential.findMany({
+      select: { phoneNumberId: true, displayPhone: true, instanceId: true }
+    });
+    const allMeta = await prisma.metaCredential.findMany({
+      select: { phoneNumberId: true, instanceId: true }
+    });
+    
+    console.error('================================================================================');
+    console.error('[META WEBHOOK] ERROR: No instance found for phone_number_id');
+    console.error(`[META WEBHOOK] Searched for: ${parsed.phoneNumberId}`);
+    console.error(`[META WEBHOOK] Display phone from webhook: ${parsed.displayPhoneNumber}`);
+    console.error('[META WEBHOOK] Existing META_COEXIST credentials:', JSON.stringify(allCoexist.map(c => ({
+      phoneNumberId: c.phoneNumberId || 'NULL',
+      displayPhone: c.displayPhone,
+      instanceId: c.instanceId
+    })), null, 2));
+    console.error('[META WEBHOOK] Existing META_CLOUD credentials:', JSON.stringify(allMeta.map(c => ({
+      phoneNumberId: c.phoneNumberId || 'NULL',
+      instanceId: c.instanceId
+    })), null, 2));
+    console.error('[META WEBHOOK] FIX: Use /auth/meta-coexist/repair/:instanceId endpoint to update phoneNumberId');
+    console.error('================================================================================');
+    
     logWebhookEvent({
       eventType: 'error',
       phoneNumberId: parsed.phoneNumberId,
       error: 'No instance found for phone_number_id',
-      metadata: { displayPhone: parsed.displayPhoneNumber }
+      metadata: { 
+        displayPhone: parsed.displayPhoneNumber,
+        existingCoexistPhones: allCoexist.map(c => c.phoneNumberId),
+        existingMetaPhones: allMeta.map(c => c.phoneNumberId)
+      }
     });
     return;
   }

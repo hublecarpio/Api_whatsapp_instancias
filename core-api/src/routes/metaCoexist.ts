@@ -744,4 +744,179 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
   }
 });
 
+router.get('/diagnose', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    
+    const credentials = await prisma.metaCoexistCredential.findMany({
+      include: {
+        instance: {
+          include: { business: true }
+        }
+      }
+    });
+    
+    const userCredentials = credentials.filter(c => c.instance?.business?.userId === userId);
+    
+    const diagnosis = userCredentials.map(cred => ({
+      instanceId: cred.instanceId,
+      instanceName: cred.instance?.name,
+      provider: cred.instance?.provider,
+      status: cred.instance?.status,
+      coexistStatus: cred.coexistStatus,
+      phoneNumberId: cred.phoneNumberId || 'MISSING',
+      displayPhone: cred.displayPhone || 'MISSING',
+      wabaId: cred.wabaId || 'MISSING',
+      hasUserToken: !!cred.userAccessToken,
+      hasSystemToken: !!cred.systemAccessToken,
+      issue: !cred.phoneNumberId ? 'phoneNumberId is missing - webhooks will fail' : null
+    }));
+    
+    res.json({
+      totalCredentials: userCredentials.length,
+      credentialsWithIssues: diagnosis.filter(d => d.issue).length,
+      credentials: diagnosis
+    });
+  } catch (error: any) {
+    console.error('[META_COEXIST] Diagnose error:', error);
+    res.status(500).json({ error: error.message || 'Diagnosis failed' });
+  }
+});
+
+router.post('/repair/:instanceId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { phoneNumberId } = req.body;
+    const userId = req.userId;
+    
+    if (!phoneNumberId) {
+      return res.status(400).json({ error: 'phoneNumberId is required in request body' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: {
+        id: instanceId,
+        business: { userId }
+      },
+      include: { metaCoexistCredential: true }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found or access denied' });
+    }
+    
+    if (!instance.metaCoexistCredential) {
+      return res.status(400).json({ error: 'No META_COEXIST credential found for this instance' });
+    }
+    
+    const accessToken = instance.metaCoexistCredential.systemAccessToken || 
+                        instance.metaCoexistCredential.userAccessToken;
+    
+    let displayPhone = instance.metaCoexistCredential.displayPhone;
+    
+    try {
+      const phoneUrl = `https://graph.facebook.com/v21.0/${phoneNumberId}?fields=display_phone_number&access_token=${accessToken}`;
+      const phoneResponse = await axios.get(phoneUrl);
+      displayPhone = phoneResponse.data.display_phone_number || displayPhone;
+      console.log('[REPAIR] Fetched display phone:', displayPhone);
+    } catch (fetchError: any) {
+      console.warn('[REPAIR] Could not fetch phone details from Meta:', fetchError.message);
+    }
+    
+    await prisma.metaCoexistCredential.update({
+      where: { instanceId },
+      data: {
+        phoneNumberId,
+        displayPhone
+      }
+    });
+    
+    await prisma.whatsAppInstance.update({
+      where: { id: instanceId },
+      data: { phoneNumber: displayPhone }
+    });
+    
+    console.log(`[REPAIR] Updated credential for instance ${instanceId} with phoneNumberId ${phoneNumberId}`);
+    
+    res.json({
+      success: true,
+      message: 'Credential repaired successfully',
+      phoneNumberId,
+      displayPhone
+    });
+  } catch (error: any) {
+    console.error('[META_COEXIST] Repair error:', error);
+    res.status(500).json({ error: error.message || 'Repair failed' });
+  }
+});
+
+router.get('/webhook-lookup/:phoneNumberId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { phoneNumberId } = req.params;
+    const userId = req.userId;
+    
+    const metaCredential = await prisma.metaCredential.findFirst({
+      where: { 
+        phoneNumberId,
+        instance: { business: { userId } }
+      },
+      include: { instance: { include: { business: true } } }
+    });
+    
+    if (metaCredential?.instance) {
+      return res.json({
+        found: true,
+        provider: 'META_CLOUD',
+        instanceId: metaCredential.instance.id,
+        businessId: metaCredential.instance.businessId,
+        displayPhone: metaCredential.instance.phoneNumber
+      });
+    }
+    
+    const coexistCredential = await prisma.metaCoexistCredential.findFirst({
+      where: { 
+        phoneNumberId,
+        instance: { business: { userId } }
+      },
+      include: { instance: { include: { business: true } } }
+    });
+    
+    if (coexistCredential?.instance) {
+      return res.json({
+        found: true,
+        provider: 'META_COEXIST',
+        instanceId: coexistCredential.instance.id,
+        businessId: coexistCredential.instance.businessId,
+        displayPhone: coexistCredential.displayPhone
+      });
+    }
+    
+    const allCoexistCredentials = await prisma.metaCoexistCredential.findMany({
+      where: { instance: { business: { userId } } },
+      select: { phoneNumberId: true, displayPhone: true, instanceId: true }
+    });
+    
+    const allMetaCredentials = await prisma.metaCredential.findMany({
+      where: { instance: { business: { userId } } },
+      select: { phoneNumberId: true, instanceId: true }
+    });
+    
+    res.json({
+      found: false,
+      searchedFor: phoneNumberId,
+      existingCoexistCredentials: allCoexistCredentials.map(c => ({
+        phoneNumberId: c.phoneNumberId || 'NULL',
+        displayPhone: c.displayPhone,
+        instanceId: c.instanceId
+      })),
+      existingMetaCredentials: allMetaCredentials.map(c => ({
+        phoneNumberId: c.phoneNumberId || 'NULL',
+        instanceId: c.instanceId
+      }))
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

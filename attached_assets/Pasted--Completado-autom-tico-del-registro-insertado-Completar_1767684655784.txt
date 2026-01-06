@@ -1,0 +1,159 @@
+
+Completado automático del registro insertado
+Completar automáticamente los datos del registro insertado
+Datos de formularios completados automáticamente
+{
+  "business": {
+    "id": null,
+    "name": null,
+    "email": null,
+    "phone": {
+      "code": null,
+      "number": null
+    },
+    "website": null,
+    "address": {
+      "streetAddress1": null,
+      "streetAddress2": null,
+      "city": null,
+      "state": null,
+      "zipPostal": null,
+      "country": null
+    },
+    "timezone": null
+  },
+  "phone": {
+    "displayName": null,
+    "category": null,
+    "description": null
+  },
+  "preVerifiedPhone": {
+    "ids": null
+  },
+  "solutionID": null,
+  "whatsAppBusinessAccount": {
+    "ids": null
+  }
+}
+​
+Configuración de información de sesión
+Puedes obtener información detallada de los usuarios a medida que avanzan por el proceso de registro insertado.
+Usamos la API del navegador estándar postMessage para permitir de forma segura la comunicación de distintos orígenes entre ventanas del proceso de registro insertado. Debes configurar un MessageEvent oyente en tu página para recibir la información de sesión.
+window.addEventListener('message', (event) => {
+  if (event.origin !== "https://www.facebook.com") return;
+  try {
+    const data = JSON.parse(event.data);
+    if (data.type === 'WA_EMBEDDED_SIGNUP') {
+      ...
+    }
+  } catch {
+    ...
+  }
+});
+Configuración del código del registro insertado
+Secuencia de pasos para implementar el código del proceso de registro insertado.
+Carga el SDK de JS con el código que se indica en la sección de SDK para JavaScript.
+Sigue el paso anterior para configurar el oyente MessageEvent para recibir la información de sesión. Este oyente se ejecutará cuando el usuario complete el flujo. Debes almacenar los identificadores de la cuenta de WhatsApp Business y del teléfono para iniciar la integración.
+window.addEventListener('message', (event) => {/* store the data from this event in local state */});
+Configura una función de devolución de llamada cuando el usuario completa el flujo usando el inicio de sesión con Facebook para empresas. Recibirás un código de registro insertado que tendrás que intercambiar por un token. Cuando envíes este código al backend, envía también los identificadores de WhatsApp Business y del teléfono para iniciar la integración.
+const fbLoginCallback = (response) => {
+  if (response.authResponse) {
+    const code = response.authResponse.code;
+    // The returned code must be transmitted to your backend first and then
+    // perform a server-to-server call from there to our servers for an access token.
+  }
+}
+Configura un método al que se llamará cuando un usuario haga clic para abrir el proceso de registro insertado. Cambia tu selección en el siguiente paso para obtener el código exacto que se usará.
+const launchWhatsAppSignup = () => {
+  // Launch Facebook login
+  FB.login(fbLoginCallback, {
+    config_id: '896539762795873', // configuration ID goes here
+    response_type: 'code', // must be set to 'code' for System User access token
+    override_default_response_type: true, // when true, any response types passed in the "response_type" will take precedence over the default types
+    extras: {"version":"v3","setup":{"business":{"id":null,"name":null,"email":null,"phone":{"code":null,"number":null},"website":null,"address":{"streetAddress1":null,"streetAddress2":null,"city":null,"state":null,"zipPostal":null,"country":null},"timezone":null},"phone":{"displayName":null,"category":null,"description":null},"preVerifiedPhone":{"ids":null},"solutionID":null,"whatsAppBusinessAccount":{"ids":null}},"featureType":"whatsapp_business_app_onboarding"}
+  });
+}
+Agrega un botón a tu página para abrir el proceso de registro insertado.
+<button onclick="launchWhatsAppSignup()" style="background-color: #1877f2; border: 0; border-radius: 4px; color: #fff; cursor: pointer; font-family: Helvetica, Arial, sans-serif; font-size: 16px; font-weight: bold; height: 40px; padding: 0 24px;">Login with Facebook</button>
+Una vez que se haya completado el flujo, la función de devolución de llamada enviará el código y los identificadores a tu backend para continuar con la integración. Sigue las secuencias de la API que se indican a continuación para configurar la API de la nube de WhatsApp Business. Cuando finalice la configuración, redirige a los usuarios a la página final para continuar según tu experiencia de producto.
+La manera más sencilla de probar el registro insertado es crear un remix del siguiente Proyecto de Glitch y pegar el código a continuación (no olvides agregar la URL del proyecto de Glitch en la lista de dominios autorizados).
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Embedded Signup</title>
+</head>
+<body>
+  <div id="fb-root"></div>
+  <button onclick="launchWhatsAppSignup()" style="background-color: #1877f2; border: 0; border-radius: 4px; color: #fff; cursor: pointer; font-family: Helvetica, Arial, sans-serif; font-size: 16px; font-weight: bold; height: 40px; padding: 0 24px;">Login with Facebook</button>
+  <p>Session info response:</p>
+  <pre id="session-info-response"></pre>
+  </br>
+  <p>SDK response:</p>
+  <pre id="sdk-response"></pre>
+
+  <script>
+    window.addEventListener('message', (event) => {
+      if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") {
+        return;
+      }
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'WA_EMBEDDED_SIGNUP') {
+          // if user finishes the Embedded Signup flow
+          if (data.event === 'FINISH') {
+            const {phone_number_id, waba_id} = data.data;
+            console.log("Phone number ID ", phone_number_id, " WhatsApp business account ID ", waba_id);
+            // if user cancels the Embedded Signup flow
+          } else if (data.event === 'CANCEL') {
+            const {current_step} = data.data;
+            console.warn("Cancel at ", current_step);
+            // if user reports an error during the Embedded Signup flow
+          } else if (data.event === 'ERROR') {
+            const {error_message} = data.data;
+            console.error("error ", error_message);
+          }
+        }
+        document.getElementById("session-info-response").textContent = JSON.stringify(data, null, 2);
+      } catch {
+        console.log('Non JSON Responses', event.data);
+      }
+    });
+  </script>
+
+  <script>
+    const fbLoginCallback = (response) => {
+      if (response.authResponse) {
+        const code = response.authResponse.code;
+        // The returned code must be transmitted to your backend first and then
+        // perform a server-to-server call from there to our servers for an access token.
+      }
+      document.getElementById("sdk-response").textContent = JSON.stringify(response, null, 2);
+    }
+
+    const launchWhatsAppSignup = () => {
+      // Launch Facebook login
+      FB.login(fbLoginCallback, {
+        config_id: '896539762795873', // configuration ID goes here
+        response_type: 'code', // must be set to 'code' for System User access token
+        override_default_response_type: true, // when true, any response types passed in the "response_type" will take precedence over the default types
+        extras: {"version":"v3","setup":{"business":{"id":null,"name":null,"email":null,"phone":{"code":null,"number":null},"website":null,"address":{"streetAddress1":null,"streetAddress2":null,"city":null,"state":null,"zipPostal":null,"country":null},"timezone":null},"phone":{"displayName":null,"category":null,"description":null},"preVerifiedPhone":{"ids":null},"solutionID":null,"whatsAppBusinessAccount":{"ids":null}},"featureType":"whatsapp_business_app_onboarding"}
+      });
+    }
+  </script>
+
+  <script>
+    window.fbAsyncInit = function() {
+      FB.init({
+        appId            : '543824685183631',
+        autoLogAppEvents : true,
+        xfbml            : true,
+        version          : 'v24.0'
+      });
+    };
+  </script>
+  <script async defer crossorigin="anonymous"
+    src="https://connect.facebook.net/en_US/sdk.js">
+  </script>
+</body>
+</html>

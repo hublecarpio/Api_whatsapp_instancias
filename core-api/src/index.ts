@@ -37,8 +37,8 @@ import { startReminderWorker as startLegacyReminderWorker } from './services/rem
 
 dotenv.config();
 
-const BUILD_VERSION = 'v2.1.0-20260106';
-const BUILD_TIMESTAMP = '2026-01-06T06:45:00Z';
+const BUILD_VERSION = 'v2.2.0-20260106';
+const BUILD_TIMESTAMP = '2026-01-06T07:40:00Z';
 
 let bullmqModules: {
   scheduleInactivityChecks: () => Promise<void>;
