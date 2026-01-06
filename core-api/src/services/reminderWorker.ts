@@ -111,16 +111,16 @@ async function checkWindowStatus(businessId: string, contactPhone: string): Prom
   });
   
   if (!lastInboundMessage) {
-    console.log(`[REMINDER] No inbound message found for ${cleanPhone} - requiresTemplate=true`);
-    return { requiresTemplate: true, provider: 'META_CLOUD', hoursSinceLastMessage: null };
+    console.log(`[REMINDER] No inbound message found for ${cleanPhone} - requiresTemplate=true (provider: ${instance.provider})`);
+    return { requiresTemplate: true, provider: instance.provider, hoursSinceLastMessage: null };
   }
   
   const hoursSinceLastMessage = (Date.now() - lastInboundMessage.createdAt.getTime()) / (1000 * 60 * 60);
   const requiresTemplate = hoursSinceLastMessage >= 24;
   
-  console.log(`[REMINDER] Window check for ${cleanPhone}: ${hoursSinceLastMessage.toFixed(2)}h since last inbound, requiresTemplate=${requiresTemplate}`);
+  console.log(`[REMINDER] Window check for ${cleanPhone}: ${hoursSinceLastMessage.toFixed(2)}h since last inbound, requiresTemplate=${requiresTemplate} (provider: ${instance.provider})`);
   
-  return { requiresTemplate, provider: 'META_CLOUD', hoursSinceLastMessage };
+  return { requiresTemplate, provider: instance.provider, hoursSinceLastMessage };
 }
 
 interface TemplateData {
@@ -667,7 +667,7 @@ export async function processReminders(): Promise<void> {
       
       console.log(`[REMINDER] Window status for ${reminder.contactPhone}: requiresTemplate=${windowStatus.requiresTemplate}, provider=${windowStatus.provider}, hours=${windowStatus.hoursSinceLastMessage}`);
       
-      if (windowStatus.requiresTemplate && windowStatus.provider === 'META_CLOUD') {
+      if (windowStatus.requiresTemplate && (windowStatus.provider === 'META_CLOUD' || windowStatus.provider === 'META_COEXIST')) {
         const contact = await prisma.contact.findFirst({
           where: { businessId: reminder.businessId, phone: reminder.contactPhone }
         });

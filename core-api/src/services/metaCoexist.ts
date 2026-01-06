@@ -263,6 +263,34 @@ export class MetaCoexistService {
     return this.sendMessage(instanceId, { to, text });
   }
 
+  async sendTemplate(instanceId: string, options: {
+    to: string;
+    templateName: string;
+    language: string;
+    components?: Array<{
+      type: 'header' | 'body' | 'button';
+      parameters?: Array<{ type: string; text?: string; image?: { link: string }; document?: { link: string } }>;
+    }>;
+  }): Promise<any> {
+    const credential = await prisma.metaCoexistCredential.findUnique({
+      where: { instanceId }
+    });
+
+    if (!credential) {
+      throw new Error('Meta Coexist credential not found for instance');
+    }
+
+    const token = credential.systemAccessToken || credential.userAccessToken;
+    
+    const metaService = new MetaCloudService({
+      accessToken: token,
+      phoneNumberId: credential.phoneNumberId,
+      businessId: credential.metaBusinessId
+    });
+
+    return metaService.sendTemplate(options);
+  }
+
   async getMediaUrl(instanceId: string, mediaId: string): Promise<string> {
     const credential = await prisma.metaCoexistCredential.findUnique({
       where: { instanceId }

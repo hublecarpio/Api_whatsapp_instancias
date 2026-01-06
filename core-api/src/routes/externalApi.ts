@@ -1012,4 +1012,248 @@ router.patch('/contacts/:phone', validateApiKey, async (req: ApiKeyRequest, res:
   }
 });
 
+const META_API_URL = 'https://graph.facebook.com/v21.0';
+
+function getMetaCredentials(instance: any): { accessToken: string; phoneNumberId: string; wabaId: string; credentialId: string } | null {
+  if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
+    return {
+      accessToken: instance.metaCredential.accessToken,
+      phoneNumberId: instance.metaCredential.phoneNumberId,
+      wabaId: instance.metaCredential.businessId,
+      credentialId: instance.metaCredential.id
+    };
+  }
+  
+  if (instance.provider === 'META_COEXIST' && instance.metaCoexistCredential) {
+    return {
+      accessToken: instance.metaCoexistCredential.systemAccessToken || instance.metaCoexistCredential.userAccessToken,
+      phoneNumberId: instance.metaCoexistCredential.phoneNumberId,
+      wabaId: instance.metaCoexistCredential.wabaId,
+      credentialId: instance.metaCoexistCredential.id
+    };
+  }
+  
+  return null;
+}
+
+router.get('/templates', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const creds = getMetaCredentials(req.instance);
+    
+    if (!creds) {
+      return res.status(400).json({ 
+        error: 'Esta instancia no soporta plantillas',
+        hint: 'Las plantillas solo estan disponibles para instancias Meta Cloud o Meta Coexist'
+      });
+    }
+    
+    const templates = await prisma.metaTemplate.findMany({
+      where: { credentialId: creds.credentialId },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json({ 
+      templates: templates.map(t => ({
+        id: t.id,
+        name: t.name,
+        language: t.language,
+        category: t.category,
+        status: t.status,
+        bodyText: t.bodyText,
+        headerType: t.headerType,
+        lastSynced: t.lastSynced
+      }))
+    });
+  } catch (error: any) {
+    console.error('API templates error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/templates/sync', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const creds = getMetaCredentials(req.instance);
+    
+    if (!creds) {
+      return res.status(400).json({ 
+        error: 'Esta instancia no soporta plantillas',
+        hint: 'Las plantillas solo estan disponibles para instancias Meta Cloud o Meta Coexist'
+      });
+    }
+    
+    const response = await axios.get(
+      `${META_API_URL}/${creds.wabaId}/message_templates`,
+      {
+        headers: { Authorization: `Bearer ${creds.accessToken}` },
+        params: { limit: 100 }
+      }
+    );
+    
+    const metaTemplates = response.data.data || [];
+    const synced = [];
+    
+    for (const mt of metaTemplates) {
+      const headerComponent = mt.components?.find((c: any) => c.type === 'HEADER');
+      const bodyComponent = mt.components?.find((c: any) => c.type === 'BODY');
+      const footerComponent = mt.components?.find((c: any) => c.type === 'FOOTER');
+      const buttonsComponent = mt.components?.find((c: any) => c.type === 'BUTTONS');
+      
+      const template = await prisma.metaTemplate.upsert({
+        where: {
+          credentialId_name: {
+            credentialId: creds.credentialId,
+            name: mt.name
+          }
+        },
+        update: {
+          metaTemplateId: mt.id,
+          language: mt.language || 'es',
+          category: mt.category || 'UTILITY',
+          status: mt.status || 'PENDING',
+          components: mt.components || [],
+          headerType: headerComponent?.format || null,
+          bodyText: bodyComponent?.text || null,
+          footerText: footerComponent?.text || null,
+          buttons: buttonsComponent?.buttons || null,
+          lastSynced: new Date()
+        },
+        create: {
+          credentialId: creds.credentialId,
+          metaTemplateId: mt.id,
+          name: mt.name,
+          language: mt.language || 'es',
+          category: mt.category || 'UTILITY',
+          status: mt.status || 'PENDING',
+          components: mt.components || [],
+          headerType: headerComponent?.format || null,
+          bodyText: bodyComponent?.text || null,
+          footerText: footerComponent?.text || null,
+          buttons: buttonsComponent?.buttons || null
+        }
+      });
+      
+      synced.push({
+        id: template.id,
+        name: template.name,
+        status: template.status
+      });
+    }
+    
+    res.json({ 
+      synced: synced.length, 
+      templates: synced,
+      message: `Se sincronizaron ${synced.length} plantillas desde Meta`
+    });
+  } catch (error: any) {
+    console.error('API templates sync error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Error al sincronizar plantillas',
+      details: error.response?.data?.error?.message || error.message
+    });
+  }
+});
+
+router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { templateName, to, variables, headerVariables } = req.body;
+    
+    if (!templateName || !to) {
+      return res.status(400).json({ error: 'templateName y to son requeridos' });
+    }
+    
+    const creds = getMetaCredentials(req.instance);
+    
+    if (!creds) {
+      return res.status(400).json({ 
+        error: 'Esta instancia no soporta plantillas',
+        hint: 'Las plantillas solo estan disponibles para instancias Meta Cloud o Meta Coexist'
+      });
+    }
+    
+    const template = await prisma.metaTemplate.findFirst({
+      where: {
+        credentialId: creds.credentialId,
+        name: templateName,
+        status: 'APPROVED'
+      }
+    });
+    
+    if (!template) {
+      return res.status(404).json({ error: 'Plantilla aprobada no encontrada' });
+    }
+    
+    const cleanTo = to.replace(/\D/g, '');
+    
+    const templateComponents: any[] = [];
+    
+    if (headerVariables && headerVariables.length > 0) {
+      templateComponents.push({
+        type: 'header',
+        parameters: headerVariables.map((v: string) => ({
+          type: 'text',
+          text: v
+        }))
+      });
+    }
+    
+    if (variables && variables.length > 0) {
+      templateComponents.push({
+        type: 'body',
+        parameters: variables.map((v: string) => ({
+          type: 'text',
+          text: v
+        }))
+      });
+    }
+    
+    const response = await axios.post(
+      `${META_API_URL}/${creds.phoneNumberId}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: cleanTo,
+        type: 'template',
+        template: {
+          name: template.name,
+          language: { code: template.language },
+          components: templateComponents.length > 0 ? templateComponents : undefined
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${creds.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    await prisma.messageLog.create({
+      data: {
+        businessId: req.businessId!,
+        instanceId: req.instanceId,
+        direction: 'outbound',
+        recipient: cleanTo,
+        message: `[Template: ${template.name}]`,
+        metadata: { 
+          provider: req.instance.provider,
+          template: template.name,
+          variables,
+          viaExternalApi: true
+        }
+      }
+    });
+    
+    res.json({
+      success: true,
+      messageId: response.data.messages?.[0]?.id,
+      template: template.name
+    });
+  } catch (error: any) {
+    console.error('API send template error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Error al enviar plantilla',
+      details: error.response?.data?.error?.message || error.message
+    });
+  }
+});
+
 export default router;

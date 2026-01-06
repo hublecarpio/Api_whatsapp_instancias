@@ -42,6 +42,7 @@ export default function ApiDocsPage() {
 
   const tabs = [
     { id: 'enviar', label: 'Enviar Mensaje' },
+    { id: 'plantillas', label: 'Plantillas' },
     { id: 'agente', label: 'Agente IA' },
     { id: 'contactos', label: 'Contactos' },
     { id: 'productos', label: 'Productos' },
@@ -146,6 +147,89 @@ export default function ApiDocsPage() {
                   <li><code className="text-neon-blue">message</code> - Texto del mensaje</li>
                   <li><code className="text-neon-blue">mediaUrl</code> - URL del archivo multimedia</li>
                   <li><code className="text-neon-blue">mediaType</code> - Tipo: image, video, audio, document</li>
+                </ul>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'plantillas' && (
+            <>
+              <div className="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-4 mb-4">
+                <p className="text-yellow-300 text-sm">
+                  Las plantillas son requeridas para mensajes fuera de la ventana de 24 horas en Meta Cloud y Meta Coexist.
+                  Deben estar aprobadas por Meta antes de poder usarse.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-medium mb-2">GET /api/v1/templates</h3>
+                <p className="text-gray-400 text-sm mb-4">Obtiene la lista de plantillas sincronizadas.</p>
+              </div>
+
+              <CodeBlock
+                id="get-templates"
+                code={`curl -X GET "${baseUrl}/api/v1/templates" \\
+  -H "Authorization: Bearer efk_tu_api_key"`}
+              />
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Respuesta:</h4>
+                <CodeBlock
+                  id="templates-response"
+                  language="json"
+                  code={`{
+  "templates": [
+    {
+      "id": "tpl_123",
+      "name": "hello_world",
+      "language": "es",
+      "category": "UTILITY",
+      "status": "APPROVED",
+      "bodyText": "Hola {{1}}, gracias por contactarnos!",
+      "headerType": "TEXT",
+      "lastSynced": "2024-01-15T10:00:00Z"
+    }
+  ]
+}`}
+                />
+              </div>
+
+              <div className="mt-6">
+                <h3 className="text-white font-medium mb-2">POST /api/v1/templates/sync</h3>
+                <p className="text-gray-400 text-sm mb-4">Sincroniza plantillas desde Meta a la base de datos local.</p>
+              </div>
+
+              <CodeBlock
+                id="sync-templates"
+                code={`curl -X POST "${baseUrl}/api/v1/templates/sync" \\
+  -H "Authorization: Bearer efk_tu_api_key"`}
+              />
+
+              <div className="mt-6">
+                <h3 className="text-white font-medium mb-2">POST /api/v1/templates/send</h3>
+                <p className="text-gray-400 text-sm mb-4">Envia un mensaje usando una plantilla aprobada.</p>
+              </div>
+
+              <CodeBlock
+                id="send-template"
+                code={`curl -X POST "${baseUrl}/api/v1/templates/send" \\
+  -H "Authorization: Bearer efk_tu_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "templateName": "hello_world",
+    "to": "5215512345678",
+    "variables": ["Juan"],
+    "headerVariables": []
+  }'`}
+              />
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Parametros:</h4>
+                <ul className="text-gray-400 text-sm space-y-1">
+                  <li><code className="text-neon-blue">templateName</code> (requerido) - Nombre exacto de la plantilla</li>
+                  <li><code className="text-neon-blue">to</code> (requerido) - Numero de telefono del destinatario</li>
+                  <li><code className="text-neon-blue">variables</code> - Array de variables para el cuerpo (body)</li>
+                  <li><code className="text-neon-blue">headerVariables</code> - Array de variables para el encabezado</li>
                 </ul>
               </div>
             </>
