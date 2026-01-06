@@ -26,11 +26,77 @@ export interface MetaWebhookMessage {
   text?: { body: string };
   image?: { id: string; mime_type: string; sha256: string; caption?: string };
   video?: { id: string; mime_type: string; sha256: string; caption?: string };
-  audio?: { id: string; mime_type: string; sha256: string };
+  audio?: { id: string; mime_type: string; sha256: string; voice?: boolean };
   document?: { id: string; mime_type: string; sha256: string; filename?: string; caption?: string };
-  sticker?: { id: string; mime_type: string };
+  sticker?: { id: string; mime_type: string; animated?: boolean };
   location?: { latitude: number; longitude: number; name?: string; address?: string };
-  contacts?: Array<{ name: { formatted_name: string }; phones: Array<{ phone: string }> }>;
+  contacts?: Array<{ name: { formatted_name: string }; phones: Array<{ phone: string; type?: string }> }>;
+  button?: { text: string; payload: string };
+  interactive?: { 
+    type: string;
+    button_reply?: { id: string; title: string };
+    list_reply?: { id: string; title: string; description?: string };
+  };
+  reaction?: { message_id: string; emoji: string };
+  context?: { from: string; id: string; referred_product?: any };
+  referral?: { source_url: string; source_type: string; source_id: string; headline?: string; body?: string };
+  order?: { catalog_id: string; product_items: Array<{ product_retailer_id: string; quantity: number; item_price: number; currency: string }> };
+}
+
+export interface MetaWebhookStatus {
+  id: string;
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  timestamp: string;
+  recipient_id: string;
+  conversation?: { id: string; origin?: { type: string } };
+  pricing?: { billable: boolean; pricing_model: string; category: string };
+  errors?: Array<{ code: number; title: string; message?: string; error_data?: { details: string } }>;
+}
+
+export interface ParsedStatus {
+  messageId: string;
+  status: string;
+  timestamp: number;
+  recipientId: string;
+  conversationId?: string;
+  originType?: string;
+  isBillable?: boolean;
+  errorCode?: number;
+  errorTitle?: string;
+  errorMessage?: string;
+}
+
+export interface ParsedWebhookResult {
+  phoneNumberId: string;
+  displayPhoneNumber: string;
+  messages: ParsedMessage[];
+  statuses: ParsedStatus[];
+}
+
+export interface ParsedMessage {
+  from: string;
+  pushName: string;
+  messageId: string;
+  timestamp: number;
+  type: string;
+  text?: string;
+  mediaId?: string;
+  mimetype?: string;
+  caption?: string;
+  filename?: string;
+  location?: { latitude: number; longitude: number; name?: string; address?: string };
+  contacts?: Array<{ name: string; phones: string[] }>;
+  buttonPayload?: string;
+  buttonText?: string;
+  interactiveType?: string;
+  interactiveId?: string;
+  interactiveTitle?: string;
+  reaction?: { messageId: string; emoji: string };
+  contextMessageId?: string;
+  contextFrom?: string;
+  isVoiceNote?: boolean;
+  isAnimatedSticker?: boolean;
+  order?: { catalogId: string; items: Array<{ productId: string; quantity: number; price: number; currency: string }> };
 }
 
 export interface MetaWebhookPayload {
@@ -418,22 +484,7 @@ export class MetaCloudService {
     return response.data.data || [];
   }
 
-  static parseWebhookMessage(payload: MetaWebhookPayload): {
-    phoneNumberId: string;
-    messages: Array<{
-      from: string;
-      pushName: string;
-      messageId: string;
-      timestamp: number;
-      type: string;
-      text?: string;
-      mediaId?: string;
-      mimetype?: string;
-      caption?: string;
-      filename?: string;
-      location?: { latitude: number; longitude: number; name?: string; address?: string };
-    }>;
-  } | null {
+  static parseWebhookMessage(payload: MetaWebhookPayload): ParsedWebhookResult | null {
     if (payload.object !== 'whatsapp_business_account') {
       return null;
     }
@@ -444,22 +495,27 @@ export class MetaCloudService {
 
         const value = change.value;
         const phoneNumberId = value.metadata.phone_number_id;
+        const displayPhoneNumber = value.metadata.display_phone_number;
         const contacts = value.contacts || [];
         const messages = value.messages || [];
+        const statuses = value.statuses || [];
 
-        if (messages.length === 0) continue;
-
-        const parsedMessages = messages.map(msg => {
+        const parsedMessages: ParsedMessage[] = messages.map(msg => {
           const contact = contacts.find(c => c.wa_id === msg.from);
           const pushName = contact?.profile?.name || '';
 
-          const parsed: any = {
+          const parsed: ParsedMessage = {
             from: msg.from,
             pushName,
             messageId: msg.id,
             timestamp: parseInt(msg.timestamp) * 1000,
             type: msg.type
           };
+
+          if (msg.context) {
+            parsed.contextMessageId = msg.context.id;
+            parsed.contextFrom = msg.context.from;
+          }
 
           switch (msg.type) {
             case 'text':
@@ -478,6 +534,7 @@ export class MetaCloudService {
             case 'audio':
               parsed.mediaId = msg.audio?.id;
               parsed.mimetype = msg.audio?.mime_type;
+              parsed.isVoiceNote = msg.audio?.voice === true;
               break;
             case 'document':
               parsed.mediaId = msg.document?.id;
@@ -488,16 +545,81 @@ export class MetaCloudService {
             case 'sticker':
               parsed.mediaId = msg.sticker?.id;
               parsed.mimetype = msg.sticker?.mime_type;
+              parsed.isAnimatedSticker = msg.sticker?.animated === true;
               break;
             case 'location':
               parsed.location = msg.location;
+              break;
+            case 'contacts':
+              if (msg.contacts) {
+                parsed.contacts = msg.contacts.map(c => ({
+                  name: c.name.formatted_name,
+                  phones: c.phones.map(p => p.phone)
+                }));
+              }
+              break;
+            case 'button':
+              parsed.buttonText = msg.button?.text;
+              parsed.buttonPayload = msg.button?.payload;
+              parsed.text = msg.button?.text;
+              break;
+            case 'interactive':
+              parsed.interactiveType = msg.interactive?.type;
+              if (msg.interactive?.button_reply) {
+                parsed.interactiveId = msg.interactive.button_reply.id;
+                parsed.interactiveTitle = msg.interactive.button_reply.title;
+                parsed.text = msg.interactive.button_reply.title;
+              } else if (msg.interactive?.list_reply) {
+                parsed.interactiveId = msg.interactive.list_reply.id;
+                parsed.interactiveTitle = msg.interactive.list_reply.title;
+                parsed.text = msg.interactive.list_reply.title;
+              }
+              break;
+            case 'reaction':
+              if (msg.reaction) {
+                parsed.reaction = {
+                  messageId: msg.reaction.message_id,
+                  emoji: msg.reaction.emoji
+                };
+              }
+              break;
+            case 'order':
+              if (msg.order) {
+                parsed.order = {
+                  catalogId: msg.order.catalog_id,
+                  items: msg.order.product_items.map(item => ({
+                    productId: item.product_retailer_id,
+                    quantity: item.quantity,
+                    price: item.item_price,
+                    currency: item.currency
+                  }))
+                };
+              }
               break;
           }
 
           return parsed;
         });
 
-        return { phoneNumberId, messages: parsedMessages };
+        const parsedStatuses: ParsedStatus[] = statuses.map((s: any) => ({
+          messageId: s.id,
+          status: s.status,
+          timestamp: parseInt(s.timestamp) * 1000,
+          recipientId: s.recipient_id,
+          conversationId: s.conversation?.id,
+          originType: s.conversation?.origin?.type,
+          isBillable: s.pricing?.billable,
+          errorCode: s.errors?.[0]?.code,
+          errorTitle: s.errors?.[0]?.title,
+          errorMessage: s.errors?.[0]?.message || s.errors?.[0]?.error_data?.details
+        }));
+
+        return { 
+          phoneNumberId, 
+          displayPhoneNumber,
+          messages: parsedMessages, 
+          statuses: parsedStatuses 
+        };
       }
     }
 

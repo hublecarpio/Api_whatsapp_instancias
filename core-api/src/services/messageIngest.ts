@@ -22,6 +22,12 @@ export interface IncomingMessage {
   caption?: string;
   filename?: string;
   location?: { latitude: number; longitude: number; name?: string; address?: string };
+  contextMessageId?: string;
+  contacts?: Array<{ name: string; phones: string[] }>;
+  buttonPayload?: string;
+  interactiveId?: string;
+  reaction?: { messageId: string; emoji: string };
+  order?: { catalogId: string; items: Array<{ productId: string; quantity: number; price: number; currency: string }> };
 }
 
 export async function processIncomingMessage(message: IncomingMessage): Promise<boolean> {
