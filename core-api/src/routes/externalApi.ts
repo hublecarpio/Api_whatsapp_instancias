@@ -697,4 +697,319 @@ router.get('/appointments', validateApiKey, async (req: ApiKeyRequest, res: Resp
   }
 });
 
+router.get('/agent-config', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const business = await prisma.business.findUnique({
+      where: { id: req.businessId },
+      include: {
+        agentPrompts: {
+          include: {
+            tools: { where: { enabled: true } }
+          }
+        },
+        policy: true
+      }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+    
+    const agentConfig = business.agentPrompts?.[0];
+    
+    res.json({
+      agentVersion: business.agentVersion || 'v1',
+      botEnabled: business.botEnabled,
+      prompt: agentConfig?.prompt || null,
+      historyLimit: agentConfig?.historyLimit || 10,
+      splitMessages: agentConfig?.splitMessages ?? true,
+      tools: (agentConfig?.tools || []).map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        endpoint: t.endpoint,
+        method: t.method,
+        enabled: t.enabled
+      })),
+      policy: business.policy ? {
+        shippingPolicy: business.policy.shippingPolicy,
+        refundPolicy: business.policy.refundPolicy,
+        brandVoice: business.policy.brandVoice,
+        allowedHours: business.policy.allowedHours
+      } : null,
+      businessObjective: business.businessObjective,
+      timezone: business.timezone
+    });
+  } catch (error: any) {
+    console.error('API agent-config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/agent-config', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { 
+      prompt, 
+      historyLimit, 
+      splitMessages, 
+      botEnabled,
+      agentVersion
+    } = req.body;
+    
+    const updates: any = {};
+    
+    if (botEnabled !== undefined) {
+      await prisma.business.update({
+        where: { id: req.businessId },
+        data: { botEnabled }
+      });
+    }
+    
+    if (agentVersion !== undefined && ['v1', 'v2'].includes(agentVersion)) {
+      await prisma.business.update({
+        where: { id: req.businessId },
+        data: { agentVersion }
+      });
+    }
+    
+    const existingPrompt = await prisma.agentPrompt.findFirst({
+      where: { businessId: req.businessId }
+    });
+    
+    const promptData: any = {};
+    if (prompt !== undefined) promptData.prompt = prompt;
+    if (historyLimit !== undefined) promptData.historyLimit = historyLimit;
+    if (splitMessages !== undefined) promptData.splitMessages = splitMessages;
+    
+    if (Object.keys(promptData).length > 0) {
+      if (existingPrompt) {
+        await prisma.agentPrompt.update({
+          where: { id: existingPrompt.id },
+          data: promptData
+        });
+      } else {
+        await prisma.agentPrompt.create({
+          data: {
+            businessId: req.businessId!,
+            prompt: prompt || 'Eres un asistente de atencion al cliente amable y profesional.',
+            ...promptData
+          }
+        });
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Configuracion del agente actualizada'
+    });
+  } catch (error: any) {
+    console.error('API agent-config update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/products', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { limit = 100, category, inStock } = req.query;
+    
+    const where: any = { businessId: req.businessId };
+    if (category) where.category = category;
+    if (inStock === 'true') where.stock = { gt: 0 };
+    
+    const products = await prisma.product.findMany({
+      where,
+      take: Math.min(Number(limit), 500),
+      orderBy: { title: 'asc' }
+    });
+    
+    res.json({ 
+      products: products.map(p => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        price: p.price,
+        stock: p.stock,
+        imageUrl: p.imageUrl
+      }))
+    });
+  } catch (error: any) {
+    console.error('API products error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/business-info', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const business = await prisma.business.findUnique({
+      where: { id: req.businessId },
+      include: {
+        instances: {
+          select: {
+            id: true,
+            name: true,
+            phoneNumber: true,
+            provider: true,
+            status: true,
+            isActive: true
+          }
+        },
+        followUpConfigs: {
+          select: {
+            id: true,
+            instanceId: true,
+            enabled: true,
+            firstDelayMinutes: true,
+            triggerMode: true
+          }
+        }
+      }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+    
+    res.json({
+      id: business.id,
+      name: business.name,
+      botEnabled: business.botEnabled,
+      agentVersion: business.agentVersion,
+      businessObjective: business.businessObjective,
+      timezone: business.timezone,
+      instances: business.instances,
+      followUpConfigs: business.followUpConfigs
+    });
+  } catch (error: any) {
+    console.error('API business-info error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/reminders', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { contactPhone, message, scheduledAt, type = 'manual' } = req.body;
+    
+    if (!contactPhone) {
+      return res.status(400).json({ error: 'Campo "contactPhone" es requerido' });
+    }
+    
+    if (!scheduledAt) {
+      return res.status(400).json({ error: 'Campo "scheduledAt" es requerido (ISO 8601)' });
+    }
+    
+    const cleanPhone = contactPhone.replace(/\D/g, '');
+    const scheduledDate = new Date(scheduledAt);
+    
+    if (isNaN(scheduledDate.getTime())) {
+      return res.status(400).json({ error: 'Formato de fecha invalido. Use ISO 8601 (ej: 2024-01-15T10:30:00Z)' });
+    }
+    
+    const contact = await prisma.contact.findFirst({
+      where: { businessId: req.businessId, phone: cleanPhone }
+    });
+    
+    const reminder = await prisma.reminder.create({
+      data: {
+        businessId: req.businessId!,
+        instanceId: req.instanceId,
+        contactPhone: cleanPhone,
+        contactName: contact?.name || null,
+        messageTemplate: message || null,
+        scheduledAt: scheduledDate,
+        type: type as any,
+        status: 'pending',
+        attemptNumber: 1
+      }
+    });
+    
+    res.json({
+      success: true,
+      reminder: {
+        id: reminder.id,
+        contactPhone: reminder.contactPhone,
+        scheduledAt: reminder.scheduledAt,
+        status: reminder.status
+      }
+    });
+  } catch (error: any) {
+    console.error('API reminders create error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/reminders', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { limit = 50, status, contactPhone } = req.query;
+    
+    const where: any = { businessId: req.businessId };
+    if (status) where.status = status;
+    if (contactPhone) where.contactPhone = (contactPhone as string).replace(/\D/g, '');
+    
+    const reminders = await prisma.reminder.findMany({
+      where,
+      take: Math.min(Number(limit), 200),
+      orderBy: { scheduledAt: 'asc' }
+    });
+    
+    res.json({ reminders });
+  } catch (error: any) {
+    console.error('API reminders error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/reminders/:id', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const reminder = await prisma.reminder.findFirst({
+      where: { id, businessId: req.businessId }
+    });
+    
+    if (!reminder) {
+      return res.status(404).json({ error: 'Recordatorio no encontrado' });
+    }
+    
+    await prisma.reminder.delete({ where: { id } });
+    
+    res.json({ success: true, message: 'Recordatorio eliminado' });
+  } catch (error: any) {
+    console.error('API reminders delete error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/contacts/:phone', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const cleanPhone = req.params.phone.replace(/\D/g, '');
+    const { name, email, tags, notes, leadStage, botPaused } = req.body;
+    
+    const contact = await prisma.contact.findFirst({
+      where: { businessId: req.businessId, phone: cleanPhone }
+    });
+    
+    if (!contact) {
+      return res.status(404).json({ error: 'Contacto no encontrado' });
+    }
+    
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (tags !== undefined) updateData.tags = tags;
+    if (notes !== undefined) updateData.notes = notes;
+    if (leadStage !== undefined) updateData.leadStage = leadStage;
+    if (botPaused !== undefined) updateData.botPaused = botPaused;
+    
+    const updated = await prisma.contact.update({
+      where: { id: contact.id },
+      data: updateData
+    });
+    
+    res.json({ success: true, contact: updated });
+  } catch (error: any) {
+    console.error('API contacts update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

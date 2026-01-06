@@ -42,10 +42,14 @@ export default function ApiDocsPage() {
 
   const tabs = [
     { id: 'enviar', label: 'Enviar Mensaje' },
+    { id: 'agente', label: 'Agente IA' },
     { id: 'contactos', label: 'Contactos' },
+    { id: 'productos', label: 'Productos' },
+    { id: 'recordatorios', label: 'Recordatorios' },
     { id: 'mensajes', label: 'Mensajes' },
     { id: 'pedidos', label: 'Pedidos' },
     { id: 'citas', label: 'Citas' },
+    { id: 'negocio', label: 'Negocio' },
     { id: 'webhooks', label: 'Webhooks' },
   ];
 
@@ -147,6 +151,82 @@ export default function ApiDocsPage() {
             </>
           )}
 
+          {activeTab === 'agente' && (
+            <>
+              <div>
+                <h3 className="text-white font-medium mb-2">GET /api/v1/agent-config</h3>
+                <p className="text-gray-400 text-sm mb-4">Obtiene la configuracion completa del agente IA (prompt, tools, etc).</p>
+              </div>
+
+              <CodeBlock
+                id="get-agent-config"
+                code={`curl -X GET "${baseUrl}/api/v1/agent-config" \\
+  -H "Authorization: Bearer efk_tu_api_key"`}
+              />
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Respuesta:</h4>
+                <CodeBlock
+                  id="agent-config-response"
+                  language="json"
+                  code={`{
+  "agentVersion": "v2",
+  "botEnabled": true,
+  "prompt": "Eres un asistente de ventas...",
+  "historyLimit": 10,
+  "splitMessages": true,
+  "tools": [
+    {
+      "id": "tool_123",
+      "name": "consultar_inventario",
+      "description": "Verifica stock de productos",
+      "endpoint": "https://mi-api.com/stock",
+      "method": "POST",
+      "enabled": true
+    }
+  ],
+  "policy": {
+    "shippingPolicy": "Envio gratis en compras mayores a $500",
+    "refundPolicy": "30 dias para devoluciones"
+  },
+  "businessObjective": "SALES",
+  "timezone": "America/Lima"
+}`}
+                />
+              </div>
+
+              <div className="mt-6">
+                <h3 className="text-white font-medium mb-2">PUT /api/v1/agent-config</h3>
+                <p className="text-gray-400 text-sm mb-4">Actualiza la configuracion del agente (prompt, version, etc).</p>
+              </div>
+
+              <CodeBlock
+                id="update-agent-config"
+                code={`curl -X PUT "${baseUrl}/api/v1/agent-config" \\
+  -H "Authorization: Bearer efk_tu_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "prompt": "Eres un asistente de ventas profesional...",
+    "botEnabled": true,
+    "agentVersion": "v2",
+    "historyLimit": 15,
+    "splitMessages": true
+  }'`}
+              />
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Parametros:</h4>
+                <ul className="text-gray-400 text-sm space-y-1">
+                  <li><code className="text-neon-blue">prompt</code> - Texto del prompt maestro del agente</li>
+                  <li><code className="text-neon-blue">botEnabled</code> - Activar/desactivar el bot (true/false)</li>
+                  <li><code className="text-neon-blue">agentVersion</code> - Version del agente: "v1" o "v2"</li>
+                  <li><code className="text-neon-blue">historyLimit</code> - Cantidad de mensajes de historial a considerar</li>
+                  <li><code className="text-neon-blue">splitMessages</code> - Dividir mensajes largos (true/false)</li>
+                </ul>
+              </div>
+            </>
+          )}
+
           {activeTab === 'contactos' && (
             <>
               <div>
@@ -187,6 +267,115 @@ export default function ApiDocsPage() {
     "tags": ["VIP", "Cliente"],
     "notes": "Cliente frecuente"
   }'`}
+              />
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Parametros actualizables:</h4>
+                <ul className="text-gray-400 text-sm space-y-1">
+                  <li><code className="text-neon-blue">name</code> - Nombre del contacto</li>
+                  <li><code className="text-neon-blue">email</code> - Email del contacto</li>
+                  <li><code className="text-neon-blue">tags</code> - Array de etiquetas ["VIP", "Cliente"]</li>
+                  <li><code className="text-neon-blue">notes</code> - Notas del contacto</li>
+                  <li><code className="text-neon-blue">leadStage</code> - Etapa del lead</li>
+                  <li><code className="text-neon-blue">botPaused</code> - Pausar bot para este contacto (true/false)</li>
+                </ul>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'productos' && (
+            <>
+              <div>
+                <h3 className="text-white font-medium mb-2">GET /api/v1/products</h3>
+                <p className="text-gray-400 text-sm mb-4">Obtiene la lista de productos del negocio.</p>
+              </div>
+
+              <CodeBlock
+                id="get-products"
+                code={`curl -X GET "${baseUrl}/api/v1/products?limit=100&inStock=true" \\
+  -H "Authorization: Bearer efk_tu_api_key"`}
+              />
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Parametros de consulta:</h4>
+                <ul className="text-gray-400 text-sm space-y-1">
+                  <li><code className="text-neon-blue">limit</code> - Cantidad maxima de productos (default: 100, max: 500)</li>
+                  <li><code className="text-neon-blue">inStock</code> - Solo productos con stock (true/false)</li>
+                </ul>
+              </div>
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Respuesta:</h4>
+                <CodeBlock
+                  id="products-response"
+                  language="json"
+                  code={`{
+  "products": [
+    {
+      "id": "prod_123",
+      "title": "Producto Premium",
+      "description": "Descripcion del producto",
+      "price": 99.99,
+      "stock": 50,
+      "imageUrl": "https://..."
+    }
+  ]
+}`}
+                />
+              </div>
+            </>
+          )}
+
+          {activeTab === 'recordatorios' && (
+            <>
+              <div>
+                <h3 className="text-white font-medium mb-2">GET /api/v1/reminders</h3>
+                <p className="text-gray-400 text-sm mb-4">Obtiene la lista de recordatorios programados.</p>
+              </div>
+
+              <CodeBlock
+                id="get-reminders"
+                code={`curl -X GET "${baseUrl}/api/v1/reminders?status=pending&limit=50" \\
+  -H "Authorization: Bearer efk_tu_api_key"`}
+              />
+
+              <div className="mt-6">
+                <h3 className="text-white font-medium mb-2">POST /api/v1/reminders</h3>
+                <p className="text-gray-400 text-sm mb-4">Crea un nuevo recordatorio para un contacto.</p>
+              </div>
+
+              <CodeBlock
+                id="create-reminder"
+                code={`curl -X POST "${baseUrl}/api/v1/reminders" \\
+  -H "Authorization: Bearer efk_tu_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "contactPhone": "5215512345678",
+    "message": "Hola! Solo queria dar seguimiento...",
+    "scheduledAt": "2024-01-20T14:00:00Z",
+    "type": "manual"
+  }'`}
+              />
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Parametros:</h4>
+                <ul className="text-gray-400 text-sm space-y-1">
+                  <li><code className="text-neon-blue">contactPhone</code> (requerido) - Telefono del contacto</li>
+                  <li><code className="text-neon-blue">scheduledAt</code> (requerido) - Fecha/hora ISO 8601</li>
+                  <li><code className="text-neon-blue">message</code> - Mensaje a enviar (opcional, se genera con IA si no se provee)</li>
+                  <li><code className="text-neon-blue">type</code> - Tipo: "manual" o "auto" (default: manual)</li>
+                </ul>
+              </div>
+
+              <div className="mt-6">
+                <h3 className="text-white font-medium mb-2">DELETE /api/v1/reminders/:id</h3>
+                <p className="text-gray-400 text-sm mb-4">Elimina un recordatorio.</p>
+              </div>
+
+              <CodeBlock
+                id="delete-reminder"
+                code={`curl -X DELETE "${baseUrl}/api/v1/reminders/reminder_123" \\
+  -H "Authorization: Bearer efk_tu_api_key"`}
               />
             </>
           )}
@@ -252,6 +441,66 @@ export default function ApiDocsPage() {
 curl -X GET "${baseUrl}/api/v1/appointments?from=2024-01-01&to=2024-12-31" \\
   -H "Authorization: Bearer efk_tu_api_key"`}
               />
+            </>
+          )}
+
+          {activeTab === 'negocio' && (
+            <>
+              <div>
+                <h3 className="text-white font-medium mb-2">GET /api/v1/business-info</h3>
+                <p className="text-gray-400 text-sm mb-4">Obtiene informacion completa del negocio, instancias y configuracion.</p>
+              </div>
+
+              <CodeBlock
+                id="get-business-info"
+                code={`curl -X GET "${baseUrl}/api/v1/business-info" \\
+  -H "Authorization: Bearer efk_tu_api_key"`}
+              />
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">Respuesta:</h4>
+                <CodeBlock
+                  id="business-info-response"
+                  language="json"
+                  code={`{
+  "id": "biz_123",
+  "name": "Mi Negocio",
+  "botEnabled": true,
+  "agentVersion": "v2",
+  "businessObjective": "SALES",
+  "timezone": "America/Lima",
+  "instances": [
+    {
+      "id": "inst_123",
+      "name": "Ventas Principal",
+      "phoneNumber": "+5215512345678",
+      "provider": "META_COEXIST",
+      "status": "CONNECTED",
+      "isActive": true
+    }
+  ],
+  "followUpConfigs": [
+    {
+      "id": "cfg_123",
+      "instanceId": "inst_123",
+      "enabled": true,
+      "firstDelayMinutes": 15,
+      "triggerMode": "user"
+    }
+  ]
+}`}
+                />
+              </div>
+
+              <div className="bg-dark-bg rounded-lg p-4 mt-4">
+                <h4 className="text-white text-sm mb-2">GET /api/v1/me</h4>
+                <p className="text-gray-400 text-sm">Informacion basica del negocio e instancia asociada a la API key.</p>
+                <CodeBlock
+                  id="get-me"
+                  code={`curl -X GET "${baseUrl}/api/v1/me" \\
+  -H "Authorization: Bearer efk_tu_api_key"`}
+                />
+              </div>
             </>
           )}
 
