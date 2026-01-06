@@ -27,24 +27,61 @@ function normalizeArgentinePhone(phone: string): string {
 
 router.use(authMiddleware);
 
-async function getMetaCredentialForBusiness(userId: string, businessId: string, instanceId?: string) {
+interface MetaCredentialResult {
+  accessToken: string;
+  phoneNumberId: string;
+  businessId: string;
+  credentialId: string;
+  provider: 'META_CLOUD' | 'META_COEXIST';
+}
+
+async function getMetaCredentialForBusiness(userId: string, businessId: string, instanceId?: string): Promise<MetaCredentialResult | null> {
   const business = await prisma.business.findFirst({
     where: { id: businessId, userId }
   });
   
   if (!business) return null;
   
-  const whereClause: any = { businessId, provider: 'META_CLOUD' };
+  const whereClause: any = { 
+    businessId, 
+    provider: { in: ['META_CLOUD', 'META_COEXIST'] }
+  };
   if (instanceId) {
     whereClause.id = instanceId;
   }
   
   const instance = await prisma.whatsAppInstance.findFirst({
     where: whereClause,
-    include: { metaCredential: true }
+    include: { metaCredential: true, metaCoexistCredential: true }
   });
   
-  return instance?.metaCredential || null;
+  if (!instance) return null;
+  
+  if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
+    return {
+      accessToken: instance.metaCredential.accessToken,
+      phoneNumberId: instance.metaCredential.phoneNumberId,
+      businessId: instance.metaCredential.businessId,
+      credentialId: instance.metaCredential.id,
+      provider: 'META_CLOUD'
+    };
+  }
+  
+  if (instance.provider === 'META_COEXIST' && instance.metaCoexistCredential) {
+    if (!instance.metaCoexistCredential.phoneNumberId) {
+      console.warn(`[TEMPLATES] META_COEXIST instance ${instance.id} missing phoneNumberId - use /auth/meta-coexist/repair/:instanceId to fix`);
+      return null;
+    }
+    return {
+      accessToken: instance.metaCoexistCredential.systemAccessToken || instance.metaCoexistCredential.userAccessToken,
+      phoneNumberId: instance.metaCoexistCredential.phoneNumberId,
+      businessId: instance.metaCoexistCredential.wabaId,
+      credentialId: instance.metaCoexistCredential.id,
+      provider: 'META_COEXIST'
+    };
+  }
+  
+  return null;
 }
 
 router.get('/:businessId', async (req: AuthRequest, res: Response) => {
@@ -53,12 +90,12 @@ router.get('/:businessId', async (req: AuthRequest, res: Response) => {
     
     if (!credential) {
       return res.status(404).json({ 
-        error: 'No Meta Cloud instance found. Please connect Meta Cloud API first.' 
+        error: 'No Meta instance found. Please connect Meta Cloud API or Meta Coexist first. If using Coexist, ensure phoneNumberId is configured (use /auth/meta-coexist/repair if needed).' 
       });
     }
     
     const templates = await prisma.metaTemplate.findMany({
-      where: { credentialId: credential.id },
+      where: { credentialId: credential.credentialId },
       orderBy: { createdAt: 'desc' }
     });
     
@@ -75,7 +112,7 @@ router.post('/:businessId/sync', async (req: AuthRequest, res: Response) => {
     
     if (!credential) {
       return res.status(404).json({ 
-        error: 'No Meta Cloud instance found' 
+        error: 'No Meta instance found (Meta Cloud or Meta Coexist required)' 
       });
     }
     
@@ -99,7 +136,7 @@ router.post('/:businessId/sync', async (req: AuthRequest, res: Response) => {
       const template = await prisma.metaTemplate.upsert({
         where: {
           credentialId_name: {
-            credentialId: credential.id,
+            credentialId: credential.credentialId,
             name: mt.name
           }
         },
@@ -116,7 +153,7 @@ router.post('/:businessId/sync', async (req: AuthRequest, res: Response) => {
           lastSynced: new Date()
         },
         create: {
-          credentialId: credential.id,
+          credentialId: credential.credentialId,
           metaTemplateId: mt.id,
           name: mt.name,
           language: mt.language || 'es',
@@ -158,7 +195,7 @@ router.post('/:businessId/create', async (req: AuthRequest, res: Response) => {
     const credential = await getMetaCredentialForBusiness(req.userId!, req.params.businessId);
     
     if (!credential) {
-      return res.status(404).json({ error: 'No Meta Cloud instance found' });
+      return res.status(404).json({ error: 'No Meta instance found (Meta Cloud or Meta Coexist required)' });
     }
     
     const components: any[] = [];
@@ -216,7 +253,7 @@ router.post('/:businessId/create', async (req: AuthRequest, res: Response) => {
     
     const template = await prisma.metaTemplate.create({
       data: {
-        credentialId: credential.id,
+        credentialId: credential.credentialId,
         metaTemplateId: response.data.id,
         name: name.toLowerCase().replace(/\s+/g, '_'),
         language: language || 'es',
@@ -248,13 +285,13 @@ router.delete('/:businessId/:templateId', async (req: AuthRequest, res: Response
     const credential = await getMetaCredentialForBusiness(req.userId!, req.params.businessId);
     
     if (!credential) {
-      return res.status(404).json({ error: 'No Meta Cloud instance found' });
+      return res.status(404).json({ error: 'No Meta instance found (Meta Cloud or Meta Coexist required)' });
     }
     
     const template = await prisma.metaTemplate.findFirst({
       where: { 
         id: req.params.templateId,
-        credentialId: credential.id
+        credentialId: credential.credentialId
       }
     });
     
@@ -296,12 +333,12 @@ router.post('/:businessId/send-template', async (req: AuthRequest, res: Response
     const credential = await getMetaCredentialForBusiness(req.userId!, req.params.businessId, instanceId);
     
     if (!credential) {
-      return res.status(404).json({ error: 'No Meta Cloud instance found' });
+      return res.status(404).json({ error: 'No Meta instance found (Meta Cloud or Meta Coexist required)' });
     }
     
     const template = await prisma.metaTemplate.findFirst({
       where: {
-        credentialId: credential.id,
+        credentialId: credential.credentialId,
         name: templateName,
         status: 'APPROVED'
       }
