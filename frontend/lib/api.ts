@@ -240,8 +240,9 @@ export const waApi = {
   completeEmbeddedSignup: (data: {
     businessId: string;
     code: string;
-    wabaId: string;
-    phoneNumberId: string;
+    wabaId?: string;
+    phoneNumberId?: string;
+    metaBusinessId?: string;
     provider?: 'META_CLOUD' | 'META_COEXIST';
   }) => api.post('/auth/meta-coexist/embedded-signup/complete', data)
 };
