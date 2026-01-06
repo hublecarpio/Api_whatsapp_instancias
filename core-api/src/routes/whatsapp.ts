@@ -720,11 +720,44 @@ router.get('/instances/:instanceId/status', async (req: AuthRequest, res: Respon
     
     const instance = await prisma.whatsAppInstance.findFirst({
       where: { id: instanceId, businessId: businessId as string },
-      include: { metaCredential: true }
+      include: { metaCredential: true, metaCoexistCredential: true }
     });
     
     if (!instance) {
       return res.status(404).json({ error: 'Instance not found' });
+    }
+    
+    if (instance.provider === 'META_COEXIST') {
+      const coexistCred = instance.metaCoexistCredential;
+      if (!coexistCred) {
+        return res.json({
+          id: instance.id,
+          name: instance.name,
+          provider: instance.provider,
+          status: 'pending_credentials',
+          phoneNumber: instance.phoneNumber
+        });
+      }
+      
+      const globalWebhookToken = process.env.META_WEBHOOK_VERIFY_TOKEN || 'efficore_webhook_token_2024';
+      return res.json({
+        id: instance.id,
+        name: instance.name,
+        provider: instance.provider,
+        phoneNumber: coexistCred.displayPhone || instance.phoneNumber,
+        status: coexistCred.coexistStatus === 'ACTIVE' ? 'connected' : instance.status,
+        isActive: instance.isActive,
+        lastConnection: instance.lastConnection,
+        coexistenceEnabled: coexistCred.coexistenceEnabled,
+        webhookUrl: getPublicWebhookUrl('/webhook/meta'),
+        webhookVerifyToken: coexistCred.webhookVerifyToken || globalWebhookToken,
+        metaInfo: {
+          displayPhoneNumber: coexistCred.displayPhone,
+          qualityRating: coexistCred.qualityRating || 'GREEN',
+          wabaId: coexistCred.wabaId,
+          phoneNumberId: coexistCred.phoneNumberId
+        }
+      });
     }
     
     if (instance.provider === 'META_CLOUD') {
@@ -1188,23 +1221,34 @@ router.get('/instances/:businessId', async (req: AuthRequest, res: Response) => 
     
     const instances = await prisma.whatsAppInstance.findMany({
       where: { businessId: req.params.businessId },
-      include: { metaCredential: { select: { webhookVerifyToken: true, phoneNumberId: true } } },
+      include: { 
+        metaCredential: { select: { webhookVerifyToken: true, phoneNumberId: true } },
+        metaCoexistCredential: { select: { webhookVerifyToken: true, phoneNumberId: true, displayPhone: true, coexistStatus: true } }
+      },
       orderBy: { createdAt: 'desc' }
     });
+    
+    const globalWebhookToken = process.env.META_WEBHOOK_VERIFY_TOKEN || 'efficore_webhook_token_2024';
     
     res.json(instances.map(inst => ({
       id: inst.id,
       name: inst.name,
       provider: inst.provider,
-      phoneNumber: inst.phoneNumber,
-      status: inst.status,
+      phoneNumber: inst.metaCoexistCredential?.displayPhone || inst.phoneNumber,
+      status: inst.provider === 'META_COEXIST' && inst.metaCoexistCredential?.coexistStatus === 'ACTIVE' 
+        ? 'connected' 
+        : inst.status,
       isActive: inst.isActive,
       botEnabled: inst.botEnabled,
       businessObjective: inst.businessObjective,
       lastConnection: inst.lastConnection,
       createdAt: inst.createdAt,
-      webhookUrl: inst.provider === 'META_CLOUD' ? getPublicWebhookUrl(`/webhook/meta/${inst.id}`) : null,
-      webhookVerifyToken: inst.metaCredential?.webhookVerifyToken
+      webhookUrl: inst.provider === 'META_CLOUD' 
+        ? getPublicWebhookUrl(`/webhook/meta/${inst.id}`) 
+        : inst.provider === 'META_COEXIST' 
+          ? getPublicWebhookUrl('/webhook/meta') 
+          : null,
+      webhookVerifyToken: inst.metaCredential?.webhookVerifyToken || inst.metaCoexistCredential?.webhookVerifyToken || (inst.provider === 'META_COEXIST' ? globalWebhookToken : undefined)
     })));
   } catch (error) {
     console.error('Get instances error:', error);
