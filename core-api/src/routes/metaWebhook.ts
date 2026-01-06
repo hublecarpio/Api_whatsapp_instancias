@@ -314,10 +314,34 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 router.post('/', async (req: Request, res: Response) => {
+  const timestamp = new Date().toISOString();
+  
+  console.log('='.repeat(80));
+  console.log(`[META WEBHOOK] === INCOMING REQUEST @ ${timestamp} ===`);
+  console.log('[META WEBHOOK] Method:', req.method);
+  console.log('[META WEBHOOK] URL:', req.originalUrl);
+  console.log('[META WEBHOOK] Content-Type:', req.headers['content-type']);
+  console.log('[META WEBHOOK] User-Agent:', req.headers['user-agent']);
+  console.log('[META WEBHOOK] X-Hub-Signature-256:', req.headers['x-hub-signature-256'] ? 'present' : 'missing');
+  console.log('[META WEBHOOK] Body type:', typeof req.body);
+  console.log('[META WEBHOOK] Body is null:', req.body === null);
+  console.log('[META WEBHOOK] Body is undefined:', req.body === undefined);
+  console.log('[META WEBHOOK] Body keys:', req.body ? Object.keys(req.body) : 'N/A');
+  console.log('[META WEBHOOK] RAW PAYLOAD:', JSON.stringify(req.body, null, 2));
+  console.log('='.repeat(80));
+  
   try {
     const payload: MetaWebhookPayload = req.body;
     
+    if (!payload || typeof payload !== 'object') {
+      console.error('[META WEBHOOK] ERROR: Invalid payload received');
+      console.error('[META WEBHOOK] Payload value:', payload);
+      res.status(200).send('EVENT_RECEIVED');
+      return;
+    }
+    
     webhookLogger.info({
+      timestamp,
       object: payload.object,
       entryCount: payload.entry?.length,
       wabaId: payload.entry?.[0]?.id,
@@ -334,7 +358,9 @@ router.post('/', async (req: Request, res: Response) => {
     
     await processWebhookPayload(payload);
   } catch (error: any) {
+    console.error('[META WEBHOOK] PROCESSING ERROR:', error);
     webhookLogger.error({ error: error.message, stack: error.stack }, 'Webhook processing error');
+    res.status(200).send('EVENT_RECEIVED');
   }
 });
 
