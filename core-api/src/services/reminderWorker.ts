@@ -624,7 +624,30 @@ export async function processReminders(): Promise<void> {
         }
       }
       
-      const instance = await getActiveInstance(reminder.businessId);
+      // Prioritize the instance associated with the reminder, then fallback to any active instance
+      let instance: any = null;
+      
+      if (reminder.instanceId) {
+        instance = await prisma.whatsAppInstance.findFirst({
+          where: { 
+            id: reminder.instanceId,
+            businessId: reminder.businessId
+          },
+          include: { metaCredential: true, metaCoexistCredential: true }
+        });
+        if (instance) {
+          console.log(`[REMINDER] Using reminder's specific instance: ${instance.id} (provider: ${instance.provider})`);
+        }
+      }
+      
+      // Fallback to any active instance if specific one not found
+      if (!instance) {
+        instance = await getActiveInstance(reminder.businessId);
+        if (instance && reminder.instanceId) {
+          console.warn(`[REMINDER] Specific instance ${reminder.instanceId} not found, falling back to ${instance.id} (${instance.provider})`);
+        }
+      }
+      
       if (!instance) {
         const retryAt = new Date(Date.now() + 15 * 60 * 1000);
         await prisma.reminder.update({
