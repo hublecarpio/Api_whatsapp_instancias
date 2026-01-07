@@ -232,14 +232,30 @@ async function processMessage(
     order: msg.order
   });
   
+  // Build message text for webhook - handle special types like order
+  let webhookMessage = msg.caption || msg.text || '';
+  
+  if (msg.type === 'order' && msg.order) {
+    const orderItems = msg.order.items.map((item: any) => 
+      `• ${item.productId} x${item.quantity} - ${item.currency} ${item.price.toFixed(2)}`
+    ).join('\n');
+    const totalAmount = msg.order.items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+    const currency = msg.order.items[0]?.currency || 'USD';
+    
+    webhookMessage = `🛒 PEDIDO DEL CATÁLOGO\nCatálogo: ${msg.order.catalogId}\nProductos:\n${orderItems}\nTotal: ${currency} ${totalAmount.toFixed(2)}`;
+  } else if (msg.type === 'location' && msg.location) {
+    webhookMessage = `Ubicación: ${msg.location.latitude}, ${msg.location.longitude}`;
+    if (msg.location.name) webhookMessage += ` (${msg.location.name})`;
+  }
+  
   dispatchUserMessage(
     instance.businessId,
     msg.from,
     msg.pushName || '',
-    msg.caption || msg.text || '',
+    webhookMessage,
     msg.type,
     mediaUrl,
-    undefined,
+    msg.order ? { order: msg.order } : undefined,
     instance.id
   ).catch(err => webhookLogger.error({ error: err.message }, 'Failed to dispatch user_message webhook'));
 
