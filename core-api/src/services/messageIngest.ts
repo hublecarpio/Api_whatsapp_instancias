@@ -67,7 +67,30 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     return false;
   }
 
-  let messageText = text || caption || (type === 'location' ? `Location: ${message.location?.latitude}, ${message.location?.longitude}` : '');
+  let messageText = text || caption || '';
+  
+  // Handle special message types
+  if (type === 'location' && message.location) {
+    messageText = `Ubicación: ${message.location.latitude}, ${message.location.longitude}`;
+    if (message.location.name) messageText += ` (${message.location.name})`;
+    if (message.location.address) messageText += ` - ${message.location.address}`;
+  }
+  
+  // Handle catalog order messages
+  if (type === 'order' && message.order) {
+    const orderItems = message.order.items.map(item => 
+      `• ${item.productId} x${item.quantity} - ${item.currency} ${item.price.toFixed(2)}`
+    ).join('\n');
+    const totalAmount = message.order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const currency = message.order.items[0]?.currency || 'USD';
+    
+    messageText = `🛒 PEDIDO DEL CATÁLOGO DE WHATSAPP\n` +
+      `Catálogo: ${message.order.catalogId}\n` +
+      `Productos:\n${orderItems}\n` +
+      `Total: ${currency} ${totalAmount.toFixed(2)}`;
+    
+    console.log(`[ORDER] Catalog order received from ${cleanPhone}:`, JSON.stringify(message.order, null, 2));
+  }
 
   let mediaAnalysis = '';
   let mediaAnalysisRaw = '';
@@ -112,7 +135,8 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
         messageId: message.messageId,
         timestamp: message.timestamp,
         mediaAnalysis: mediaAnalysisRaw || undefined,
-        mediaType: mediaUrl ? type : undefined
+        mediaType: mediaUrl ? type : undefined,
+        order: message.order || undefined
       }
     }
   });
