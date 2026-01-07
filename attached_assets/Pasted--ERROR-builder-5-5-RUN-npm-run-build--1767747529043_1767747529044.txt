@@ -1,0 +1,44 @@
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             39.8s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+1.020                                                                                                                                                                       
+1.020 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+1.020 > next build                                                                                                                                                          
+1.020                                                                                                                                                                       
+1.964 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+1.964 This information is used to shape Next.js' roadmap and prioritize features.
+1.964 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+1.964 https://nextjs.org/telemetry
+1.964 
+2.083   ▲ Next.js 14.2.16
+2.084 
+2.195    Creating an optimized production build ...
+25.99  ✓ Compiled successfully
+25.99    Linting and checking validity of types ...
+39.62 Failed to compile.
+39.62 
+39.62 ./app/dashboard/chat/page.tsx:1216:73
+39.62 Type error: 'windowStatus' is possibly 'null'.
+39.62 
+39.62   1214 |                     </button>
+39.62   1215 |                     {['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && (
+39.62 > 1216 |                       <span className={`text-xs px-1.5 py-0.5 rounded ${windowStatus.windowOpen ? 'bg-neon-blue/20 text-neon-blue' : 'bg-accent-warning/20 text-accent-warning'}`}>
+39.62        |                                                                         ^
+39.62   1217 |                         {windowStatus.windowOpen ? `📬 ${windowStatus.hoursRemaining}h` : '📭 Template'}
+39.62   1218 |                       </span>
+39.62   1219 |                     )}
+39.69 npm notice
+39.69 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+39.69 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+39.69 npm notice To update run: npm install -g npm@11.7.0
+39.69 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1

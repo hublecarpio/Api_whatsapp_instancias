@@ -1212,7 +1212,7 @@ export default function ChatPage() {
                     >
                       {contactRemindersPaused ? '⏸️ Rec off' : '🔔 Rec'}
                     </button>
-                    {['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && (
+                    {windowStatus && windowStatus.provider && ['META_CLOUD', 'META_COEXIST'].includes(windowStatus.provider) && (
                       <span className={`text-xs px-1.5 py-0.5 rounded ${windowStatus.windowOpen ? 'bg-neon-blue/20 text-neon-blue' : 'bg-accent-warning/20 text-accent-warning'}`}>
                         {windowStatus.windowOpen ? `📬 ${windowStatus.hoursRemaining}h` : '📭 Template'}
                       </span>
