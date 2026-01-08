@@ -430,19 +430,19 @@ export default function ChatPage() {
     if (selectedPhone && currentBusiness) {
       prevMessagesLengthRef.current = 0;
       isNearBottomRef.current = true;
-      fetchMessages(selectedPhone);
+      fetchMessages(selectedPhone, selectedConversationInstanceId);
       fetchWindowStatus(selectedPhone);
       fetchContactBotStatus(selectedPhone);
       fetchContactReminderStatus(selectedPhone);
       fetchContactExtractedData(selectedPhone);
       const interval = setInterval(() => {
-        fetchMessages(selectedPhone);
+        fetchMessages(selectedPhone, selectedConversationInstanceId);
         fetchWindowStatus(selectedPhone);
         fetchContactExtractedData(selectedPhone);
       }, 5000);
       return () => clearInterval(interval);
     }
-  }, [selectedPhone, currentBusiness]);
+  }, [selectedPhone, currentBusiness, selectedConversationInstanceId]);
 
   const fetchContactBotStatus = async (phone: string) => {
     if (!currentBusiness) return;
@@ -584,7 +584,7 @@ export default function ChatPage() {
       setShowTemplateModal(false);
       setSelectedTemplateForSend(null);
       setTemplateVariables([]);
-      fetchMessages(selectedPhone);
+      fetchMessages(selectedPhone, selectedConversationInstanceId);
     } catch (err: any) {
       console.error('Failed to send template:', err);
       setError(err.response?.data?.error || 'Error al enviar plantilla');
@@ -688,7 +688,8 @@ export default function ChatPage() {
       fetchConversations();
       setSelectedPhone(cleanPhone);
       setSelectedContactName('');
-      fetchMessages(cleanPhone);
+      setSelectedConversationInstanceId(selectedInstanceId);
+      fetchMessages(cleanPhone, selectedInstanceId);
       fetchWindowStatus(cleanPhone);
     } catch (err: any) {
       console.error('Failed to send new chat:', err);
@@ -732,10 +733,10 @@ export default function ChatPage() {
     }
   };
 
-  const fetchMessages = async (phone: string) => {
+  const fetchMessages = async (phone: string, instanceId?: string | null) => {
     if (!currentBusiness) return;
     try {
-      const response = await messageApi.conversation(currentBusiness.id, phone, selectedInstanceId || undefined);
+      const response = await messageApi.conversation(currentBusiness.id, phone, instanceId || undefined);
       setMessages(response.data);
     } catch (err) {
       console.error('Failed to fetch messages:', err);
@@ -825,7 +826,7 @@ export default function ChatPage() {
         await waApi.send(currentBusiness.id, { to: selectedPhone, message: messageCopy, instanceId: effectiveInstanceId });
       }
       
-      fetchMessages(selectedPhone);
+      fetchMessages(selectedPhone, selectedConversationInstanceId);
     } catch (err: any) {
       console.error('Failed to send message:', err);
       setMessages(prev => prev.filter(m => m.id !== tempId));
