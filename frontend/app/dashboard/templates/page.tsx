@@ -50,7 +50,8 @@ export default function TemplatesPage() {
   const checkMetaInstance = async () => {
     try {
       const response = await waApi.status(currentBusiness!.id);
-      setHasMetaInstance(response.data.provider === 'META_CLOUD');
+      const provider = response.data.provider;
+      setHasMetaInstance(provider === 'META_CLOUD' || provider === 'META_COEXIST');
     } catch {
       setHasMetaInstance(false);
     }

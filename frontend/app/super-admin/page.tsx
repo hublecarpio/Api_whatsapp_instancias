@@ -1571,11 +1571,11 @@ function WhatsAppTab({ token }: { token: string }) {
                 <td className="py-3 px-4 text-white font-mono text-sm">{inst.id?.substring(0, 12)}...</td>
                 <td className="py-3 px-4">
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    inst.provider === 'META_CLOUD' 
+                    inst.provider === 'META_CLOUD' || inst.provider === 'META_COEXIST'
                       ? 'bg-green-500/20 text-green-400' 
                       : 'bg-blue-500/20 text-blue-400'
                   }`}>
-                    {inst.provider === 'META_CLOUD' ? 'Meta Cloud' : 'Baileys'}
+                    {inst.provider === 'META_CLOUD' ? 'Meta Cloud' : inst.provider === 'META_COEXIST' ? 'Meta Coexist' : 'Baileys'}
                   </span>
                 </td>
                 <td className="py-3 px-4">

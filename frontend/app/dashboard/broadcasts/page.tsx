@@ -37,7 +37,7 @@ interface MetaTemplate {
 
 interface WhatsAppInstance {
   id: string;
-  provider: 'BAILEYS' | 'META_CLOUD';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
   status: string;
 }
 
@@ -127,7 +127,7 @@ export default function BroadcastsPage() {
   const [filterInstanceId, setFilterInstanceId] = useState<string>('');
   const [metaMode, setMetaMode] = useState<'template' | 'regular'>('template');
 
-  const isMetaCloud = instance?.provider === 'META_CLOUD';
+  const isMetaCloud = instance?.provider === 'META_CLOUD' || instance?.provider === 'META_COEXIST';
   
   const contactsWithin24h = contacts.filter(c => {
     if (!c.lastMessageAt) return false;
@@ -310,7 +310,7 @@ export default function BroadcastsPage() {
       const inst = instanceResponse.data;
       setInstance(inst);
 
-      if (inst?.provider === 'META_CLOUD') {
+      if (inst?.provider === 'META_CLOUD' || inst?.provider === 'META_COEXIST') {
         const templatesResponse = await axios.get(`${API_URL}/templates/${currentBusiness.id}`, {
           headers: getAuthHeader()
         });
