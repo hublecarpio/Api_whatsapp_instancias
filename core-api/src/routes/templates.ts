@@ -84,6 +84,22 @@ async function getMetaCredentialForBusiness(userId: string, businessId: string, 
   return null;
 }
 
+function buildCredentialWhere(credential: MetaCredentialResult): { credentialId?: string; coexistCredentialId?: string } {
+  if (credential.provider === 'META_CLOUD') {
+    return { credentialId: credential.credentialId };
+  } else {
+    return { coexistCredentialId: credential.credentialId };
+  }
+}
+
+function buildCredentialData(credential: MetaCredentialResult): { credentialId?: string; coexistCredentialId?: string } {
+  if (credential.provider === 'META_CLOUD') {
+    return { credentialId: credential.credentialId };
+  } else {
+    return { coexistCredentialId: credential.credentialId };
+  }
+}
+
 router.get('/:businessId', async (req: AuthRequest, res: Response) => {
   try {
     const credential = await getMetaCredentialForBusiness(req.userId!, req.params.businessId);
@@ -95,7 +111,7 @@ router.get('/:businessId', async (req: AuthRequest, res: Response) => {
     }
     
     const templates = await prisma.metaTemplate.findMany({
-      where: { credentialId: credential.credentialId },
+      where: buildCredentialWhere(credential),
       orderBy: { createdAt: 'desc' }
     });
     
@@ -133,39 +149,47 @@ router.post('/:businessId/sync', async (req: AuthRequest, res: Response) => {
       const footerComponent = mt.components?.find((c: any) => c.type === 'FOOTER');
       const buttonsComponent = mt.components?.find((c: any) => c.type === 'BUTTONS');
       
-      const template = await prisma.metaTemplate.upsert({
+      const existingTemplate = await prisma.metaTemplate.findFirst({
         where: {
-          credentialId_name: {
-            credentialId: credential.credentialId,
-            name: mt.name
-          }
-        },
-        update: {
-          metaTemplateId: mt.id,
-          language: mt.language || 'es',
-          category: mt.category || 'UTILITY',
-          status: mt.status || 'PENDING',
-          components: mt.components || [],
-          headerType: headerComponent?.format || null,
-          bodyText: bodyComponent?.text || null,
-          footerText: footerComponent?.text || null,
-          buttons: buttonsComponent?.buttons || null,
-          lastSynced: new Date()
-        },
-        create: {
-          credentialId: credential.credentialId,
-          metaTemplateId: mt.id,
-          name: mt.name,
-          language: mt.language || 'es',
-          category: mt.category || 'UTILITY',
-          status: mt.status || 'PENDING',
-          components: mt.components || [],
-          headerType: headerComponent?.format || null,
-          bodyText: bodyComponent?.text || null,
-          footerText: footerComponent?.text || null,
-          buttons: buttonsComponent?.buttons || null
+          ...buildCredentialWhere(credential),
+          name: mt.name
         }
       });
+      
+      let template;
+      if (existingTemplate) {
+        template = await prisma.metaTemplate.update({
+          where: { id: existingTemplate.id },
+          data: {
+            metaTemplateId: mt.id,
+            language: mt.language || 'es',
+            category: mt.category || 'UTILITY',
+            status: mt.status || 'PENDING',
+            components: mt.components || [],
+            headerType: headerComponent?.format || null,
+            bodyText: bodyComponent?.text || null,
+            footerText: footerComponent?.text || null,
+            buttons: buttonsComponent?.buttons || null,
+            lastSynced: new Date()
+          }
+        });
+      } else {
+        template = await prisma.metaTemplate.create({
+          data: {
+            ...buildCredentialData(credential),
+            metaTemplateId: mt.id,
+            name: mt.name,
+            language: mt.language || 'es',
+            category: mt.category || 'UTILITY',
+            status: mt.status || 'PENDING',
+            components: mt.components || [],
+            headerType: headerComponent?.format || null,
+            bodyText: bodyComponent?.text || null,
+            footerText: footerComponent?.text || null,
+            buttons: buttonsComponent?.buttons || null
+          } as any
+        });
+      }
       
       synced.push(template);
     }
@@ -253,7 +277,7 @@ router.post('/:businessId/create', async (req: AuthRequest, res: Response) => {
     
     const template = await prisma.metaTemplate.create({
       data: {
-        credentialId: credential.credentialId,
+        ...buildCredentialData(credential),
         metaTemplateId: response.data.id,
         name: name.toLowerCase().replace(/\s+/g, '_'),
         language: language || 'es',
@@ -264,7 +288,7 @@ router.post('/:businessId/create', async (req: AuthRequest, res: Response) => {
         bodyText,
         footerText: footerText || null,
         buttons: buttons || null
-      }
+      } as any
     });
     
     res.status(201).json({
@@ -291,7 +315,7 @@ router.delete('/:businessId/:templateId', async (req: AuthRequest, res: Response
     const template = await prisma.metaTemplate.findFirst({
       where: { 
         id: req.params.templateId,
-        credentialId: credential.credentialId
+        ...buildCredentialWhere(credential)
       }
     });
     
@@ -338,7 +362,7 @@ router.post('/:businessId/send-template', async (req: AuthRequest, res: Response
     
     const template = await prisma.metaTemplate.findFirst({
       where: {
-        credentialId: credential.credentialId,
+        ...buildCredentialWhere(credential),
         name: templateName,
         status: 'APPROVED'
       }

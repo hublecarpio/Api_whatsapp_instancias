@@ -473,33 +473,38 @@ model MetaCoexistCredential {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
-  instance  WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instance   WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  templates  MetaTemplate[]
 
   @@index([wabaId])
   @@index([phoneNumberId])
 }
 
 model MetaTemplate {
-  id             String   @id @default(uuid())
-  credentialId   String
-  metaTemplateId String
-  name           String
-  language       String   @default("es")
-  category       String   @default("UTILITY")
-  status         String   @default("PENDING")
-  components     Json
-  headerType     String?
-  bodyText       String?
-  footerText     String?
-  buttons        Json?
-  lastSynced     DateTime @default(now())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  credentialId         String?
+  coexistCredentialId  String?
+  metaTemplateId       String
+  name                 String
+  language             String   @default("es")
+  category             String   @default("UTILITY")
+  status               String   @default("PENDING")
+  components           Json
+  headerType           String?
+  bodyText             String?
+  footerText           String?
+  buttons              Json?
+  lastSynced           DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  credential MetaCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  credential         MetaCredential?         @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  coexistCredential  MetaCoexistCredential?  @relation(fields: [coexistCredentialId], references: [id], onDelete: Cascade)
 
   @@unique([credentialId, name])
+  @@unique([coexistCredentialId, name])
   @@index([credentialId, status])
+  @@index([coexistCredentialId, status])
 }
 
 model Product {
