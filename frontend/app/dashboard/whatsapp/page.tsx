@@ -301,10 +301,42 @@ export default function WhatsAppPage() {
     addEvent('action', 'Creando instancia Baileys...');
     
     try {
-      await waApi.create(currentBusiness.id, fullPhone);
-      addEvent('success', 'Instancia Baileys creada');
+      let newInstanceId: string | null = null;
+      
+      // Check existing instances from business (more reliable than store)
+      const existingInstances = currentBusiness.instances || [];
+      
+      // If instances already exist, use addInstance to create a new one instead of replacing
+      if (existingInstances.length > 0) {
+        const response = await waApi.addInstance({
+          businessId: currentBusiness.id,
+          provider: 'BAILEYS',
+          phoneNumber: fullPhone,
+          name: `WhatsApp ${existingInstances.length + 1}`
+        });
+        newInstanceId = response.data.instance?.id;
+        addEvent('success', 'Nueva instancia Baileys agregada');
+      } else {
+        const response = await waApi.create(currentBusiness.id, fullPhone);
+        newInstanceId = response.data.instance?.id;
+        addEvent('success', 'Instancia Baileys creada');
+      }
+      
       const refreshed = await businessApi.get(currentBusiness.id);
       setCurrentBusiness(refreshed.data);
+      
+      // Select the new instance to show its QR
+      if (newInstanceId) {
+        setSelectedInstanceId(newInstanceId);
+      } else if (refreshed.data.instances?.length > 0) {
+        // Find the newest Baileys instance
+        const baileysInstances = refreshed.data.instances.filter((i: any) => i.provider === 'BAILEYS');
+        if (baileysInstances.length > 0) {
+          const newest = baileysInstances[baileysInstances.length - 1];
+          setSelectedInstanceId(newest.id);
+        }
+      }
+      
       await fetchStatus();
       setPhoneInput('');
     } catch (err: any) {
