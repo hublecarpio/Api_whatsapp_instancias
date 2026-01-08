@@ -367,30 +367,68 @@ export default function WhatsAppPage() {
     addEvent('action', 'Creando instancia Meta Cloud...');
     
     try {
-      const response = await waApi.createMeta({
-        businessId: currentBusiness.id,
-        name: metaForm.name || 'Meta WhatsApp',
-        accessToken: metaForm.accessToken,
-        metaBusinessId: metaForm.metaBusinessId,
-        phoneNumberId: metaForm.phoneNumberId,
-        appId: metaForm.appId,
-        appSecret: metaForm.appSecret,
-        phoneNumber: metaForm.displayPhoneNumber.replace(/\D/g, '')
-      });
+      let response;
+      let newInstanceId: string | null = null;
       
-      addEvent('success', 'Instancia Meta Cloud creada');
+      // Check existing instances from business
+      const existingInstances = currentBusiness.instances || [];
+      
+      // If instances already exist, use addInstance to create a new one instead of replacing
+      if (existingInstances.length > 0) {
+        response = await waApi.addInstance({
+          businessId: currentBusiness.id,
+          provider: 'META_CLOUD',
+          name: metaForm.name || 'Meta WhatsApp',
+          phoneNumber: metaForm.displayPhoneNumber.replace(/\D/g, ''),
+          metaCredentials: {
+            accessToken: metaForm.accessToken,
+            wabaId: metaForm.metaBusinessId,
+            phoneNumberId: metaForm.phoneNumberId,
+            appId: metaForm.appId,
+            appSecret: metaForm.appSecret
+          }
+        });
+        newInstanceId = response.data.instance?.id;
+        addEvent('success', 'Nueva instancia Meta Cloud agregada');
+      } else {
+        response = await waApi.createMeta({
+          businessId: currentBusiness.id,
+          name: metaForm.name || 'Meta WhatsApp',
+          accessToken: metaForm.accessToken,
+          metaBusinessId: metaForm.metaBusinessId,
+          phoneNumberId: metaForm.phoneNumberId,
+          appId: metaForm.appId,
+          appSecret: metaForm.appSecret,
+          phoneNumber: metaForm.displayPhoneNumber.replace(/\D/g, '')
+        });
+        newInstanceId = response.data.instance?.id;
+        addEvent('success', 'Instancia Meta Cloud creada');
+      }
+      
       setShowMetaForm(false);
       setShowProviderModal(false);
       
       if (response.data.webhookUrl) {
         setWebhookInfo({
           url: response.data.webhookUrl,
-          token: response.data.instance.webhookVerifyToken
+          token: response.data.instance?.webhookVerifyToken || response.data.webhookVerifyToken
         });
       }
       
       const refreshed = await businessApi.get(currentBusiness.id);
       setCurrentBusiness(refreshed.data);
+      
+      // Select the new instance
+      if (newInstanceId) {
+        setSelectedInstanceId(newInstanceId);
+      } else if (refreshed.data.instances?.length > 0) {
+        const metaInstances = refreshed.data.instances.filter((i: any) => i.provider === 'META_CLOUD');
+        if (metaInstances.length > 0) {
+          const newest = metaInstances[metaInstances.length - 1];
+          setSelectedInstanceId(newest.id);
+        }
+      }
+      
       await fetchStatus();
       
       setMetaForm({
