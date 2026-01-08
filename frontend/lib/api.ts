@@ -253,6 +253,9 @@ export const messageApi = {
     if (instanceId) url += `&instance_id=${instanceId}`;
     return api.get(url);
   },
+  getConversationsByInstance: (businessId: string, instanceId: string) => {
+    return api.get(`/messages/conversations?business_id=${businessId}&instance_id=${instanceId}`);
+  },
   conversation: (businessId: string, phone: string, instanceId?: string) => {
     let url = `/messages/conversation/${phone}?business_id=${businessId}`;
     if (instanceId) url += `&instance_id=${instanceId}`;

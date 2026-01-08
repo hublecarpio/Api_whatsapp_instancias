@@ -86,6 +86,7 @@ router.get('/start', authMiddleware, async (req: AuthRequest, res: Response) => 
       instance = await prisma.whatsAppInstance.create({
         data: {
           businessId: businessId as string,
+          instanceNumber: existingInstances + 1,
           provider: 'META_COEXIST',
           status: 'pending_credentials',
           name: `WhatsApp Coexist ${existingInstances + 1}`
@@ -660,6 +661,7 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
     const instance = await prisma.whatsAppInstance.create({
       data: {
         businessId,
+        instanceNumber: existingInstances + 1,
         name: instanceName,
         provider: selectedProvider,
         status: 'connected',

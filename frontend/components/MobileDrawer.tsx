@@ -68,7 +68,7 @@ export default function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
     { href: '/dashboard/contacts', label: 'Contactos', icon: '👥' },
     { href: '/dashboard/broadcasts', label: 'Envio Masivo', icon: '📢' },
     { href: '/dashboard/prompt', label: 'Agente IA', icon: '🤖' },
-    { href: '/dashboard/chat', label: 'Chat', icon: '💭' },
+    { href: '/dashboard/chats', label: 'Chats', icon: '💭' },
     { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' },
     { href: '/dashboard/reminders', label: 'Seguimientos', icon: '⏰' },
     { href: '/dashboard/billing', label: 'Facturacion', icon: '💳' }

@@ -385,6 +385,7 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
       const instance = await prisma.whatsAppInstance.create({
         data: {
           businessId,
+          instanceNumber,
           name: instanceName,
           provider: 'META_CLOUD',
           status: hasCredentials ? 'connected' : 'pending_credentials',
@@ -442,6 +443,7 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     const instance = await prisma.whatsAppInstance.create({
       data: {
         businessId,
+        instanceNumber,
         name: instanceName,
         instanceBackendId,
         status: 'pending_qr',
@@ -1097,9 +1099,15 @@ router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Respo
       webhook: webhookUrl
     });
     
+    const existingInstances = await prisma.whatsAppInstance.findMany({
+      where: { businessId }
+    });
+    const legacyInstanceNumber = existingInstances.length + 1;
+    
     const instance = await prisma.whatsAppInstance.create({
       data: {
         businessId,
+        instanceNumber: legacyInstanceNumber,
         instanceBackendId: instanceId,
         status: 'pending_qr',
         phoneNumber: phoneNumber || null
@@ -1200,9 +1208,15 @@ router.post('/create-meta', requireEmailVerified, async (req: AuthRequest, res: 
       });
     }
     
+    const existingInstances = await prisma.whatsAppInstance.findMany({
+      where: { businessId }
+    });
+    const legacyInstanceNumber = existingInstances.length + 1;
+    
     const instance = await prisma.whatsAppInstance.create({
       data: {
         businessId,
+        instanceNumber: legacyInstanceNumber,
         name: name || 'Meta WhatsApp',
         provider: 'META_CLOUD',
         instanceBackendId: null,

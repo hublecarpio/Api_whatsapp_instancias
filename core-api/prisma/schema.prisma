@@ -356,6 +356,7 @@ enum WhatsAppProvider {
 model WhatsAppInstance {
   id                String           @id @default(uuid())
   businessId        String
+  instanceNumber    Int              @default(1)
   name              String           @default("WhatsApp")
   provider          WhatsAppProvider @default(BAILEYS)
   instanceBackendId String?
@@ -388,6 +389,7 @@ model WhatsAppInstance {
   products         Product[]                 @relation("ProductInstance")
   orders           Order[]                   @relation("OrderInstance")
 
+  @@unique([businessId, instanceNumber])
   @@index([businessId])
   @@index([apiKeyPrefix])
 }
