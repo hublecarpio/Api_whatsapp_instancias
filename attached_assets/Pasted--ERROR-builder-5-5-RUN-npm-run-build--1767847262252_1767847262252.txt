@@ -1,0 +1,45 @@
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             49.9s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+0.669                                                                                                                                                                       
+0.669 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+0.669 > next build                                                                                                                                                          
+0.669                                                                                                                                                                       
+1.371 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+1.371 This information is used to shape Next.js' roadmap and prioritize features.
+1.371 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+1.371 https://nextjs.org/telemetry
+1.371 
+1.455   ▲ Next.js 14.2.16
+1.455 
+1.577    Creating an optimized production build ...
+33.25  ✓ Compiled successfully
+33.25    Linting and checking validity of types ...
+49.63 Failed to compile.
+49.63 
+49.63 ./app/dashboard/chats/[instanceNumber]/page.tsx:81:17
+49.63 Type error: Property 'getTags' does not exist on type '{ list: (businessId: string, instanceId?: string | undefined) => Promise<AxiosResponse<any, any, {}>>; create: (data: { business_id: string; instance_id?: string | undefined; name: string; color?: string | undefined; description?: string | undefined; }) => Promise<...>; ... 15 more ...; toggleContactReminder: (busin...'.
+49.63 
+49.63   79 |       const [conversationsRes, tagsRes, assignmentsRes] = await Promise.all([
+49.63   80 |         messageApi.getConversationsByInstance(currentBusiness.id, foundInstance.id),
+49.63 > 81 |         tagsApi.getTags(currentBusiness.id).catch(() => ({ data: [] })),
+49.63      |                 ^
+49.63   82 |         tagsApi.getAssignments(currentBusiness.id).catch(() => ({ data: [] }))
+49.63   83 |       ]);
+49.63   84 |       
+49.71 npm notice
+49.71 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+49.71 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+49.71 npm notice To update run: npm install -g npm@11.7.0
+49.71 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+The push refers to repository [docker.io/iamhuble/whatsapp-saas-frontend]

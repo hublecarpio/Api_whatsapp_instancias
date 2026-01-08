@@ -78,7 +78,7 @@ export default function InstanceChatsPage() {
       
       const [conversationsRes, tagsRes, assignmentsRes] = await Promise.all([
         messageApi.getConversationsByInstance(currentBusiness.id, foundInstance.id),
-        tagsApi.getTags(currentBusiness.id).catch(() => ({ data: [] })),
+        tagsApi.list(currentBusiness.id).catch(() => ({ data: [] })),
         tagsApi.getAssignments(currentBusiness.id).catch(() => ({ data: [] }))
       ]);
       
