@@ -64,7 +64,7 @@ export default function InstanceChatsPage() {
     try {
       setLoading(true);
       
-      const instancesResponse = await waApi.getInstances(currentBusiness.id);
+      const instancesResponse = await waApi.instances(currentBusiness.id);
       const foundInstance = instancesResponse.data?.find(
         (i: WhatsAppInstance) => i.instanceNumber === instanceNumber
       );
