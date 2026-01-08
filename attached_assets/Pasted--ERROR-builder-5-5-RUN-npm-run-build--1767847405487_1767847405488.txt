@@ -1,0 +1,45 @@
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                             47.0s 
+------                                                                                                                                                                      
+ > [builder 5/5] RUN npm run build:                                                                                                                                         
+0.676                                                                                                                                                                       
+0.676 > whatsapp-saas-frontend@1.0.0 build                                                                                                                                  
+0.676 > next build                                                                                                                                                          
+0.676                                                                                                                                                                       
+1.447 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+1.449 This information is used to shape Next.js' roadmap and prioritize features.
+1.451 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+1.451 https://nextjs.org/telemetry
+1.451 
+1.549   ▲ Next.js 14.2.16
+1.549 
+1.670    Creating an optimized production build ...
+29.50  ✓ Compiled successfully
+29.50    Linting and checking validity of types ...
+46.72 Failed to compile.
+46.72 
+46.72 ./app/dashboard/chats/page.tsx:35:36
+46.72 Type error: Property 'getInstances' does not exist on type '{ create: (businessId: string, phoneNumber?: string | undefined) => Promise<AxiosResponse<any, any, {}>>; createMeta: (data: { businessId: string; name?: string | undefined; ... 5 more ...; phoneNumber?: string | undefined; }) => Promise<...>; ... 32 more ...; completeEmbeddedSignup: (data: { ...; }) => Promise<...>...'. Did you mean 'instances'?
+46.72 
+46.72   33 |     try {
+46.72   34 |       setLoading(true);
+46.72 > 35 |       const response = await waApi.getInstances(currentBusiness.id);
+46.72      |                                    ^
+46.72   36 |       setInstances(response.data || []);
+46.72   37 |     } catch (error) {
+46.72   38 |       console.error('Failed to load instances:', error);
+46.82 npm notice
+46.82 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+46.82 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+46.82 npm notice To update run: npm install -g npm@11.7.0
+46.82 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+The push refers to repository [docker.io/iamhuble/whatsapp-saas-frontend]

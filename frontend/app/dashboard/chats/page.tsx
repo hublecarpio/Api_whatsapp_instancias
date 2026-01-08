@@ -32,7 +32,7 @@ export default function ChatsPage() {
     
     try {
       setLoading(true);
-      const response = await waApi.getInstances(currentBusiness.id);
+      const response = await waApi.instances(currentBusiness.id);
       setInstances(response.data || []);
     } catch (error) {
       console.error('Failed to load instances:', error);
