@@ -304,20 +304,42 @@ export default function BroadcastsPage() {
   const loadInstanceAndTemplates = async () => {
     if (!currentBusiness?.id) return;
     try {
-      const instanceResponse = await axios.get(`${API_URL}/wa/${currentBusiness.id}/status`, {
-        headers: getAuthHeader()
-      });
-      const inst = instanceResponse.data;
-      setInstance(inst);
-
-      if (inst?.provider === 'META_CLOUD' || inst?.provider === 'META_COEXIST') {
-        const templatesResponse = await axios.get(`${API_URL}/templates/${currentBusiness.id}`, {
+      const selectedInst = instances.find(i => i.id === selectedInstanceId) || instances[0];
+      
+      if (selectedInst) {
+        setInstance({
+          id: selectedInst.id,
+          provider: selectedInst.provider,
+          status: selectedInst.status
+        });
+        
+        if (selectedInst.provider === 'META_CLOUD' || selectedInst.provider === 'META_COEXIST') {
+          const templatesResponse = await axios.get(`${API_URL}/templates/${currentBusiness.id}`, {
+            headers: getAuthHeader()
+          });
+          const approvedTemplates = (templatesResponse.data || []).filter(
+            (t: MetaTemplate) => t.status === 'APPROVED'
+          );
+          setTemplates(approvedTemplates);
+        } else {
+          setTemplates([]);
+        }
+      } else {
+        const instanceResponse = await axios.get(`${API_URL}/wa/${currentBusiness.id}/status`, {
           headers: getAuthHeader()
         });
-        const approvedTemplates = (templatesResponse.data || []).filter(
-          (t: MetaTemplate) => t.status === 'APPROVED'
-        );
-        setTemplates(approvedTemplates);
+        const inst = instanceResponse.data;
+        setInstance(inst);
+
+        if (inst?.provider === 'META_CLOUD' || inst?.provider === 'META_COEXIST') {
+          const templatesResponse = await axios.get(`${API_URL}/templates/${currentBusiness.id}`, {
+            headers: getAuthHeader()
+          });
+          const approvedTemplates = (templatesResponse.data || []).filter(
+            (t: MetaTemplate) => t.status === 'APPROVED'
+          );
+          setTemplates(approvedTemplates);
+        }
       }
     } catch (error) {
       console.error('Error loading instance/templates:', error);
@@ -595,6 +617,12 @@ export default function BroadcastsPage() {
       });
     }
   }, [currentBusiness?.id]);
+
+  useEffect(() => {
+    if (currentBusiness?.id && instances.length > 0) {
+      loadInstanceAndTemplates();
+    }
+  }, [selectedInstanceId, instances.length]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;

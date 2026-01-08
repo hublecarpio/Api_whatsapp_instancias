@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
+import { useInstanceStore } from '@/store/instance';
 import { templatesApi, waApi } from '@/lib/api';
 
 interface Template {
@@ -20,6 +21,9 @@ interface Template {
 
 export default function TemplatesPage() {
   const { currentBusiness } = useBusinessStore();
+  const { instances, selectedInstanceId } = useInstanceStore();
+  const selectedInstance = instances.find(i => i.id === selectedInstanceId) || instances[0];
+  
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -45,13 +49,18 @@ export default function TemplatesPage() {
       checkMetaInstance();
       fetchTemplates();
     }
-  }, [currentBusiness]);
+  }, [currentBusiness, selectedInstanceId, instances.length]);
 
   const checkMetaInstance = async () => {
     try {
-      const response = await waApi.status(currentBusiness!.id);
-      const provider = response.data.provider;
-      setHasMetaInstance(provider === 'META_CLOUD' || provider === 'META_COEXIST');
+      if (selectedInstance) {
+        const provider = selectedInstance.provider;
+        setHasMetaInstance(provider === 'META_CLOUD' || provider === 'META_COEXIST');
+      } else {
+        const response = await waApi.status(currentBusiness!.id);
+        const provider = response.data.provider;
+        setHasMetaInstance(provider === 'META_CLOUD' || provider === 'META_COEXIST');
+      }
     } catch {
       setHasMetaInstance(false);
     }
