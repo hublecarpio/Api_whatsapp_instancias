@@ -46,7 +46,8 @@ async function findInstanceByPhoneNumberId(phoneNumberId: string) {
       instance: metaCoexistCredential.instance,
       accessToken: metaCoexistCredential.systemAccessToken || metaCoexistCredential.userAccessToken,
       phoneNumberId: metaCoexistCredential.phoneNumberId,
-      businessId: metaCoexistCredential.wabaId,
+      businessId: metaCoexistCredential.metaBusinessId,
+      wabaId: metaCoexistCredential.wabaId,
       platformBusinessId: metaCoexistCredential.instance.businessId,
       providerType: 'META_COEXIST' as MetaProviderType
     };
