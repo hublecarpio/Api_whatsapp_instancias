@@ -212,6 +212,17 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // Check if this is the user's last business
+    const businessCount = await prisma.business.count({
+      where: { userId: req.userId }
+    });
+    
+    if (businessCount <= 1) {
+      return res.status(400).json({ 
+        error: 'No puedes eliminar tu único negocio. Debes tener al menos un negocio activo.' 
+      });
+    }
+    
     await prisma.business.delete({ where: { id: req.params.id } });
     
     res.json({ success: true });
