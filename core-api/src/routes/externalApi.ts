@@ -219,7 +219,7 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
           sender: instance.phoneNumber || business.id,
           recipient: cleanTo,
           message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
-          direction: 'OUTGOING',
+          direction: 'outbound',
           mediaUrl: mediaUrl || null,
           providerMessageId: messageId,
           metadata: { source: 'external_api', mediaType }
@@ -320,7 +320,7 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
           sender: instance.phoneNumber || business.id,
           recipient: cleanTo,
           message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
-          direction: 'OUTGOING',
+          direction: 'outbound',
           mediaUrl: mediaUrl || null,
           providerMessageId: messageId,
           metadata: { source: 'external_api', provider: 'META_CLOUD', mediaType }
@@ -426,7 +426,7 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
           sender: instance.phoneNumber || business.id,
           recipient: cleanTo,
           message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
-          direction: 'OUTGOING',
+          direction: 'outbound',
           mediaUrl: mediaUrl || null,
           providerMessageId: messageId,
           metadata: { source: 'external_api', provider: 'META_COEXIST', mediaType }
@@ -1230,7 +1230,7 @@ router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: R
       data: {
         businessId: req.businessId!,
         instanceId: req.instanceId,
-        direction: 'OUTGOING',
+        direction: 'outbound',
         recipient: cleanTo,
         message: `[Template: ${template.name}]`,
         metadata: { 
