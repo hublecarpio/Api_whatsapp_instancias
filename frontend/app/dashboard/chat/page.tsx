@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi } from '@/lib/api';
@@ -92,6 +93,8 @@ interface ContactAssignment {
 }
 
 export default function ChatPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentBusiness } = useBusinessStore();
   const { selectedInstanceId, setSelectedInstanceId, instances, setInstances } = useInstanceStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -167,6 +170,43 @@ export default function ChatPage() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const isNearBottomRef = useRef(true);
   const prevMessagesLengthRef = useRef(0);
+
+  const handleSelectConversation = useCallback((phone: string, contactName: string, instanceId: string | null) => {
+    setSelectedPhone(phone);
+    setSelectedContactName(contactName || '');
+    setSelectedConversationInstanceId(instanceId);
+    setChatListOpen(false);
+    
+    const selectedInst = instances.find(i => i.id === instanceId);
+    if (selectedInst?.instanceNumber) {
+      router.replace(`/dashboard/chat?instance=${selectedInst.instanceNumber}&phone=${encodeURIComponent(phone)}`, { scroll: false });
+    } else {
+      router.replace(`/dashboard/chat?phone=${encodeURIComponent(phone)}`, { scroll: false });
+    }
+  }, [instances, router]);
+
+  useEffect(() => {
+    const phoneParam = searchParams.get('phone');
+    const instanceParam = searchParams.get('instance');
+    
+    if (instances.length > 0 && instanceParam) {
+      const instNumber = parseInt(instanceParam, 10);
+      const targetInstance = instances.find(i => i.instanceNumber === instNumber);
+      if (targetInstance && targetInstance.id !== selectedInstanceId) {
+        setSelectedInstanceId(targetInstance.id);
+      }
+    }
+    
+    if (phoneParam && conversations.length > 0 && !selectedPhone) {
+      const conv = conversations.find(c => c.phone === phoneParam);
+      if (conv) {
+        setSelectedPhone(conv.phone);
+        setSelectedContactName(conv.contactName || '');
+        setSelectedConversationInstanceId(conv.instanceId || null);
+        setChatListOpen(false);
+      }
+    }
+  }, [searchParams, conversations, selectedPhone, instances, selectedInstanceId, setSelectedInstanceId]);
 
   useEffect(() => {
     const handleViewportResize = () => {
@@ -1146,7 +1186,7 @@ export default function ChatPage() {
               (viewMode === 'kanban' ? getConversationsByTag(selectedTag) : filteredConversations).map((conv) => {
                 const contactTag = getContactTag(conv.phone);
                 return (
-                  <button key={conv.phone} onClick={() => { setSelectedPhone(conv.phone); setSelectedContactName(conv.contactName || ''); setSelectedConversationInstanceId(conv.instanceId || null); setChatListOpen(false); }} className={`w-full p-3 text-left hover:bg-dark-hover transition-colors flex items-center gap-3 ${selectedPhone === conv.phone ? 'bg-neon-blue/10 border-l-2 border-neon-blue' : ''}`}>
+                  <button key={conv.phone} onClick={() => handleSelectConversation(conv.phone, conv.contactName || '', conv.instanceId || null)} className={`w-full p-3 text-left hover:bg-dark-hover transition-colors flex items-center gap-3 ${selectedPhone === conv.phone ? 'bg-neon-blue/10 border-l-2 border-neon-blue' : ''}`}>
                     <div className="w-12 h-12 bg-dark-card rounded-full flex items-center justify-center flex-shrink-0 relative">
                       <span className="text-xl">👤</span>
                       {contactTag && <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-dark-surface" style={{ backgroundColor: contactTag.color }} />}
@@ -1172,7 +1212,7 @@ export default function ChatPage() {
           {selectedPhone ? (
             <>
               <div className="px-3 sm:px-4 py-3 border-b border-dark-border bg-dark-card flex items-center gap-3">
-                <button onClick={() => { setChatListOpen(true); setSelectedPhone(null); }} className="sm:hidden p-1.5 text-gray-400 hover:text-white transition-colors">
+                <button onClick={() => { setChatListOpen(true); setSelectedPhone(null); router.replace('/dashboard/chat', { scroll: false }); }} className="sm:hidden p-1.5 text-gray-400 hover:text-white transition-colors">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
                 <button onClick={() => setChatListOpen(!chatListOpen)} className="hidden sm:block p-1 text-gray-500 hover:text-white transition-colors">
