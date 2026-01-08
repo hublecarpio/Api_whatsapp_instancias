@@ -198,7 +198,17 @@ export default function ChatPage() {
     }
     
     if (phoneParam && conversations.length > 0 && !selectedPhone) {
-      const conv = conversations.find(c => c.phone === phoneParam);
+      let conv;
+      if (instanceParam && instances.length > 0) {
+        const instNumber = parseInt(instanceParam, 10);
+        const targetInstance = instances.find(i => i.instanceNumber === instNumber);
+        if (targetInstance) {
+          conv = conversations.find(c => c.phone === phoneParam && c.instanceId === targetInstance.id);
+        }
+      }
+      if (!conv) {
+        conv = conversations.find(c => c.phone === phoneParam);
+      }
       if (conv) {
         setSelectedPhone(conv.phone);
         setSelectedContactName(conv.contactName || '');
@@ -574,7 +584,7 @@ export default function ChatPage() {
     if (!currentBusiness || !selectedPhone) return;
     setSendingTemplate(true);
     try {
-      const effectiveInstanceId = selectedInstanceId || selectedConversationInstanceId || undefined;
+      const effectiveInstanceId = selectedConversationInstanceId || selectedInstanceId || undefined;
       await templatesApi.send(currentBusiness.id, {
         templateName: template.name,
         to: selectedPhone,
@@ -802,7 +812,7 @@ export default function ChatPage() {
         const uploadRes = await mediaApi.upload(currentBusiness.id, fileCopy.file);
         const { url, type, mimetype } = uploadRes.data;
         
-        const effectiveInstanceId = selectedInstanceId || selectedConversationInstanceId || undefined;
+        const effectiveInstanceId = selectedConversationInstanceId || selectedInstanceId || undefined;
         const sendData: any = { to: selectedPhone, instanceId: effectiveInstanceId };
         if (type === 'image') {
           sendData.imageUrl = url;
@@ -822,7 +832,7 @@ export default function ChatPage() {
         setPreviewFile(null);
         setUploading(false);
       } else {
-        const effectiveInstanceId = selectedInstanceId || selectedConversationInstanceId || undefined;
+        const effectiveInstanceId = selectedConversationInstanceId || selectedInstanceId || undefined;
         await waApi.send(currentBusiness.id, { to: selectedPhone, message: messageCopy, instanceId: effectiveInstanceId });
       }
       

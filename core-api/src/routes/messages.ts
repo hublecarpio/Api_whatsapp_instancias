@@ -151,8 +151,12 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       
       const contactName = metadata?.contactName || metadata?.pushName || '';
       
-      if (!conversationsMap.has(phone)) {
-        conversationsMap.set(phone, {
+      // Use phone+instanceId as key to separate conversations per instance
+      const instanceId = msg.instanceId || 'default';
+      const conversationKey = `${phone}_${instanceId}`;
+      
+      if (!conversationsMap.has(conversationKey)) {
+        conversationsMap.set(conversationKey, {
           phone,
           contactName,
           lastMessage: msg.message,
@@ -162,7 +166,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
           instanceId: msg.instanceId
         });
       } else {
-        const conv = conversationsMap.get(phone)!;
+        const conv = conversationsMap.get(conversationKey)!;
         conv.messageCount++;
         if (msg.direction === 'inbound') {
           conv.unread++;
