@@ -28,6 +28,8 @@ interface Message {
     mediaType?: string;
     type?: string;
     pending?: boolean;
+    isTemplate?: boolean;
+    templateName?: string;
   };
 }
 
@@ -1410,6 +1412,11 @@ export default function ChatPage() {
                         </div>
                       )}
                       <p className={`text-xs mt-1 text-right ${msg.direction === 'outbound' ? 'text-neon-blue-dark' : 'text-gray-500'}`}>
+                        {(msg.metadata?.isTemplate || msg.metadata?.templateName) && (
+                          <span className="mr-2 px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px] font-medium">
+                            Plantilla
+                          </span>
+                        )}
                         {formatTime(msg.createdAt)}
                         {msg.direction === 'outbound' && <span className="ml-1">✓✓</span>}
                       </p>

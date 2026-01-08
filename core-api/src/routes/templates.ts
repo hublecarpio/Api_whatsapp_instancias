@@ -417,8 +417,13 @@ router.post('/:businessId/send-template', async (req: AuthRequest, res: Response
       }
     );
     
+    // Find the correct instance based on the credential provider
     const instance = await prisma.whatsAppInstance.findFirst({
-      where: { businessId: req.params.businessId, provider: 'META_CLOUD' }
+      where: { 
+        businessId: req.params.businessId, 
+        provider: credential.provider,
+        ...(instanceId ? { id: instanceId } : {})
+      }
     });
     
     await prisma.messageLog.create({
@@ -429,8 +434,10 @@ router.post('/:businessId/send-template', async (req: AuthRequest, res: Response
         recipient: cleanTo,
         message: `[Template: ${template.name}]`,
         metadata: { 
-          provider: 'META_CLOUD',
-          template: template.name,
+          provider: credential.provider,
+          contactPhone: cleanTo,
+          isTemplate: true,
+          templateName: template.name,
           variables
         }
       }
