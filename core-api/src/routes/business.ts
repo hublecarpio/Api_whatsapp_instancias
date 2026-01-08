@@ -34,13 +34,39 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const businesses = await prisma.business.findMany({
+    let businesses = await prisma.business.findMany({
       where: { userId: req.userId },
       include: {
         instances: true,
         _count: { select: { products: true, messages: true } }
       }
     });
+    
+    // Auto-heal: Create default business if user has none (fixes orphaned users from Google OAuth etc)
+    if (businesses.length === 0 && req.userId) {
+      console.log(`[Business] Auto-creating default business for orphaned user ${req.userId}`);
+      
+      const user = await prisma.user.findUnique({
+        where: { id: req.userId },
+        select: { name: true }
+      });
+      
+      const newBusiness = await prisma.business.create({
+        data: {
+          userId: req.userId,
+          name: 'Mi Empresa',
+          description: 'Configura los datos de tu empresa',
+          botEnabled: true
+        },
+        include: {
+          instances: true,
+          _count: { select: { products: true, messages: true } }
+        }
+      });
+      
+      console.log(`[Business] Created default business ${newBusiness.id} for user ${req.userId}`);
+      businesses = [newBusiness];
+    }
     
     res.json(businesses);
   } catch (error) {
