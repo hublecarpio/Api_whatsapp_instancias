@@ -1014,13 +1014,22 @@ router.patch('/contacts/:phone', validateApiKey, async (req: ApiKeyRequest, res:
 
 const META_API_URL = 'https://graph.facebook.com/v21.0';
 
-function getMetaCredentials(instance: any): { accessToken: string; phoneNumberId: string; wabaId: string; credentialId: string } | null {
+interface MetaCredentialsResult {
+  accessToken: string;
+  phoneNumberId: string;
+  wabaId: string;
+  credentialId: string;
+  provider: 'META_CLOUD' | 'META_COEXIST';
+}
+
+function getMetaCredentials(instance: any): MetaCredentialsResult | null {
   if (instance.provider === 'META_CLOUD' && instance.metaCredential) {
     return {
       accessToken: instance.metaCredential.accessToken,
       phoneNumberId: instance.metaCredential.phoneNumberId,
       wabaId: instance.metaCredential.businessId,
-      credentialId: instance.metaCredential.id
+      credentialId: instance.metaCredential.id,
+      provider: 'META_CLOUD'
     };
   }
   
@@ -1029,11 +1038,20 @@ function getMetaCredentials(instance: any): { accessToken: string; phoneNumberId
       accessToken: instance.metaCoexistCredential.systemAccessToken || instance.metaCoexistCredential.userAccessToken,
       phoneNumberId: instance.metaCoexistCredential.phoneNumberId,
       wabaId: instance.metaCoexistCredential.wabaId,
-      credentialId: instance.metaCoexistCredential.id
+      credentialId: instance.metaCoexistCredential.id,
+      provider: 'META_COEXIST'
     };
   }
   
   return null;
+}
+
+function buildTemplateCredentialWhere(creds: MetaCredentialsResult): { credentialId?: string; coexistCredentialId?: string } {
+  if (creds.provider === 'META_CLOUD') {
+    return { credentialId: creds.credentialId };
+  } else {
+    return { coexistCredentialId: creds.credentialId };
+  }
 }
 
 router.get('/templates', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
@@ -1048,7 +1066,7 @@ router.get('/templates', validateApiKey, async (req: ApiKeyRequest, res: Respons
     }
     
     const templates = await prisma.metaTemplate.findMany({
-      where: { credentialId: creds.credentialId },
+      where: buildTemplateCredentialWhere(creds),
       orderBy: { createdAt: 'desc' }
     });
     
@@ -1098,39 +1116,49 @@ router.post('/templates/sync', validateApiKey, async (req: ApiKeyRequest, res: R
       const footerComponent = mt.components?.find((c: any) => c.type === 'FOOTER');
       const buttonsComponent = mt.components?.find((c: any) => c.type === 'BUTTONS');
       
-      const template = await prisma.metaTemplate.upsert({
-        where: {
-          credentialId_name: {
-            credentialId: creds.credentialId,
-            name: mt.name
-          }
-        },
-        update: {
-          metaTemplateId: mt.id,
-          language: mt.language || 'es',
-          category: mt.category || 'UTILITY',
-          status: mt.status || 'PENDING',
-          components: mt.components || [],
-          headerType: headerComponent?.format || null,
-          bodyText: bodyComponent?.text || null,
-          footerText: footerComponent?.text || null,
-          buttons: buttonsComponent?.buttons || null,
-          lastSynced: new Date()
-        },
-        create: {
-          credentialId: creds.credentialId,
-          metaTemplateId: mt.id,
-          name: mt.name,
-          language: mt.language || 'es',
-          category: mt.category || 'UTILITY',
-          status: mt.status || 'PENDING',
-          components: mt.components || [],
-          headerType: headerComponent?.format || null,
-          bodyText: bodyComponent?.text || null,
-          footerText: footerComponent?.text || null,
-          buttons: buttonsComponent?.buttons || null
-        }
+      const credentialWhere = buildTemplateCredentialWhere(creds);
+      const credentialData = creds.provider === 'META_CLOUD' 
+        ? { credentialId: creds.credentialId }
+        : { coexistCredentialId: creds.credentialId };
+      
+      const existing = await prisma.metaTemplate.findFirst({
+        where: { ...credentialWhere, name: mt.name }
       });
+      
+      let template;
+      if (existing) {
+        template = await prisma.metaTemplate.update({
+          where: { id: existing.id },
+          data: {
+            metaTemplateId: mt.id,
+            language: mt.language || 'es',
+            category: mt.category || 'UTILITY',
+            status: mt.status || 'PENDING',
+            components: mt.components || [],
+            headerType: headerComponent?.format || null,
+            bodyText: bodyComponent?.text || null,
+            footerText: footerComponent?.text || null,
+            buttons: buttonsComponent?.buttons || null,
+            lastSynced: new Date()
+          }
+        });
+      } else {
+        template = await prisma.metaTemplate.create({
+          data: {
+            ...credentialData,
+            metaTemplateId: mt.id,
+            name: mt.name,
+            language: mt.language || 'es',
+            category: mt.category || 'UTILITY',
+            status: mt.status || 'PENDING',
+            components: mt.components || [],
+            headerType: headerComponent?.format || null,
+            bodyText: bodyComponent?.text || null,
+            footerText: footerComponent?.text || null,
+            buttons: buttonsComponent?.buttons || null
+          }
+        });
+      }
       
       synced.push({
         id: template.id,
@@ -1172,7 +1200,7 @@ router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: R
     
     const template = await prisma.metaTemplate.findFirst({
       where: {
-        credentialId: creds.credentialId,
+        ...buildTemplateCredentialWhere(creds),
         name: templateName,
         status: 'APPROVED'
       }
