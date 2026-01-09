@@ -73,10 +73,6 @@ export async function analyzeIntent(
   conversationHistory: string[],
   businessObjective: 'SALES' | 'APPOINTMENTS'
 ): Promise<IntentAnalysis> {
-  if (!isOpenAIConfigured()) {
-    return getDefaultIntent();
-  }
-
   const objections = await prisma.salesObjection.findMany({
     where: { businessId, isActive: true },
     orderBy: { priority: 'desc' }
@@ -96,6 +92,10 @@ export async function analyzeIntent(
       suggestedTools: [],
       urgency: 'high'
     };
+  }
+
+  if (!isOpenAIConfigured()) {
+    return getDefaultIntentWithContext(message, businessObjective);
   }
 
   try {
@@ -193,6 +193,65 @@ function getDefaultIntent(): IntentAnalysis {
     intent: 'OTHER',
     confidence: 0.5,
     reasoning: 'Default fallback - no analysis available',
+    suggestedTools: [],
+    urgency: 'medium'
+  };
+}
+
+function getDefaultIntentWithContext(
+  message: string,
+  businessObjective: 'SALES' | 'APPOINTMENTS'
+): IntentAnalysis {
+  const lowerMessage = message.toLowerCase();
+  
+  const greetingKeywords = ['hola', 'buenos días', 'buenas tardes', 'buenas noches', 'hey', 'hi'];
+  if (greetingKeywords.some(kw => lowerMessage.includes(kw))) {
+    return {
+      intent: 'GREETING',
+      confidence: 0.7,
+      reasoning: 'Keyword-based greeting detection',
+      suggestedTools: [],
+      urgency: 'low'
+    };
+  }
+  
+  const priceKeywords = ['precio', 'costo', 'cuánto', 'cuanto', 'vale', 'cuesta'];
+  if (priceKeywords.some(kw => lowerMessage.includes(kw))) {
+    return {
+      intent: 'PRICE_INQUIRY',
+      confidence: 0.7,
+      reasoning: 'Keyword-based price inquiry detection',
+      suggestedTools: ['buscar_producto'],
+      urgency: 'medium'
+    };
+  }
+  
+  const appointmentKeywords = ['cita', 'agendar', 'disponibilidad', 'horario', 'reservar'];
+  if (appointmentKeywords.some(kw => lowerMessage.includes(kw))) {
+    return {
+      intent: 'SCHEDULE_APPOINTMENT',
+      confidence: 0.7,
+      reasoning: 'Keyword-based appointment detection',
+      suggestedTools: ['ver_disponibilidad', 'agendar_cita'],
+      urgency: 'medium'
+    };
+  }
+  
+  const buyKeywords = ['comprar', 'pagar', 'ordenar', 'pedido', 'quiero'];
+  if (buyKeywords.some(kw => lowerMessage.includes(kw))) {
+    return {
+      intent: businessObjective === 'APPOINTMENTS' ? 'SCHEDULE_APPOINTMENT' : 'READY_TO_BUY',
+      confidence: 0.6,
+      reasoning: 'Keyword-based purchase intent detection',
+      suggestedTools: businessObjective === 'APPOINTMENTS' ? ['agendar_cita'] : ['crear_enlace_pago'],
+      urgency: 'high'
+    };
+  }
+  
+  return {
+    intent: 'OTHER',
+    confidence: 0.5,
+    reasoning: 'No keyword match, using default',
     suggestedTools: [],
     urgency: 'medium'
   };
