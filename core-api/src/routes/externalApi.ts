@@ -1058,6 +1058,15 @@ router.get('/templates', validateApiKey, async (req: ApiKeyRequest, res: Respons
   try {
     const creds = getMetaCredentials(req.instance);
     
+    console.log('[DEBUG /templates] Instance:', {
+      id: req.instance?.id,
+      name: req.instance?.name,
+      provider: req.instance?.provider,
+      hasMetaCred: !!req.instance?.metaCredential,
+      hasCoexistCred: !!req.instance?.metaCoexistCredential
+    });
+    console.log('[DEBUG /templates] Creds:', creds);
+    
     if (!creds) {
       return res.status(400).json({ 
         error: 'Esta instancia no soporta plantillas',
@@ -1065,10 +1074,15 @@ router.get('/templates', validateApiKey, async (req: ApiKeyRequest, res: Respons
       });
     }
     
+    const whereClause = buildTemplateCredentialWhere(creds);
+    console.log('[DEBUG /templates] Where clause:', whereClause);
+    
     const templates = await prisma.metaTemplate.findMany({
-      where: buildTemplateCredentialWhere(creds),
+      where: whereClause,
       orderBy: { createdAt: 'desc' }
     });
+    
+    console.log('[DEBUG /templates] Found templates:', templates.length);
     
     res.json({ 
       templates: templates.map(t => ({
