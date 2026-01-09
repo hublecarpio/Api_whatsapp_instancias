@@ -540,6 +540,19 @@ export const agentWebhookApi = {
     api.put(`/agent/webhook/${businessId}`, data)
 };
 
+export const objectionsApi = {
+  list: (businessId: string) =>
+    api.get(`/objections/${businessId}`),
+  create: (businessId: string, data: { name: string; triggerPhrases: string[]; responseScript: string; priority?: number; category?: string }) =>
+    api.post(`/objections/${businessId}`, data),
+  update: (businessId: string, objectionId: string, data: { name?: string; triggerPhrases?: string[]; responseScript?: string; priority?: number; category?: string; isActive?: boolean }) =>
+    api.put(`/objections/${businessId}/${objectionId}`, data),
+  delete: (businessId: string, objectionId: string) =>
+    api.delete(`/objections/${businessId}/${objectionId}`),
+  seedDefaults: (businessId: string) =>
+    api.post(`/objections/${businessId}/seed-defaults`)
+};
+
 export const advisorApi = {
   invite: (data: { email: string; businessId: string }) =>
     api.post('/advisor/invite', data),
