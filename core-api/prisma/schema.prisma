@@ -330,6 +330,8 @@ model Business {
   contactAssignments ContactAssignment[]
   contacts           Contact[]
   googleCalendar    GoogleCalendarCredential?
+  salesObjections   SalesObjection[]
+  funnelStages      FunnelStage[]
 }
 
 model GoogleCalendarCredential {
@@ -603,6 +605,87 @@ model ToolLog {
   createdAt   DateTime @default(now())
 
   tool AgentTool @relation(fields: [toolId], references: [id], onDelete: Cascade)
+}
+
+enum IntentType {
+  GREETING
+  PRODUCT_INQUIRY
+  PRICE_INQUIRY
+  OBJECTION
+  READY_TO_BUY
+  SCHEDULE_APPOINTMENT
+  SUPPORT_REQUEST
+  COMPLAINT
+  FOLLOWUP
+  CLOSING
+  OTHER
+}
+
+model SalesObjection {
+  id              String   @id @default(uuid())
+  businessId      String
+  name            String
+  triggerPhrases  String[]
+  responseScript  String
+  priority        Int      @default(0)
+  isActive        Boolean  @default(true)
+  category        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, isActive])
+  @@index([businessId, category])
+}
+
+model FunnelStage {
+  id              String   @id @default(uuid())
+  businessId      String
+  name            String
+  order           Int      @default(0)
+  description     String?
+  promptContext   String?
+  toolsAllowed    String[]
+  autoTransition  Json?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  contacts ContactFunnelState[]
+
+  @@unique([businessId, name])
+  @@index([businessId, order])
+}
+
+model ContactFunnelState {
+  id              String    @id @default(uuid())
+  businessId      String
+  contactPhone    String
+  stageId         String
+  enteredAt       DateTime  @default(now())
+  lastInteraction DateTime?
+  metadata        Json?
+
+  stage FunnelStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, contactPhone])
+  @@index([stageId])
+}
+
+model IntentLog {
+  id              String     @id @default(uuid())
+  businessId      String
+  contactPhone    String
+  messageId       String?
+  detectedIntent  IntentType
+  confidence      Float
+  objectionId     String?
+  reasoning       String?
+  createdAt       DateTime   @default(now())
+
+  @@index([businessId, contactPhone])
+  @@index([businessId, detectedIntent])
 }
 
 model MessageBuffer {

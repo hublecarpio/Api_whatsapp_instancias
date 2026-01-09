@@ -14,6 +14,7 @@ import { queueAIResponse, getAIQueueStats } from '../services/queues/aiResponseP
 import { getAIResponseQueue } from '../services/queues/index.js';
 import { scheduleFollowUp } from '../services/followUpService.js';
 import { dispatchAgentMessage, dispatchWebhook } from '../services/webhookService.js';
+import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsForIntent, IntentAnalysis } from '../services/intentAnalyzer.js';
 
 const router = Router();
 
@@ -1014,6 +1015,46 @@ async function processWithAgent(
   const splitMessages = promptConfig?.splitMessages ?? true;
   const tools = promptConfig?.tools || [];
   
+  const combinedMessage = messages.join(' ');
+  const businessObjective = business.businessObjective as 'SALES' | 'APPOINTMENTS';
+  
+  const recentMessagesForIntent = await prisma.messageLog.findMany({
+    where: { 
+      businessId,
+      OR: [
+        { sender: contactPhone },
+        { recipient: contactPhone }
+      ]
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+    select: { message: true, direction: true }
+  });
+  
+  const conversationHistoryForIntent = recentMessagesForIntent
+    .reverse()
+    .map((m: { message: string | null; direction: string }) => `${m.direction === 'inbound' ? 'Cliente' : 'Agente'}: ${m.message || ''}`)
+    .filter((m: string) => m.length > 10);
+  
+  let intentAnalysis: IntentAnalysis | null = null;
+  try {
+    intentAnalysis = await analyzeIntent(
+      businessId,
+      combinedMessage,
+      conversationHistoryForIntent,
+      businessObjective
+    );
+    console.log(`[Agent V1] Intent detected: ${intentAnalysis.intent} (${(intentAnalysis.confidence * 100).toFixed(0)}%)`);
+    
+    if (intentAnalysis.objection) {
+      console.log(`[Agent V1] Objection detected: ${intentAnalysis.objection.name}`);
+    }
+  } catch (intentError: any) {
+    console.error('[Agent V1] Intent analysis failed:', intentError.message);
+  }
+  
+  const conversationContext = await getConversationContext(businessId, contactPhone);
+  
   let systemPrompt = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
   
   if (business.policy) {
@@ -1160,6 +1201,16 @@ async function processWithAgent(
       if (file.triggerContext) systemPrompt += ` | Enviar cuando: ${file.triggerContext}`;
     });
     systemPrompt += `\n\nIMPORTANTE: Cuando detectes que el cliente pregunta por algo relacionado a estos archivos (por keywords o contexto), usa enviar_archivo con el ID correspondiente.`;
+  }
+  
+  if (intentAnalysis) {
+    systemPrompt = buildDynamicPrompt(
+      systemPrompt,
+      intentAnalysis,
+      conversationContext,
+      businessObjective
+    );
+    console.log(`[Agent V1] Dynamic prompt built with intent context`);
   }
   
   const recentMessages = await prisma.messageLog.findMany({
