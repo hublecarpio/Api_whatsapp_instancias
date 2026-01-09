@@ -1303,4 +1303,116 @@ router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: R
   }
 });
 
+router.post('/templates/create', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { name, language, category, headerType, headerText, headerMediaUrl, bodyText, footerText, buttons } = req.body;
+    
+    if (!name || !bodyText) {
+      return res.status(400).json({ error: 'name y bodyText son requeridos' });
+    }
+    
+    const creds = getMetaCredentials(req.instance);
+    
+    if (!creds) {
+      return res.status(400).json({ 
+        error: 'Esta instancia no soporta plantillas',
+        hint: 'Las plantillas solo estan disponibles para instancias Meta Cloud o Meta Coexist'
+      });
+    }
+    
+    const components: any[] = [];
+    
+    if (headerType && headerType !== 'NONE') {
+      const headerComponent: any = { type: 'HEADER', format: headerType };
+      if (headerType === 'TEXT' && headerText) {
+        headerComponent.text = headerText;
+      } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && headerMediaUrl) {
+        headerComponent.example = { header_handle: [headerMediaUrl] };
+      }
+      components.push(headerComponent);
+    }
+    
+    const bodyVariables = bodyText.match(/\{\{(\d+)\}\}/g) || [];
+    const bodyComponent: any = { type: 'BODY', text: bodyText };
+    if (bodyVariables.length > 0) {
+      bodyComponent.example = {
+        body_text: [bodyVariables.map((_: any, i: number) => `ejemplo${i + 1}`)]
+      };
+    }
+    components.push(bodyComponent);
+    
+    if (footerText) {
+      components.push({ type: 'FOOTER', text: footerText });
+    }
+    
+    if (buttons && buttons.length > 0) {
+      components.push({
+        type: 'BUTTONS',
+        buttons: buttons.map((btn: any) => ({
+          type: btn.type || 'QUICK_REPLY',
+          text: btn.text,
+          ...(btn.url && { url: btn.url }),
+          ...(btn.phone_number && { phone_number: btn.phone_number })
+        }))
+      });
+    }
+    
+    const templateName = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    
+    const response = await axios.post(
+      `${META_API_URL}/${creds.wabaId}/message_templates`,
+      {
+        name: templateName,
+        language: language || 'es',
+        category: category || 'UTILITY',
+        components
+      },
+      {
+        headers: { 
+          Authorization: `Bearer ${creds.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    const credentialData = creds.provider === 'META_CLOUD' 
+      ? { credentialId: creds.credentialId }
+      : { coexistCredentialId: creds.credentialId };
+    
+    const template = await prisma.metaTemplate.create({
+      data: {
+        ...credentialData,
+        metaTemplateId: response.data.id,
+        name: templateName,
+        language: language || 'es',
+        category: category || 'UTILITY',
+        status: 'PENDING',
+        components,
+        headerType: headerType || null,
+        bodyText,
+        footerText: footerText || null,
+        buttons: buttons || null
+      }
+    });
+    
+    res.status(201).json({
+      success: true,
+      template: {
+        id: template.id,
+        name: template.name,
+        status: template.status,
+        language: template.language,
+        category: template.category
+      },
+      message: 'Plantilla creada y enviada para aprobacion de Meta'
+    });
+  } catch (error: any) {
+    console.error('API create template error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Error al crear plantilla',
+      details: error.response?.data?.error?.message || error.message
+    });
+  }
+});
+
 export default router;
