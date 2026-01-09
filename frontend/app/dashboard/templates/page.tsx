@@ -39,6 +39,7 @@ export default function TemplatesPage() {
     category: 'UTILITY',
     headerType: 'NONE',
     headerText: '',
+    headerMediaUrl: '',
     bodyText: '',
     footerText: '',
     buttons: [] as Array<{ type: string; text: string; url?: string }>
@@ -114,6 +115,7 @@ export default function TemplatesPage() {
         category: newTemplate.category,
         headerType: newTemplate.headerType !== 'NONE' ? newTemplate.headerType : undefined,
         headerText: newTemplate.headerType === 'TEXT' ? newTemplate.headerText : undefined,
+        headerMediaUrl: ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(newTemplate.headerType) ? newTemplate.headerMediaUrl : undefined,
         bodyText: newTemplate.bodyText,
         footerText: newTemplate.footerText || undefined,
         buttons: newTemplate.buttons.length > 0 ? newTemplate.buttons : undefined
@@ -126,6 +128,7 @@ export default function TemplatesPage() {
         category: 'UTILITY',
         headerType: 'NONE',
         headerText: '',
+        headerMediaUrl: '',
         bodyText: '',
         footerText: '',
         buttons: []
@@ -421,6 +424,30 @@ export default function TemplatesPage() {
                     placeholder="Texto del encabezado"
                     className="input"
                   />
+                )}
+                {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(newTemplate.headerType) && (
+                  <div>
+                    <input
+                      type="url"
+                      value={newTemplate.headerMediaUrl}
+                      onChange={e => setNewTemplate(prev => ({ ...prev, headerMediaUrl: e.target.value }))}
+                      placeholder={newTemplate.headerType === 'DOCUMENT' 
+                        ? "https://ejemplo.com/archivo.pdf" 
+                        : newTemplate.headerType === 'IMAGE'
+                        ? "https://ejemplo.com/imagen.jpg"
+                        : "https://ejemplo.com/video.mp4"
+                      }
+                      className="input"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {newTemplate.headerType === 'DOCUMENT' 
+                        ? 'URL publica HTTPS del PDF de ejemplo (max 15MB). Meta lo usa solo para revision.' 
+                        : newTemplate.headerType === 'IMAGE'
+                        ? 'URL publica HTTPS de la imagen de ejemplo (JPG/PNG, max 5MB)'
+                        : 'URL publica HTTPS del video de ejemplo (MP4, max 16MB)'
+                      }
+                    </p>
+                  </div>
                 )}
               </div>
 

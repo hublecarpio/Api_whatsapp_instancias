@@ -1183,7 +1183,7 @@ router.post('/templates/sync', validateApiKey, async (req: ApiKeyRequest, res: R
 
 router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
-    const { templateName, to, variables, headerVariables } = req.body;
+    const { templateName, to, variables, headerVariables, headerMedia } = req.body;
     
     if (!templateName || !to) {
       return res.status(400).json({ error: 'templateName y to son requeridos' });
@@ -1214,7 +1214,26 @@ router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: R
     
     const templateComponents: any[] = [];
     
-    if (headerVariables && headerVariables.length > 0) {
+    if (headerMedia) {
+      const mediaType = headerMedia.type?.toLowerCase() || 'document';
+      const mediaParam: any = { type: mediaType };
+      
+      if (mediaType === 'document') {
+        mediaParam.document = { 
+          link: headerMedia.link,
+          filename: headerMedia.filename || 'document.pdf'
+        };
+      } else if (mediaType === 'image') {
+        mediaParam.image = { link: headerMedia.link };
+      } else if (mediaType === 'video') {
+        mediaParam.video = { link: headerMedia.link };
+      }
+      
+      templateComponents.push({
+        type: 'header',
+        parameters: [mediaParam]
+      });
+    } else if (headerVariables && headerVariables.length > 0) {
       templateComponents.push({
         type: 'header',
         parameters: headerVariables.map((v: string) => ({
