@@ -413,7 +413,7 @@ export async function getConversationContext(
         businessId,
         contactPhone,
         status: 'CONFIRMED',
-        startTime: { gte: new Date() }
+        scheduledAt: { gte: new Date() }
       }
     })
   ]);
