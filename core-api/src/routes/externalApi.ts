@@ -1054,18 +1054,38 @@ function buildTemplateCredentialWhere(creds: MetaCredentialsResult): { credentia
   }
 }
 
+// Auto-migrate old templates that were saved with wrong credential field
+async function migrateCoexistTemplates(coexistCredentialId: string): Promise<number> {
+  // Find templates that have this coexistCredentialId stored in the wrong field (credentialId)
+  const wrongTemplates = await prisma.metaTemplate.findMany({
+    where: {
+      credentialId: coexistCredentialId,
+      coexistCredentialId: null
+    }
+  });
+  
+  if (wrongTemplates.length > 0) {
+    console.log(`[MIGRATE] Found ${wrongTemplates.length} templates with wrong credential field, migrating...`);
+    
+    for (const t of wrongTemplates) {
+      await prisma.metaTemplate.update({
+        where: { id: t.id },
+        data: {
+          coexistCredentialId: coexistCredentialId,
+          credentialId: null
+        }
+      });
+    }
+    
+    console.log(`[MIGRATE] Migrated ${wrongTemplates.length} templates to coexistCredentialId`);
+  }
+  
+  return wrongTemplates.length;
+}
+
 router.get('/templates', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
     const creds = getMetaCredentials(req.instance);
-    
-    console.log('[DEBUG /templates] Instance:', {
-      id: req.instance?.id,
-      name: req.instance?.name,
-      provider: req.instance?.provider,
-      hasMetaCred: !!req.instance?.metaCredential,
-      hasCoexistCred: !!req.instance?.metaCoexistCredential
-    });
-    console.log('[DEBUG /templates] Creds:', creds);
     
     if (!creds) {
       return res.status(400).json({ 
@@ -1074,15 +1094,18 @@ router.get('/templates', validateApiKey, async (req: ApiKeyRequest, res: Respons
       });
     }
     
+    // Auto-migrate old templates for META_COEXIST instances
+    let migrated = 0;
+    if (creds.provider === 'META_COEXIST') {
+      migrated = await migrateCoexistTemplates(creds.credentialId);
+    }
+    
     const whereClause = buildTemplateCredentialWhere(creds);
-    console.log('[DEBUG /templates] Where clause:', whereClause);
     
     const templates = await prisma.metaTemplate.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' }
     });
-    
-    console.log('[DEBUG /templates] Found templates:', templates.length);
     
     res.json({ 
       templates: templates.map(t => ({
