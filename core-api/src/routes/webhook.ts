@@ -5,10 +5,60 @@ import { analyzeAndUpdateLeadStage, extractAndSaveContactData } from '../service
 import { geminiService } from '../services/gemini.js';
 import { logTokenUsage } from '../services/tokenLogger.js';
 import { dispatchUserMessage } from '../services/webhookService.js';
+import { getRedisConnection, isRedisAvailable } from '../services/redis.js';
 
 const router = Router();
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
+
+// Atomic deduplication for BAILEYS messages
+const DEDUP_TTL_SECONDS = 300;
+const processedBaileysMessages = new Map<string, number>();
+const MAX_MEMORY_ENTRIES = 5000;
+
+async function isBaileysMessageDuplicate(messageId: string): Promise<boolean> {
+  if (!messageId) return false;
+  
+  const dedupKey = `baileys_webhook_dedup:${messageId}`;
+  
+  if (isRedisAvailable()) {
+    try {
+      const redis = getRedisConnection();
+      const result = await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
+      if (result === null) {
+        console.log(`[DEDUP-REDIS-BAILEYS] Message ${messageId} already processed, skipping`);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('[DEDUP-BAILEYS] Redis error, falling back to memory:', err);
+    }
+  }
+  
+  const now = Date.now();
+  if (processedBaileysMessages.has(messageId)) {
+    const timestamp = processedBaileysMessages.get(messageId)!;
+    if (now - timestamp < DEDUP_TTL_SECONDS * 1000) {
+      console.log(`[DEDUP-MEM-BAILEYS] Message ${messageId} already processed, skipping`);
+      return true;
+    }
+  }
+  
+  if (processedBaileysMessages.size >= MAX_MEMORY_ENTRIES) {
+    const cutoff = now - (DEDUP_TTL_SECONDS * 1000);
+    let deleted = 0;
+    for (const [key, ts] of processedBaileysMessages.entries()) {
+      if (ts < cutoff) {
+        processedBaileysMessages.delete(key);
+        deleted++;
+      }
+      if (deleted >= 1000) break;
+    }
+  }
+  
+  processedBaileysMessages.set(messageId, now);
+  return false;
+}
 
 async function processMediaWithGemini(
   mediaUrl: string, 
@@ -152,6 +202,12 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           
           const providerMessageId = data.key?.id || data.messageId || data.id || null;
           
+          // ATOMIC deduplication - prevents race conditions
+          if (providerMessageId && await isBaileysMessageDuplicate(providerMessageId)) {
+            return res.json({ received: true, ignored: 'duplicate_message' });
+          }
+          
+          // Secondary check in DB (for messages that passed Redis check but already in DB)
           if (providerMessageId) {
             const existingMessage = await prisma.messageLog.findFirst({
               where: {
@@ -161,8 +217,8 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             });
             
             if (existingMessage) {
-              console.log(`[WEBHOOK] Duplicate message detected, skipping: ${providerMessageId}`);
-              return res.json({ received: true, ignored: 'duplicate_message' });
+              console.log(`[WEBHOOK] Duplicate message in DB, skipping: ${providerMessageId}`);
+              return res.json({ received: true, ignored: 'duplicate_message_db' });
             }
           }
           
@@ -318,7 +374,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             }
           }
           
-          await prisma.messageLog.create({
+          const messageLog = await prisma.messageLog.create({
             data: {
               businessId,
               instanceId: instance?.id,
@@ -352,7 +408,11 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               mediaAnalysis ? `${data.text || ''}\n[Media: ${mediaAnalysis}]` : (data.text || ''),
               mediaType || 'text',
               data.mediaUrl,
-              mediaAnalysis ? { analysis: mediaAnalysis } : undefined,
+              {
+                analysis: mediaAnalysis || undefined,
+                efficoreMessageId: messageLog.id,
+                baileysMessageId: providerMessageId
+              },
               instance?.id
             ).catch(err => console.error('[WEBHOOK] Failed to dispatch user_message webhook:', err.message));
           }
