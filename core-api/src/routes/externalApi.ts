@@ -1,9 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 import prisma from '../services/prisma';
 import eventLogger from '../services/eventLogger';
 import { dispatchAgentMessage } from '../services/webhookService';
+import { getOutboundMessageQueue, OutboundMessageJobData } from '../services/queues/index';
 
 const router = Router();
 
@@ -153,7 +155,7 @@ router.get('/me', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
 
 router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
-    const { to, message, mediaUrl, mediaType } = req.body;
+    const { to, message, mediaUrl, mediaType, priority = 'normal', sync = false } = req.body;
     const business = req.business;
     const instance = req.instance;
     
@@ -174,313 +176,312 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
     }
     
     const cleanTo = to.replace(/\D/g, '');
+    const queue = getOutboundMessageQueue();
     
-    if (instance.provider === 'BAILEYS') {
-      const waApiUrl = process.env.WA_API_URL || 'http://localhost:8080';
-      const baileysInstanceId = instance.instanceBackendId;
-      
-      if (!baileysInstanceId) {
-        return res.status(500).json({ 
-          error: 'Instancia Baileys no configurada correctamente',
-          hint: 'La instancia no tiene un backend ID asignado. Por favor, recrea la instancia.'
-        });
-      }
-      
-      let endpoint = `/instances/${baileysInstanceId}/sendMessage`;
-      let payload: any = {
-        to: cleanTo,
-        message: message
-      };
-      
-      if (mediaUrl) {
-        if (mediaType === 'image' || mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-          endpoint = `/instances/${baileysInstanceId}/sendImage`;
-          payload = { to: cleanTo, imageUrl: mediaUrl, caption: message || '' };
-        } else if (mediaType === 'video' || mediaUrl.match(/\.(mp4|mov|avi)$/i)) {
-          endpoint = `/instances/${baileysInstanceId}/sendVideo`;
-          payload = { to: cleanTo, videoUrl: mediaUrl, caption: message || '' };
-        } else if (mediaType === 'audio' || mediaUrl.match(/\.(mp3|ogg|wav|m4a)$/i)) {
-          endpoint = `/instances/${baileysInstanceId}/sendAudio`;
-          payload = { to: cleanTo, audioUrl: mediaUrl };
-        } else if (mediaType === 'document' || mediaUrl.match(/\.(pdf|doc|docx|xls|xlsx)$/i)) {
-          endpoint = `/instances/${baileysInstanceId}/sendFile`;
-          payload = { to: cleanTo, fileUrl: mediaUrl, caption: message || '', fileName: 'document' };
-        }
-      }
-      
-      const response = await axios.post(`${waApiUrl}${endpoint}`, payload);
-      const messageId = response.data.messageId || response.data.key?.id;
-      
-      // Register message in MessageLog (like agent message)
-      await prisma.messageLog.create({
-        data: {
-          businessId: business.id,
-          instanceId: instance.id,
-          sender: instance.phoneNumber || business.id,
-          recipient: cleanTo,
-          message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
-          direction: 'outbound',
-          mediaUrl: mediaUrl || null,
-          providerMessageId: messageId,
-          metadata: { source: 'external_api', mediaType }
-        }
+    if (!queue || sync === true) {
+      return await sendMessageSync(req, res, business, instance, cleanTo, message, mediaUrl, mediaType);
+    }
+    
+    if (instance.provider === 'BAILEYS' && !instance.instanceBackendId) {
+      return res.status(500).json({ 
+        error: 'Instancia Baileys no configurada correctamente',
+        hint: 'La instancia no tiene un backend ID asignado. Por favor, recrea la instancia.'
       });
-      
-      // Update or create contact
-      const now = new Date();
-      await prisma.contact.upsert({
-        where: {
-          businessId_phone: { businessId: business.id, phone: cleanTo }
-        },
-        create: {
-          businessId: business.id,
-          phone: cleanTo,
-          name: cleanTo,
-          firstMessageAt: now,
-          lastMessageAt: now,
-          messageCount: 1
-        },
-        update: {
-          lastMessageAt: now,
-          messageCount: { increment: 1 }
-        }
-      });
-      
-      // Dispatch webhook for external integrations
-      await dispatchAgentMessage(
-        business.id,
-        cleanTo,
-        message || '',
-        mediaUrl ? [mediaUrl] : undefined,
-        ['external_api'],
-        instance.id
-      );
-      
-      await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API a ${cleanTo}`, {
-        businessId: business.id,
-        details: { to: cleanTo, hasMedia: !!mediaUrl, messageId }
-      });
-      
-      res.json({
-        success: true,
-        messageId,
-        to: cleanTo
-      });
-      
-    } else if (instance.provider === 'META_CLOUD') {
+    }
+    
+    if (instance.provider === 'META_CLOUD') {
       const metaCred = instance.metaCredential;
-      
       if (!metaCred || !metaCred.accessToken || !metaCred.phoneNumberId) {
         return res.status(400).json({ error: 'Instancia META no configurada correctamente' });
       }
-      
-      const metaToken = metaCred.accessToken;
-      const phoneNumberId = metaCred.phoneNumberId;
-      
-      let payload: any;
-      
-      if (mediaUrl) {
-        const type = mediaType || 'image';
-        payload = {
-          messaging_product: 'whatsapp',
-          to: cleanTo,
-          type,
-          [type]: {
-            link: mediaUrl,
-            caption: message || undefined
-          }
-        };
-      } else {
-        payload = {
-          messaging_product: 'whatsapp',
-          to: cleanTo,
-          type: 'text',
-          text: { body: message }
-        };
-      }
-      
-      const response = await axios.post(
-        `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${metaToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      const messageId = response.data.messages?.[0]?.id;
-      
-      // Register message in MessageLog (like agent message)
-      await prisma.messageLog.create({
-        data: {
-          businessId: business.id,
-          instanceId: instance.id,
-          sender: instance.phoneNumber || business.id,
-          recipient: cleanTo,
-          message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
-          direction: 'outbound',
-          mediaUrl: mediaUrl || null,
-          providerMessageId: messageId,
-          metadata: { source: 'external_api', provider: 'META_CLOUD', mediaType }
-        }
-      });
-      
-      // Update or create contact
-      const now = new Date();
-      await prisma.contact.upsert({
-        where: {
-          businessId_phone: { businessId: business.id, phone: cleanTo }
-        },
-        create: {
-          businessId: business.id,
-          phone: cleanTo,
-          name: cleanTo,
-          firstMessageAt: now,
-          lastMessageAt: now,
-          messageCount: 1
-        },
-        update: {
-          lastMessageAt: now,
-          messageCount: { increment: 1 }
-        }
-      });
-      
-      // Dispatch webhook for external integrations
-      await dispatchAgentMessage(
-        business.id,
-        cleanTo,
-        message || '',
-        mediaUrl ? [mediaUrl] : undefined,
-        ['external_api'],
-        instance.id
-      );
-      
-      await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API META a ${cleanTo}`, {
-        businessId: business.id,
-        details: { to: cleanTo, hasMedia: !!mediaUrl, messageId }
-      });
-      
-      res.json({
-        success: true,
-        messageId,
-        to: cleanTo
-      });
-    } else if (instance.provider === 'META_COEXIST') {
+    }
+    
+    if (instance.provider === 'META_COEXIST') {
       const coexistCred = instance.metaCoexistCredential;
-      
       if (!coexistCred) {
         return res.status(400).json({ error: 'Instancia META Coexist no configurada correctamente' });
       }
-      
       const accessToken = coexistCred.systemAccessToken || coexistCred.userAccessToken;
-      const phoneNumberId = coexistCred.phoneNumberId;
-      
-      if (!accessToken || !phoneNumberId) {
+      if (!accessToken || !coexistCred.phoneNumberId) {
         return res.status(400).json({ 
           error: 'Credenciales META Coexist incompletas',
           hint: 'Falta phoneNumberId - use el endpoint de reparación para configurarlo'
         });
       }
-      
-      let payload: any;
-      
-      if (mediaUrl) {
-        const type = mediaType || 'image';
-        payload = {
-          messaging_product: 'whatsapp',
-          to: cleanTo,
-          type,
-          [type]: {
-            link: mediaUrl,
-            caption: message || undefined
-          }
-        };
-      } else {
-        payload = {
-          messaging_product: 'whatsapp',
-          to: cleanTo,
-          type: 'text',
-          text: { body: message }
-        };
-      }
-      
-      const response = await axios.post(
-        `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      const messageId = response.data.messages?.[0]?.id;
-      
-      await prisma.messageLog.create({
-        data: {
-          businessId: business.id,
-          instanceId: instance.id,
-          sender: instance.phoneNumber || business.id,
-          recipient: cleanTo,
-          message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
-          direction: 'outbound',
-          mediaUrl: mediaUrl || null,
-          providerMessageId: messageId,
-          metadata: { source: 'external_api', provider: 'META_COEXIST', mediaType }
-        }
-      });
-      
-      const now = new Date();
-      await prisma.contact.upsert({
-        where: {
-          businessId_phone: { businessId: business.id, phone: cleanTo }
-        },
-        create: {
-          businessId: business.id,
-          phone: cleanTo,
-          name: cleanTo,
-          firstMessageAt: now,
-          lastMessageAt: now,
-          messageCount: 1
-        },
-        update: {
-          lastMessageAt: now,
-          messageCount: { increment: 1 }
-        }
-      });
-      
-      await dispatchAgentMessage(
-        business.id,
-        cleanTo,
-        message || '',
-        mediaUrl ? [mediaUrl] : undefined,
-        ['external_api'],
-        instance.id
-      );
-      
-      await eventLogger.info('EXTERNAL_API', `Mensaje enviado via API META Coexist a ${cleanTo}`, {
-        businessId: business.id,
-        details: { to: cleanTo, hasMedia: !!mediaUrl, messageId }
-      });
-      
-      res.json({
-        success: true,
-        messageId,
-        to: cleanTo
-      });
-    } else {
-      return res.status(400).json({ error: 'Proveedor de WhatsApp no soportado' });
     }
     
+    const jobId = `msg_${uuidv4()}`;
+    const jobData: OutboundMessageJobData = {
+      jobId,
+      businessId: business.id,
+      instanceId: instance.id,
+      to: cleanTo,
+      message,
+      mediaUrl,
+      mediaType,
+      provider: instance.provider as 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST',
+      instanceBackendId: instance.instanceBackendId,
+      metaCredential: instance.metaCredential ? {
+        accessToken: instance.metaCredential.accessToken,
+        phoneNumberId: instance.metaCredential.phoneNumberId
+      } : undefined,
+      metaCoexistCredential: instance.metaCoexistCredential ? {
+        accessToken: instance.metaCoexistCredential.systemAccessToken || instance.metaCoexistCredential.userAccessToken,
+        phoneNumberId: instance.metaCoexistCredential.phoneNumberId
+      } : undefined,
+      phoneNumber: instance.phoneNumber,
+      enqueuedAt: Date.now(),
+      priority: priority as 'high' | 'normal' | 'low',
+      source: 'external_api'
+    };
+    
+    const priorityValue = priority === 'high' ? 1 : priority === 'low' ? 10 : 5;
+    
+    await queue.add(jobId, jobData, {
+      jobId,
+      priority: priorityValue
+    });
+    
+    await eventLogger.info('EXTERNAL_API', `Mensaje encolado para ${cleanTo}`, {
+      businessId: business.id,
+      details: { to: cleanTo, hasMedia: !!mediaUrl, jobId, priority }
+    });
+    
+    res.status(202).json({
+      success: true,
+      queued: true,
+      jobId,
+      to: cleanTo,
+      status: 'pending',
+      statusUrl: `/api/external/message-status/${jobId}`
+    });
+    
   } catch (error: any) {
-    console.error('API send-message error:', error.response?.data || error.message);
+    console.error('Send message error:', error);
     res.status(500).json({ 
-      error: 'Error enviando mensaje',
+      error: error.message,
+      hint: 'Si el problema persiste, contacte soporte tecnico'
+    });
+  }
+});
+
+async function sendMessageSync(req: ApiKeyRequest, res: Response, business: any, instance: any, cleanTo: string, message: string, mediaUrl?: string, mediaType?: string) {
+  if (instance.provider === 'BAILEYS') {
+    const waApiUrl = process.env.WA_API_URL || 'http://localhost:8080';
+    const baileysInstanceId = instance.instanceBackendId;
+    
+    if (!baileysInstanceId) {
+      return res.status(500).json({ 
+        error: 'Instancia Baileys no configurada correctamente',
+        hint: 'La instancia no tiene un backend ID asignado. Por favor, recrea la instancia.'
+      });
+    }
+    
+    let endpoint = `/instances/${baileysInstanceId}/sendMessage`;
+    let payload: any = { to: cleanTo, message };
+    
+    if (mediaUrl) {
+      if (mediaType === 'image' || mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+        endpoint = `/instances/${baileysInstanceId}/sendImage`;
+        payload = { to: cleanTo, imageUrl: mediaUrl, caption: message || '' };
+      } else if (mediaType === 'video' || mediaUrl.match(/\.(mp4|mov|avi)$/i)) {
+        endpoint = `/instances/${baileysInstanceId}/sendVideo`;
+        payload = { to: cleanTo, videoUrl: mediaUrl, caption: message || '' };
+      } else if (mediaType === 'audio' || mediaUrl.match(/\.(mp3|ogg|wav|m4a)$/i)) {
+        endpoint = `/instances/${baileysInstanceId}/sendAudio`;
+        payload = { to: cleanTo, audioUrl: mediaUrl };
+      } else if (mediaType === 'document' || mediaUrl.match(/\.(pdf|doc|docx|xls|xlsx)$/i)) {
+        endpoint = `/instances/${baileysInstanceId}/sendFile`;
+        payload = { to: cleanTo, fileUrl: mediaUrl, caption: message || '', fileName: 'document' };
+      }
+    }
+    
+    const response = await axios.post(`${waApiUrl}${endpoint}`, payload);
+    const messageId = response.data.messageId || response.data.key?.id;
+    
+    await prisma.messageLog.create({
+      data: {
+        businessId: business.id,
+        instanceId: instance.id,
+        sender: instance.phoneNumber || business.id,
+        recipient: cleanTo,
+        message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
+        direction: 'outbound',
+        mediaUrl: mediaUrl || null,
+        providerMessageId: messageId,
+        metadata: { source: 'external_api', mediaType, sync: true }
+      }
+    });
+    
+    const now = new Date();
+    await prisma.contact.upsert({
+      where: { businessId_phone: { businessId: business.id, phone: cleanTo } },
+      create: { businessId: business.id, phone: cleanTo, name: cleanTo, firstMessageAt: now, lastMessageAt: now, messageCount: 1 },
+      update: { lastMessageAt: now, messageCount: { increment: 1 } }
+    });
+    
+    await dispatchAgentMessage(business.id, cleanTo, message || '', mediaUrl ? [mediaUrl] : undefined, ['external_api'], instance.id);
+    
+    return res.json({ success: true, messageId, to: cleanTo, sync: true });
+    
+  } else if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+    const credential = instance.provider === 'META_CLOUD' ? instance.metaCredential : instance.metaCoexistCredential;
+    const accessToken = instance.provider === 'META_CLOUD' ? credential?.accessToken : (credential?.systemAccessToken || credential?.userAccessToken);
+    const phoneNumberId = credential?.phoneNumberId;
+    
+    if (!accessToken || !phoneNumberId) {
+      return res.status(400).json({ error: 'Instancia META no configurada correctamente' });
+    }
+    
+    let payload: any;
+    if (mediaUrl) {
+      const type = mediaType || 'image';
+      payload = { messaging_product: 'whatsapp', to: cleanTo, type, [type]: { link: mediaUrl, caption: message || undefined } };
+    } else {
+      payload = { messaging_product: 'whatsapp', to: cleanTo, type: 'text', text: { body: message } };
+    }
+    
+    const response = await axios.post(
+      `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+      payload,
+      { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } }
+    );
+    
+    const messageId = response.data.messages?.[0]?.id;
+    
+    await prisma.messageLog.create({
+      data: {
+        businessId: business.id,
+        instanceId: instance.id,
+        sender: instance.phoneNumber || business.id,
+        recipient: cleanTo,
+        message: message || (mediaUrl ? `[Media: ${mediaType || 'file'}]` : ''),
+        direction: 'outbound',
+        mediaUrl: mediaUrl || null,
+        providerMessageId: messageId,
+        metadata: { source: 'external_api', provider: instance.provider, mediaType, sync: true }
+      }
+    });
+    
+    const now = new Date();
+    await prisma.contact.upsert({
+      where: { businessId_phone: { businessId: business.id, phone: cleanTo } },
+      create: { businessId: business.id, phone: cleanTo, name: cleanTo, firstMessageAt: now, lastMessageAt: now, messageCount: 1 },
+      update: { lastMessageAt: now, messageCount: { increment: 1 } }
+    });
+    
+    await dispatchAgentMessage(business.id, cleanTo, message || '', mediaUrl ? [mediaUrl] : undefined, ['external_api'], instance.id);
+    
+    return res.json({ success: true, messageId, to: cleanTo, sync: true });
+    
+  } else {
+    return res.status(400).json({ error: 'Proveedor de WhatsApp no soportado' });
+  }
+}
+
+router.get('/message-status/:jobId', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { jobId } = req.params;
+    const queue = getOutboundMessageQueue();
+    
+    if (!queue) {
+      return res.status(503).json({ error: 'Queue service not available' });
+    }
+    
+    const job = await queue.getJob(jobId);
+    
+    if (!job) {
+      const messageLog = await prisma.messageLog.findFirst({
+        where: {
+          businessId: req.business.id,
+          metadata: { path: ['queueJobId'], equals: jobId }
+        },
+        select: { id: true, providerMessageId: true, createdAt: true }
+      });
+      
+      if (messageLog) {
+        return res.json({
+          jobId,
+          status: 'completed',
+          messageId: messageLog.providerMessageId,
+          completedAt: messageLog.createdAt
+        });
+      }
+      
+      return res.status(404).json({ error: 'Job not found', jobId });
+    }
+    
+    const state = await job.getState();
+    const progress = job.progress;
+    
+    let response: any = {
+      jobId,
+      status: state,
+      to: job.data.to,
+      enqueuedAt: new Date(job.data.enqueuedAt).toISOString(),
+      attempts: job.attemptsMade,
+      maxAttempts: job.opts.attempts
+    };
+    
+    if (state === 'completed') {
+      const returnValue = job.returnvalue as any;
+      response.messageId = returnValue?.messageId;
+      response.completedAt = job.finishedOn ? new Date(job.finishedOn).toISOString() : null;
+    }
+    
+    if (state === 'failed') {
+      response.error = job.failedReason;
+      response.failedAt = job.finishedOn ? new Date(job.finishedOn).toISOString() : null;
+    }
+    
+    res.json(response);
+    
+  } catch (error: any) {
+    console.error('API message-status error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Error obteniendo estado del mensaje',
       details: error.response?.data?.error || error.message
     });
+  }
+});
+
+router.get('/queue-stats', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const queue = getOutboundMessageQueue();
+    
+    if (!queue) {
+      return res.json({
+        available: false,
+        message: 'Queue system not available, using synchronous mode'
+      });
+    }
+    
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      queue.getWaitingCount(),
+      queue.getActiveCount(),
+      queue.getCompletedCount(),
+      queue.getFailedCount(),
+      queue.getDelayedCount()
+    ]);
+    
+    res.json({
+      available: true,
+      stats: {
+        waiting,
+        active,
+        completed,
+        failed,
+        delayed,
+        total: waiting + active + delayed
+      },
+      health: {
+        status: failed > 100 ? 'degraded' : 'healthy',
+        failureRate: completed > 0 ? (failed / (completed + failed) * 100).toFixed(2) + '%' : '0%'
+      }
+    });
+  } catch (error: any) {
+    console.error('API queue-stats error:', error);
+    res.status(500).json({ error: 'Error obteniendo estadisticas de cola' });
   }
 });
 
