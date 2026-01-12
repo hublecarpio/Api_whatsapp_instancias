@@ -11,52 +11,73 @@ const router = Router();
 
 type MetaProviderType = 'META_CLOUD' | 'META_COEXIST';
 
-// Redis-based deduplication with TTL
+// Redis-based deduplication with TTL (atomic SET NX)
 const DEDUP_TTL_SECONDS = 300; // 5 minutes
 const processedMessages = new Map<string, number>(); // In-memory fallback
+const MAX_MEMORY_ENTRIES = 5000;
 
 async function isMessageAlreadyProcessed(messageId: string): Promise<boolean> {
   if (!messageId) return false;
   
   const dedupKey = `meta_webhook_dedup:${messageId}`;
   
-  // Try Redis first
+  // Try Redis first with ATOMIC SET NX EX (prevents race conditions)
   if (isRedisAvailable()) {
     try {
       const redis = getRedisConnection();
-      const exists = await redis.get(dedupKey);
-      if (exists) {
+      // SET key value EX ttl NX - returns 'OK' if set, null if key already exists
+      const result = await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
+      
+      if (result === null) {
+        // Key already existed - duplicate
         console.log(`[DEDUP-REDIS] Message ${messageId} already processed, skipping`);
         return true;
       }
-      // Mark as processed with TTL
-      await redis.setex(dedupKey, DEDUP_TTL_SECONDS, '1');
+      // Key was set - first time processing
       return false;
     } catch (err) {
       console.warn('[DEDUP] Redis error, falling back to memory:', err);
     }
   }
   
-  // Fallback to in-memory
+  // Fallback to in-memory with LRU-style cleanup
   const now = Date.now();
+  
+  // Check if already processed
   if (processedMessages.has(messageId)) {
     const timestamp = processedMessages.get(messageId)!;
     if (now - timestamp < DEDUP_TTL_SECONDS * 1000) {
       console.log(`[DEDUP-MEM] Message ${messageId} already processed, skipping`);
       return true;
     }
+    // Expired entry, will be updated below
+  }
+  
+  // Cleanup old entries BEFORE adding (prevents unbounded growth)
+  if (processedMessages.size >= MAX_MEMORY_ENTRIES) {
+    const cutoff = now - (DEDUP_TTL_SECONDS * 1000);
+    let deleted = 0;
+    for (const [key, ts] of processedMessages.entries()) {
+      if (ts < cutoff) {
+        processedMessages.delete(key);
+        deleted++;
+      }
+      // Stop after cleaning enough
+      if (deleted >= 1000) break;
+    }
+    // If still too large, remove oldest entries
+    if (processedMessages.size >= MAX_MEMORY_ENTRIES) {
+      const entries = Array.from(processedMessages.entries())
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, 1000);
+      for (const [key] of entries) {
+        processedMessages.delete(key);
+      }
+    }
   }
   
   // Mark as processed
   processedMessages.set(messageId, now);
-  
-  // Cleanup old entries periodically
-  if (processedMessages.size > 10000) {
-    const cutoff = now - (DEDUP_TTL_SECONDS * 1000);
-    for (const [key, ts] of processedMessages.entries()) {
-      if (ts < cutoff) processedMessages.delete(key);
-    }
-  }
   
   return false;
 }
