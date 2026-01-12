@@ -7,7 +7,8 @@ export const QUEUE_NAMES = {
   WHATSAPP_INCOMING: 'efficore-whatsapp-incoming',
   INACTIVITY_CHECK: 'efficore-inactivity-check',
   AI_RESPONSE: 'efficore-ai-response',
-  EXPIRED_BUFFER: 'efficore-expired-buffer'
+  EXPIRED_BUFFER: 'efficore-expired-buffer',
+  OUTBOUND_MESSAGE: 'efficore-outbound-message'
 } as const;
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6389';
@@ -88,11 +89,36 @@ export interface AIResponseJobData {
   provider?: string;
 }
 
+export interface OutboundMessageJobData {
+  jobId: string;
+  businessId: string;
+  instanceId: string;
+  to: string;
+  message?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'audio' | 'document';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
+  instanceBackendId?: string;
+  metaCredential?: {
+    accessToken: string;
+    phoneNumberId: string;
+  };
+  metaCoexistCredential?: {
+    accessToken: string;
+    phoneNumberId: string;
+  };
+  phoneNumber?: string;
+  enqueuedAt: number;
+  priority: 'high' | 'normal' | 'low';
+  source: 'external_api' | 'agent' | 'broadcast' | 'reminder';
+}
+
 let reminderQueue: Queue<ReminderJobData> | null = null;
 let messageBufferQueue: Queue<MessageBufferJobData> | null = null;
 let whatsappIncomingQueue: Queue<WhatsAppIncomingJobData> | null = null;
 let inactivityCheckQueue: Queue<InactivityCheckJobData> | null = null;
 let aiResponseQueue: Queue<AIResponseJobData> | null = null;
+let outboundMessageQueue: Queue<OutboundMessageJobData> | null = null;
 
 export function initializeQueues(): void {
   const conn = getConnection();
@@ -183,8 +209,26 @@ export function initializeQueues(): void {
       }
     }
   });
+
+  outboundMessageQueue = new Queue<OutboundMessageJobData>(QUEUE_NAMES.OUTBOUND_MESSAGE, {
+    connection: conn,
+    defaultJobOptions: {
+      attempts: 5,
+      backoff: {
+        type: 'exponential',
+        delay: 1000
+      },
+      removeOnComplete: {
+        age: 24 * 3600,
+        count: 10000
+      },
+      removeOnFail: {
+        age: 7 * 24 * 3600
+      }
+    }
+  });
   
-  console.log('BullMQ queues initialized (including AI Response queue)');
+  console.log('BullMQ queues initialized (including Outbound Message queue)');
 }
 
 export function areQueuesInitialized(): boolean {
@@ -205,6 +249,10 @@ export function getInactivityCheckQueue(): Queue<InactivityCheckJobData> | null 
 
 export function getAIResponseQueue(): Queue<AIResponseJobData> | null {
   return aiResponseQueue;
+}
+
+export function getOutboundMessageQueue(): Queue<OutboundMessageJobData> | null {
+  return outboundMessageQueue;
 }
 
 export function getQueueConnection(): Redis {
@@ -247,6 +295,7 @@ export async function closeQueues(): Promise<void> {
   if (whatsappIncomingQueue) closeTasks.push(whatsappIncomingQueue.close());
   if (inactivityCheckQueue) closeTasks.push(inactivityCheckQueue.close());
   if (aiResponseQueue) closeTasks.push(aiResponseQueue.close());
+  if (outboundMessageQueue) closeTasks.push(outboundMessageQueue.close());
   
   await Promise.all(closeTasks);
   
@@ -263,6 +312,7 @@ export async function closeQueues(): Promise<void> {
   whatsappIncomingQueue = null;
   inactivityCheckQueue = null;
   aiResponseQueue = null;
+  outboundMessageQueue = null;
   
   console.log('All queues closed');
 }
