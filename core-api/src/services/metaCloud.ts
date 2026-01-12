@@ -283,9 +283,12 @@ export class MetaCloudService {
     const cleanPhone = to.replace(/\D/g, '');
 
     try {
+      console.log('[META] sendAudioMessage called');
+      console.log('[META] Target phone:', cleanPhone);
       console.log('[META] Downloading audio from:', audioUrl);
+      
       const { buffer, mimeType } = await this.downloadFromUrl(audioUrl);
-      console.log(`[META] Audio downloaded: ${buffer.length} bytes, type: ${mimeType}`);
+      console.log(`[META] Audio downloaded: ${buffer.length} bytes, Content-Type: ${mimeType}`);
       
       // Meta Cloud soporta: audio/aac, audio/amr, audio/mpeg, audio/mp4, audio/ogg (OPUS)
       // Para notas de voz nativas, OGG con OPUS es ideal
@@ -309,8 +312,10 @@ export class MetaCloudService {
         extension = 'amr';
       }
       
+      console.log(`[META] Uploading audio to Meta as ${actualMimeType} (voice.${extension})`);
       const mediaId = await this.uploadMedia(buffer, actualMimeType, `voice.${extension}`);
       console.log('[META] Audio uploaded to Meta, media_id:', mediaId);
+      console.log('[META] Sending audio message to', cleanPhone);
       
       const response = await axios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,

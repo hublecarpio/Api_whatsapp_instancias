@@ -114,6 +114,8 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
   try {
     const { businessId } = req.body;
     
+    console.log('[MEDIA] Upload request:', { businessId, userId: req.userId, filename: req.file?.originalname, mimetype: req.file?.mimetype, size: req.file?.size });
+    
     if (!req.file) {
       return res.status(400).json({ error: 'No file provided' });
     }
@@ -122,11 +124,26 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
       return res.status(400).json({ error: 'businessId is required' });
     }
     
-    const business = await prisma.business.findFirst({
-      where: { id: businessId, userId: req.userId! }
+    // Check for business access - support advisors (who don't own the business)
+    const user = await prisma.user.findUnique({ 
+      where: { id: req.userId! },
+      select: { role: true, parentUserId: true }
     });
     
+    let business;
+    if (user?.role === 'ASESOR' && user.parentUserId) {
+      // Advisors can access their parent's businesses
+      business = await prisma.business.findFirst({
+        where: { id: businessId, userId: user.parentUserId }
+      });
+    } else {
+      business = await prisma.business.findFirst({
+        where: { id: businessId, userId: req.userId! }
+      });
+    }
+    
     if (!business) {
+      console.log('[MEDIA] Business not found for user:', req.userId, 'businessId:', businessId, 'role:', user?.role);
       return res.status(404).json({ error: 'Business not found' });
     }
     
@@ -140,14 +157,15 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res: Resp
     
     if (req.file.mimetype === 'audio/webm' || req.file.mimetype.startsWith('audio/')) {
       try {
-        console.log('Converting audio for WhatsApp...');
+        console.log('[MEDIA] Converting audio for WhatsApp from', req.file.mimetype, '(', req.file.buffer.length, 'bytes)');
         const converted = await convertAudioForWhatsApp(req.file.buffer, req.file.mimetype);
         fileBuffer = converted.buffer;
         fileMimetype = converted.mimetype;
         extension = converted.extension;
-        console.log('Audio converted successfully to', converted.mimetype);
+        console.log('[MEDIA] Audio converted successfully:', converted.mimetype, '(', converted.buffer.length, 'bytes)');
       } catch (convErr: any) {
-        console.error('Audio conversion failed, using original:', convErr.message);
+        console.error('[MEDIA] Audio conversion failed:', convErr.message);
+        console.error('[MEDIA] Fallback: using original audio (may not work with Meta Cloud API)');
       }
     }
     

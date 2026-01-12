@@ -1446,6 +1446,8 @@ router.post('/:businessId/send', async (req: AuthRequest, res: Response) => {
   try {
     const { to, message, imageUrl, videoUrl, audioUrl, fileUrl, fileName, mimeType, instanceId } = req.body;
     
+    console.log('[SEND] Request body:', { to, message: message?.substring(0, 50), imageUrl, videoUrl, audioUrl, fileUrl, fileName, instanceId });
+    
     const user = await getUserWithRole(req.userId!);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
