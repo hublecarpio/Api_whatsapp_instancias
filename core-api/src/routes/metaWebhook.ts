@@ -5,10 +5,61 @@ import { processIncomingMessage } from '../services/messageIngest.js';
 import { uploadBuffer, isS3Configured } from '../services/storage.js';
 import { dispatchUserMessage } from '../services/webhookService.js';
 import { webhookLogger, logWebhookEvent } from '../services/logger.js';
+import { getRedisConnection, isRedisAvailable } from '../services/redis.js';
 
 const router = Router();
 
 type MetaProviderType = 'META_CLOUD' | 'META_COEXIST';
+
+// Redis-based deduplication with TTL
+const DEDUP_TTL_SECONDS = 300; // 5 minutes
+const processedMessages = new Map<string, number>(); // In-memory fallback
+
+async function isMessageAlreadyProcessed(messageId: string): Promise<boolean> {
+  if (!messageId) return false;
+  
+  const dedupKey = `meta_webhook_dedup:${messageId}`;
+  
+  // Try Redis first
+  if (isRedisAvailable()) {
+    try {
+      const redis = getRedisConnection();
+      const exists = await redis.get(dedupKey);
+      if (exists) {
+        console.log(`[DEDUP-REDIS] Message ${messageId} already processed, skipping`);
+        return true;
+      }
+      // Mark as processed with TTL
+      await redis.setex(dedupKey, DEDUP_TTL_SECONDS, '1');
+      return false;
+    } catch (err) {
+      console.warn('[DEDUP] Redis error, falling back to memory:', err);
+    }
+  }
+  
+  // Fallback to in-memory
+  const now = Date.now();
+  if (processedMessages.has(messageId)) {
+    const timestamp = processedMessages.get(messageId)!;
+    if (now - timestamp < DEDUP_TTL_SECONDS * 1000) {
+      console.log(`[DEDUP-MEM] Message ${messageId} already processed, skipping`);
+      return true;
+    }
+  }
+  
+  // Mark as processed
+  processedMessages.set(messageId, now);
+  
+  // Cleanup old entries periodically
+  if (processedMessages.size > 10000) {
+    const cutoff = now - (DEDUP_TTL_SECONDS * 1000);
+    for (const [key, ts] of processedMessages.entries()) {
+      if (ts < cutoff) processedMessages.delete(key);
+    }
+  }
+  
+  return false;
+}
 
 const GLOBAL_WEBHOOK_VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'efficore_webhook_token_2024';
 
@@ -143,6 +194,16 @@ async function processMessage(
 ) {
   const startTime = Date.now();
 
+  // DEDUPLICATION CHECK - prevent duplicate webhook events
+  if (await isMessageAlreadyProcessed(msg.messageId)) {
+    webhookLogger.info({
+      messageId: msg.messageId,
+      from: msg.from,
+      reason: 'duplicate'
+    }, 'Skipping duplicate message');
+    return;
+  }
+
   logWebhookEvent({
     eventType: 'message_received',
     phoneNumberId: metaService['credentials'].phoneNumberId,
@@ -210,7 +271,7 @@ async function processMessage(
     }
   }
 
-  await processIncomingMessage({
+  const processed = await processIncomingMessage({
     businessId: instance.businessId,
     instanceId: instance.id,
     provider: providerType,
@@ -233,38 +294,55 @@ async function processMessage(
     order: msg.order
   });
   
-  // Build message text for webhook - handle special types like order
-  let webhookMessage = msg.caption || msg.text || '';
-  
-  if (msg.type === 'order' && msg.order) {
-    const orderItems = msg.order.items.map((item: any) => 
-      `• ${item.productId} x${item.quantity} - ${item.currency} ${item.price.toFixed(2)}`
-    ).join('\n');
-    const totalAmount = msg.order.items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
-    const currency = msg.order.items[0]?.currency || 'USD';
+  // Only dispatch webhook if message was actually processed (not a duplicate in DB)
+  if (processed !== false) {
+    // Get the internal Efficore message ID from the database
+    const messageLog = await prisma.messageLog.findFirst({
+      where: {
+        businessId: instance.businessId,
+        providerMessageId: msg.messageId
+      },
+      select: { id: true }
+    });
     
-    webhookMessage = `🛒 PEDIDO DEL CATÁLOGO\nCatálogo: ${msg.order.catalogId}\nProductos:\n${orderItems}\nTotal: ${currency} ${totalAmount.toFixed(2)}`;
-  } else if (msg.type === 'location' && msg.location) {
-    webhookMessage = `Ubicación: ${msg.location.latitude}, ${msg.location.longitude}`;
-    if (msg.location.name) webhookMessage += ` (${msg.location.name})`;
+    // Build message text for webhook - handle special types like order
+    let webhookMessage = msg.caption || msg.text || '';
+    
+    if (msg.type === 'order' && msg.order) {
+      const orderItems = msg.order.items.map((item: any) => 
+        `• ${item.productId} x${item.quantity} - ${item.currency} ${item.price.toFixed(2)}`
+      ).join('\n');
+      const totalAmount = msg.order.items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+      const currency = msg.order.items[0]?.currency || 'USD';
+      
+      webhookMessage = `🛒 PEDIDO DEL CATÁLOGO\nCatálogo: ${msg.order.catalogId}\nProductos:\n${orderItems}\nTotal: ${currency} ${totalAmount.toFixed(2)}`;
+    } else if (msg.type === 'location' && msg.location) {
+      webhookMessage = `Ubicación: ${msg.location.latitude}, ${msg.location.longitude}`;
+      if (msg.location.name) webhookMessage += ` (${msg.location.name})`;
+    }
+    
+    dispatchUserMessage(
+      instance.businessId,
+      msg.from,
+      msg.pushName || '',
+      webhookMessage,
+      msg.type,
+      mediaUrl,
+      { 
+        order: msg.order || undefined,
+        efficoreMessageId: messageLog?.id,
+        metaMessageId: msg.messageId
+      },
+      instance.id
+    ).catch(err => webhookLogger.error({ error: err.message }, 'Failed to dispatch user_message webhook'));
   }
-  
-  dispatchUserMessage(
-    instance.businessId,
-    msg.from,
-    msg.pushName || '',
-    webhookMessage,
-    msg.type,
-    mediaUrl,
-    msg.order ? { order: msg.order } : undefined,
-    instance.id
-  ).catch(err => webhookLogger.error({ error: err.message }, 'Failed to dispatch user_message webhook'));
 
   webhookLogger.debug({
     messageId: msg.messageId,
     from: msg.from,
-    duration: Date.now() - startTime
-  }, 'Message processed successfully');
+    duration: Date.now() - startTime,
+    processed: processed !== false
+  }, 'Message processing complete');
 }
 
 async function processStatusUpdate(status: ParsedStatus, instance: any, providerType: MetaProviderType) {
