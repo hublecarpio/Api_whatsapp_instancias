@@ -445,46 +445,6 @@ router.get('/message-status/:jobId', validateApiKey, async (req: ApiKeyRequest, 
   }
 });
 
-router.get('/queue-stats', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
-  try {
-    const queue = getOutboundMessageQueue();
-    
-    if (!queue) {
-      return res.json({
-        available: false,
-        message: 'Queue system not available, using synchronous mode'
-      });
-    }
-    
-    const [waiting, active, completed, failed, delayed] = await Promise.all([
-      queue.getWaitingCount(),
-      queue.getActiveCount(),
-      queue.getCompletedCount(),
-      queue.getFailedCount(),
-      queue.getDelayedCount()
-    ]);
-    
-    res.json({
-      available: true,
-      stats: {
-        waiting,
-        active,
-        completed,
-        failed,
-        delayed,
-        total: waiting + active + delayed
-      },
-      health: {
-        status: failed > 100 ? 'degraded' : 'healthy',
-        failureRate: completed > 0 ? (failed / (completed + failed) * 100).toFixed(2) + '%' : '0%'
-      }
-    });
-  } catch (error: any) {
-    console.error('API queue-stats error:', error);
-    res.status(500).json({ error: 'Error obteniendo estadisticas de cola' });
-  }
-});
-
 router.get('/contacts', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
     const { limit = 100, offset = 0, tag, stage, search } = req.query;

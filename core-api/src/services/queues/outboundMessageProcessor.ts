@@ -1,4 +1,4 @@
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, DelayedError } from 'bullmq';
 import Redis from 'ioredis';
 import axios from 'axios';
 import prisma from '../prisma.js';
@@ -139,28 +139,141 @@ async function sendViaMeta(data: OutboundMessageJobData): Promise<{ success: boo
   return { success: true, messageId };
 }
 
-async function processOutboundMessage(job: Job<OutboundMessageJobData>): Promise<{ success: boolean; messageId?: string }> {
+const MAX_REAL_FAILURES = 5;
+
+type ErrorClassification = 'RATE_LIMIT' | 'TRANSIENT' | 'PERMANENT';
+
+function parseRetryAfter(retryAfterHeader: string | undefined): number {
+  if (!retryAfterHeader) return 60000;
+  
+  const seconds = parseInt(retryAfterHeader, 10);
+  if (!isNaN(seconds) && seconds > 0) {
+    return Math.min(seconds * 1000, 300000);
+  }
+  
+  const date = Date.parse(retryAfterHeader);
+  if (!isNaN(date)) {
+    const delayMs = Math.max(0, date - Date.now());
+    return Math.min(Math.max(delayMs, 5000), 300000);
+  }
+  
+  return 60000;
+}
+
+function classifySendOutcome(error: any): { classification: ErrorClassification; retryDelay: number } {
+  const status = error?.response?.status;
+  const message = error?.message?.toLowerCase() || '';
+  const responseData = error?.response?.data;
+  
+  if (status === 429 || status === 420 || status === 503) {
+    const retryAfter = error?.response?.headers?.['retry-after'];
+    return { 
+      classification: 'RATE_LIMIT', 
+      retryDelay: parseRetryAfter(retryAfter)
+    };
+  }
+  
+  if (responseData?.error?.code === 130429 || 
+      responseData?.error?.message?.includes('rate limit') ||
+      message.includes('rate limit') || 
+      message.includes('too many requests')) {
+    return { classification: 'RATE_LIMIT', retryDelay: 60000 };
+  }
+  
+  if (status === 500 || status === 502 || status === 504 ||
+      message.includes('timeout') || 
+      message.includes('econnreset') ||
+      message.includes('econnrefused') ||
+      message.includes('network') ||
+      message.includes('socket')) {
+    return { classification: 'TRANSIENT', retryDelay: 5000 };
+  }
+  
+  return { classification: 'PERMANENT', retryDelay: 0 };
+}
+
+async function deferRateLimitedJob(
+  job: Job<OutboundMessageJobData>, 
+  delayMs: number,
+  reason: string,
+  token?: string
+): Promise<never> {
+  const data = job.data;
+  const rateLimitCount = (data as any).rateLimitCount || 0;
+  const safeDelay = Math.max(delayMs, 5000);
+  
+  console.log(`[OUTBOUND_WORKER] Deferring job ${data.jobId} for ${safeDelay}ms (reason: ${reason}, count: ${rateLimitCount + 1})`);
+  
+  await job.updateData({
+    ...data,
+    rateLimitCount: rateLimitCount + 1,
+    lastRateLimitAt: Date.now()
+  } as any);
+  
+  await job.moveToDelayed(Date.now() + safeDelay, token);
+  console.log(`[OUTBOUND_WORKER] Job ${data.jobId} moved to delayed (no attempt consumed)`);
+  
+  throw new DelayedError();
+}
+
+async function processOutboundMessage(job: Job<OutboundMessageJobData>, token?: string): Promise<{ success: boolean; messageId?: string }> {
   const data = job.data;
   const startTime = Date.now();
+  const realFailures = data.realFailures || 0;
+  const rateLimitCount = (data as any).rateLimitCount || 0;
   
-  console.log(`[OUTBOUND_WORKER] Processing job ${data.jobId} for ${data.to} via ${data.provider}`);
+  console.log(`[OUTBOUND_WORKER] Processing job ${data.jobId} for ${data.to} via ${data.provider} (realFailures: ${realFailures}, rateLimits: ${rateLimitCount})`);
   
   const rateCheck = await checkRateLimit(data.businessId, data.provider);
   if (!rateCheck.allowed) {
-    console.log(`[OUTBOUND_WORKER] Rate limited, will retry in ${rateCheck.retryAfterMs}ms`);
-    throw new Error(`RATE_LIMITED:${rateCheck.retryAfterMs}`);
+    const delayMs = rateCheck.retryAfterMs || 60000;
+    await deferRateLimitedJob(job, delayMs, 'internal_rate_limit', token);
   }
   
   let result: { success: boolean; messageId?: string; error?: string };
   
-  if (data.provider === 'BAILEYS') {
-    result = await sendViaBaileys(data);
-  } else {
-    result = await sendViaMeta(data);
+  try {
+    if (data.provider === 'BAILEYS') {
+      result = await sendViaBaileys(data);
+    } else {
+      result = await sendViaMeta(data);
+    }
+  } catch (sendError: any) {
+    const { classification, retryDelay } = classifySendOutcome(sendError);
+    
+    if (classification === 'RATE_LIMIT') {
+      await deferRateLimitedJob(job, retryDelay, 'provider_rate_limit', token);
+    }
+    
+    if (classification === 'TRANSIENT') {
+      const newRealFailures = realFailures + 1;
+      console.log(`[OUTBOUND_WORKER] Transient error (realFailure ${newRealFailures}/${MAX_REAL_FAILURES}):`, sendError.message);
+      
+      if (newRealFailures >= MAX_REAL_FAILURES) {
+        throw new Error(`Max real failures (${MAX_REAL_FAILURES}) reached: ${sendError.message}`);
+      }
+      
+      await job.updateData({ ...data, realFailures: newRealFailures });
+      const error = new Error('TRANSIENT_ERROR') as any;
+      error.retryDelay = retryDelay;
+      throw error;
+    }
+    
+    throw new Error(`Permanent failure: ${sendError.message}`);
   }
   
   if (!result.success) {
-    throw new Error(result.error || 'Send failed');
+    const newRealFailures = realFailures + 1;
+    console.log(`[OUTBOUND_WORKER] Result failed (realFailure ${newRealFailures}/${MAX_REAL_FAILURES}):`, result.error);
+    
+    if (newRealFailures >= MAX_REAL_FAILURES) {
+      throw new Error(`Max real failures (${MAX_REAL_FAILURES}) reached: ${result.error}`);
+    }
+    
+    await job.updateData({ ...data, realFailures: newRealFailures });
+    const error = new Error('SEND_FAILED') as any;
+    error.retryDelay = Math.min(1000 * Math.pow(2, newRealFailures), 60000);
+    throw error;
   }
   
   await prisma.messageLog.create({
@@ -239,8 +352,8 @@ export function startOutboundMessageWorker(): Worker<OutboundMessageJobData> {
   
   outboundWorker = new Worker<OutboundMessageJobData>(
     QUEUE_NAMES.OUTBOUND_MESSAGE,
-    async (job) => {
-      return await processOutboundMessage(job);
+    async (job, token) => {
+      return await processOutboundMessage(job, token);
     },
     {
       connection,
@@ -248,6 +361,18 @@ export function startOutboundMessageWorker(): Worker<OutboundMessageJobData> {
       limiter: {
         max: 100,
         duration: 1000
+      },
+      settings: {
+        backoffStrategy: (attemptsMade: number, type?: string, err?: Error) => {
+          const customErr = err as any;
+          if (customErr?.retryDelay && typeof customErr.retryDelay === 'number') {
+            console.log(`[BACKOFF] Using custom delay: ${customErr.retryDelay}ms for ${customErr.message}`);
+            return customErr.retryDelay;
+          }
+          const defaultDelay = Math.min(1000 * Math.pow(2, attemptsMade), 60000);
+          console.log(`[BACKOFF] Using exponential delay: ${defaultDelay}ms (attempt ${attemptsMade})`);
+          return defaultDelay;
+        }
       }
     }
   );
@@ -258,11 +383,6 @@ export function startOutboundMessageWorker(): Worker<OutboundMessageJobData> {
   
   outboundWorker.on('failed', (job, error) => {
     console.error(`[OUTBOUND_WORKER] Job ${job?.id} failed:`, error.message);
-    
-    if (error.message.startsWith('RATE_LIMITED:')) {
-      const retryAfterMs = parseInt(error.message.split(':')[1]) || 1000;
-      console.log(`[OUTBOUND_WORKER] Will retry after ${retryAfterMs}ms due to rate limit`);
-    }
   });
   
   outboundWorker.on('error', (error) => {

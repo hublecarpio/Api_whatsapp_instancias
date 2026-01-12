@@ -111,6 +111,7 @@ export interface OutboundMessageJobData {
   enqueuedAt: number;
   priority: 'high' | 'normal' | 'low';
   source: 'external_api' | 'agent' | 'broadcast' | 'reminder';
+  realFailures?: number;
 }
 
 let reminderQueue: Queue<ReminderJobData> | null = null;
@@ -213,10 +214,9 @@ export function initializeQueues(): void {
   outboundMessageQueue = new Queue<OutboundMessageJobData>(QUEUE_NAMES.OUTBOUND_MESSAGE, {
     connection: conn,
     defaultJobOptions: {
-      attempts: 5,
+      attempts: 1000,
       backoff: {
-        type: 'exponential',
-        delay: 1000
+        type: 'custom'
       },
       removeOnComplete: {
         age: 24 * 3600,
