@@ -734,10 +734,11 @@ export default function ChatPage() {
     prevMessagesLengthRef.current = messages.length;
   }, [messages]);
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (instanceIdOverride?: string | null) => {
     if (!currentBusiness) return;
     try {
-      const response = await messageApi.conversations(currentBusiness.id, selectedInstanceId || undefined);
+      const effectiveInstanceId = instanceIdOverride !== undefined ? instanceIdOverride : selectedInstanceId;
+      const response = await messageApi.conversations(currentBusiness.id, effectiveInstanceId || undefined);
       setConversations(response.data);
     } catch (err) {
       console.error('Failed to fetch conversations:', err);
@@ -772,17 +773,20 @@ export default function ChatPage() {
   }, [currentBusiness, setInstances, selectedInstanceId, setSelectedInstanceId]);
   
   const [instanceSwitching, setInstanceSwitching] = useState(false);
+  const prevInstanceIdRef = useRef<string | null>(null);
   
   useEffect(() => {
-    if (currentBusiness) {
-      setInstanceSwitching(true);
-      setSelectedPhone(null);
-      setSelectedConversationInstanceId(null);
-      setMessages([]);
-      setConversations([]);
-      fetchConversations().finally(() => setInstanceSwitching(false));
+    if (currentBusiness && selectedInstanceId !== prevInstanceIdRef.current) {
+      prevInstanceIdRef.current = selectedInstanceId;
+      if (!instanceSwitching) {
+        setSelectedPhone(null);
+        setSelectedConversationInstanceId(null);
+        setMessages([]);
+        setConversations([]);
+        fetchConversations(selectedInstanceId);
+      }
     }
-  }, [selectedInstanceId]);
+  }, [selectedInstanceId, currentBusiness]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1100,16 +1104,17 @@ export default function ChatPage() {
                   return (
                     <button
                       key={inst.id}
-                      onClick={() => {
+                      onClick={async () => {
                         if (isSelected) return;
                         setInstanceSwitching(true);
-                        const { setSelectedInstanceId } = useInstanceStore.getState();
                         setSelectedInstanceId(inst.id);
                         setSelectedPhone(null);
                         setSelectedConversationInstanceId(null);
                         setMessages([]);
+                        setConversations([]);
                         router.replace(`/dashboard/chat?instance=${inst.instanceNumber}`, { scroll: false });
-                        setTimeout(() => setInstanceSwitching(false), 500);
+                        await fetchConversations(inst.id);
+                        setInstanceSwitching(false);
                       }}
                       disabled={instanceSwitching}
                       className={`px-2 py-1 rounded text-xs transition-all flex items-center gap-1 ${
