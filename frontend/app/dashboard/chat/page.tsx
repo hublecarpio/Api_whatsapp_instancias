@@ -443,13 +443,13 @@ export default function ChatPage() {
       prevMessagesLengthRef.current = 0;
       isNearBottomRef.current = true;
       fetchMessages(selectedPhone, selectedConversationInstanceId);
-      fetchWindowStatus(selectedPhone);
+      fetchWindowStatus(selectedPhone, selectedConversationInstanceId);
       fetchContactBotStatus(selectedPhone);
       fetchContactReminderStatus(selectedPhone);
       fetchContactExtractedData(selectedPhone);
       const interval = setInterval(() => {
         fetchMessages(selectedPhone, selectedConversationInstanceId);
-        fetchWindowStatus(selectedPhone);
+        fetchWindowStatus(selectedPhone, selectedConversationInstanceId);
         fetchContactExtractedData(selectedPhone);
       }, 5000);
       return () => clearInterval(interval);
@@ -542,10 +542,11 @@ export default function ChatPage() {
     }
   };
 
-  const fetchWindowStatus = async (phone: string) => {
+  const fetchWindowStatus = async (phone: string, instanceId?: string | null) => {
     if (!currentBusiness) return;
     try {
-      const response = await messageApi.windowStatus(currentBusiness.id, phone);
+      const effectiveInstanceId = instanceId || selectedConversationInstanceId || selectedInstanceId;
+      const response = await messageApi.windowStatus(currentBusiness.id, phone, effectiveInstanceId || undefined);
       setWindowStatus(response.data);
     } catch (err) {
       console.error('Failed to fetch window status:', err);
@@ -702,7 +703,7 @@ export default function ChatPage() {
       setSelectedContactName('');
       setSelectedConversationInstanceId(selectedInstanceId);
       fetchMessages(cleanPhone, selectedInstanceId);
-      fetchWindowStatus(cleanPhone);
+      fetchWindowStatus(cleanPhone, selectedInstanceId);
     } catch (err: any) {
       console.error('Failed to send new chat:', err);
       const errorMsg = err.response?.data?.error || 'Error al enviar mensaje';
@@ -1100,14 +1101,22 @@ export default function ChatPage() {
                     <button
                       key={inst.id}
                       onClick={() => {
+                        if (isSelected) return;
+                        setInstanceSwitching(true);
                         const { setSelectedInstanceId } = useInstanceStore.getState();
                         setSelectedInstanceId(inst.id);
+                        setSelectedPhone(null);
+                        setSelectedConversationInstanceId(null);
+                        setMessages([]);
+                        router.replace(`/dashboard/chat?instance=${inst.instanceNumber}`, { scroll: false });
+                        setTimeout(() => setInstanceSwitching(false), 500);
                       }}
+                      disabled={instanceSwitching}
                       className={`px-2 py-1 rounded text-xs transition-all flex items-center gap-1 ${
                         isSelected
                           ? 'bg-neon-blue/20 text-neon-blue'
                           : 'text-gray-500 hover:text-gray-300'
-                      }`}
+                      } ${instanceSwitching ? 'opacity-50 cursor-wait' : ''}`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></span>
                       {inst.name || inst.phoneNumber || `#${inst.id.slice(-4)}`}

@@ -249,7 +249,7 @@ router.get('/conversation/:phone', async (req: AuthRequest, res: Response) => {
 
 router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id } = req.query;
+    const { business_id, instance_id } = req.query;
     const { phone } = req.params;
     
     if (!business_id) {
@@ -273,9 +273,15 @@ router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: R
       }
     }
     
+    // Find the specific instance if instance_id is provided, otherwise fall back to first
+    const instanceWhere: any = { businessId: business_id as string };
+    if (instance_id) {
+      instanceWhere.id = instance_id as string;
+    }
+    
     const instance = await prisma.whatsAppInstance.findFirst({
-      where: { businessId: business_id as string },
-      include: { metaCredential: true }
+      where: instanceWhere,
+      include: { metaCredential: true, metaCoexistCredential: true }
     });
     
     if (!instance) {
@@ -287,7 +293,8 @@ router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: R
       });
     }
     
-    if (instance.provider !== 'META_CLOUD') {
+    // Baileys does not require templates
+    if (instance.provider === 'BAILEYS') {
       return res.json({
         provider: 'BAILEYS',
         requiresTemplate: false,
@@ -296,18 +303,35 @@ router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: R
       });
     }
     
+    // META_CLOUD and META_COEXIST require template check
+    const isMetaProvider = ['META_CLOUD', 'META_COEXIST'].includes(instance.provider);
+    if (!isMetaProvider) {
+      return res.json({
+        provider: instance.provider,
+        requiresTemplate: false,
+        windowOpen: true,
+        message: 'Unknown provider - assuming no template required'
+      });
+    }
+    
+    // Build query for last inbound message - filter by instance if provided
+    const messageWhere: any = {
+      businessId: business_id as string,
+      sender: phone,
+      direction: 'inbound'
+    };
+    if (instance_id) {
+      messageWhere.instanceId = instance_id as string;
+    }
+    
     const lastInboundMessage = await prisma.messageLog.findFirst({
-      where: {
-        businessId: business_id as string,
-        sender: phone,
-        direction: 'inbound'
-      },
+      where: messageWhere,
       orderBy: { createdAt: 'desc' }
     });
     
     if (!lastInboundMessage) {
       return res.json({
-        provider: 'META_CLOUD',
+        provider: instance.provider,
         requiresTemplate: true,
         windowOpen: false,
         lastClientMessage: null,
@@ -319,7 +343,7 @@ router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: R
     const windowOpen = hoursSinceLastMessage < 24;
     
     return res.json({
-      provider: 'META_CLOUD',
+      provider: instance.provider,
       requiresTemplate: !windowOpen,
       windowOpen,
       lastClientMessage: lastInboundMessage.createdAt,

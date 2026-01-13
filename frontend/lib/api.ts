@@ -261,8 +261,11 @@ export const messageApi = {
     if (instanceId) url += `&instance_id=${instanceId}`;
     return api.get(url);
   },
-  windowStatus: (businessId: string, phone: string) =>
-    api.get(`/messages/conversation/${phone}/window-status?business_id=${businessId}`),
+  windowStatus: (businessId: string, phone: string, instanceId?: string) => {
+    let url = `/messages/conversation/${phone}/window-status?business_id=${businessId}`;
+    if (instanceId) url += `&instance_id=${instanceId}`;
+    return api.get(url);
+  },
   send: (businessId: string, to: string, message: string) =>
     api.post(`/wa/${businessId}/send`, { to, message })
 };

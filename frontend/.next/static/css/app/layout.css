@@ -1540,6 +1540,9 @@ body.glass-mode .mobile-drawer {
 .cursor-pointer {
   cursor: pointer;
 }
+.cursor-wait {
+  cursor: wait;
+}
 .touch-manipulation {
   touch-action: manipulation;
 }
