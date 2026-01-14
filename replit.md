@@ -98,3 +98,107 @@ To enable Meta Coexistence (Embedded Signup + Coexistence flow), configure these
 | `/auth/meta-coexist/wabas` | GET | List available WABAs |
 | `/auth/meta-coexist/phone-numbers` | GET | List phone numbers in a WABA |
 | `/auth/meta-coexist/disconnect/:instanceId` | POST | Disconnect Meta Coexistence |
+
+## External API - Order Management (N8N Integration)
+
+The platform provides a complete REST API for order management accessible via API key authentication. All endpoints require a PRO subscription and use Bearer token authentication.
+
+### Authentication
+```
+Authorization: Bearer efk_your_api_key_here
+```
+
+### Order States Flow
+```
+AWAITING_VOUCHER → PAID → PROCESSING → SHIPPED → DELIVERED
+                     ↘                              ↗
+                       → CANCELLED / REFUNDED
+```
+
+### Order API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/orders` | GET | List all orders (supports `status` and `limit` query params) |
+| `/api/v1/orders/:orderId` | GET | Get a specific order with items |
+| `/api/v1/orders` | POST | Create a new order (purchase intent) |
+| `/api/v1/orders/:orderId/status` | PATCH | Change order status |
+| `/api/v1/orders/:orderId/confirm` | POST | Confirm payment after voucher received |
+| `/api/v1/orders/:orderId/voucher` | POST | Attach voucher image to order |
+| `/api/v1/orders/:orderId` | DELETE | Delete order (only AWAITING_VOUCHER or CANCELLED) |
+
+### Create Order Request (POST /api/v1/orders)
+```json
+{
+  "contactPhone": "51999888777",
+  "contactName": "Juan Pérez",
+  "items": [
+    { "productId": "uuid-here", "quantity": 2 },
+    { "productTitle": "Custom Item", "unitPrice": 50.00, "quantity": 1 }
+  ],
+  "shippingAddress": "Av. Example 123",
+  "shippingCity": "Lima",
+  "shippingCountry": "Peru",
+  "notes": "Optional notes"
+}
+```
+
+### Update Order Status Request (PATCH /api/v1/orders/:orderId/status)
+```json
+{
+  "status": "SHIPPED",
+  "notes": "Tracking: ABC123",
+  "deliveryAgentName": "Carlos Delivery"
+}
+```
+
+### State Transition Rules
+The API enforces the following valid state transitions:
+
+| From Status | Allowed Next Statuses |
+|-------------|----------------------|
+| `AWAITING_VOUCHER` | `PAID`, `CANCELLED` |
+| `PAID` | `PROCESSING`, `CANCELLED`, `REFUNDED` |
+| `PROCESSING` | `SHIPPED`, `CANCELLED`, `REFUNDED` |
+| `SHIPPED` | `DELIVERED`, `CANCELLED`, `REFUNDED` |
+| `DELIVERED` | `REFUNDED` |
+| `CANCELLED` | (final state) |
+| `REFUNDED` | (final state) |
+
+Invalid transitions will return a 400 error with details about allowed transitions.
+
+### Attach Voucher Request (POST /api/v1/orders/:orderId/voucher)
+```json
+{
+  "voucherImageUrl": "https://minio.example.com/voucher.jpg",
+  "autoConfirm": true
+}
+```
+Set `autoConfirm: true` to automatically mark as PAID when attaching voucher.
+
+## AI Agent Order Tools
+
+The AI agent automatically uses order tools based on business configuration:
+
+### Tool Selection Logic
+- **`crear_enlace_pago`**: Used when `paymentLinkEnabled=true` (Super Admin enabled Stripe). Creates Stripe payment links.
+- **`crear_pedido_voucher`**: Used when `paymentLinkEnabled=false` (default). Creates orders with `AWAITING_VOUCHER` status.
+
+### When Agent Creates Orders
+The agent decides to create an order when:
+1. Customer confirms purchase intent (e.g., "Sí, quiero comprarlo")
+2. Agent has collected required data: product ID, customer name, shipping address
+3. Business is in SALES mode (not APPOINTMENTS)
+
+### Agent Order Context
+The agent receives context about pending orders in its system prompt:
+- If customer has a pending order awaiting voucher, agent reminds them to send payment proof
+- If voucher was received, agent confirms and thanks customer
+- Validated voucher details (bank, amount, code) are injected into conversation
+
+### Voucher Validation Flow
+1. Customer sends image via WhatsApp
+2. Gemini Vision analyzes the image for payment proof
+3. If valid voucher detected, it's automatically attached to pending order
+4. Agent receives context: "COMPROBANTE DE PAGO RECIBIDO Y VALIDADO"
+5. Admin can confirm payment via dashboard or API

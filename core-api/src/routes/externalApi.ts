@@ -633,6 +633,386 @@ router.get('/orders', validateApiKey, async (req: ApiKeyRequest, res: Response) 
   }
 });
 
+router.get('/orders/:orderId', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        businessId: req.businessId
+      },
+      include: {
+        items: true
+      }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    res.json({ order });
+  } catch (error: any) {
+    console.error('API get order error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/orders', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { 
+      contactPhone, 
+      contactName, 
+      items, 
+      shippingAddress, 
+      shippingCity, 
+      shippingCountry,
+      notes
+    } = req.body;
+    
+    if (!contactPhone) {
+      return res.status(400).json({ error: 'contactPhone es requerido' });
+    }
+    
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items es requerido (array de productos)' });
+    }
+    
+    const cleanPhone = contactPhone.replace(/\D/g, '');
+    
+    const business = await prisma.business.findUnique({
+      where: { id: req.businessId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+    
+    const productIds = items.map((i: any) => i.productId).filter(Boolean);
+    const products = productIds.length > 0 
+      ? await prisma.product.findMany({
+          where: { id: { in: productIds }, businessId: req.businessId }
+        })
+      : [];
+    
+    const productMap = new Map(products.map(p => [p.id, p]));
+    let totalAmount = 0;
+    
+    const orderItems = items.map((item: any) => {
+      const product = item.productId ? productMap.get(item.productId) : null;
+      const unitPrice = item.unitPrice ?? product?.price ?? 0;
+      const quantity = item.quantity || 1;
+      totalAmount += unitPrice * quantity;
+      
+      return {
+        productId: item.productId || null,
+        productTitle: item.productTitle || product?.title || 'Producto',
+        quantity,
+        unitPrice,
+        imageUrl: item.imageUrl || product?.imageUrl || null
+      };
+    });
+    
+    const order = await prisma.order.create({
+      data: {
+        businessId: req.businessId!,
+        instanceId: req.instanceId || null,
+        contactPhone: cleanPhone,
+        contactName: contactName || null,
+        shippingAddress: shippingAddress || null,
+        shippingCity: shippingCity || null,
+        shippingCountry: shippingCountry || null,
+        totalAmount,
+        currencyCode: business.currencyCode || 'PEN',
+        currencySymbol: business.currencySymbol || 'S/.',
+        status: 'AWAITING_VOUCHER',
+        notes: notes || null,
+        items: {
+          create: orderItems
+        }
+      },
+      include: { items: true }
+    });
+    
+    console.log(`[EXTERNAL API] Order created: ${order.id} for phone ${cleanPhone}`);
+    
+    res.status(201).json({
+      success: true,
+      order: {
+        id: order.id,
+        status: order.status,
+        totalAmount: order.totalAmount,
+        currencySymbol: order.currencySymbol,
+        contactPhone: order.contactPhone,
+        contactName: order.contactName,
+        items: order.items,
+        createdAt: order.createdAt
+      },
+      message: 'Pedido creado exitosamente. Esperando comprobante de pago.'
+    });
+  } catch (error: any) {
+    console.error('API create order error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/orders/:orderId/status', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { status, notes, deliveryAgentId, deliveryAgentName } = req.body;
+    
+    const validStatuses = [
+      'AWAITING_VOUCHER', 
+      'PAID', 
+      'PROCESSING', 
+      'SHIPPED', 
+      'DELIVERED', 
+      'CANCELLED', 
+      'REFUNDED'
+    ];
+    
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        error: 'Estado no valido',
+        validStatuses
+      });
+    }
+    
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        businessId: req.businessId
+      }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    const allowedTransitions: Record<string, string[]> = {
+      'AWAITING_VOUCHER': ['PAID', 'CANCELLED'],
+      'PAID': ['PROCESSING', 'CANCELLED', 'REFUNDED'],
+      'PROCESSING': ['SHIPPED', 'CANCELLED', 'REFUNDED'],
+      'SHIPPED': ['DELIVERED', 'CANCELLED', 'REFUNDED'],
+      'DELIVERED': ['REFUNDED'],
+      'CANCELLED': [],
+      'REFUNDED': []
+    };
+    
+    const currentStatus = order.status;
+    const allowedNextStatuses = allowedTransitions[currentStatus] || [];
+    
+    if (!allowedNextStatuses.includes(status)) {
+      return res.status(400).json({
+        error: `Transicion de estado no permitida: ${currentStatus} → ${status}`,
+        currentStatus,
+        requestedStatus: status,
+        allowedTransitions: allowedNextStatuses,
+        hint: allowedNextStatuses.length > 0 
+          ? `Desde ${currentStatus} solo puedes ir a: ${allowedNextStatuses.join(', ')}`
+          : `El estado ${currentStatus} es final y no permite mas cambios`
+      });
+    }
+    
+    const updateData: any = { status };
+    
+    if (status === 'PAID' && !order.paidAt) {
+      updateData.paidAt = new Date();
+    }
+    if (status === 'SHIPPED' && !order.shippedAt) {
+      updateData.shippedAt = new Date();
+    }
+    if (status === 'DELIVERED' && !order.deliveredAt) {
+      updateData.deliveredAt = new Date();
+    }
+    if (notes) {
+      updateData.notes = notes;
+    }
+    if (deliveryAgentId) {
+      updateData.deliveryAgentId = deliveryAgentId;
+    }
+    if (deliveryAgentName) {
+      updateData.deliveryAgentName = deliveryAgentName;
+    }
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: updateData,
+      include: { items: true }
+    });
+    
+    console.log(`[EXTERNAL API] Order ${orderId} status changed to ${status}`);
+    
+    res.json({
+      success: true,
+      order: updatedOrder,
+      message: `Estado del pedido actualizado a ${status}`
+    });
+  } catch (error: any) {
+    console.error('API update order status error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/orders/:orderId/confirm', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { notes } = req.body;
+    
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        businessId: req.businessId
+      },
+      include: { items: true }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    if (order.status !== 'AWAITING_VOUCHER') {
+      return res.status(400).json({ 
+        error: 'Solo se pueden confirmar pedidos en estado AWAITING_VOUCHER',
+        currentStatus: order.status
+      });
+    }
+    
+    if (!order.voucherImageUrl) {
+      return res.status(400).json({ 
+        error: 'No se ha recibido comprobante de pago para este pedido',
+        hint: 'El cliente debe enviar el voucher primero, o use POST /orders/:orderId/voucher para adjuntarlo'
+      });
+    }
+    
+    const updateData: any = {
+      status: 'PAID',
+      paidAt: new Date()
+    };
+    
+    if (notes) {
+      updateData.notes = notes;
+    }
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: updateData,
+      include: { items: true }
+    });
+    
+    console.log(`[EXTERNAL API] Order ${orderId} payment confirmed`);
+    
+    res.json({
+      success: true,
+      order: updatedOrder,
+      message: 'Pago confirmado exitosamente'
+    });
+  } catch (error: any) {
+    console.error('API confirm order error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/orders/:orderId/voucher', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { voucherImageUrl, autoConfirm } = req.body;
+    
+    if (!voucherImageUrl) {
+      return res.status(400).json({ error: 'voucherImageUrl es requerido' });
+    }
+    
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        businessId: req.businessId
+      }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    if (order.status !== 'AWAITING_VOUCHER') {
+      return res.status(400).json({ 
+        error: 'Solo se pueden adjuntar vouchers a pedidos en estado AWAITING_VOUCHER',
+        currentStatus: order.status
+      });
+    }
+    
+    const updateData: any = {
+      voucherImageUrl,
+      voucherReceivedAt: new Date()
+    };
+    
+    if (autoConfirm === true) {
+      updateData.status = 'PAID';
+      updateData.paidAt = new Date();
+    }
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: updateData,
+      include: { items: true }
+    });
+    
+    console.log(`[EXTERNAL API] Voucher attached to order ${orderId}${autoConfirm ? ' (auto-confirmed)' : ''}`);
+    
+    res.json({
+      success: true,
+      order: updatedOrder,
+      message: autoConfirm 
+        ? 'Voucher adjuntado y pago confirmado automaticamente'
+        : 'Voucher adjuntado exitosamente. Pendiente de confirmacion.'
+    });
+  } catch (error: any) {
+    console.error('API attach voucher error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/orders/:orderId', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        businessId: req.businessId
+      }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    if (!['AWAITING_VOUCHER', 'CANCELLED'].includes(order.status)) {
+      return res.status(400).json({ 
+        error: 'Solo se pueden eliminar pedidos en estado AWAITING_VOUCHER o CANCELLED',
+        currentStatus: order.status
+      });
+    }
+    
+    await prisma.orderItem.deleteMany({
+      where: { orderId }
+    });
+    
+    await prisma.order.delete({
+      where: { id: orderId }
+    });
+    
+    console.log(`[EXTERNAL API] Order ${orderId} deleted`);
+    
+    res.json({
+      success: true,
+      message: 'Pedido eliminado exitosamente'
+    });
+  } catch (error: any) {
+    console.error('API delete order error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/appointments', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
     const { limit = 50, status, from, to } = req.query;
