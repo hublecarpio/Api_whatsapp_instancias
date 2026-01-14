@@ -300,7 +300,18 @@ router.post('/assign', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const advisor = await prisma.user.findFirst({
+    // Check new UserBusinessRole system first
+    const roleBasedAdvisor = await prisma.userBusinessRole.findFirst({
+      where: {
+        userId: advisorId,
+        businessId,
+        role: 'ADVISOR',
+        isActive: true
+      }
+    });
+    
+    // Check legacy system
+    const legacyAdvisor = await prisma.user.findFirst({
       where: {
         id: advisorId,
         parentUserId: req.userId,
@@ -308,7 +319,7 @@ router.post('/assign', async (req: AuthRequest, res: Response) => {
       }
     });
     
-    if (!advisor) {
+    if (!roleBasedAdvisor && !legacyAdvisor) {
       return res.status(404).json({ error: 'Advisor not found' });
     }
     
