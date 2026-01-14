@@ -259,6 +259,8 @@ async function getUserContextsInternal(userId: string): Promise<UserContext[]> {
     select: { id: true, name: true, logoUrl: true }
   });
   
+  console.log(`[CONTEXTS] User ${userId} owns ${ownedBusinesses.length} businesses`);
+  
   for (const biz of ownedBusinesses) {
     contexts.push({
       businessId: biz.id,
@@ -280,6 +282,8 @@ async function getUserContextsInternal(userId: string): Promise<UserContext[]> {
       }
     }
   });
+  
+  console.log(`[CONTEXTS] User ${userId} has ${advisorRoles.length} UserBusinessRole entries`);
   
   for (const role of advisorRoles) {
     if (!contexts.find(c => c.businessId === role.businessId)) {
@@ -315,6 +319,7 @@ async function getUserContextsInternal(userId: string): Promise<UserContext[]> {
     }
   }
   
+  console.log(`[CONTEXTS] Total contexts for user ${userId}: ${contexts.length}`, contexts.map(c => ({ name: c.businessName, role: c.role })));
   return contexts;
 }
 

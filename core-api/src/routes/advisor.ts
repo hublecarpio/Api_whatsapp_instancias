@@ -27,32 +27,59 @@ router.post('/invite', async (req: AuthRequest, res: Response) => {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     
     if (existingUser) {
+      console.log(`[INVITE] Existing user found: ${email} (id: ${existingUser.id})`);
+      
       const existingRole = await prisma.userBusinessRole.findUnique({
         where: { userId_businessId: { userId: existingUser.id, businessId } }
       });
       
       if (existingRole) {
+        if (!existingRole.isActive) {
+          // Reactivate if deactivated
+          await prisma.userBusinessRole.update({
+            where: { id: existingRole.id },
+            data: { isActive: true }
+          });
+          console.log(`[INVITE] Reactivated existing role for ${email} in business ${businessId}`);
+          return res.json({ 
+            message: 'Usuario reactivado como asesor exitosamente',
+            existingUser: true,
+            reactivated: true
+          });
+        }
         return res.status(400).json({ error: 'Este usuario ya tiene acceso a este negocio' });
       }
       
-      await prisma.userBusinessRole.create({
-        data: {
-          userId: existingUser.id,
-          businessId,
-          role: 'ADVISOR'
-        }
-      });
+      try {
+        const newRole = await prisma.userBusinessRole.create({
+          data: {
+            userId: existingUser.id,
+            businessId,
+            role: 'ADVISOR',
+            isActive: true
+          }
+        });
+        console.log(`[INVITE] Created UserBusinessRole: ${newRole.id} for user ${existingUser.id} in business ${businessId}`);
+      } catch (createError: any) {
+        console.error(`[INVITE] Failed to create UserBusinessRole:`, createError);
+        return res.status(500).json({ error: 'Error al crear rol de asesor: ' + createError.message });
+      }
       
-      await sendEmail(
-        email,
-        `Ahora eres asesor en ${business.name}`,
-        `
-          <h2>Has sido agregado como asesor</h2>
-          <p>Ahora tienes acceso como asesor en <strong>${business.name}</strong>.</p>
-          <p>Inicia sesion con tu cuenta existente y usa el selector de contexto para cambiar entre tus negocios.</p>
-          <p><a href="${process.env.FRONTEND_URL || 'http://localhost:5000'}/login" style="background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">Iniciar Sesion</a></p>
-        `
-      );
+      try {
+        await sendEmail(
+          email,
+          `Ahora eres asesor en ${business.name}`,
+          `
+            <h2>Has sido agregado como asesor</h2>
+            <p>Ahora tienes acceso como asesor en <strong>${business.name}</strong>.</p>
+            <p>Inicia sesion con tu cuenta existente y usa el selector de contexto para cambiar entre tus negocios.</p>
+            <p><a href="${process.env.FRONTEND_URL || 'http://localhost:5000'}/login" style="background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">Iniciar Sesion</a></p>
+          `
+        );
+        console.log(`[INVITE] Email sent to ${email}`);
+      } catch (emailError: any) {
+        console.error(`[INVITE] Email failed (but role created):`, emailError.message);
+      }
       
       return res.json({ 
         message: 'Usuario existente agregado como asesor exitosamente',
