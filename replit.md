@@ -48,6 +48,7 @@ The platform employs a microservices-like architecture with a **Frontend (Next.j
 *   **Enhanced Mass Broadcast System**: Supports file upload (MinIO), CSV import, variable interpolation, deduplication, Meta template preservation, and WhatsApp group import for Baileys instances.
 *   **Referral Code System**: Marketing tracking via unique URLs, with CRUD for codes and usage statistics. Extended with an affiliate program.
 *   **Advisor/Agent System**: Role-based access control for team members with invitation workflow and contact assignment. Round-robin lead auto-assignment.
+*   **Multi-Role User System**: Users can simultaneously own their own businesses and serve as advisors for other businesses. The `UserBusinessRole` table tracks user-business relationships with roles (OWNER/ADVISOR). Login returns all accessible business contexts, and a ContextSwitcher component in the sidebar allows users to switch between businesses. Existing users can be invited as advisors without email conflicts. Legacy advisors can be migrated via the `/auth/migrate-advisors` endpoint (Super Admin only).
 *   **Distributed Buffer State Management**: Buffer processing state in Redis with distributed locking, BullMQ for expired buffer processing, and atomic buffer claiming with DB locking.
 *   **Guided Onboarding with Effi**: Fullscreen 3-step onboarding wizard for new users (QR connection, product setup, AI agent prompt).
 *   **Delegated Agent System**: Super Admin can assign a user as a "delegated agent" to track and follow up with platform users, who are synced as contacts.
