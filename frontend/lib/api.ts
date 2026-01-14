@@ -565,8 +565,8 @@ export const advisorApi = {
     api.delete(`/advisor/invitation/${id}`),
   getTeam: (businessId: string) =>
     api.get(`/advisor/team/${businessId}`),
-  removeAdvisor: (advisorId: string) =>
-    api.delete(`/advisor/team/${advisorId}`),
+  removeAdvisor: (advisorId: string, businessId: string) =>
+    api.delete(`/advisor/team/${advisorId}?businessId=${businessId}`),
   assignContact: (data: { businessId: string; contactPhone: string; advisorId: string }) =>
     api.post('/advisor/assign', data),
   removeAssignment: (businessId: string, contactPhone: string) =>

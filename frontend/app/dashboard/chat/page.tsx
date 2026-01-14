@@ -371,9 +371,10 @@ export default function ChatPage() {
   };
 
   const handleRemoveAdvisor = async (advisorId: string) => {
+    if (!currentBusiness) return;
     if (!confirm('Seguro que deseas eliminar este asesor?')) return;
     try {
-      await advisorApi.removeAdvisor(advisorId);
+      await advisorApi.removeAdvisor(advisorId, currentBusiness.id);
       fetchTeamData();
     } catch (err) {
       console.error('Failed to remove advisor:', err);

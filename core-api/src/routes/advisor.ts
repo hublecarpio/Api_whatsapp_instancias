@@ -162,7 +162,30 @@ router.get('/team/:businessId', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const advisors = await prisma.user.findMany({
+    // Get advisors from the new UserBusinessRole system
+    const roleBasedAdvisors = await prisma.userBusinessRole.findMany({
+      where: {
+        businessId,
+        role: 'ADVISOR',
+        isActive: true
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            createdAt: true,
+            _count: {
+              select: { contactAssignments: { where: { businessId } } }
+            }
+          }
+        }
+      }
+    });
+    
+    // Get legacy advisors (parentUserId system)
+    const legacyAdvisors = await prisma.user.findMany({
       where: {
         parentUserId: req.userId,
         role: 'ASESOR'
@@ -173,12 +196,35 @@ router.get('/team/:businessId', async (req: AuthRequest, res: Response) => {
         email: true,
         createdAt: true,
         _count: {
-          select: { contactAssignments: true }
+          select: { contactAssignments: { where: { businessId } } }
         }
       }
     });
     
-    res.json(advisors);
+    // Merge and deduplicate
+    const advisorMap = new Map();
+    
+    for (const role of roleBasedAdvisors) {
+      advisorMap.set(role.user.id, {
+        id: role.user.id,
+        name: role.user.name,
+        email: role.user.email,
+        createdAt: role.createdAt,
+        _count: role.user._count,
+        source: 'role'
+      });
+    }
+    
+    for (const advisor of legacyAdvisors) {
+      if (!advisorMap.has(advisor.id)) {
+        advisorMap.set(advisor.id, {
+          ...advisor,
+          source: 'legacy'
+        });
+      }
+    }
+    
+    res.json(Array.from(advisorMap.values()));
   } catch (error: any) {
     console.error('Get team error:', error);
     res.status(500).json({ error: error.message });
@@ -188,8 +234,37 @@ router.get('/team/:businessId', async (req: AuthRequest, res: Response) => {
 router.delete('/team/:advisorId', async (req: AuthRequest, res: Response) => {
   try {
     const { advisorId } = req.params;
+    const { businessId } = req.query;
     
-    const advisor = await prisma.user.findFirst({
+    if (!businessId || typeof businessId !== 'string') {
+      return res.status(400).json({ error: 'businessId is required as query param' });
+    }
+    
+    // Verify the requester owns the business
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    // Check if advisor exists in the new UserBusinessRole system
+    const roleRecord = await prisma.userBusinessRole.findUnique({
+      where: { userId_businessId: { userId: advisorId, businessId } }
+    });
+    
+    if (roleRecord) {
+      // Deactivate rather than delete to preserve history
+      await prisma.userBusinessRole.update({
+        where: { id: roleRecord.id },
+        data: { isActive: false }
+      });
+      return res.json({ message: 'Advisor removed' });
+    }
+    
+    // Check legacy system
+    const legacyAdvisor = await prisma.user.findFirst({
       where: {
         id: advisorId,
         parentUserId: req.userId,
@@ -197,13 +272,12 @@ router.delete('/team/:advisorId', async (req: AuthRequest, res: Response) => {
       }
     });
     
-    if (!advisor) {
-      return res.status(404).json({ error: 'Advisor not found' });
+    if (legacyAdvisor) {
+      await prisma.user.delete({ where: { id: advisorId } });
+      return res.json({ message: 'Advisor removed' });
     }
     
-    await prisma.user.delete({ where: { id: advisorId } });
-    
-    res.json({ message: 'Advisor removed' });
+    return res.status(404).json({ error: 'Advisor not found' });
   } catch (error: any) {
     console.error('Remove advisor error:', error);
     res.status(500).json({ error: error.message });
