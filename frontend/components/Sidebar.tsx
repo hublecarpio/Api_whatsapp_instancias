@@ -7,6 +7,7 @@ import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import Logo from './Logo';
 import { HoloIcon } from './icons/HoloIcons';
+import ContextSwitcher from './ContextSwitcher';
 
 export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const pathname = usePathname();
@@ -135,11 +136,8 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
         )}
       </div>
 
-      {!collapsed && currentBusiness && (
-        <div className="px-4 py-3 border-b border-dark-border flex-shrink-0">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Empresa</p>
-          <p className="text-sm text-white font-medium truncate mt-1">{currentBusiness.name}</p>
-        </div>
+      {!collapsed && (
+        <ContextSwitcher />
       )}
 
       <nav className="flex-1 overflow-y-auto scrollbar-thin min-h-0">

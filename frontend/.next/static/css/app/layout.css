@@ -917,6 +917,9 @@ body.glass-mode .mobile-drawer {
 .left-3 {
   left: 0.75rem;
 }
+.left-4 {
+  left: 1rem;
+}
 .left-7 {
   left: 1.75rem;
 }
@@ -928,6 +931,9 @@ body.glass-mode .mobile-drawer {
 }
 .right-3 {
   right: 0.75rem;
+}
+.right-4 {
+  right: 1rem;
 }
 .top-0 {
   top: 0px;

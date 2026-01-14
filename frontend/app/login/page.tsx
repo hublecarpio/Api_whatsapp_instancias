@@ -37,7 +37,7 @@ function LoginContent() {
 
     try {
       const response = await authApi.login({ email, password });
-      setAuth(response.data.user, response.data.token);
+      setAuth(response.data.user, response.data.token, response.data.contexts || []);
       
       if (response.data.user.role === 'ASESOR') {
         router.push('/asesor');
