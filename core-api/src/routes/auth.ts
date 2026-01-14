@@ -540,6 +540,92 @@ router.get('/contexts', authMiddleware, async (req: AuthRequest, res: Response) 
   }
 });
 
+router.post('/migrate-advisors', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const requestingUser = await prisma.user.findUnique({ 
+      where: { id: req.userId },
+      select: { email: true }
+    });
+    
+    const isSuperAdmin = requestingUser?.email === process.env.SUPER_ADMIN_USER;
+    if (!isSuperAdmin) {
+      return res.status(403).json({ error: 'Only super admin can run this migration' });
+    }
+    
+    const legacyAdvisors = await prisma.user.findMany({
+      where: {
+        OR: [
+          { role: 'ASESOR' },
+          { parentUserId: { not: null } }
+        ]
+      },
+      include: {
+        contactAssignments: {
+          select: { businessId: true },
+          distinct: ['businessId']
+        }
+      }
+    });
+    
+    let migratedCount = 0;
+    let skippedCount = 0;
+    const errors: string[] = [];
+    
+    for (const advisor of legacyAdvisors) {
+      const businessIds = new Set<string>();
+      
+      for (const assignment of advisor.contactAssignments) {
+        businessIds.add(assignment.businessId);
+      }
+      
+      if (advisor.parentUserId) {
+        const parentBusinesses = await prisma.business.findMany({
+          where: { userId: advisor.parentUserId },
+          select: { id: true }
+        });
+        for (const biz of parentBusinesses) {
+          businessIds.add(biz.id);
+        }
+      }
+      
+      for (const businessId of businessIds) {
+        try {
+          const existing = await prisma.userBusinessRole.findUnique({
+            where: { userId_businessId: { userId: advisor.id, businessId } }
+          });
+          
+          if (!existing) {
+            await prisma.userBusinessRole.create({
+              data: {
+                userId: advisor.id,
+                businessId,
+                role: 'ADVISOR'
+              }
+            });
+            migratedCount++;
+          } else {
+            skippedCount++;
+          }
+        } catch (err: any) {
+          errors.push(`Failed to migrate ${advisor.email} to business ${businessId}: ${err.message}`);
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Migration completed. Migrated ${migratedCount} roles, skipped ${skippedCount} existing.`,
+      migratedCount,
+      skippedCount,
+      legacyAdvisorCount: legacyAdvisors.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error: any) {
+    console.error('Migrate advisors error:', error);
+    res.status(500).json({ error: 'Failed to migrate advisors: ' + error.message });
+  }
+});
+
 router.get('/test-smtp', async (req: Request, res: Response) => {
   try {
     console.log('Testing SMTP connection...');
