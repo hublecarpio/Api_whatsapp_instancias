@@ -25,8 +25,39 @@ router.post('/invite', async (req: AuthRequest, res: Response) => {
     }
     
     const existingUser = await prisma.user.findUnique({ where: { email } });
+    
     if (existingUser) {
-      return res.status(400).json({ error: 'This email is already registered' });
+      const existingRole = await prisma.userBusinessRole.findUnique({
+        where: { userId_businessId: { userId: existingUser.id, businessId } }
+      });
+      
+      if (existingRole) {
+        return res.status(400).json({ error: 'Este usuario ya tiene acceso a este negocio' });
+      }
+      
+      await prisma.userBusinessRole.create({
+        data: {
+          userId: existingUser.id,
+          businessId,
+          role: 'ADVISOR'
+        }
+      });
+      
+      await sendEmail(
+        email,
+        `Ahora eres asesor en ${business.name}`,
+        `
+          <h2>Has sido agregado como asesor</h2>
+          <p>Ahora tienes acceso como asesor en <strong>${business.name}</strong>.</p>
+          <p>Inicia sesion con tu cuenta existente y usa el selector de contexto para cambiar entre tus negocios.</p>
+          <p><a href="${process.env.FRONTEND_URL || 'http://localhost:5000'}/login" style="background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">Iniciar Sesion</a></p>
+        `
+      );
+      
+      return res.json({ 
+        message: 'Usuario existente agregado como asesor exitosamente',
+        existingUser: true 
+      });
     }
     
     const existingInvitation = await prisma.advisorInvitation.findUnique({

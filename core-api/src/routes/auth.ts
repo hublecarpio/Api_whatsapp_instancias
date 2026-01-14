@@ -229,6 +229,8 @@ router.post('/login', async (req: Request, res: Response) => {
     
     const token = generateToken(user.id);
     
+    const contexts = await getUserContextsInternal(user.id);
+    
     res.json({
       user: { 
         id: user.id, 
@@ -240,13 +242,81 @@ router.post('/login', async (req: Request, res: Response) => {
         role: user.role,
         parentUserId: user.parentUserId
       },
-      token
+      token,
+      contexts
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
+
+async function getUserContextsInternal(userId: string): Promise<UserContext[]> {
+  const contexts: UserContext[] = [];
+  
+  const ownedBusinesses = await prisma.business.findMany({
+    where: { userId },
+    select: { id: true, name: true, logoUrl: true }
+  });
+  
+  for (const biz of ownedBusinesses) {
+    contexts.push({
+      businessId: biz.id,
+      businessName: biz.name,
+      role: 'OWNER',
+      logoUrl: biz.logoUrl
+    });
+  }
+  
+  const advisorRoles = await prisma.userBusinessRole.findMany({
+    where: { 
+      userId, 
+      role: 'ADVISOR',
+      isActive: true 
+    },
+    include: {
+      business: {
+        select: { id: true, name: true, logoUrl: true }
+      }
+    }
+  });
+  
+  for (const role of advisorRoles) {
+    if (!contexts.find(c => c.businessId === role.businessId)) {
+      contexts.push({
+        businessId: role.business.id,
+        businessName: role.business.name,
+        role: 'ADVISOR',
+        logoUrl: role.business.logoUrl
+      });
+    }
+  }
+  
+  const legacyAssignments = await prisma.contactAssignment.findMany({
+    where: { userId },
+    select: { businessId: true },
+    distinct: ['businessId']
+  });
+  
+  for (const assignment of legacyAssignments) {
+    if (!contexts.find(c => c.businessId === assignment.businessId)) {
+      const business = await prisma.business.findUnique({
+        where: { id: assignment.businessId },
+        select: { id: true, name: true, logoUrl: true }
+      });
+      if (business) {
+        contexts.push({
+          businessId: business.id,
+          businessName: business.name,
+          role: 'ADVISOR',
+          logoUrl: business.logoUrl
+        });
+      }
+    }
+  }
+  
+  return contexts;
+}
 
 router.get('/verify-email', async (req: Request, res: Response) => {
   try {
@@ -446,6 +516,27 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Get me error:', error);
     res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+export interface UserContext {
+  businessId: string;
+  businessName: string;
+  role: 'OWNER' | 'ADVISOR';
+  logoUrl?: string | null;
+}
+
+export async function getUserContexts(userId: string): Promise<UserContext[]> {
+  return getUserContextsInternal(userId);
+}
+
+router.get('/contexts', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const contexts = await getUserContexts(req.userId!);
+    res.json({ contexts });
+  } catch (error) {
+    console.error('Get contexts error:', error);
+    res.status(500).json({ error: 'Failed to get user contexts' });
   }
 });
 
