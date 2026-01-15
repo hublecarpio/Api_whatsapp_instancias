@@ -266,7 +266,11 @@ export default function OrdersPage() {
   };
 
   const openConversation = (contactPhone: string) => {
-    router.push(`/dashboard/chat?phone=${encodeURIComponent(contactPhone)}`);
+    const params = new URLSearchParams({ phone: contactPhone });
+    if (selectedInstanceId) {
+      params.set('instance', selectedInstanceId);
+    }
+    router.push(`/dashboard/chat?${params.toString()}`);
   };
 
   const toggleLinkExpand = (linkId: string) => {
