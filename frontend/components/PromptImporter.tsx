@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { promptImporterApi } from '@/lib/api';
 
 interface PromptImporterProps {
@@ -68,6 +69,11 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'input' | 'preview' | 'result'>('input');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleAnalyze = async () => {
     if (!rawPrompt.trim()) {
@@ -134,9 +140,16 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
         Importar desde Prompt
       </button>
 
-      {isOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a1a1a] rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      {isOpen && mounted && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4"
+          style={{ zIndex: 99999 }}
+          onClick={(e) => e.target === e.currentTarget && handleClose()}
+        >
+          <div 
+            className="bg-[#1a1a1a] rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
               <div>
                 <h2 className="text-lg font-semibold text-white">Importador Inteligente</h2>
@@ -485,7 +498,8 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
