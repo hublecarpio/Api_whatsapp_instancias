@@ -51,6 +51,7 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Delegated Agent System**: Super Admin can assign a user as a "delegated agent" to track and follow up with platform users.
 *   **Phone Verification System**: Users verify phone numbers via WhatsApp OTP through the Super Admin's delegated agent instance.
 *   **Multi-Instance WhatsApp Support**: PRO/Enterprise users can connect multiple WhatsApp numbers, each with independent configuration.
+*   **Sales Funnel System (Flujo de Venta)**: Sequential stage-based conversation flow where each stage has required data fields that must be collected before advancing, and topics that can be blocked until requirements are met. Integrates with ContactExtractedData for automatic stage progression.
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
