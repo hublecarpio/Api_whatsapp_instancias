@@ -760,6 +760,25 @@ REGLAS DE VALIDACIÓN:
       
       const prompt = `Eres un experto en configurar agentes de IA para ventas por WhatsApp. Analiza el siguiente texto en bruto que describe un negocio y extrae TODA la información relevante para configurar el sistema.
 
+## CONTEXTO DEL SISTEMA:
+Este es un sistema SaaS multi-tenant donde cada negocio puede tener múltiples instancias de WhatsApp. Cada instancia tiene su propia configuración aislada de productos, campos de extracción, etapas de embudo, etc.
+
+## ESTRUCTURA DE DATOS DEL SISTEMA:
+
+### Tags (Etapas del Lead) vs FunnelStages (Flujo de Venta) - DIFERENCIAS CRÍTICAS:
+
+| Concepto | Tags/Etapas del Lead | FunnelStages/Flujo de Venta |
+|----------|---------------------|----------------------------|
+| Propósito | Clasificación MANUAL de contactos por el usuario | Progresión AUTOMÁTICA del bot durante la venta |
+| Asignación | El usuario humano asigna/cambia manualmente | El agente AI avanza automáticamente al cumplir requisitos |
+| Secuencia | NO tienen orden obligatorio, son etiquetas libres | SON SECUENCIALES (Paso 1 → 2 → 3...) |
+| Requisitos | No tienen campos requeridos | Cada etapa define qué datos DEBE recolectar antes de avanzar |
+| Bloqueo | No bloquean conversación | Pueden BLOQUEAR temas hasta completar requisitos |
+| Uso típico | CRM, organización, reportes | Control del flujo conversacional del bot |
+
+**Ejemplos de Tags**: "Cliente VIP", "Prospecto", "Ya compró", "Lead frío", "Requiere seguimiento"
+**Ejemplos de FunnelStages**: "Bienvenida" → "Calificación" → "Presentación" → "Objeciones" → "Cierre"
+
 ## TEXTO A ANALIZAR:
 ${rawPrompt.substring(0, 15000)}
 
@@ -775,24 +794,26 @@ ${rawPrompt.substring(0, 15000)}
    - workingHours: Horario de atención
    - paymentMethods: Métodos de pago aceptados
 
-2. **products**: Lista de productos/servicios
+2. **products**: Lista de productos/servicios (aislados por instancia)
    - title: Nombre del producto (OBLIGATORIO)
    - description: Descripción
    - price: Precio numérico (OBLIGATORIO, 0 si no se menciona)
    - category: Categoría
    - variants: Variantes (tallas, colores, tamaños)
 
-3. **extractionFields**: Datos a extraer del cliente durante conversaciones
+3. **extractionFields**: Datos a extraer del cliente durante conversaciones (aislados por instancia)
    - key: Identificador único sin espacios (ej: "nombre", "direccion", "talla")
    - label: Etiqueta visible (ej: "Nombre completo", "Dirección de envío")
    - description: Para qué se usa este dato
+   - isRequired: Si es obligatorio recolectarlo (true/false)
 
-4. **funnelStages**: Etapas del embudo de ventas
-   - name: Nombre de la etapa
-   - description: Descripción
-   - order: Orden numérico (1, 2, 3...)
-   - requiredFields: Campos que deben recolectarse antes de avanzar
-   - blockedTopics: Temas bloqueados hasta cumplir requisitos (ej: "precios", "pagos")
+4. **funnelStages**: Etapas SECUENCIALES del embudo de ventas - EL BOT AVANZA AUTOMÁTICAMENTE (aislados por instancia)
+   - name: Nombre de la etapa (ej: "Bienvenida", "Calificación", "Cierre")
+   - description: Qué debe lograr el bot en esta etapa
+   - order: Orden numérico SECUENCIAL (1, 2, 3...)
+   - requiredFieldKeys: Array de keys de extractionFields que DEBEN recolectarse antes de avanzar
+   - blockedTopics: Temas que el bot NO puede discutir hasta cumplir requisitos (ej: ["precios", "pagos", "descuentos"])
+   - promptContext: Instrucciones específicas para el bot en esta etapa
 
 5. **objections**: Manejo de objeciones comunes
    - trigger: Frase o palabra que activa la objeción
@@ -804,9 +825,9 @@ ${rawPrompt.substring(0, 15000)}
    - price: Precio del envío
    - estimatedTime: Tiempo estimado de entrega
 
-7. **agentPrompt**: Prompt principal para el agente (personalidad, instrucciones)
+7. **agentPrompt**: Prompt principal para el agente (personalidad, instrucciones generales)
 
-8. **agentPersonality**: Resumen de la personalidad del agente
+8. **agentPersonality**: Resumen de la personalidad del agente (tono, estilo)
 
 ## RESPONDE EN JSON EXACTO:
 {
