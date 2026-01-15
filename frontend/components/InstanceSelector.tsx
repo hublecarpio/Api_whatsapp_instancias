@@ -314,7 +314,7 @@ export default function InstanceSelector({
                   <div className={`w-3 h-3 rounded-full ${
                     instance.status === 'open' || instance.status === 'connected' 
                       ? 'bg-green-500' 
-                      : instance.status === 'pending_qr'
+                      : instance.status === 'pending_qr' || instance.status === 'requires_qr'
                       ? 'bg-yellow-500'
                       : 'bg-red-500'
                   }`} />
@@ -333,7 +333,7 @@ export default function InstanceSelector({
                     <span className="text-xs text-gray-500">
                       {instance.status === 'open' || instance.status === 'connected' 
                         ? 'Conectado' 
-                        : instance.status === 'pending_qr'
+                        : instance.status === 'pending_qr' || instance.status === 'requires_qr'
                         ? 'Esperando QR'
                         : instance.status === 'pending_credentials'
                         ? 'Config. pendiente'
@@ -345,7 +345,7 @@ export default function InstanceSelector({
                       </span>
                     )}
                   </div>
-                  {instance.status !== 'open' && instance.status !== 'connected' && instance.status !== 'pending_qr' && instance.status !== 'pending_credentials' && (
+                  {instance.status !== 'open' && instance.status !== 'connected' && instance.status !== 'pending_qr' && instance.status !== 'requires_qr' && instance.status !== 'pending_credentials' && (
                     <button
                       onClick={(e) => handleReconnect(instance, e)}
                       disabled={reconnectingId === instance.id}

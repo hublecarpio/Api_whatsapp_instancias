@@ -316,10 +316,18 @@ export class WhatsAppInstance {
           }, 2000);
         }
       } else if (sessionInvalid) {
-        this.logger.info('Session invalid or logged out, clearing session data');
+        this.logger.info('Session invalid or logged out, clearing session and requesting new QR');
         this.status = 'disconnected';
         this.qrCode = null;
         await this.clearSession();
+        
+        if (!this.isDeleted && !this.isClosing) {
+          setTimeout(() => {
+            this.connect().catch(err => {
+              this.logger.error({ error: err.message }, 'Reconnection after logout failed');
+            });
+          }, 2000);
+        }
       } else if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
         this.status = 'connecting';
