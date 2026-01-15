@@ -46,7 +46,7 @@ const COUNTRY_CODES = [
 
 export default function BusinessPage() {
   const { currentBusiness, setCurrentBusiness, businesses, setBusinesses, updateBusiness } = useBusinessStore();
-  const { user, setAuth } = useAuthStore();
+  const { user, setAuth, activeContext, setActiveContext, contexts, setContexts } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [success, setSuccess] = useState('');
@@ -197,6 +197,16 @@ export default function BusinessPage() {
         
         const refreshed = await businessApi.get(currentBusiness.id);
         setCurrentBusiness(refreshed.data);
+        
+        if (activeContext && activeContext.businessId === currentBusiness.id) {
+          const updatedContext = { ...activeContext, businessName: name };
+          setActiveContext(updatedContext);
+          const updatedContexts = contexts.map(c => 
+            c.businessId === currentBusiness.id ? { ...c, businessName: name } : c
+          );
+          setContexts(updatedContexts);
+        }
+        
         setSuccess('Empresa actualizada correctamente');
       } else {
         const response = await businessApi.create({ name, description, industry, timezone, currencyCode, currencySymbol });
