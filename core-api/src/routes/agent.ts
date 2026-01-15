@@ -2124,12 +2124,25 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // Check if bot is disabled globally but contact has testing mode enabled
     if (!business.botEnabled) {
-      return res.json({
-        action: 'manual',
-        message: 'Bot is disabled',
-        botEnabled: false
+      const contact = await prisma.contact.findFirst({
+        where: {
+          businessId: business_id,
+          phone: contactPhone.replace(/\D/g, '')
+        },
+        select: { botTestEnabled: true }
       });
+      
+      if (!contact?.botTestEnabled) {
+        console.log(`[Agent Think] Bot disabled globally and no testing mode for contact ${contactPhone}`);
+        return res.json({
+          action: 'manual',
+          message: 'Bot is disabled',
+          botEnabled: false
+        });
+      }
+      console.log(`[Agent Think] Bot disabled globally but Testing ON for contact ${contactPhone}, processing...`);
     }
     
     const promptConfig = business.agentPrompts?.[0];
