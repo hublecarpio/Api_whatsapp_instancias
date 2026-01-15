@@ -146,7 +146,8 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       agentPrompts: { include: { tools: { where: { enabled: true } } } },
       products: true,
       instances: { include: { metaCredential: true } },
-      user: { select: { isPro: true, id: true, subscriptionStatus: true } }
+      user: { select: { isPro: true, id: true, subscriptionStatus: true } },
+      deliveryZones: { where: { isActive: true }, orderBy: { order: 'asc' } }
     }
   });
   
@@ -1618,7 +1619,8 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
       agentPrompts: { include: { tools: { where: { enabled: true } } } },
       products: true,
       instances: { include: { metaCredential: true } },
-      user: { select: { isPro: true, id: true, subscriptionStatus: true } }
+      user: { select: { isPro: true, id: true, subscriptionStatus: true } },
+      deliveryZones: { where: { isActive: true }, orderBy: { order: 'asc' } }
     }
   });
   

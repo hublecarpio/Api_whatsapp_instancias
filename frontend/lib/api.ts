@@ -590,3 +590,18 @@ export const advisorApi = {
   getContactAppointments: (businessId: string, contactPhone: string) =>
     api.get(`/advisor/contact-appointments/${businessId}/${encodeURIComponent(contactPhone)}`)
 };
+
+export const deliveryZonesApi = {
+  list: (businessId: string) =>
+    api.get(`/agent/delivery-zones/${businessId}`),
+  create: (businessId: string, data: { name: string; districts?: string[]; address?: string; cost: number; freeAbove?: number; deliveryTime?: string; policy?: string }) =>
+    api.post(`/agent/delivery-zones/${businessId}`, data),
+  update: (businessId: string, zoneId: string, data: { name?: string; districts?: string[]; address?: string; cost?: number; freeAbove?: number; deliveryTime?: string; policy?: string; isActive?: boolean }) =>
+    api.put(`/agent/delivery-zones/${businessId}/${zoneId}`, data),
+  delete: (businessId: string, zoneId: string) =>
+    api.delete(`/agent/delivery-zones/${businessId}/${zoneId}`),
+  import: (businessId: string, zones: any[]) =>
+    api.post(`/agent/delivery-zones/${businessId}/import`, { zones }),
+  reorder: (businessId: string, zoneIds: string[]) =>
+    api.put(`/agent/delivery-zones/${businessId}/reorder`, { zoneIds })
+};

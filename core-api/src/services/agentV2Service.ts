@@ -144,6 +144,29 @@ export function buildBusinessContext(
   const paymentLinkEnabled = business.user?.paymentLinkEnabled ?? false;
   const businessObjective = business.businessObjective || 'SALES';
   
+  // Build delivery zones context for AI
+  const deliveryZones = (business.deliveryZones || [])
+    .filter((z: any) => z.isActive)
+    .map((z: any) => ({
+      name: z.name,
+      districts: z.districts,
+      cost: z.cost,
+      freeAbove: z.freeAbove,
+      deliveryTime: z.deliveryTime
+    }));
+  
+  if (deliveryZones.length > 0) {
+    let zonesInfo = '\n\n## Zonas de Envío Disponibles:\n';
+    deliveryZones.forEach((z: any) => {
+      zonesInfo += `- **${z.name}**: Costo ${business.currencySymbol || 'S/.'}${z.cost}`;
+      if (z.freeAbove) zonesInfo += ` (Gratis en compras mayores a ${business.currencySymbol || 'S/.'}${z.freeAbove})`;
+      if (z.deliveryTime) zonesInfo += ` - Tiempo: ${z.deliveryTime}`;
+      if (z.districts?.length > 0) zonesInfo += `\n  Distritos: ${z.districts.join(', ')}`;
+      zonesInfo += '\n';
+    });
+    policies.push(zonesInfo);
+  }
+  
   return {
     business_id: business.id,
     business_name: business.name,

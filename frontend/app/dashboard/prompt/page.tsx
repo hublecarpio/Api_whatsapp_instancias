@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { useInstanceStore } from '@/store/instance';
-import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi, waApi } from '@/lib/api';
+import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi, waApi, deliveryZonesApi } from '@/lib/api';
+import DeliveryZones from '@/components/DeliveryZones';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel } from '@/components/AgentV2';
 import AgentHealthDashboard from '@/components/AgentHealthDashboard';
@@ -163,7 +164,7 @@ export default function PromptPage() {
   const [testVariables, setTestVariables] = useState<Record<string, string>>({});
   const [testLoading, setTestLoading] = useState(false);
   const [testResponse, setTestResponse] = useState<{ status?: number; data?: any; error?: string; duration?: number; debug?: { interpolatedUrl?: string; method?: string; variables?: Record<string, string>; requestBody?: any } } | null>(null);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools' | 'files' | 'api'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools' | 'files' | 'api' | 'shipping'>('prompt');
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedToolForLogs, setSelectedToolForLogs] = useState<Tool | null>(null);
   const [toolLogs, setToolLogs] = useState<ToolLog[]>([]);
@@ -180,7 +181,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'tools' | 'files' | 'config' | 'api'>('prompt');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'tools' | 'files' | 'config' | 'api' | 'shipping'>('prompt');
   
   const [promptSections, setPromptSections] = useState<PromptSection[]>([]);
   const [loadingSections, setLoadingSections] = useState(false);
@@ -1255,6 +1256,16 @@ export default function PromptPage() {
           >
             Archivos
           </button>
+          {(currentBusiness as any)?.businessObjective === 'SALES' && (
+            <button
+              onClick={() => setActiveTab('shipping')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === 'shipping' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
+              }`}
+            >
+              Envíos
+            </button>
+          )}
           {((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro') && (
             <>
               <button
@@ -1323,6 +1334,16 @@ export default function PromptPage() {
           >
             Archivos ({agentFiles.length})
           </button>
+          {(currentBusiness as any)?.businessObjective === 'SALES' && (
+            <button
+              onClick={() => setActiveV2Tab('shipping')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeV2Tab === 'shipping' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+              }`}
+            >
+              Envíos
+            </button>
+          )}
           <button
             onClick={() => {
               setActiveV2Tab('config');
@@ -2229,6 +2250,15 @@ export default function PromptPage() {
         </div>
       )}
 
+      {agentVersion === 'v1' && activeTab === 'shipping' && currentBusiness && (
+        <div className="card">
+          <DeliveryZones 
+            businessId={currentBusiness.id} 
+            currencySymbol={(currentBusiness as any).currencySymbol || 'S/.'} 
+          />
+        </div>
+      )}
+
       {agentVersion === 'v1' && activeTab === 'api' && (
         <div className="space-y-6">
           <div className="card">
@@ -2517,6 +2547,15 @@ export default function PromptPage() {
               </li>
             </ul>
           </div>
+        </div>
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'shipping' && currentBusiness && (
+        <div className="card">
+          <DeliveryZones 
+            businessId={currentBusiness.id} 
+            currencySymbol={(currentBusiness as any).currencySymbol || 'S/.'} 
+          />
         </div>
       )}
 

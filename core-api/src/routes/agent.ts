@@ -2985,4 +2985,224 @@ router.post('/webhook/:businessId/test', authMiddleware, async (req: AuthRequest
   }
 });
 
+// ==================== DELIVERY ZONES ====================
+
+router.get('/delivery-zones/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const zones = await prisma.deliveryZone.findMany({
+      where: { businessId },
+      orderBy: { order: 'asc' }
+    });
+    
+    res.json(zones);
+  } catch (error: any) {
+    console.error('Get delivery zones error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/delivery-zones/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { name, districts, address, cost, freeAbove, deliveryTime, policy } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const maxOrder = await prisma.deliveryZone.aggregate({
+      where: { businessId },
+      _max: { order: true }
+    });
+    
+    const zone = await prisma.deliveryZone.create({
+      data: {
+        businessId,
+        name,
+        districts: districts || [],
+        address,
+        cost: parseFloat(cost) || 0,
+        freeAbove: freeAbove ? parseFloat(freeAbove) : null,
+        deliveryTime,
+        policy,
+        order: (maxOrder._max.order || 0) + 1
+      }
+    });
+    
+    res.json(zone);
+  } catch (error: any) {
+    console.error('Create delivery zone error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/delivery-zones/:businessId/:zoneId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, zoneId } = req.params;
+    const { name, districts, address, cost, freeAbove, deliveryTime, policy, isActive, order } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const zone = await prisma.deliveryZone.update({
+      where: { id: zoneId },
+      data: {
+        name,
+        districts,
+        address,
+        cost: cost !== undefined ? parseFloat(cost) : undefined,
+        freeAbove: freeAbove !== undefined ? (freeAbove ? parseFloat(freeAbove) : null) : undefined,
+        deliveryTime,
+        policy,
+        isActive,
+        order
+      }
+    });
+    
+    res.json(zone);
+  } catch (error: any) {
+    console.error('Update delivery zone error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/delivery-zones/:businessId/:zoneId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, zoneId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    await prisma.deliveryZone.delete({
+      where: { id: zoneId }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete delivery zone error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/delivery-zones/:businessId/import', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { zones } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!Array.isArray(zones)) {
+      return res.status(400).json({ error: 'zones must be an array' });
+    }
+    
+    const maxOrder = await prisma.deliveryZone.aggregate({
+      where: { businessId },
+      _max: { order: true }
+    });
+    
+    let currentOrder = (maxOrder._max.order || 0) + 1;
+    const created: any[] = [];
+    const errors: any[] = [];
+    
+    for (const z of zones) {
+      try {
+        if (!z.name) {
+          errors.push({ row: z, error: 'name is required' });
+          continue;
+        }
+        
+        const zone = await prisma.deliveryZone.create({
+          data: {
+            businessId,
+            name: z.name,
+            districts: Array.isArray(z.districts) ? z.districts : (z.districts ? z.districts.split(',').map((d: string) => d.trim()) : []),
+            address: z.address || null,
+            cost: parseFloat(z.cost) || 0,
+            freeAbove: z.freeAbove ? parseFloat(z.freeAbove) : null,
+            deliveryTime: z.deliveryTime || null,
+            policy: z.policy || null,
+            order: currentOrder++
+          }
+        });
+        created.push(zone);
+      } catch (e: any) {
+        errors.push({ row: z, error: e.message });
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      imported: created.length, 
+      errors: errors.length,
+      errorDetails: errors 
+    });
+  } catch (error: any) {
+    console.error('Import delivery zones error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/delivery-zones/:businessId/reorder', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { zoneIds } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!Array.isArray(zoneIds)) {
+      return res.status(400).json({ error: 'zoneIds must be an array' });
+    }
+    
+    await Promise.all(
+      zoneIds.map((id, index) => 
+        prisma.deliveryZone.update({
+          where: { id },
+          data: { order: index }
+        })
+      )
+    );
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Reorder delivery zones error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
