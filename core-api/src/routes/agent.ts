@@ -3390,4 +3390,335 @@ router.get('/extraction-fields/:businessId', authMiddleware, async (req: AuthReq
   }
 });
 
+// ============ INTELLIGENT PROMPT IMPORTER ============
+
+import { geminiService } from '../services/gemini.js';
+
+router.post('/analyze-prompt', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, rawPrompt } = req.body;
+    
+    if (!business_id || !rawPrompt) {
+      return res.status(400).json({ error: 'business_id and rawPrompt are required' });
+    }
+    
+    if (rawPrompt.length > 50000) {
+      return res.status(400).json({ error: 'Prompt too long (max 50,000 characters)' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!geminiService.isConfigured()) {
+      return res.status(503).json({ error: 'Gemini API not configured' });
+    }
+    
+    console.log(`[IMPORT] Analyzing prompt for business ${business_id}, length: ${rawPrompt.length}`);
+    
+    const result = await geminiService.analyzeBusinessPrompt(rawPrompt);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error || 'Failed to analyze prompt' });
+    }
+    
+    // Get existing data to detect conflicts
+    const [existingProducts, existingFields, existingStages, existingObjections, existingZones] = await Promise.all([
+      prisma.product.findMany({ where: { businessId: business_id }, select: { title: true } }),
+      prisma.extractionField.findMany({ where: { businessId: business_id }, select: { fieldKey: true } }),
+      prisma.funnelStage.findMany({ where: { businessId: business_id }, select: { name: true } }),
+      prisma.objectionResponse.findMany({ where: { businessId: business_id }, select: { triggerPhrase: true } }),
+      prisma.deliveryZone.findMany({ where: { businessId: business_id }, select: { name: true } })
+    ]);
+    
+    const conflicts = {
+      products: result.config.products.filter(p => 
+        existingProducts.some(ep => ep.title.toLowerCase() === p.title.toLowerCase())
+      ).map(p => p.title),
+      extractionFields: result.config.extractionFields.filter(f =>
+        existingFields.some(ef => ef.fieldKey === f.key)
+      ).map(f => f.key),
+      funnelStages: result.config.funnelStages.filter(s =>
+        existingStages.some(es => es.name.toLowerCase() === s.name.toLowerCase())
+      ).map(s => s.name),
+      objections: result.config.objections.filter(o =>
+        existingObjections.some(eo => eo.triggerPhrase.toLowerCase() === o.trigger.toLowerCase())
+      ).map(o => o.trigger),
+      deliveryZones: result.config.deliveryZones.filter(z =>
+        existingZones.some(ez => ez.name.toLowerCase() === z.name.toLowerCase())
+      ).map(z => z.name)
+    };
+    
+    res.json({
+      success: true,
+      config: result.config,
+      missing: result.missing,
+      warnings: result.warnings,
+      conflicts,
+      confidence: result.confidence,
+      existingCounts: {
+        products: existingProducts.length,
+        extractionFields: existingFields.length,
+        funnelStages: existingStages.length,
+        objections: existingObjections.length,
+        deliveryZones: existingZones.length
+      }
+    });
+  } catch (error: any) {
+    console.error('Analyze prompt error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, config, options = {} } = req.body;
+    
+    if (!business_id || !config) {
+      return res.status(400).json({ error: 'business_id and config are required' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const { skipConflicts = true } = options;
+    const results: Record<string, { created: number; skipped: number; errors: string[] }> = {
+      products: { created: 0, skipped: 0, errors: [] },
+      extractionFields: { created: 0, skipped: 0, errors: [] },
+      funnelStages: { created: 0, skipped: 0, errors: [] },
+      objections: { created: 0, skipped: 0, errors: [] },
+      deliveryZones: { created: 0, skipped: 0, errors: [] },
+      businessInfo: { created: 0, skipped: 0, errors: [] },
+      agentPrompt: { created: 0, skipped: 0, errors: [] }
+    };
+    
+    // Import Products
+    if (config.products?.length > 0) {
+      const existingTitles = (await prisma.product.findMany({
+        where: { businessId: business_id },
+        select: { title: true }
+      })).map(p => p.title.toLowerCase());
+      
+      for (const product of config.products) {
+        try {
+          if (skipConflicts && existingTitles.includes(product.title.toLowerCase())) {
+            results.products.skipped++;
+            continue;
+          }
+          await prisma.product.create({
+            data: {
+              businessId: business_id,
+              title: product.title,
+              description: product.description || null,
+              price: product.price || 0,
+              category: product.category || null,
+              isActive: true
+            }
+          });
+          results.products.created++;
+        } catch (err: any) {
+          results.products.errors.push(`${product.title}: ${err.message}`);
+        }
+      }
+    }
+    
+    // Import Extraction Fields
+    if (config.extractionFields?.length > 0) {
+      const existingKeys = (await prisma.extractionField.findMany({
+        where: { businessId: business_id },
+        select: { fieldKey: true }
+      })).map(f => f.fieldKey);
+      
+      const maxOrder = await prisma.extractionField.aggregate({
+        where: { businessId: business_id },
+        _max: { order: true }
+      });
+      let order = (maxOrder._max.order || 0) + 1;
+      
+      for (const field of config.extractionFields) {
+        try {
+          if (skipConflicts && existingKeys.includes(field.key)) {
+            results.extractionFields.skipped++;
+            continue;
+          }
+          await prisma.extractionField.create({
+            data: {
+              businessId: business_id,
+              fieldKey: field.key,
+              fieldLabel: field.label,
+              fieldType: 'text',
+              description: field.description || null,
+              order: order++,
+              enabled: true
+            }
+          });
+          results.extractionFields.created++;
+        } catch (err: any) {
+          results.extractionFields.errors.push(`${field.key}: ${err.message}`);
+        }
+      }
+    }
+    
+    // Import Funnel Stages
+    if (config.funnelStages?.length > 0) {
+      const existingNames = (await prisma.funnelStage.findMany({
+        where: { businessId: business_id },
+        select: { name: true }
+      })).map(s => s.name.toLowerCase());
+      
+      const maxOrder = await prisma.funnelStage.aggregate({
+        where: { businessId: business_id },
+        _max: { order: true }
+      });
+      let order = (maxOrder._max.order || 0) + 1;
+      
+      for (const stage of config.funnelStages) {
+        try {
+          if (skipConflicts && existingNames.includes(stage.name.toLowerCase())) {
+            results.funnelStages.skipped++;
+            continue;
+          }
+          await prisma.funnelStage.create({
+            data: {
+              businessId: business_id,
+              name: stage.name,
+              description: stage.description || null,
+              order: order++,
+              requiredFieldKeys: stage.requiredFields || [],
+              blockedTopics: stage.blockedTopics || [],
+              isActive: true
+            }
+          });
+          results.funnelStages.created++;
+        } catch (err: any) {
+          results.funnelStages.errors.push(`${stage.name}: ${err.message}`);
+        }
+      }
+    }
+    
+    // Import Objections
+    if (config.objections?.length > 0) {
+      const existingTriggers = (await prisma.objectionResponse.findMany({
+        where: { businessId: business_id },
+        select: { triggerPhrase: true }
+      })).map(o => o.triggerPhrase.toLowerCase());
+      
+      for (const objection of config.objections) {
+        try {
+          if (skipConflicts && existingTriggers.includes(objection.trigger.toLowerCase())) {
+            results.objections.skipped++;
+            continue;
+          }
+          await prisma.objectionResponse.create({
+            data: {
+              businessId: business_id,
+              triggerPhrase: objection.trigger,
+              responseTemplate: objection.response,
+              category: objection.category || 'general',
+              priority: 50,
+              isActive: true
+            }
+          });
+          results.objections.created++;
+        } catch (err: any) {
+          results.objections.errors.push(`${objection.trigger}: ${err.message}`);
+        }
+      }
+    }
+    
+    // Import Delivery Zones
+    if (config.deliveryZones?.length > 0) {
+      const existingNames = (await prisma.deliveryZone.findMany({
+        where: { businessId: business_id },
+        select: { name: true }
+      })).map(z => z.name.toLowerCase());
+      
+      for (const zone of config.deliveryZones) {
+        try {
+          if (skipConflicts && existingNames.includes(zone.name.toLowerCase())) {
+            results.deliveryZones.skipped++;
+            continue;
+          }
+          await prisma.deliveryZone.create({
+            data: {
+              businessId: business_id,
+              name: zone.name,
+              price: zone.price || 0,
+              estimatedTime: zone.estimatedTime || null,
+              isActive: true
+            }
+          });
+          results.deliveryZones.created++;
+        } catch (err: any) {
+          results.deliveryZones.errors.push(`${zone.name}: ${err.message}`);
+        }
+      }
+    }
+    
+    // Update Business Info if provided
+    if (config.businessInfo && Object.keys(config.businessInfo).length > 0) {
+      try {
+        const updateData: any = {};
+        if (config.businessInfo.name) updateData.name = config.businessInfo.name;
+        if (config.businessInfo.description) updateData.description = config.businessInfo.description;
+        if (config.businessInfo.country) updateData.country = config.businessInfo.country;
+        if (config.businessInfo.city) updateData.city = config.businessInfo.city;
+        if (config.businessInfo.currency) updateData.currencyCode = config.businessInfo.currency;
+        if (config.businessInfo.timezone) updateData.timezone = config.businessInfo.timezone;
+        
+        if (Object.keys(updateData).length > 0) {
+          await prisma.business.update({
+            where: { id: business_id },
+            data: updateData
+          });
+          results.businessInfo.created = 1;
+        }
+      } catch (err: any) {
+        results.businessInfo.errors.push(err.message);
+      }
+    }
+    
+    // Update Agent Prompt if provided
+    if (config.agentPrompt) {
+      try {
+        await prisma.business.update({
+          where: { id: business_id },
+          data: { prompt: config.agentPrompt }
+        });
+        results.agentPrompt.created = 1;
+      } catch (err: any) {
+        results.agentPrompt.errors.push(err.message);
+      }
+    }
+    
+    const totalCreated = Object.values(results).reduce((sum, r) => sum + r.created, 0);
+    const totalSkipped = Object.values(results).reduce((sum, r) => sum + r.skipped, 0);
+    const totalErrors = Object.values(results).reduce((sum, r) => sum + r.errors.length, 0);
+    
+    console.log(`[IMPORT] Config imported for business ${business_id}: ${totalCreated} created, ${totalSkipped} skipped, ${totalErrors} errors`);
+    
+    res.json({
+      success: true,
+      summary: {
+        totalCreated,
+        totalSkipped,
+        totalErrors
+      },
+      details: results
+    });
+  } catch (error: any) {
+    console.error('Import config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

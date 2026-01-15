@@ -594,6 +594,216 @@ REGLAS DE VALIDACIÓN:
       };
     }
   }
+
+  async analyzeBusinessPrompt(
+    rawPrompt: string
+  ): Promise<{
+    success: boolean;
+    config: {
+      businessInfo: {
+        name?: string;
+        description?: string;
+        industry?: string;
+        country?: string;
+        city?: string;
+        currency?: string;
+        timezone?: string;
+        workingHours?: string;
+        paymentMethods?: string[];
+      };
+      products: {
+        title: string;
+        description?: string;
+        price: number;
+        category?: string;
+        variants?: string[];
+      }[];
+      extractionFields: {
+        key: string;
+        label: string;
+        description?: string;
+      }[];
+      funnelStages: {
+        name: string;
+        description?: string;
+        order: number;
+        requiredFields?: string[];
+        blockedTopics?: string[];
+      }[];
+      objections: {
+        trigger: string;
+        response: string;
+        category?: string;
+      }[];
+      deliveryZones: {
+        name: string;
+        price: number;
+        estimatedTime?: string;
+      }[];
+      agentPrompt?: string;
+      agentPersonality?: string;
+    };
+    missing: string[];
+    warnings: string[];
+    confidence: number;
+    error?: string;
+  }> {
+    if (!this.isConfigured()) {
+      return { 
+        success: false, 
+        config: { businessInfo: {}, products: [], extractionFields: [], funnelStages: [], objections: [], deliveryZones: [] },
+        missing: [],
+        warnings: [],
+        confidence: 0,
+        error: 'Gemini API not configured' 
+      };
+    }
+
+    try {
+      console.log('[GEMINI] Analyzing business prompt, length:', rawPrompt.length);
+      
+      const prompt = `Eres un experto en configurar agentes de IA para ventas por WhatsApp. Analiza el siguiente texto en bruto que describe un negocio y extrae TODA la información relevante para configurar el sistema.
+
+## TEXTO A ANALIZAR:
+${rawPrompt.substring(0, 15000)}
+
+## INSTRUCCIONES DE EXTRACCIÓN:
+
+1. **businessInfo**: Datos generales del negocio
+   - name: Nombre del negocio
+   - description: Descripción corta del negocio
+   - industry: Industria (ej: retail, servicios, alimentos)
+   - country, city: Ubicación
+   - currency: Moneda (PEN, USD, COP, etc)
+   - timezone: Zona horaria
+   - workingHours: Horario de atención
+   - paymentMethods: Métodos de pago aceptados
+
+2. **products**: Lista de productos/servicios
+   - title: Nombre del producto (OBLIGATORIO)
+   - description: Descripción
+   - price: Precio numérico (OBLIGATORIO, 0 si no se menciona)
+   - category: Categoría
+   - variants: Variantes (tallas, colores, tamaños)
+
+3. **extractionFields**: Datos a extraer del cliente durante conversaciones
+   - key: Identificador único sin espacios (ej: "nombre", "direccion", "talla")
+   - label: Etiqueta visible (ej: "Nombre completo", "Dirección de envío")
+   - description: Para qué se usa este dato
+
+4. **funnelStages**: Etapas del embudo de ventas
+   - name: Nombre de la etapa
+   - description: Descripción
+   - order: Orden numérico (1, 2, 3...)
+   - requiredFields: Campos que deben recolectarse antes de avanzar
+   - blockedTopics: Temas bloqueados hasta cumplir requisitos (ej: "precios", "pagos")
+
+5. **objections**: Manejo de objeciones comunes
+   - trigger: Frase o palabra que activa la objeción
+   - response: Respuesta sugerida
+   - category: Categoría (precio, tiempo, confianza, etc)
+
+6. **deliveryZones**: Zonas de envío con precios
+   - name: Nombre de la zona
+   - price: Precio del envío
+   - estimatedTime: Tiempo estimado de entrega
+
+7. **agentPrompt**: Prompt principal para el agente (personalidad, instrucciones)
+
+8. **agentPersonality**: Resumen de la personalidad del agente
+
+## RESPONDE EN JSON EXACTO:
+{
+  "config": {
+    "businessInfo": {...},
+    "products": [...],
+    "extractionFields": [...],
+    "funnelStages": [...],
+    "objections": [...],
+    "deliveryZones": [...],
+    "agentPrompt": "...",
+    "agentPersonality": "..."
+  },
+  "missing": ["lista de datos importantes que faltan"],
+  "warnings": ["advertencias sobre datos incompletos o ambiguos"],
+  "confidence": 0.85
+}
+
+REGLAS:
+- Extrae TODO lo que encuentres, aunque sea parcial
+- Si un producto no tiene precio claro, pon price: 0
+- Si no encuentras productos, deja el array vacío
+- missing debe incluir datos críticos que faltan para funcionar bien
+- confidence: 0-1 basado en qué tan completa está la información`;
+
+      const response = await axios.post(
+        `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 8192
+          }
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 120000
+        }
+      );
+
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.log('[GEMINI] Business prompt analysis - invalid response format');
+        return { 
+          success: false, 
+          config: { businessInfo: {}, products: [], extractionFields: [], funnelStages: [], objections: [], deliveryZones: [] },
+          missing: ['No se pudo analizar el prompt'],
+          warnings: [],
+          confidence: 0,
+          error: 'Invalid response format from Gemini'
+        };
+      }
+
+      const result = JSON.parse(jsonMatch[0]);
+      console.log('[GEMINI] Business prompt analysis completed:', {
+        products: result.config?.products?.length || 0,
+        extractionFields: result.config?.extractionFields?.length || 0,
+        funnelStages: result.config?.funnelStages?.length || 0,
+        objections: result.config?.objections?.length || 0,
+        missing: result.missing?.length || 0,
+        confidence: result.confidence
+      });
+
+      return {
+        success: true,
+        config: {
+          businessInfo: result.config?.businessInfo || {},
+          products: result.config?.products || [],
+          extractionFields: result.config?.extractionFields || [],
+          funnelStages: result.config?.funnelStages || [],
+          objections: result.config?.objections || [],
+          deliveryZones: result.config?.deliveryZones || [],
+          agentPrompt: result.config?.agentPrompt,
+          agentPersonality: result.config?.agentPersonality
+        },
+        missing: result.missing || [],
+        warnings: result.warnings || [],
+        confidence: result.confidence || 0
+      };
+    } catch (error: any) {
+      console.error('[GEMINI] Business prompt analysis failed:', error.response?.data || error.message);
+      return {
+        success: false,
+        config: { businessInfo: {}, products: [], extractionFields: [], funnelStages: [], objections: [], deliveryZones: [] },
+        missing: [],
+        warnings: [],
+        confidence: 0,
+        error: error.response?.data?.error?.message || error.message
+      };
+    }
+  }
 }
 
 export const geminiService = new GeminiService();
