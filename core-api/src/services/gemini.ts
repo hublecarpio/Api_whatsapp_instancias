@@ -1,24 +1,120 @@
 import axios from 'axios';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1';
+const OPENROUTER_GEMINI_MODEL = 'google/gemini-2.0-flash-001';
 
 interface GeminiResponse {
   success: boolean;
   text: string;
   error?: string;
+  usedFallback?: boolean;
 }
 
 export class GeminiService {
   private apiKey: string;
+  private openrouterKey: string;
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey || GEMINI_API_KEY || '';
+    this.openrouterKey = OPENROUTER_API_KEY || '';
   }
 
   isConfigured(): boolean {
-    return !!this.apiKey;
+    return !!this.apiKey || !!this.openrouterKey;
+  }
+
+  private hasOpenRouterFallback(): boolean {
+    return !!this.openrouterKey;
+  }
+
+  private isQuotaError(error: any): boolean {
+    const errorMessage = error?.response?.data?.error?.message || error?.message || '';
+    const errorCode = error?.response?.status;
+    return (
+      errorCode === 429 ||
+      errorMessage.toLowerCase().includes('quota') ||
+      errorMessage.toLowerCase().includes('rate') ||
+      errorMessage.toLowerCase().includes('limit') ||
+      errorMessage.toLowerCase().includes('exceeded')
+    );
+  }
+
+  private async callOpenRouter(
+    prompt: string,
+    options: {
+      temperature?: number;
+      maxTokens?: number;
+      imageBase64?: string;
+      imageMimeType?: string;
+    } = {}
+  ): Promise<{ success: boolean; text: string; error?: string }> {
+    if (!this.openrouterKey) {
+      return { success: false, text: '', error: 'OpenRouter API not configured' };
+    }
+
+    try {
+      console.log('[GEMINI-OPENROUTER] Using OpenRouter fallback for Gemini');
+      
+      const messages: any[] = [];
+      
+      if (options.imageBase64 && options.imageMimeType) {
+        messages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${options.imageMimeType};base64,${options.imageBase64}`
+              }
+            },
+            {
+              type: 'text',
+              text: prompt
+            }
+          ]
+        });
+      } else {
+        messages.push({
+          role: 'user',
+          content: prompt
+        });
+      }
+
+      const response = await axios.post(
+        `${OPENROUTER_API_URL}/chat/completions`,
+        {
+          model: OPENROUTER_GEMINI_MODEL,
+          messages,
+          temperature: options.temperature ?? 0.3,
+          max_tokens: options.maxTokens ?? 1024
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.openrouterKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://replit.com',
+            'X-Title': 'WhatsApp SaaS Platform'
+          },
+          timeout: 120000
+        }
+      );
+
+      const text = response.data?.choices?.[0]?.message?.content || '';
+      console.log('[GEMINI-OPENROUTER] Response received, length:', text.length);
+      
+      return { success: true, text: text.trim() };
+    } catch (error: any) {
+      console.error('[GEMINI-OPENROUTER] OpenRouter call failed:', error.response?.data || error.message);
+      return {
+        success: false,
+        text: '',
+        error: error.response?.data?.error?.message || error.message
+      };
+    }
   }
 
   private async downloadMedia(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
@@ -736,22 +832,50 @@ REGLAS:
 - missing debe incluir datos críticos que faltan para funcionar bien
 - confidence: 0-1 basado en qué tan completa está la información`;
 
-      const response = await axios.post(
-        `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
-        {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 8192
-          }
-        },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 120000
-        }
-      );
+      let text = '';
+      let usedFallback = false;
 
-      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      try {
+        if (this.apiKey) {
+          const response = await axios.post(
+            `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+            {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 8192
+              }
+            },
+            {
+              headers: { 'Content-Type': 'application/json' },
+              timeout: 120000
+            }
+          );
+          text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        } else {
+          throw new Error('No Gemini API key, trying fallback');
+        }
+      } catch (directError: any) {
+        console.warn('[GEMINI] Direct API failed:', directError.response?.data?.error?.message || directError.message);
+        
+        if (this.hasOpenRouterFallback() && (this.isQuotaError(directError) || !this.apiKey)) {
+          console.log('[GEMINI] Attempting OpenRouter fallback for business prompt analysis...');
+          const fallbackResult = await this.callOpenRouter(prompt, {
+            temperature: 0.2,
+            maxTokens: 8192
+          });
+          
+          if (fallbackResult.success) {
+            text = fallbackResult.text;
+            usedFallback = true;
+            console.log('[GEMINI] OpenRouter fallback succeeded');
+          } else {
+            throw new Error(fallbackResult.error || 'OpenRouter fallback failed');
+          }
+        } else {
+          throw directError;
+        }
+      }
       
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -773,7 +897,8 @@ REGLAS:
         funnelStages: result.config?.funnelStages?.length || 0,
         objections: result.config?.objections?.length || 0,
         missing: result.missing?.length || 0,
-        confidence: result.confidence
+        confidence: result.confidence,
+        usedFallback
       });
 
       return {
@@ -789,7 +914,7 @@ REGLAS:
           agentPersonality: result.config?.agentPersonality
         },
         missing: result.missing || [],
-        warnings: result.warnings || [],
+        warnings: usedFallback ? [...(result.warnings || []), 'Se usó OpenRouter como respaldo por límites de cuota'] : (result.warnings || []),
         confidence: result.confidence || 0
       };
     } catch (error: any) {
