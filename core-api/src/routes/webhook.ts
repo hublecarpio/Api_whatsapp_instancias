@@ -417,7 +417,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             ).catch(err => console.error('[WEBHOOK] Failed to dispatch user_message webhook:', err.message));
           }
           
-          if (!isFromMe && business.botEnabled) {
+          if (!isFromMe) {
             const cleanPhoneForSettings = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
             const contactSettings = await prisma.contactSettings.findFirst({
               where: {
@@ -426,9 +426,34 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               }
             });
             
-            if (contactSettings?.botDisabled) {
-              console.log(`Bot disabled for contact ${cleanPhoneForSettings}, skipping agent`);
+            // Check if contact has testing mode enabled (from Contact table)
+            const contact = await prisma.contact.findFirst({
+              where: {
+                businessId,
+                phone: cleanPhoneForSettings
+              },
+              select: { botTestEnabled: true }
+            });
+            
+            // Determine if we should process this message with the agent
+            let shouldProcessWithAgent = false;
+            
+            if (business.botEnabled) {
+              // Bot is globally enabled - process unless disabled for this contact
+              if (contactSettings?.botDisabled) {
+                console.log(`[WEBHOOK] Bot disabled for contact ${cleanPhoneForSettings}, skipping agent`);
+              } else {
+                shouldProcessWithAgent = true;
+              }
+            } else if (contact?.botTestEnabled) {
+              // Bot is globally disabled BUT testing mode is enabled for this contact
+              console.log(`[WEBHOOK] Bot globally disabled but Testing ON for contact ${cleanPhoneForSettings}, processing with agent`);
+              shouldProcessWithAgent = true;
             } else {
+              console.log(`[WEBHOOK] Bot globally disabled and no testing mode for contact ${cleanPhoneForSettings}, skipping agent`);
+            }
+            
+            if (shouldProcessWithAgent) {
             let messageForAgent = data.text || '';
             
             if (mediaAnalysis) {
