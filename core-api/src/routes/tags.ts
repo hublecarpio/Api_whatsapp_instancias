@@ -684,15 +684,27 @@ router.get('/contact/:contact_phone/bot-status', authMiddleware, async (req: Aut
     
     const cleanPhone = contact_phone.replace(/\D/g, '').replace(/:.*$/, '');
     
-    const settings = await prisma.contactSettings.findFirst({
-      where: {
-        businessId: business_id as string,
-        contactPhone: cleanPhone
-      }
-    });
+    const [settings, contact] = await Promise.all([
+      prisma.contactSettings.findFirst({
+        where: {
+          businessId: business_id as string,
+          contactPhone: cleanPhone
+        }
+      }),
+      prisma.contact.findUnique({
+        where: {
+          businessId_phone: {
+            businessId: business_id as string,
+            phone: cleanPhone
+          }
+        },
+        select: { botTestEnabled: true }
+      })
+    ]);
     
     res.json({
       botDisabled: settings?.botDisabled || false,
+      botTestEnabled: contact?.botTestEnabled || false,
       notes: settings?.notes || null
     });
   } catch (error: any) {

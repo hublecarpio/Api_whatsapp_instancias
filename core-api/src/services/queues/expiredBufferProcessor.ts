@@ -81,10 +81,18 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
           continue;
         }
         
+        // Check if bot is globally disabled but contact has test mode enabled
         if (!business.botEnabled) {
-          console.log(`[ExpiredBuffer] Bot disabled for business ${buffer.businessId}, deleting buffer`);
-          await prisma.messageBuffer.delete({ where: { id: buffer.id } });
-          continue;
+          const contact = await prisma.contact.findUnique({
+            where: { businessId_phone: { businessId: buffer.businessId, phone: buffer.contactPhone } }
+          });
+          
+          if (!contact?.botTestEnabled) {
+            console.log(`[ExpiredBuffer] Bot disabled for business ${buffer.businessId}, deleting buffer`);
+            await prisma.messageBuffer.delete({ where: { id: buffer.id } });
+            continue;
+          }
+          console.log(`[ExpiredBuffer] Bot test mode enabled for contact ${buffer.contactPhone}, processing buffer`);
         }
         
         const contactSettings = await prisma.contactSettings.findFirst({

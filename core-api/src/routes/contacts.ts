@@ -83,6 +83,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         notes: contact.notes,
         source: contact.source,
         botDisabled: contact.botDisabled,
+        botTestEnabled: contact.botTestEnabled,
         isArchived: contact.isArchived,
         firstMessageAt: contact.firstMessageAt,
         lastMessageAt: contact.lastMessageAt,
@@ -575,6 +576,7 @@ router.get('/:phone', async (req: AuthRequest, res: Response) => {
       notes: contact.notes,
       source: contact.source,
       botDisabled: contact.botDisabled,
+      botTestEnabled: contact.botTestEnabled,
       isArchived: contact.isArchived,
       firstMessageAt: contact.firstMessageAt,
       lastMessageAt: contact.lastMessageAt,
@@ -602,7 +604,7 @@ router.put('/:phone', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
     const { phone } = req.params;
-    const { name, email, notes, botDisabled, tags, isArchived, businessId, extractedData } = req.body;
+    const { name, email, notes, botDisabled, botTestEnabled, tags, isArchived, businessId, extractedData } = req.body;
 
     if (!businessId) {
       return res.status(400).json({ error: 'businessId es requerido' });
@@ -631,6 +633,7 @@ router.put('/:phone', async (req: AuthRequest, res: Response) => {
         ...(email !== undefined && { email }),
         ...(notes !== undefined && { notes }),
         ...(botDisabled !== undefined && { botDisabled }),
+        ...(botTestEnabled !== undefined && { botTestEnabled }),
         ...(tags !== undefined && { tags }),
         ...(isArchived !== undefined && { isArchived })
       }
@@ -833,6 +836,55 @@ router.post('/:phone/unarchive', async (req: AuthRequest, res: Response) => {
     res.json(contact);
   } catch (error: any) {
     console.error('[CONTACTS] Error unarchiving contact:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Toggle bot test mode for a contact (allows bot response when globally disabled)
+router.post('/:phone/bot-test', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { phone } = req.params;
+    const { businessId, enabled } = req.body;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const existing = await prisma.contact.findUnique({
+      where: { businessId_phone: { businessId: business.id, phone } }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Contacto no encontrado' });
+    }
+
+    const newValue = enabled !== undefined ? enabled : !existing.botTestEnabled;
+
+    const contact = await prisma.contact.update({
+      where: { id: existing.id },
+      data: { botTestEnabled: newValue }
+    });
+
+    console.log(`[CONTACTS] Bot test mode ${newValue ? 'enabled' : 'disabled'} for contact ${phone} in business ${businessId}`);
+
+    res.json({ 
+      success: true, 
+      botTestEnabled: contact.botTestEnabled,
+      message: newValue 
+        ? 'Modo testing activado. El bot responderá a este contacto aunque esté desactivado globalmente.'
+        : 'Modo testing desactivado.'
+    });
+  } catch (error: any) {
+    console.error('[CONTACTS] Error toggling bot test mode:', error);
     res.status(500).json({ error: error.message });
   }
 });

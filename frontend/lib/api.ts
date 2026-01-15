@@ -385,6 +385,8 @@ export const tagsApi = {
     api.get(`/tags/contact/${contactPhone}/bot-status?business_id=${businessId}`),
   toggleContactBot: (businessId: string, contactPhone: string, botDisabled: boolean) =>
     api.patch(`/tags/contact/${contactPhone}/bot-toggle`, { business_id: businessId, botDisabled }),
+  toggleContactBotTest: (businessId: string, contactPhone: string, enabled: boolean) =>
+    api.post(`/contacts/${contactPhone}/bot-test`, { businessId, enabled }),
   getContactExtractedData: (businessId: string, contactPhone: string) =>
     api.get(`/tags/contact/${contactPhone}/extracted-data?business_id=${businessId}`),
   getContactReminderStatus: (businessId: string, contactPhone: string) =>

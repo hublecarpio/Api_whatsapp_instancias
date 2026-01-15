@@ -175,18 +175,24 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
   // Cancel any pending follow-up reminders when user sends a message
   await cancelPendingFollowUps(businessId, cleanPhone);
 
-  if (!business.botEnabled) {
-    console.log('Bot disabled for business:', businessId);
-    return true;
-  }
-
   const contact = await prisma.contact.findUnique({
     where: {
       businessId_phone: { businessId, phone: cleanPhone }
     }
   });
 
-  if (contact?.botDisabled) {
+  // Bot testing mode: Allow bot response for specific contacts even when globally disabled
+  if (!business.botEnabled) {
+    if (contact?.botTestEnabled) {
+      console.log('[BOT TEST MODE] Bot globally disabled but test mode enabled for contact:', cleanPhone);
+    } else {
+      console.log('Bot disabled for business:', businessId);
+      return true;
+    }
+  }
+
+  // Per-contact bot disable (only applies when bot is globally enabled)
+  if (business.botEnabled && contact?.botDisabled) {
     console.log('Bot disabled for contact:', cleanPhone, 'in business:', businessId);
     return true;
   }

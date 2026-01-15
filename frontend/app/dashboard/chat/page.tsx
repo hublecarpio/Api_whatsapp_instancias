@@ -122,6 +122,8 @@ export default function ChatPage() {
   const [dailyContacts, setDailyContacts] = useState<DailyContactStats | null>(null);
   const [contactBotDisabled, setContactBotDisabled] = useState<boolean>(false);
   const [contactBotToggling, setContactBotToggling] = useState(false);
+  const [contactBotTestEnabled, setContactBotTestEnabled] = useState<boolean>(false);
+  const [contactBotTestToggling, setContactBotTestToggling] = useState(false);
   const [contactRemindersPaused, setContactRemindersPaused] = useState<boolean>(false);
   const [contactReminderToggling, setContactReminderToggling] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -462,9 +464,11 @@ export default function ChatPage() {
     try {
       const response = await tagsApi.getContactBotStatus(currentBusiness.id, phone);
       setContactBotDisabled(response.data.botDisabled || false);
+      setContactBotTestEnabled(response.data.botTestEnabled || false);
     } catch (err) {
       console.error('Failed to fetch contact bot status:', err);
       setContactBotDisabled(false);
+      setContactBotTestEnabled(false);
     }
   };
 
@@ -526,6 +530,20 @@ export default function ChatPage() {
       console.error('Failed to toggle contact bot:', err);
     } finally {
       setContactBotToggling(false);
+    }
+  };
+
+  const handleToggleBotTestMode = async () => {
+    if (!currentBusiness || !selectedPhone) return;
+    setContactBotTestToggling(true);
+    try {
+      const newStatus = !contactBotTestEnabled;
+      await tagsApi.toggleContactBotTest(currentBusiness.id, selectedPhone, newStatus);
+      setContactBotTestEnabled(newStatus);
+    } catch (err) {
+      console.error('Failed to toggle bot test mode:', err);
+    } finally {
+      setContactBotTestToggling(false);
     }
   };
 
@@ -1256,8 +1274,8 @@ export default function ChatPage() {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <button 
                       onClick={handleToggleContactBot} 
-                      disabled={contactBotToggling} 
-                      title={contactBotDisabled ? 'Bot desactivado para este contacto' : 'Bot activo para este contacto'}
+                      disabled={contactBotToggling || !currentBusiness.botEnabled} 
+                      title={!currentBusiness.botEnabled ? 'Bot desactivado globalmente' : contactBotDisabled ? 'Bot desactivado para este contacto' : 'Bot activo para este contacto'}
                       className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
                         contactBotDisabled 
                           ? 'bg-accent-error/20 text-accent-error' 
@@ -1268,6 +1286,20 @@ export default function ChatPage() {
                     >
                       {contactBotDisabled ? '🚫 Bot off' : currentBusiness.botEnabled ? '🤖 Bot' : '😴 Global off'}
                     </button>
+                    {!currentBusiness.botEnabled && (
+                      <button 
+                        onClick={handleToggleBotTestMode} 
+                        disabled={contactBotTestToggling} 
+                        title={contactBotTestEnabled ? 'Modo testing activo - Bot responderá a este chat' : 'Activar modo testing para probar el bot'}
+                        className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                          contactBotTestEnabled 
+                            ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' 
+                            : 'bg-dark-hover text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400'
+                        }`}
+                      >
+                        {contactBotTestEnabled ? '🧪 Testing ON' : '🧪 Test'}
+                      </button>
+                    )}
                     <button 
                       onClick={handleToggleContactReminder} 
                       disabled={contactReminderToggling} 

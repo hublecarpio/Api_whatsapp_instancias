@@ -157,11 +157,20 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     throw new Error(`Business ${businessId} not found`);
   }
   
+  // Check if bot is globally disabled but contact has test mode enabled
   if (!business.botEnabled) {
-    if (bufferId) {
-      await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
+    const contact = await prisma.contact.findUnique({
+      where: { businessId_phone: { businessId, phone: contactPhone } }
+    });
+    
+    if (!contact?.botTestEnabled) {
+      console.log(`[AI Worker] Bot globally disabled for business ${businessId}, skipping`);
+      if (bufferId) {
+        await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
+      }
+      return { response: '' };
     }
-    return { response: '' };
+    console.log(`[AI Worker] Bot test mode enabled for contact ${contactPhone}, processing despite global disable`);
   }
   
   const tokenCheck = await checkUserTokenLimit(business.userId);
@@ -1617,8 +1626,17 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
     throw new Error(`Business ${businessId} not found`);
   }
   
+  // Check if bot is globally disabled but contact has test mode enabled
   if (!business.botEnabled) {
-    return { response: '' };
+    const contact = await prisma.contact.findUnique({
+      where: { businessId_phone: { businessId, phone: contactPhone } }
+    });
+    
+    if (!contact?.botTestEnabled) {
+      console.log(`[AI Direct] Bot globally disabled for business ${businessId}, skipping`);
+      return { response: '' };
+    }
+    console.log(`[AI Direct] Bot test mode enabled for contact ${contactPhone}, processing despite global disable`);
   }
   
   const tokenCheck = await checkUserTokenLimit(business.userId);
