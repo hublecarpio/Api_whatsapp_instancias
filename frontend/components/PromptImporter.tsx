@@ -11,7 +11,7 @@ interface PromptImporterProps {
 interface AnalysisResult {
   success: boolean;
   config: {
-    businessInfo: {
+    businessInfo?: {
       name?: string;
       description?: string;
       industry?: string;
@@ -22,30 +22,30 @@ interface AnalysisResult {
       workingHours?: string;
       paymentMethods?: string[];
     };
-    products: { title: string; description?: string; price: number; category?: string }[];
-    extractionFields: { key: string; label: string; description?: string }[];
-    funnelStages: { name: string; description?: string; order: number; requiredFields?: string[]; blockedTopics?: string[] }[];
-    objections: { trigger: string; response: string; category?: string }[];
-    deliveryZones: { name: string; price: number; estimatedTime?: string }[];
+    products?: { title: string; description?: string; price: number }[];
+    extractionFields?: { key: string; label: string; description?: string }[];
+    funnelStages?: { name: string; description?: string; order: number; requiredFieldKeys?: string[]; blockedTopics?: string[] }[];
+    objections?: { triggerPhrase: string; responseTemplate: string }[];
+    deliveryZones?: { name: string; cost: number; deliveryTime?: string; districts?: string[] }[];
     agentPrompt?: string;
     agentPersonality?: string;
   };
-  missing: string[];
-  warnings: string[];
-  conflicts: {
-    products: string[];
-    extractionFields: string[];
-    funnelStages: string[];
-    objections: string[];
-    deliveryZones: string[];
+  missing?: string[];
+  warnings?: string[];
+  conflicts?: {
+    products?: string[];
+    extractionFields?: string[];
+    funnelStages?: string[];
+    objections?: string[];
+    deliveryZones?: string[];
   };
   confidence: number;
-  existingCounts: {
-    products: number;
-    extractionFields: number;
-    funnelStages: number;
-    objections: number;
-    deliveryZones: number;
+  existingCounts?: {
+    products?: number;
+    extractionFields?: number;
+    funnelStages?: number;
+    objections?: number;
+    deliveryZones?: number;
   };
 }
 
@@ -198,20 +198,20 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-green-400 text-sm">
-                        {analysis.config.products.length} productos
+                        {(analysis.config?.products || []).length} productos
                       </span>
                       <span className="text-gray-500">|</span>
                       <span className="text-blue-400 text-sm">
-                        {analysis.config.extractionFields.length} campos
+                        {(analysis.config?.extractionFields || []).length} campos
                       </span>
                       <span className="text-gray-500">|</span>
                       <span className="text-purple-400 text-sm">
-                        {analysis.config.funnelStages.length} etapas
+                        {(analysis.config?.funnelStages || []).length} etapas
                       </span>
                     </div>
                   </div>
 
-                  {analysis.missing.length > 0 && (
+                  {(analysis.missing || []).length > 0 && (
                     <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
                       <h3 className="text-yellow-400 font-medium mb-2 flex items-center gap-2">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -220,41 +220,41 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                         Datos Faltantes
                       </h3>
                       <ul className="text-sm text-gray-300 space-y-1">
-                        {analysis.missing.map((item, i) => (
+                        {(analysis.missing || []).map((item, i) => (
                           <li key={i}>• {item}</li>
                         ))}
                       </ul>
                     </div>
                   )}
 
-                  {Object.values(analysis.conflicts).some(arr => arr.length > 0) && (
+                  {analysis.conflicts && Object.values(analysis.conflicts).some(arr => (arr || []).length > 0) && (
                     <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
                       <h3 className="text-orange-400 font-medium mb-2">Conflictos (se omitiran)</h3>
                       <div className="text-sm text-gray-300 space-y-1">
-                        {analysis.conflicts.products.length > 0 && (
-                          <p>Productos existentes: {analysis.conflicts.products.join(', ')}</p>
+                        {(analysis.conflicts.products || []).length > 0 && (
+                          <p>Productos existentes: {(analysis.conflicts.products || []).join(', ')}</p>
                         )}
-                        {analysis.conflicts.extractionFields.length > 0 && (
-                          <p>Campos existentes: {analysis.conflicts.extractionFields.join(', ')}</p>
+                        {(analysis.conflicts.extractionFields || []).length > 0 && (
+                          <p>Campos existentes: {(analysis.conflicts.extractionFields || []).join(', ')}</p>
                         )}
-                        {analysis.conflicts.funnelStages.length > 0 && (
-                          <p>Etapas existentes: {analysis.conflicts.funnelStages.join(', ')}</p>
+                        {(analysis.conflicts.funnelStages || []).length > 0 && (
+                          <p>Etapas existentes: {(analysis.conflicts.funnelStages || []).join(', ')}</p>
                         )}
                       </div>
                     </div>
                   )}
 
                   <div className="space-y-3">
-                    {analysis.config.products.length > 0 && (
+                    {(analysis.config?.products || []).length > 0 && (
                       <details className="bg-[#2a2a2a] rounded-lg overflow-hidden">
                         <summary className="px-4 py-3 cursor-pointer text-white font-medium flex items-center justify-between">
-                          <span>Productos ({analysis.config.products.length})</span>
+                          <span>Productos ({(analysis.config?.products || []).length})</span>
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </summary>
                         <div className="px-4 pb-4 space-y-2">
-                          {analysis.config.products.map((p, i) => (
+                          {(analysis.config?.products || []).map((p, i) => (
                             <div key={i} className="flex justify-between text-sm">
                               <span className="text-gray-300">{p.title}</span>
                               <span className="text-green-400">S/. {p.price}</span>
@@ -264,16 +264,16 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                       </details>
                     )}
 
-                    {analysis.config.extractionFields.length > 0 && (
+                    {(analysis.config?.extractionFields || []).length > 0 && (
                       <details className="bg-[#2a2a2a] rounded-lg overflow-hidden">
                         <summary className="px-4 py-3 cursor-pointer text-white font-medium flex items-center justify-between">
-                          <span>Campos de Extraccion ({analysis.config.extractionFields.length})</span>
+                          <span>Campos de Extraccion ({(analysis.config?.extractionFields || []).length})</span>
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </summary>
                         <div className="px-4 pb-4 space-y-2">
-                          {analysis.config.extractionFields.map((f, i) => (
+                          {(analysis.config?.extractionFields || []).map((f, i) => (
                             <div key={i} className="text-sm">
                               <span className="text-blue-400">{f.key}</span>
                               <span className="text-gray-500"> - </span>
@@ -284,16 +284,16 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                       </details>
                     )}
 
-                    {analysis.config.funnelStages.length > 0 && (
+                    {(analysis.config?.funnelStages || []).length > 0 && (
                       <details className="bg-[#2a2a2a] rounded-lg overflow-hidden">
                         <summary className="px-4 py-3 cursor-pointer text-white font-medium flex items-center justify-between">
-                          <span>Etapas del Funnel ({analysis.config.funnelStages.length})</span>
+                          <span>Etapas del Funnel ({(analysis.config?.funnelStages || []).length})</span>
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </summary>
                         <div className="px-4 pb-4 space-y-2">
-                          {analysis.config.funnelStages.map((s, i) => (
+                          {(analysis.config?.funnelStages || []).map((s, i) => (
                             <div key={i} className="text-sm">
                               <span className="text-purple-400">{s.order}. {s.name}</span>
                               {s.description && <p className="text-gray-500 text-xs ml-4">{s.description}</p>}
@@ -303,38 +303,38 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                       </details>
                     )}
 
-                    {analysis.config.deliveryZones.length > 0 && (
+                    {(analysis.config?.deliveryZones || []).length > 0 && (
                       <details className="bg-[#2a2a2a] rounded-lg overflow-hidden">
                         <summary className="px-4 py-3 cursor-pointer text-white font-medium flex items-center justify-between">
-                          <span>Zonas de Envio ({analysis.config.deliveryZones.length})</span>
+                          <span>Zonas de Envio ({(analysis.config?.deliveryZones || []).length})</span>
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </summary>
                         <div className="px-4 pb-4 space-y-2">
-                          {analysis.config.deliveryZones.map((z, i) => (
+                          {(analysis.config?.deliveryZones || []).map((z, i) => (
                             <div key={i} className="flex justify-between text-sm">
                               <span className="text-gray-300">{z.name}</span>
-                              <span className="text-yellow-400">S/. {z.price}</span>
+                              <span className="text-yellow-400">S/. {z.cost}</span>
                             </div>
                           ))}
                         </div>
                       </details>
                     )}
 
-                    {analysis.config.objections.length > 0 && (
+                    {(analysis.config?.objections || []).length > 0 && (
                       <details className="bg-[#2a2a2a] rounded-lg overflow-hidden">
                         <summary className="px-4 py-3 cursor-pointer text-white font-medium flex items-center justify-between">
-                          <span>Manejo de Objeciones ({analysis.config.objections.length})</span>
+                          <span>Manejo de Objeciones ({(analysis.config?.objections || []).length})</span>
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
                         </summary>
                         <div className="px-4 pb-4 space-y-2">
-                          {analysis.config.objections.map((o, i) => (
+                          {(analysis.config?.objections || []).map((o, i) => (
                             <div key={i} className="text-sm">
-                              <span className="text-red-400">"{o.trigger}"</span>
-                              <p className="text-gray-400 text-xs ml-4 mt-1">{o.response.substring(0, 100)}...</p>
+                              <span className="text-red-400">"{o.triggerPhrase}"</span>
+                              <p className="text-gray-400 text-xs ml-4 mt-1">{o.responseTemplate?.substring(0, 100)}...</p>
                             </div>
                           ))}
                         </div>
