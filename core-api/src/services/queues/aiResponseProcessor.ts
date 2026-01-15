@@ -14,6 +14,7 @@ import eventLogger from '../eventLogger.js';
 import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
 import { retrieveRelevantSections, formatSectionsForPrompt } from '../ragService.js';
 import { processDataExtraction, getExtractedDataForContact, getAppointmentFieldsData } from '../dataExtractionService.js';
+import { getContactStageStatus, buildStageContextForPrompt, checkAndAdvanceStage } from '../funnelStageService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -264,6 +265,9 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
         const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
         console.log(`[AI Worker] Extracting custom data for ${normalizedPhone}`);
         await processDataExtraction(businessId, normalizedPhone);
+        
+        // Check if contact can advance to next funnel stage after data extraction
+        await checkAndAdvanceStage(businessId, normalizedPhone);
       } catch (err: any) {
         console.error('[AI Worker] Data extraction failed:', err.message);
       }
@@ -534,6 +538,17 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   // Add lead stage context if available
   if (currentLeadStage) {
     systemPrompt += `\n\n## Etapa comercial actual del cliente: ${currentLeadStage}\nConsidera esta etapa al responder y guía la conversación hacia el siguiente paso del proceso comercial.`;
+  }
+  
+  // Add funnel stage context if configured
+  try {
+    const funnelStatus = await getContactStageStatus(business.id, normalizedPhone);
+    if (funnelStatus.currentStage) {
+      const funnelContext = buildStageContextForPrompt(funnelStatus);
+      systemPrompt += funnelContext;
+    }
+  } catch (funnelErr: any) {
+    console.error('[AI Worker] Failed to get funnel stage context:', funnelErr.message);
   }
   
   const recentMessages = await prisma.messageLog.findMany({
