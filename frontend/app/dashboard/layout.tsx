@@ -28,7 +28,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, loadFromStorage, setAuth, updateUser, logout } = useAuthStore();
+  const { user, loadFromStorage, setAuth, updateUser, logout, setContexts } = useAuthStore();
   const setBusinesses = useBusinessStore(state => state.setBusinesses);
   const setCurrentBusiness = useBusinessStore(state => state.setCurrentBusiness);
   const clearBusinesses = useBusinessStore(state => state.clearBusinesses);
@@ -84,7 +84,10 @@ export default function DashboardLayout({
           }
           
           if (userResponse.data) {
-            setAuth(userResponse.data, storedToken);
+            setAuth(userResponse.data, storedToken, userResponse.data.contexts || []);
+            if (userResponse.data.contexts?.length > 0) {
+              setContexts(userResponse.data.contexts);
+            }
             
             if (userResponse.data.role === 'ASESOR') {
               router.push('/asesor');
@@ -154,7 +157,10 @@ export default function DashboardLayout({
             }
             
             if (userResponse.data) {
-              setAuth(userResponse.data, storedToken);
+              setAuth(userResponse.data, storedToken, userResponse.data.contexts || []);
+              if (userResponse.data.contexts?.length > 0) {
+                setContexts(userResponse.data.contexts);
+              }
             }
           } catch (e) {
             console.error('Failed to reload data after access restored:', e);

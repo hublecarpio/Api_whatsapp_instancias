@@ -503,12 +503,14 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       };
     }
     
+    const contexts = await getUserContextsInternal(req.userId!);
+    
     res.json({
       ...user,
       subscriptionStatus: effectiveStatus.toLowerCase(),
       needsSubscription: effectiveStatus === 'PENDING' || effectiveStatus === 'CANCELED',
       isPro: user.isPro || hasActiveBonus,
-      paymentLinkEnabled: user.paymentLinkEnabled, // ONLY Super Admin controls this - no automatic activation
+      paymentLinkEnabled: user.paymentLinkEnabled,
       proBonusExpiresAt: user.proBonusExpiresAt,
       hasActiveBonus,
       hasStripeSubscription,
@@ -516,7 +518,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       demoPhase: user.demoPhase,
       demoInfo,
       role: user.role,
-      parentUserId: user.parentUserId
+      parentUserId: user.parentUserId,
+      contexts
     });
   } catch (error) {
     console.error('Get me error:', error);
