@@ -53,6 +53,7 @@ export default function InstanceSelector({
   const [metaAppId, setMetaAppId] = useState('');
   const [metaAppSecret, setMetaAppSecret] = useState('');
   const [metaPhoneNumber, setMetaPhoneNumber] = useState('');
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   
   const COUNTRY_CODES = [
     { code: '+51', country: 'Peru', flag: '🇵🇪' },
@@ -86,6 +87,27 @@ export default function InstanceSelector({
   const handleSelectInstance = (instance: WhatsAppInstance) => {
     setSelectedInstanceId(instance.id);
     onInstanceSelect?.(instance);
+  };
+
+  const handleReconnect = async (instance: WhatsAppInstance, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+      handleSelectInstance(instance);
+      return;
+    }
+    
+    setReconnectingId(instance.id);
+    try {
+      await waApi.instanceRestart(instance.id, businessId);
+      await fetchInstances();
+      handleSelectInstance(instance);
+    } catch (error) {
+      console.error('Error reconnecting:', error);
+      handleSelectInstance(instance);
+    } finally {
+      setReconnectingId(null);
+    }
   };
 
   const handleAddInstance = async () => {
@@ -325,17 +347,19 @@ export default function InstanceSelector({
                   </div>
                   {instance.status !== 'open' && instance.status !== 'connected' && instance.status !== 'pending_qr' && instance.status !== 'pending_credentials' && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectInstance(instance);
-                      }}
-                      className="px-3 py-1.5 text-xs bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 rounded-lg transition-all flex items-center gap-1"
+                      onClick={(e) => handleReconnect(instance, e)}
+                      disabled={reconnectingId === instance.id}
+                      className="px-3 py-1.5 text-xs bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 rounded-lg transition-all flex items-center gap-1 disabled:opacity-50"
                       title="Reconectar"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Reconectar
+                      {reconnectingId === instance.id ? (
+                        <div className="w-3.5 h-3.5 border-2 border-neon-blue/30 border-t-neon-blue rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      )}
+                      {reconnectingId === instance.id ? 'Reconectando...' : 'Reconectar'}
                     </button>
                   )}
                   <button
