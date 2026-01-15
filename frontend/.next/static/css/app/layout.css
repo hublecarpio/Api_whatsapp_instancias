@@ -4150,6 +4150,11 @@ html[data-mobile="true"] .glass-sidebar {
   background-color: rgb(22 101 52 / var(--tw-bg-opacity, 1));
 }
 
+.disabled\:bg-purple-800:disabled {
+  --tw-bg-opacity: 1;
+  background-color: rgb(107 33 168 / var(--tw-bg-opacity, 1));
+}
+
 .disabled\:opacity-30:disabled {
   opacity: 0.3;
 }

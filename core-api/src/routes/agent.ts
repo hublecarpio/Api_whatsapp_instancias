@@ -3431,26 +3431,26 @@ router.post('/analyze-prompt', authMiddleware, async (req: AuthRequest, res: Res
       prisma.product.findMany({ where: { businessId: business_id }, select: { title: true } }),
       prisma.extractionField.findMany({ where: { businessId: business_id }, select: { fieldKey: true } }),
       prisma.funnelStage.findMany({ where: { businessId: business_id }, select: { name: true } }),
-      prisma.objectionResponse.findMany({ where: { businessId: business_id }, select: { triggerPhrase: true } }),
+      prisma.salesObjection.findMany({ where: { businessId: business_id }, select: { name: true } }),
       prisma.deliveryZone.findMany({ where: { businessId: business_id }, select: { name: true } })
     ]);
     
     const conflicts = {
-      products: result.config.products.filter(p => 
-        existingProducts.some(ep => ep.title.toLowerCase() === p.title.toLowerCase())
-      ).map(p => p.title),
-      extractionFields: result.config.extractionFields.filter(f =>
-        existingFields.some(ef => ef.fieldKey === f.key)
-      ).map(f => f.key),
-      funnelStages: result.config.funnelStages.filter(s =>
-        existingStages.some(es => es.name.toLowerCase() === s.name.toLowerCase())
-      ).map(s => s.name),
-      objections: result.config.objections.filter(o =>
-        existingObjections.some(eo => eo.triggerPhrase.toLowerCase() === o.trigger.toLowerCase())
-      ).map(o => o.trigger),
-      deliveryZones: result.config.deliveryZones.filter(z =>
-        existingZones.some(ez => ez.name.toLowerCase() === z.name.toLowerCase())
-      ).map(z => z.name)
+      products: result.config.products.filter((p: { title: string }) => 
+        existingProducts.some((ep: { title: string }) => ep.title.toLowerCase() === p.title.toLowerCase())
+      ).map((p: { title: string }) => p.title),
+      extractionFields: result.config.extractionFields.filter((f: { key: string }) =>
+        existingFields.some((ef: { fieldKey: string }) => ef.fieldKey === f.key)
+      ).map((f: { key: string }) => f.key),
+      funnelStages: result.config.funnelStages.filter((s: { name: string }) =>
+        existingStages.some((es: { name: string }) => es.name.toLowerCase() === s.name.toLowerCase())
+      ).map((s: { name: string }) => s.name),
+      objections: result.config.objections.filter((o: { trigger: string }) =>
+        existingObjections.some((eo: { name: string }) => eo.name.toLowerCase() === o.trigger.toLowerCase())
+      ).map((o: { trigger: string }) => o.trigger),
+      deliveryZones: result.config.deliveryZones.filter((z: { name: string }) =>
+        existingZones.some((ez: { name: string }) => ez.name.toLowerCase() === z.name.toLowerCase())
+      ).map((z: { name: string }) => z.name)
     };
     
     res.json({
@@ -3506,7 +3506,7 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
       const existingTitles = (await prisma.product.findMany({
         where: { businessId: business_id },
         select: { title: true }
-      })).map(p => p.title.toLowerCase());
+      })).map((p: { title: string }) => p.title.toLowerCase());
       
       for (const product of config.products) {
         try {
@@ -3519,9 +3519,7 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
               businessId: business_id,
               title: product.title,
               description: product.description || null,
-              price: product.price || 0,
-              category: product.category || null,
-              isActive: true
+              price: product.price || 0
             }
           });
           results.products.created++;
@@ -3605,24 +3603,25 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
       }
     }
     
-    // Import Objections
+    // Import Objections (using SalesObjection model)
     if (config.objections?.length > 0) {
-      const existingTriggers = (await prisma.objectionResponse.findMany({
+      const existingNames = (await prisma.salesObjection.findMany({
         where: { businessId: business_id },
-        select: { triggerPhrase: true }
-      })).map(o => o.triggerPhrase.toLowerCase());
+        select: { name: true }
+      })).map((o: { name: string }) => o.name.toLowerCase());
       
       for (const objection of config.objections) {
         try {
-          if (skipConflicts && existingTriggers.includes(objection.trigger.toLowerCase())) {
+          if (skipConflicts && existingNames.includes(objection.trigger.toLowerCase())) {
             results.objections.skipped++;
             continue;
           }
-          await prisma.objectionResponse.create({
+          await prisma.salesObjection.create({
             data: {
               businessId: business_id,
-              triggerPhrase: objection.trigger,
-              responseTemplate: objection.response,
+              name: objection.trigger,
+              triggerPhrases: [objection.trigger],
+              responseScript: objection.response,
               category: objection.category || 'general',
               priority: 50,
               isActive: true
@@ -3640,7 +3639,7 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
       const existingNames = (await prisma.deliveryZone.findMany({
         where: { businessId: business_id },
         select: { name: true }
-      })).map(z => z.name.toLowerCase());
+      })).map((z: { name: string }) => z.name.toLowerCase());
       
       for (const zone of config.deliveryZones) {
         try {
@@ -3652,8 +3651,8 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
             data: {
               businessId: business_id,
               name: zone.name,
-              price: zone.price || 0,
-              estimatedTime: zone.estimatedTime || null,
+              cost: zone.price || 0,
+              deliveryTime: zone.estimatedTime || null,
               isActive: true
             }
           });
@@ -3670,8 +3669,7 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
         const updateData: any = {};
         if (config.businessInfo.name) updateData.name = config.businessInfo.name;
         if (config.businessInfo.description) updateData.description = config.businessInfo.description;
-        if (config.businessInfo.country) updateData.country = config.businessInfo.country;
-        if (config.businessInfo.city) updateData.city = config.businessInfo.city;
+        if (config.businessInfo.industry) updateData.industry = config.businessInfo.industry;
         if (config.businessInfo.currency) updateData.currencyCode = config.businessInfo.currency;
         if (config.businessInfo.timezone) updateData.timezone = config.businessInfo.timezone;
         
@@ -3687,13 +3685,26 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
       }
     }
     
-    // Update Agent Prompt if provided
+    // Update Agent Prompt if provided (using AgentPrompt table)
     if (config.agentPrompt) {
       try {
-        await prisma.business.update({
-          where: { id: business_id },
-          data: { prompt: config.agentPrompt }
+        const existingPrompt = await prisma.agentPrompt.findFirst({
+          where: { businessId: business_id, instanceId: null }
         });
+        
+        if (existingPrompt) {
+          await prisma.agentPrompt.update({
+            where: { id: existingPrompt.id },
+            data: { prompt: config.agentPrompt }
+          });
+        } else {
+          await prisma.agentPrompt.create({
+            data: {
+              businessId: business_id,
+              prompt: config.agentPrompt
+            }
+          });
+        }
         results.agentPrompt.created = 1;
       } catch (err: any) {
         results.agentPrompt.errors.push(err.message);

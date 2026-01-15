@@ -10,6 +10,7 @@ import FunnelStages from '@/components/FunnelStages';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel } from '@/components/AgentV2';
 import AgentHealthDashboard from '@/components/AgentHealthDashboard';
+import PromptImporter from '@/components/PromptImporter';
 
 interface ToolParameter {
   name: string;
@@ -1217,6 +1218,16 @@ export default function PromptPage() {
           <span className="text-sm text-gray-300">Bot {botEnabled ? 'activo' : 'inactivo'}</span>
         </div>
         <div className="flex items-center gap-3">
+          {currentBusiness?.id && (
+            <PromptImporter 
+              businessId={currentBusiness.id} 
+              onImportComplete={() => {
+                loadPromptData();
+                setSuccess('Configuracion importada exitosamente');
+                setTimeout(() => setSuccess(null), 3000);
+              }}
+            />
+          )}
           <button
             onClick={handleToggleBot}
             disabled={loading}

@@ -620,3 +620,10 @@ export const funnelStagesApi = {
   getExtractionFields: (businessId: string) =>
     api.get(`/agent/extraction-fields/${businessId}`)
 };
+
+export const promptImporterApi = {
+  analyze: (businessId: string, rawPrompt: string) =>
+    api.post('/agent/analyze-prompt', { business_id: businessId, rawPrompt }),
+  import: (businessId: string, config: any, options?: { skipConflicts?: boolean }) =>
+    api.post('/agent/import-config', { business_id: businessId, config, options })
+};
