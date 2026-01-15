@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { useInstanceStore } from '@/store/instance';
-import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi, waApi, deliveryZonesApi } from '@/lib/api';
+import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi, waApi, deliveryZonesApi, funnelStagesApi } from '@/lib/api';
 import DeliveryZones from '@/components/DeliveryZones';
+import FunnelStages from '@/components/FunnelStages';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { SkillsV2Panel, LeadMemoryPanel, RulesLearnedPanel } from '@/components/AgentV2';
 import AgentHealthDashboard from '@/components/AgentHealthDashboard';
@@ -164,7 +165,7 @@ export default function PromptPage() {
   const [testVariables, setTestVariables] = useState<Record<string, string>>({});
   const [testLoading, setTestLoading] = useState(false);
   const [testResponse, setTestResponse] = useState<{ status?: number; data?: any; error?: string; duration?: number; debug?: { interpolatedUrl?: string; method?: string; variables?: Record<string, string>; requestBody?: any } } | null>(null);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools' | 'files' | 'api' | 'shipping'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools' | 'files' | 'api' | 'shipping' | 'funnel'>('prompt');
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedToolForLogs, setSelectedToolForLogs] = useState<Tool | null>(null);
   const [toolLogs, setToolLogs] = useState<ToolLog[]>([]);
@@ -181,7 +182,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'tools' | 'files' | 'config' | 'api' | 'shipping'>('prompt');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'tools' | 'files' | 'config' | 'api' | 'shipping' | 'funnel'>('prompt');
   
   const [promptSections, setPromptSections] = useState<PromptSection[]>([]);
   const [loadingSections, setLoadingSections] = useState(false);
@@ -1266,6 +1267,14 @@ export default function PromptPage() {
               Envíos
             </button>
           )}
+          <button
+            onClick={() => setActiveTab('funnel')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'funnel' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Flujo de Venta
+          </button>
           {((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro') && (
             <>
               <button
@@ -1344,6 +1353,14 @@ export default function PromptPage() {
               Envíos
             </button>
           )}
+          <button
+            onClick={() => setActiveV2Tab('funnel')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeV2Tab === 'funnel' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Flujo de Venta
+          </button>
           <button
             onClick={() => {
               setActiveV2Tab('config');
@@ -2259,6 +2276,12 @@ export default function PromptPage() {
         </div>
       )}
 
+      {agentVersion === 'v1' && activeTab === 'funnel' && currentBusiness && (
+        <div className="card">
+          <FunnelStages businessId={currentBusiness.id} />
+        </div>
+      )}
+
       {agentVersion === 'v1' && activeTab === 'api' && (
         <div className="space-y-6">
           <div className="card">
@@ -2556,6 +2579,12 @@ export default function PromptPage() {
             businessId={currentBusiness.id} 
             currencySymbol={(currentBusiness as any).currencySymbol || 'S/.'} 
           />
+        </div>
+      )}
+
+      {agentVersion === 'v2' && activeV2Tab === 'funnel' && currentBusiness && (
+        <div className="card">
+          <FunnelStages businessId={currentBusiness.id} />
         </div>
       )}
 
