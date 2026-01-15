@@ -156,7 +156,8 @@ export default function ProductsPage() {
 "Gorra Bordada Logo","Gorra ajustable con logo bordado",24.99,200,https://ejemplo.com/gorra.jpg
 "Pack 3 Calcetines","Set de 3 pares calcetines deportivos",19.99,150,`;
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = 'productos_ejemplo.csv';
@@ -171,7 +172,14 @@ export default function ProductsPage() {
     setError('');
     
     try {
-      const text = await file.text();
+      const arrayBuffer = await file.arrayBuffer();
+      const decoder = new TextDecoder('utf-8');
+      let text = decoder.decode(arrayBuffer);
+      
+      if (text.charCodeAt(0) === 0xFEFF) {
+        text = text.slice(1);
+      }
+      
       const lines = text.split('\n').filter(line => line.trim());
       
       if (lines.length < 2) {
