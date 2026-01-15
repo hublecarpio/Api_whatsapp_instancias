@@ -2449,13 +2449,11 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     const { businessId } = req.params;
     const { contactPhone, instanceId } = req.query;
     
-    // Build product filter - only show products for selected instance (or shared products)
+    // Build product filter - only show products for selected instance
+    // If instance is specified, show ONLY that instance's products (not shared ones)
     const productWhere: any = { businessId };
     if (instanceId && String(instanceId).trim() !== '') {
-      productWhere.OR = [
-        { instanceId: instanceId as string },
-        { instanceId: null }
-      ];
+      productWhere.instanceId = instanceId as string;
     }
     
     const [business, promptSections, leadStages, extractionFields, reminders, products] = await Promise.all([
