@@ -437,6 +437,7 @@ model WhatsAppInstance {
   tags             Tag[]
   products         Product[]                 @relation("ProductInstance")
   orders           Order[]                   @relation("OrderInstance")
+  funnelStages     FunnelStage[]
 
   @@unique([businessId, instanceNumber])
   @@index([businessId])
@@ -689,6 +690,7 @@ model SalesObjection {
 model FunnelStage {
   id                String   @id @default(uuid())
   businessId        String
+  instanceId        String?
   name              String
   order             Int      @default(0)
   description       String?
@@ -701,12 +703,14 @@ model FunnelStage {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @default(now()) @updatedAt
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   contacts ContactFunnelState[]
 
-  @@unique([businessId, name])
+  @@unique([businessId, name, instanceId])
   @@index([businessId, order])
   @@index([businessId, isActive])
+  @@index([instanceId])
 }
 
 model ContactFunnelState {

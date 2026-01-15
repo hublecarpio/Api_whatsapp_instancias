@@ -3371,6 +3371,7 @@ router.put('/delivery-zones/:businessId/reorder', authMiddleware, async (req: Au
 router.get('/funnel-stages/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
+    const { instance_id } = req.query;
     
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -3380,8 +3381,13 @@ router.get('/funnel-stages/:businessId', authMiddleware, async (req: AuthRequest
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    const whereClause: any = { businessId };
+    if (instance_id && String(instance_id).trim() !== '') {
+      whereClause.instanceId = instance_id as string;
+    }
+    
     const stages = await prisma.funnelStage.findMany({
-      where: { businessId },
+      where: whereClause,
       orderBy: { order: 'asc' }
     });
     
@@ -3395,7 +3401,7 @@ router.get('/funnel-stages/:businessId', authMiddleware, async (req: AuthRequest
 router.post('/funnel-stages/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { name, description, promptContext, requiredFieldKeys, blockedTopics, toolsAllowed } = req.body;
+    const { name, description, promptContext, requiredFieldKeys, blockedTopics, toolsAllowed, instanceId } = req.body;
     
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -3409,14 +3415,20 @@ router.post('/funnel-stages/:businessId', authMiddleware, async (req: AuthReques
       return res.status(400).json({ error: 'Name is required' });
     }
     
+    const whereClause: any = { businessId };
+    if (instanceId) {
+      whereClause.instanceId = instanceId;
+    }
+    
     const maxOrder = await prisma.funnelStage.aggregate({
-      where: { businessId },
+      where: whereClause,
       _max: { order: true }
     });
     
     const stage = await prisma.funnelStage.create({
       data: {
         businessId,
+        instanceId: instanceId || null,
         name: name.trim(),
         description: description || null,
         promptContext: promptContext || null,
