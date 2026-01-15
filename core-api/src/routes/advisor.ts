@@ -258,6 +258,95 @@ router.get('/team/:businessId', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Sync all advisors - create UserBusinessRole for any advisors missing it
+router.post('/sync/:businessId', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const advisorUserIds = new Set<string>();
+    
+    // Get legacy advisors (parentUserId system)
+    const legacyAdvisors = await prisma.user.findMany({
+      where: {
+        parentUserId: req.userId,
+        role: 'ASESOR'
+      },
+      select: { id: true }
+    });
+    
+    for (const adv of legacyAdvisors) {
+      advisorUserIds.add(adv.id);
+    }
+    
+    // Get users with contact assignments in this business (except business owner)
+    const assignedUsers = await prisma.contactAssignment.findMany({
+      where: { 
+        businessId,
+        userId: { not: req.userId }
+      },
+      select: { userId: true },
+      distinct: ['userId']
+    });
+    
+    for (const assignment of assignedUsers) {
+      advisorUserIds.add(assignment.userId);
+    }
+    
+    let synced = 0;
+    let skipped = 0;
+    
+    for (const advisorId of advisorUserIds) {
+      const existing = await prisma.userBusinessRole.findUnique({
+        where: { userId_businessId: { userId: advisorId, businessId } }
+      });
+      
+      if (!existing) {
+        const user = await prisma.user.findUnique({
+          where: { id: advisorId },
+          select: { email: true }
+        });
+        
+        await prisma.userBusinessRole.create({
+          data: {
+            userId: advisorId,
+            businessId,
+            role: 'ADVISOR',
+            isActive: true
+          }
+        });
+        console.log(`[SYNC] Created UserBusinessRole for ${user?.email} in business ${businessId}`);
+        synced++;
+      } else if (!existing.isActive) {
+        await prisma.userBusinessRole.update({
+          where: { id: existing.id },
+          data: { isActive: true }
+        });
+        synced++;
+      } else {
+        skipped++;
+      }
+    }
+    
+    res.json({ 
+      message: `Sync completed: ${synced} advisors synced, ${skipped} already synced`,
+      synced,
+      skipped,
+      totalAdvisors: advisorUserIds.size
+    });
+  } catch (error: any) {
+    console.error('Sync advisors error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.delete('/team/:advisorId', async (req: AuthRequest, res: Response) => {
   try {
     const { advisorId } = req.params;
@@ -328,7 +417,7 @@ router.post('/assign', async (req: AuthRequest, res: Response) => {
     }
     
     // Check new UserBusinessRole system first
-    const roleBasedAdvisor = await prisma.userBusinessRole.findFirst({
+    let roleBasedAdvisor = await prisma.userBusinessRole.findFirst({
       where: {
         userId: advisorId,
         businessId,
@@ -348,6 +437,26 @@ router.post('/assign', async (req: AuthRequest, res: Response) => {
     
     if (!roleBasedAdvisor && !legacyAdvisor) {
       return res.status(404).json({ error: 'Advisor not found' });
+    }
+    
+    // Auto-create UserBusinessRole for legacy advisors if missing
+    if (legacyAdvisor && !roleBasedAdvisor) {
+      try {
+        roleBasedAdvisor = await prisma.userBusinessRole.create({
+          data: {
+            userId: advisorId,
+            businessId,
+            role: 'ADVISOR',
+            isActive: true
+          }
+        });
+        console.log(`[ASSIGN] Auto-created UserBusinessRole for legacy advisor ${advisorId} in business ${businessId}`);
+      } catch (autoCreateErr: any) {
+        // Ignore if already exists (race condition)
+        if (!autoCreateErr.message?.includes('Unique constraint')) {
+          console.error(`[ASSIGN] Failed to auto-create UserBusinessRole:`, autoCreateErr);
+        }
+      }
     }
     
     await prisma.contactAssignment.upsert({
