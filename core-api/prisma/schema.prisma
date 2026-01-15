@@ -357,6 +357,7 @@ model Business {
   salesObjections   SalesObjection[]
   funnelStages      FunnelStage[]
   userRoles         UserBusinessRole[]
+  deliveryZones     DeliveryZone[]
 }
 
 model GoogleCalendarCredential {
@@ -372,6 +373,27 @@ model GoogleCalendarCredential {
   updatedAt       DateTime @updatedAt
 
   business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model DeliveryZone {
+  id           String   @id @default(uuid())
+  businessId   String
+  name         String
+  districts    String[]
+  address      String?
+  cost         Float
+  freeAbove    Float?
+  deliveryTime String?
+  policy       String?
+  isActive     Boolean  @default(true)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, isActive])
+  @@index([businessId, order])
 }
 
 enum WhatsAppProvider {
