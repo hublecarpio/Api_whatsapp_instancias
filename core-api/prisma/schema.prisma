@@ -145,6 +145,7 @@ model Contact {
   messageCount    Int       @default(1)
   isArchived      Boolean   @default(false)
   botDisabled     Boolean   @default(false)
+  botTestEnabled  Boolean   @default(false)
   remindersPaused Boolean   @default(false)
   platformUserId  String?
   metadata        Json?
@@ -891,16 +892,17 @@ model TokenUsage {
 }
 
 model ContactSettings {
-  id           String    @id @default(uuid())
-  businessId   String
-  instanceId   String?
-  contactPhone String
-  contactName  String?
-  botDisabled  Boolean   @default(false)
-  notes        String?
-  archivedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  businessId     String
+  instanceId     String?
+  contactPhone   String
+  contactName    String?
+  botDisabled    Boolean   @default(false)
+  botTestEnabled Boolean   @default(false)
+  notes          String?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([businessId, contactPhone, instanceId])
   @@index([businessId, botDisabled])
