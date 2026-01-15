@@ -2466,7 +2466,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
               files: { select: { id: true, name: true, fileUrl: true } }
             } 
           },
-          instances: { select: { id: true, status: true, provider: true, phoneNumber: true } },
+          instances: { select: { id: true, status: true, provider: true, phoneNumber: true, businessObjective: true } },
           availability: { select: { dayOfWeek: true, isBlocked: true, startTime: true, endTime: true } },
           policy: true,
           user: { select: { paymentLinkEnabled: true, subscriptionTier: true, subscriptionStatus: true } }
@@ -2504,7 +2504,15 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const objective = business.businessObjective || 'SALES';
+    // Use instance objective if available, otherwise fall back to business objective
+    let objective = business.businessObjective || 'SALES';
+    let selectedInstance = null;
+    if (instanceId && String(instanceId).trim() !== '') {
+      selectedInstance = business.instances?.find((i: any) => i.id === instanceId);
+      if (selectedInstance?.businessObjective) {
+        objective = selectedInstance.businessObjective;
+      }
+    }
     const isSalesMode = objective !== 'APPOINTMENTS';
     const isAppointmentMode = objective === 'APPOINTMENTS';
     const productCount = products.length;
