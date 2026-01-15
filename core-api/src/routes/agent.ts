@@ -69,9 +69,11 @@ async function processWithAgentQueuedWithIds(
   providerMessageIds?: string[],
   provider?: string
 ): Promise<{ response: string; tokensUsed?: number; queued?: boolean }> {
+  console.log(`[Agent Processor] Starting processWithAgentQueuedWithIds for ${contactPhone} with ${messages.length} messages`);
   const queue = getAIResponseQueue();
   
   if (USE_AI_QUEUE && queue) {
+    console.log(`[Agent Processor] Attempting to queue message for ${contactPhone}`);
     const jobId = await queueAIResponse({
       businessId,
       contactPhone,
@@ -92,8 +94,16 @@ async function processWithAgentQueuedWithIds(
   }
   
   // Fallback - use first message ID for single processing
+  console.log(`[Agent Processor] Falling back to direct processing for ${contactPhone}`);
   const firstMessageId = providerMessageIds?.[0];
-  return await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId, firstMessageId, provider);
+  try {
+    const result = await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId, firstMessageId, provider);
+    console.log(`[Agent Processor] processWithAgent completed for ${contactPhone}: response length=${result.response?.length || 0}`);
+    return result;
+  } catch (error: any) {
+    console.error(`[Agent Processor] Error in processWithAgent for ${contactPhone}:`, error.message);
+    throw error;
+  }
 }
 
 interface InternalRequest extends Request {
@@ -119,8 +129,29 @@ async function internalOrAuthMiddleware(req: InternalRequest, res: Response, nex
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // Check if bot is disabled globally - but allow if contact has testing mode enabled
     if (!business.botEnabled) {
-      return res.json({ action: 'manual', message: 'Bot is disabled', botEnabled: false });
+      const { phone, phoneNumber } = req.body;
+      const contactPhone = (phoneNumber || phone || '').replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
+      
+      if (contactPhone) {
+        const contact = await prisma.contact.findFirst({
+          where: {
+            businessId: business_id,
+            phone: contactPhone
+          },
+          select: { botTestEnabled: true }
+        });
+        
+        if (contact?.botTestEnabled) {
+          console.log(`[Agent Middleware] Bot disabled globally but Testing ON for contact ${contactPhone}, allowing...`);
+        } else {
+          console.log(`[Agent Middleware] Bot disabled globally, no testing mode for contact ${contactPhone}`);
+          return res.json({ action: 'manual', message: 'Bot is disabled', botEnabled: false });
+        }
+      } else {
+        return res.json({ action: 'manual', message: 'Bot is disabled', botEnabled: false });
+      }
     }
     
     const subscriptionStatus = business.user.subscriptionStatus;
@@ -148,6 +179,11 @@ async function processExpiredBuffersLegacy() {
     const now = new Date();
     const lockUntil = new Date(Date.now() + 7200000);
     
+    const allBuffers = await prisma.messageBuffer.findMany();
+    if (allBuffers.length > 0) {
+      console.log(`[BUFFER-WORKER] Found ${allBuffers.length} total buffers, checking for expired...`);
+    }
+    
     const expiredBuffers = await prisma.messageBuffer.findMany({
       where: {
         expiresAt: { lte: now },
@@ -157,6 +193,10 @@ async function processExpiredBuffersLegacy() {
         ]
       }
     });
+    
+    if (expiredBuffers.length > 0) {
+      console.log(`[BUFFER-WORKER] Found ${expiredBuffers.length} expired buffers to process`);
+    }
     
     for (const buffer of expiredBuffers) {
       const bufferKey = `${buffer.businessId}:${buffer.contactPhone}`;
@@ -192,9 +232,27 @@ async function processExpiredBuffersLegacy() {
           where: { id: buffer.businessId }
         });
         
-        if (!business || !business.botEnabled) {
+        if (!business) {
           await prisma.messageBuffer.delete({ where: { id: buffer.id } });
           continue;
+        }
+        
+        // Check if bot is disabled globally - but allow if contact has testing mode enabled
+        if (!business.botEnabled) {
+          const contact = await prisma.contact.findFirst({
+            where: {
+              businessId: buffer.businessId,
+              phone: buffer.contactPhone
+            },
+            select: { botTestEnabled: true }
+          });
+          
+          if (!contact?.botTestEnabled) {
+            console.log(`[BUFFER-WORKER] Bot disabled and no testing mode for ${buffer.contactPhone}, deleting buffer`);
+            await prisma.messageBuffer.delete({ where: { id: buffer.id } });
+            continue;
+          }
+          console.log(`[BUFFER-WORKER] Bot disabled but Testing ON for ${buffer.contactPhone}, processing...`);
         }
         
         let instance = null;
@@ -930,8 +988,22 @@ async function processWithAgent(
     throw new Error('Business not found');
   }
   
+  // Check if bot is enabled globally OR if contact has test mode enabled
   if (!business.botEnabled) {
-    return { response: '' };
+    // Look up the contact to check if test mode is enabled
+    const contact = await prisma.contact.findFirst({
+      where: {
+        businessId,
+        phone: contactPhone.replace(/@.*/, '').replace(/[^0-9]/g, '')
+      },
+      select: { botTestEnabled: true }
+    });
+    
+    if (!contact?.botTestEnabled) {
+      console.log(`[Agent] Bot disabled and contact ${contactPhone} has no test mode, returning empty`);
+      return { response: '' };
+    }
+    console.log(`[Agent] Bot disabled globally but Testing ON for contact ${contactPhone}, generating response...`);
   }
   
   if (business.agentVersion === 'v2') {
@@ -2106,6 +2178,7 @@ async function processWithAgent(
 }
 
 router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Response) => {
+  console.log(`[Agent Think] Endpoint called - business_id: ${req.body.business_id}, phone: ${req.body.phone}`);
   try {
     const { business_id, user_message, phone, phoneNumber, contactName, instanceId, instanceBackendId, providerMessageId, provider } = req.body;
     
@@ -2182,6 +2255,9 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
         ? [...existingMessageIds, providerMessageId]
         : existingMessageIds;
       
+      const expiresAt = new Date(Date.now() + bufferSeconds * 1000);
+      console.log(`[Agent Think] Creating/updating buffer for ${contactPhone} with ${currentMessages.length} messages, expires at ${expiresAt.toISOString()}`);
+      
       await prisma.messageBuffer.upsert({
         where: { businessId_contactPhone: { businessId: business_id, contactPhone } },
         create: {
@@ -2195,7 +2271,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
             contactName: contactName || '',
             provider: provider || undefined
           },
-          expiresAt: new Date(Date.now() + bufferSeconds * 1000)
+          expiresAt
         },
         update: {
           messages: { 
@@ -2206,15 +2282,18 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
             provider: provider || undefined
           },
           instanceId: instanceId || undefined,
-          expiresAt: new Date(Date.now() + bufferSeconds * 1000)
+          expiresAt
         }
       });
+      
+      console.log(`[Agent Think] Buffer created/updated successfully for ${contactPhone}`);
       
       // Capture all providerMessageIds and provider for this buffer
       const capturedProviderMessageIds = currentProviderMessageIds;
       const capturedProvider = provider;
       
       const timeout = setTimeout(async () => {
+        console.log(`[Agent Buffer] Processing buffer for ${contactPhone} after ${bufferSeconds}s delay`);
         try {
           const buffer = await prisma.messageBuffer.findUnique({
             where: { businessId_contactPhone: { businessId: business_id, contactPhone } }
@@ -2225,12 +2304,15 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
             const messages = bufferData?.texts || (Array.isArray(bufferData) ? bufferData : []);
             const messageIds = bufferData?.providerMessageIds || [];
             
+            console.log(`[Agent Buffer] Found ${messages.length} messages to process for ${contactPhone}`);
+            
             await prisma.messageBuffer.delete({
               where: { id: buffer.id }
             });
             
             activeBuffers.delete(bufferKey);
             
+            console.log(`[Agent Buffer] Calling processWithAgentQueuedWithIds for ${contactPhone}`);
             await processWithAgentQueuedWithIds(
               business_id,
               messages,
