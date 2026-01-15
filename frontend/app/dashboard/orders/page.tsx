@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
-import { ordersApi, waApi } from '@/lib/api';
+import { ordersApi, waApi, tagsApi } from '@/lib/api';
 import ExtractionFieldsManager from '@/components/ExtractionFieldsManager';
 import CustomSelect from '@/components/ui/CustomSelect';
 
@@ -100,7 +101,16 @@ const LINK_STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-500/20 text-red-400 border-red-500/30'
 };
 
+interface ExtractedDataItem {
+  fieldKey: string;
+  fieldLabel: string;
+  value: string;
+  confidence: number;
+  source: string;
+}
+
 export default function OrdersPage() {
+  const router = useRouter();
   const { currentBusiness } = useBusinessStore();
   const { instances, setInstances, selectedInstanceId, setSelectedInstanceId } = useInstanceStore();
   const { user } = useAuthStore();
@@ -119,6 +129,8 @@ export default function OrdersPage() {
   const [confirmingPayment, setConfirmingPayment] = useState<string | null>(null);
   const [voucherModalUrl, setVoucherModalUrl] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [extractedDataCache, setExtractedDataCache] = useState<Record<string, ExtractedDataItem[]>>({});
+  const [loadingExtractedData, setLoadingExtractedData] = useState<string | null>(null);
 
   const filteredOrders = orders.filter(order => {
     if (!searchQuery) return true;
@@ -232,8 +244,29 @@ export default function OrdersPage() {
     }
   };
 
-  const toggleOrderExpand = (orderId: string) => {
+  const toggleOrderExpand = async (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (expandedOrderId !== orderId && order && currentBusiness?.id) {
+      if (!extractedDataCache[order.contactPhone]) {
+        setLoadingExtractedData(orderId);
+        try {
+          const res = await tagsApi.getContactExtractedData(currentBusiness.id, order.contactPhone);
+          setExtractedDataCache(prev => ({
+            ...prev,
+            [order.contactPhone]: res.data?.fields || []
+          }));
+        } catch (err) {
+          console.error('Failed to load extracted data:', err);
+        } finally {
+          setLoadingExtractedData(null);
+        }
+      }
+    }
     setExpandedOrderId(prev => prev === orderId ? null : orderId);
+  };
+
+  const openConversation = (contactPhone: string) => {
+    router.push(`/dashboard/chat?phone=${encodeURIComponent(contactPhone)}`);
   };
 
   const toggleLinkExpand = (linkId: string) => {
@@ -536,8 +569,40 @@ export default function OrdersPage() {
                           <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-1">Cliente</p>
                           <p className="text-white text-sm">{order.contactName || 'Sin nombre'}</p>
                           <p className="text-gray-400 text-xs sm:text-sm">{formatPhone(order.contactPhone)}</p>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openConversation(order.contactPhone);
+                            }}
+                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 text-xs rounded-lg transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            Ver Conversacion
+                          </button>
                         </div>
                       </div>
+
+                      {extractedDataCache[order.contactPhone]?.length > 0 && (
+                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 sm:p-4">
+                          <p className="text-blue-400 font-medium text-sm mb-2">Datos del Cliente</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {extractedDataCache[order.contactPhone].map((field) => (
+                              <div key={field.fieldKey} className="bg-[#1a1a1a] rounded px-2 py-1.5">
+                                <p className="text-gray-500 text-[10px] uppercase">{field.fieldLabel}</p>
+                                <p className="text-white text-xs sm:text-sm truncate">{field.value}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {loadingExtractedData === order.id && (
+                        <div className="flex items-center gap-2 text-gray-400 text-xs">
+                          <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+                          Cargando datos del cliente...
+                        </div>
+                      )}
 
                       {order.shippingAddress && (
                         <div>
