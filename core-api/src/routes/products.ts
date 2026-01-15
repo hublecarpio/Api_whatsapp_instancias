@@ -420,4 +420,31 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.post('/bulk-delete', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, productIds } = req.body;
+    
+    if (!businessId || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ error: 'businessId and productIds array are required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const deleted = await prisma.product.deleteMany({
+      where: {
+        id: { in: productIds },
+        businessId
+      }
+    });
+    
+    res.json({ success: true, deleted: deleted.count });
+  } catch (error) {
+    console.error('Bulk delete products error:', error);
+    res.status(500).json({ error: 'Failed to delete products' });
+  }
+});
+
 export default router;

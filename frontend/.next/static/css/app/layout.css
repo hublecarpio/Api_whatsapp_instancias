@@ -953,6 +953,12 @@ body.glass-mode .mobile-drawer {
 .top-full {
   top: 100%;
 }
+.left-2 {
+  left: 0.5rem;
+}
+.top-2 {
+  top: 0.5rem;
+}
 .-z-10 {
   z-index: -10;
 }

@@ -40,6 +40,8 @@ export default function ProductsPage() {
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'az' | 'za' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc'>('az');
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -99,6 +101,43 @@ export default function ProductsPage() {
     setEditingProduct(null);
     setShowForm(false);
     setCopied(false);
+  };
+
+  const toggleSelectProduct = (productId: string) => {
+    const newSelected = new Set(selectedProducts);
+    if (newSelected.has(productId)) {
+      newSelected.delete(productId);
+    } else {
+      newSelected.add(productId);
+    }
+    setSelectedProducts(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedProducts.size === filteredProducts.length) {
+      setSelectedProducts(new Set());
+    } else {
+      setSelectedProducts(new Set(filteredProducts.map(p => p.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!currentBusiness || selectedProducts.size === 0) return;
+    
+    if (!confirm(`¿Eliminar ${selectedProducts.size} productos seleccionados? Esta accion no se puede deshacer.`)) {
+      return;
+    }
+    
+    setBulkDeleting(true);
+    try {
+      await productApi.bulkDelete(currentBusiness.id, Array.from(selectedProducts));
+      setSelectedProducts(new Set());
+      fetchProducts();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al eliminar productos');
+    } finally {
+      setBulkDeleting(false);
+    }
   };
 
   const handleFileUpload = async (file: File) => {
@@ -406,6 +445,23 @@ export default function ProductsPage() {
             </button>
           </div>
           <button
+            onClick={toggleSelectAll}
+            className="btn btn-secondary text-sm"
+          >
+            {selectedProducts.size === filteredProducts.length && filteredProducts.length > 0 
+              ? 'Deseleccionar todo' 
+              : `Seleccionar todo (${filteredProducts.length})`}
+          </button>
+          {selectedProducts.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="btn bg-red-600 hover:bg-red-700 text-white text-sm"
+            >
+              {bulkDeleting ? 'Eliminando...' : `Eliminar (${selectedProducts.size})`}
+            </button>
+          )}
+          <button
             onClick={downloadCsvExample}
             className="btn btn-secondary text-sm"
           >
@@ -586,7 +642,15 @@ export default function ProductsPage() {
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProducts.map((product) => (
-            <div key={product.id} className="card card-hover">
+            <div key={product.id} className={`card card-hover relative ${selectedProducts.has(product.id) ? 'ring-2 ring-neon-blue' : ''}`}>
+              <div className="absolute top-2 left-2 z-10">
+                <input
+                  type="checkbox"
+                  checked={selectedProducts.has(product.id)}
+                  onChange={() => toggleSelectProduct(product.id)}
+                  className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-neon-blue focus:ring-neon-blue cursor-pointer"
+                />
+              </div>
               {product.imageUrl && (
                 <img
                   src={product.imageUrl}
@@ -630,15 +694,24 @@ export default function ProductsPage() {
       ) : (
         <div className="space-y-2">
           <div className="hidden sm:grid sm:grid-cols-12 gap-4 px-4 py-2 text-xs text-gray-500 uppercase font-medium">
+            <div className="col-span-1"></div>
             <div className="col-span-1">Imagen</div>
-            <div className="col-span-4">Producto</div>
+            <div className="col-span-3">Producto</div>
             <div className="col-span-2">Precio</div>
             <div className="col-span-2">Stock</div>
             <div className="col-span-3">Acciones</div>
           </div>
           {filteredProducts.map((product) => (
-            <div key={product.id} className="card card-hover">
+            <div key={product.id} className={`card card-hover ${selectedProducts.has(product.id) ? 'ring-2 ring-neon-blue' : ''}`}>
               <div className="flex flex-col sm:grid sm:grid-cols-12 gap-4 items-center">
+                <div className="col-span-1 flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedProducts.has(product.id)}
+                    onChange={() => toggleSelectProduct(product.id)}
+                    className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-neon-blue focus:ring-neon-blue cursor-pointer"
+                  />
+                </div>
                 <div className="col-span-1 w-full sm:w-auto">
                   {product.imageUrl ? (
                     <img
@@ -652,7 +725,7 @@ export default function ProductsPage() {
                     </div>
                   )}
                 </div>
-                <div className="col-span-4 w-full sm:w-auto">
+                <div className="col-span-3 w-full sm:w-auto">
                   <h3 className="font-semibold text-white">{product.title}</h3>
                   {product.description && (
                     <p className="text-sm text-gray-400 truncate max-w-xs">{product.description}</p>
