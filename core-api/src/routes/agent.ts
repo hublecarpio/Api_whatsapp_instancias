@@ -2523,12 +2523,14 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     const productCount = products.length;
     
     // Find the correct prompt for the selected instance
-    let selectedPrompt = business.agentPrompts?.[0];
+    // If instanceId is specified, ONLY use that instance's prompt (strict isolation)
+    // If no instanceId, use the first available prompt (legacy behavior)
+    let selectedPrompt = null;
     if (instanceId && String(instanceId).trim() !== '') {
-      const instancePrompt = business.agentPrompts?.find((p: any) => p.instanceId === instanceId);
-      if (instancePrompt) {
-        selectedPrompt = instancePrompt;
-      }
+      selectedPrompt = business.agentPrompts?.find((p: any) => p.instanceId === instanceId);
+    } else {
+      // Legacy: use first prompt without instanceId, or any first prompt
+      selectedPrompt = business.agentPrompts?.find((p: any) => !p.instanceId) || business.agentPrompts?.[0];
     }
     const customTools = selectedPrompt?.tools || [];
     const agentFiles = selectedPrompt?.files || [];
