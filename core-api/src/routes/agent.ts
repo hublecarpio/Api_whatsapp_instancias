@@ -3205,4 +3205,189 @@ router.put('/delivery-zones/:businessId/reorder', authMiddleware, async (req: Au
   }
 });
 
+router.get('/funnel-stages/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const stages = await prisma.funnelStage.findMany({
+      where: { businessId },
+      orderBy: { order: 'asc' }
+    });
+    
+    res.json(stages);
+  } catch (error: any) {
+    console.error('Get funnel stages error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/funnel-stages/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { name, description, promptContext, requiredFieldKeys, blockedTopics, toolsAllowed } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!name?.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    
+    const maxOrder = await prisma.funnelStage.aggregate({
+      where: { businessId },
+      _max: { order: true }
+    });
+    
+    const stage = await prisma.funnelStage.create({
+      data: {
+        businessId,
+        name: name.trim(),
+        description: description || null,
+        promptContext: promptContext || null,
+        requiredFieldKeys: requiredFieldKeys || [],
+        blockedTopics: blockedTopics || [],
+        toolsAllowed: toolsAllowed || [],
+        order: (maxOrder._max.order ?? -1) + 1
+      }
+    });
+    
+    res.json(stage);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'A stage with this name already exists' });
+    }
+    console.error('Create funnel stage error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/funnel-stages/:businessId/:stageId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, stageId } = req.params;
+    const { name, description, promptContext, requiredFieldKeys, blockedTopics, toolsAllowed, isActive } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const stage = await prisma.funnelStage.update({
+      where: { id: stageId },
+      data: {
+        name: name !== undefined ? name.trim() : undefined,
+        description: description !== undefined ? description : undefined,
+        promptContext: promptContext !== undefined ? promptContext : undefined,
+        requiredFieldKeys: requiredFieldKeys !== undefined ? requiredFieldKeys : undefined,
+        blockedTopics: blockedTopics !== undefined ? blockedTopics : undefined,
+        toolsAllowed: toolsAllowed !== undefined ? toolsAllowed : undefined,
+        isActive: isActive !== undefined ? isActive : undefined
+      }
+    });
+    
+    res.json(stage);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'A stage with this name already exists' });
+    }
+    console.error('Update funnel stage error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/funnel-stages/:businessId/:stageId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, stageId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    await prisma.funnelStage.delete({
+      where: { id: stageId }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete funnel stage error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/funnel-stages/:businessId/reorder', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { stageIds } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!Array.isArray(stageIds)) {
+      return res.status(400).json({ error: 'stageIds must be an array' });
+    }
+    
+    await Promise.all(
+      stageIds.map((id, index) => 
+        prisma.funnelStage.update({
+          where: { id },
+          data: { order: index }
+        })
+      )
+    );
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Reorder funnel stages error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/extraction-fields/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const fields = await prisma.extractionField.findMany({
+      where: { businessId, enabled: true },
+      orderBy: { order: 'asc' }
+    });
+    
+    res.json(fields);
+  } catch (error: any) {
+    console.error('Get extraction fields error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
