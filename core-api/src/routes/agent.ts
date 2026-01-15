@@ -1127,7 +1127,36 @@ async function processWithAgent(
   
   const conversationContext = await getConversationContext(businessId, contactPhone);
   
+  // Load extracted contact data from ContactSettings.notes
+  const normalizedContactPhone = contactPhone.replace(/@.*/, '').replace(/[^0-9]/g, '');
+  const contactSettings = await prisma.contactSettings.findFirst({
+    where: {
+      businessId,
+      contactPhone: normalizedContactPhone
+    }
+  });
+  
   let systemPrompt = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
+  
+  // Add extracted contact data to prompt so agent knows what info we already have
+  if (contactSettings?.notes) {
+    try {
+      const parsedNotes = JSON.parse(contactSettings.notes);
+      const extractedData = parsedNotes.extractedData || {};
+      const dataEntries = Object.entries(extractedData).filter(([_, v]) => v && String(v).trim() !== '');
+      
+      if (dataEntries.length > 0) {
+        systemPrompt += `\n\n## DATOS YA RECOLECTADOS DEL CLIENTE (NO volver a pedir):`;
+        dataEntries.forEach(([key, value]) => {
+          systemPrompt += `\n- ${key}: ${value}`;
+        });
+        systemPrompt += `\n\nIMPORTANTE: YA tienes estos datos. NO los vuelvas a pedir. Usa esta información para avanzar en la conversación.`;
+        console.log(`[Agent V1] Loaded extracted data for context: ${JSON.stringify(Object.fromEntries(dataEntries))}`);
+      }
+    } catch (parseError) {
+      // Notes not valid JSON, ignore
+    }
+  }
   
   if (business.policy) {
     systemPrompt += `\n\n## Políticas del negocio:`;
