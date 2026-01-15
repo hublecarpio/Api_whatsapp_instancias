@@ -62,6 +62,7 @@ export const businessApi = {
   create: (data: any) => api.post('/business', data),
   update: (id: string, data: any) => api.put(`/business/${id}`, data),
   updateOpenAI: (id: string, data: any) => api.put(`/business/${id}/openai`, data),
+  updateModel: (id: string, model: string) => api.put(`/business/${id}/model`, { model }),
   toggleBot: (id: string, enabled?: boolean) => 
     api.put(`/business/${id}/bot-toggle`, { botEnabled: enabled }),
   delete: (id: string) => api.delete(`/business/${id}`),
@@ -525,8 +526,8 @@ export const agentFilesApi = {
 };
 
 export const agentHealthApi = {
-  get: (businessId: string) =>
-    api.get(`/agent/health/${businessId}`)
+  get: (businessId: string, instanceId?: string) =>
+    api.get(`/agent/health/${businessId}${instanceId ? `?instanceId=${instanceId}` : ''}`)
 };
 
 export const agentApiKeyApi = {

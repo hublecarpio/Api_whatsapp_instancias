@@ -1,7 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { agentHealthApi } from '@/lib/api';
+import { agentHealthApi, businessApi } from '@/lib/api';
+
+const AVAILABLE_MODELS = [
+  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', provider: 'OpenAI' },
+  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', provider: 'OpenAI' },
+  { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'OpenAI' },
+  { id: 'google/gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash', provider: 'Google' },
+  { id: 'google/gemini-2.5-pro-preview', name: 'Gemini 2.5 Pro', provider: 'Google' },
+  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'Anthropic' }
+];
 
 interface ToolInfo {
   name: string;
@@ -112,17 +121,40 @@ interface AgentHealth {
 
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 
-export default function AgentHealthDashboard({ businessId }: { businessId: string }) {
+interface Props {
+  businessId: string;
+  instanceId?: string | null;
+}
+
+export default function AgentHealthDashboard({ businessId, instanceId }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<AgentHealth | null>(null);
   const [showNetwork, setShowNetwork] = useState(false);
+  const [showModelSelector, setShowModelSelector] = useState(false);
+  const [savingModel, setSavingModel] = useState(false);
+
+  const handleModelChange = async (modelId: string) => {
+    if (!businessId) return;
+    setSavingModel(true);
+    try {
+      await businessApi.updateModel(businessId, modelId);
+      if (health) {
+        setHealth({ ...health, model: modelId });
+      }
+      setShowModelSelector(false);
+    } catch (error) {
+      console.error('Failed to update model:', error);
+    } finally {
+      setSavingModel(false);
+    }
+  };
 
   const fetchHealth = async () => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const response = await agentHealthApi.get(businessId);
+      const response = await agentHealthApi.get(businessId, instanceId || undefined);
       setHealth(response.data);
     } catch (error) {
       console.error('Failed to fetch agent health:', error);
@@ -132,10 +164,10 @@ export default function AgentHealthDashboard({ businessId }: { businessId: strin
   };
 
   useEffect(() => {
-    if (isOpen && !health) {
+    if (isOpen) {
       fetchHealth();
     }
-  }, [isOpen, businessId]);
+  }, [isOpen, businessId, instanceId]);
 
   if (!isOpen) {
     return (
@@ -205,10 +237,33 @@ export default function AgentHealthDashboard({ businessId }: { businessId: strin
                 <div className="text-xs text-gray-400">Modo</div>
                 <div className="text-sm text-white">{health.objectiveLabel}</div>
               </div>
-              <div className="bg-dark-card rounded-lg p-3 text-center border border-dark-border">
+              <div 
+                className="bg-dark-card rounded-lg p-3 text-center border border-dark-border cursor-pointer hover:border-neon-blue transition-colors relative"
+                onClick={() => setShowModelSelector(!showModelSelector)}
+              >
                 <div className="text-2xl mb-1">🤖</div>
                 <div className="text-xs text-gray-400">Modelo</div>
-                <div className="text-sm text-white truncate" title={health.model}>{health.model}</div>
+                <div className="text-sm text-neon-blue truncate flex items-center justify-center gap-1" title={health.model}>
+                  {AVAILABLE_MODELS.find(m => m.id === health.model)?.name || health.model}
+                  <span className="text-xs">▼</span>
+                </div>
+                {showModelSelector && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface border border-dark-border rounded-lg shadow-xl z-20 max-h-60 overflow-auto">
+                    {AVAILABLE_MODELS.map(model => (
+                      <button
+                        key={model.id}
+                        onClick={(e) => { e.stopPropagation(); handleModelChange(model.id); }}
+                        disabled={savingModel}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-dark-card transition-colors ${
+                          health.model === model.id ? 'text-neon-blue bg-neon-blue/10' : 'text-white'
+                        }`}
+                      >
+                        <div className="font-medium">{model.name}</div>
+                        <div className="text-xs text-gray-500">{model.provider}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="bg-dark-card rounded-lg p-3 text-center border border-dark-border">
                 <div className="text-2xl mb-1">🌍</div>

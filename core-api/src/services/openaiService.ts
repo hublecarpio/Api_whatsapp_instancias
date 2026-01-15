@@ -23,14 +23,17 @@ const PRICING_PER_1K_TOKENS: Record<string, { input: number; output: number }> =
 };
 
 export const AVAILABLE_MODELS = [
-  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', tier: 'budget', family: 'gpt-4' },
-  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', tier: 'standard', family: 'gpt-4' },
-  { id: 'gpt-4.1', name: 'GPT-4.1', tier: 'premium', family: 'gpt-4' },
-  { id: 'gpt-5-nano', name: 'GPT-5 Nano', tier: 'budget', family: 'gpt-5' },
-  { id: 'gpt-5-mini', name: 'GPT-5 Mini', tier: 'standard', family: 'gpt-5' },
-  { id: 'gpt-5', name: 'GPT-5', tier: 'premium', family: 'gpt-5' },
-  { id: 'gpt-5.2', name: 'GPT-5.2', tier: 'flagship', family: 'gpt-5' },
-  { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro', tier: 'enterprise', family: 'gpt-5' }
+  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', tier: 'budget', family: 'gpt-4', provider: 'openai' },
+  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', tier: 'standard', family: 'gpt-4', provider: 'openai' },
+  { id: 'gpt-4.1', name: 'GPT-4.1', tier: 'premium', family: 'gpt-4', provider: 'openai' },
+  { id: 'gpt-5-nano', name: 'GPT-5 Nano', tier: 'budget', family: 'gpt-5', provider: 'openai' },
+  { id: 'gpt-5-mini', name: 'GPT-5 Mini', tier: 'standard', family: 'gpt-5', provider: 'openai' },
+  { id: 'gpt-5', name: 'GPT-5', tier: 'premium', family: 'gpt-5', provider: 'openai' },
+  { id: 'gpt-5.2', name: 'GPT-5.2', tier: 'flagship', family: 'gpt-5', provider: 'openai' },
+  { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro', tier: 'enterprise', family: 'gpt-5', provider: 'openai' },
+  { id: 'google/gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash', tier: 'standard', family: 'gemini', provider: 'openrouter' },
+  { id: 'google/gemini-2.5-pro-preview', name: 'Gemini 2.5 Pro', tier: 'premium', family: 'gemini', provider: 'openrouter' },
+  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', tier: 'premium', family: 'claude', provider: 'openrouter' }
 ];
 
 export const REASONING_EFFORTS: ReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh'];

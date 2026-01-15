@@ -2447,7 +2447,16 @@ router.get('/config', authMiddleware, requireActiveSubscription, async (req: Req
 router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { contactPhone } = req.query;
+    const { contactPhone, instanceId } = req.query;
+    
+    // Build product filter - only show products for selected instance (or shared products)
+    const productWhere: any = { businessId };
+    if (instanceId && String(instanceId).trim() !== '') {
+      productWhere.OR = [
+        { instanceId: instanceId as string },
+        { instanceId: null }
+      ];
+    }
     
     const [business, promptSections, leadStages, extractionFields, reminders, products] = await Promise.all([
       prisma.business.findFirst({
@@ -2459,7 +2468,7 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
               files: { select: { id: true, name: true, fileUrl: true } }
             } 
           },
-          instances: { select: { status: true, provider: true, phoneNumber: true } },
+          instances: { select: { id: true, status: true, provider: true, phoneNumber: true } },
           availability: { select: { dayOfWeek: true, isBlocked: true, startTime: true, endTime: true } },
           policy: true,
           user: { select: { paymentLinkEnabled: true, subscriptionTier: true, subscriptionStatus: true } }
@@ -2488,8 +2497,8 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
         take: 10
       }),
       prisma.product.findMany({
-        where: { businessId },
-        select: { id: true, title: true, price: true, stock: true, imageUrl: true }
+        where: productWhere,
+        select: { id: true, title: true, price: true, stock: true, imageUrl: true, instanceId: true }
       })
     ]);
     

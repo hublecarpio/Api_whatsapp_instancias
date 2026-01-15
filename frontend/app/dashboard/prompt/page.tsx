@@ -1307,7 +1307,7 @@ export default function PromptPage() {
             </>
           )}
           <div className="ml-auto">
-            {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} />}
+            {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} instanceId={selectedInstanceId} />}
           </div>
         </div>
       ) : (
@@ -1384,7 +1384,7 @@ export default function PromptPage() {
             Configuracion
           </button>
           <div className="ml-auto">
-            {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} />}
+            {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} instanceId={selectedInstanceId} />}
           </div>
         </div>
       )}

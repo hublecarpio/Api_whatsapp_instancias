@@ -100,7 +100,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, industry, logoUrl, agentVersion, timezone, currencyCode, currencySymbol, businessObjective, onboardingCompleted, onboardingSkipped } = req.body;
+    const { name, description, industry, logoUrl, agentVersion, timezone, currencyCode, currencySymbol, businessObjective, onboardingCompleted, onboardingSkipped, openaiModel } = req.body;
     
     const existing = await prisma.business.findFirst({
       where: { id: req.params.id, userId: req.userId }
@@ -140,6 +140,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     }
     if (onboardingCompleted !== undefined) updateData.onboardingCompleted = onboardingCompleted;
     if (onboardingSkipped !== undefined) updateData.onboardingSkipped = onboardingSkipped;
+    if (openaiModel !== undefined) updateData.openaiModel = openaiModel;
     
     const business = await prisma.business.update({
       where: { id: req.params.id },
@@ -150,6 +151,31 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Update business error:', error);
     res.status(500).json({ error: 'Failed to update business' });
+  }
+});
+
+router.put('/:id/model', async (req: AuthRequest, res: Response) => {
+  try {
+    const { model } = req.body;
+    
+    const existing = await prisma.business.findFirst({
+      where: { id: req.params.id, userId: req.userId }
+    });
+    
+    if (!existing) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const business = await prisma.business.update({
+      where: { id: req.params.id },
+      data: { openaiModel: model }
+    });
+    
+    console.log(`[BUSINESS] Model updated for ${business.id}: ${model}`);
+    res.json({ id: business.id, model: business.openaiModel });
+  } catch (error) {
+    console.error('Update model error:', error);
+    res.status(500).json({ error: 'Failed to update model' });
   }
 });
 
