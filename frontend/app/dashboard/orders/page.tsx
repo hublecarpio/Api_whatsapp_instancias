@@ -335,14 +335,17 @@ export default function OrdersPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-white">
             {canUsePaymentLinks ? 'Pedidos y Enlaces' : 'Pedidos y Vouchers'}
           </h1>
-          {instances.length > 1 && (
+          {instances.length > 0 && (
             <CustomSelect
-              value={selectedInstanceId || instances[0]?.id || ''}
+              value={selectedInstanceId || ''}
               onChange={(val) => setSelectedInstanceId(val || null)}
-              options={instances.map((inst: any) => ({
-                value: inst.id,
-                label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
-              }))}
+              options={[
+                { value: '', label: 'Todos' },
+                ...instances.map((inst: any) => ({
+                  value: inst.id,
+                  label: `${inst.name} ${inst.phoneNumber ? `(${inst.phoneNumber})` : ''}`
+                }))
+              ]}
               className="min-w-[160px]"
             />
           )}

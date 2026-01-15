@@ -309,9 +309,12 @@ export async function getOrdersByBusiness(businessId: string, status?: string, l
   if (status) {
     where.status = status;
   }
-  if (instanceId !== undefined) {
-    where.instanceId = instanceId || null;
+  // Only filter by instanceId if a specific non-empty value is provided
+  // If instanceId is undefined, empty string, or not passed - show ALL orders for the business
+  if (instanceId && instanceId.trim() !== '') {
+    where.instanceId = instanceId;
   }
+  // Note: We no longer filter for null instanceId, so all orders appear regardless of instance
 
   return prisma.order.findMany({
     where,
