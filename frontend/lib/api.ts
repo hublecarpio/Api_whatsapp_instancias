@@ -605,3 +605,18 @@ export const deliveryZonesApi = {
   reorder: (businessId: string, zoneIds: string[]) =>
     api.put(`/agent/delivery-zones/${businessId}/reorder`, { zoneIds })
 };
+
+export const funnelStagesApi = {
+  list: (businessId: string) =>
+    api.get(`/agent/funnel-stages/${businessId}`),
+  create: (businessId: string, data: { name: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[] }) =>
+    api.post(`/agent/funnel-stages/${businessId}`, data),
+  update: (businessId: string, stageId: string, data: { name?: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[]; isActive?: boolean }) =>
+    api.put(`/agent/funnel-stages/${businessId}/${stageId}`, data),
+  delete: (businessId: string, stageId: string) =>
+    api.delete(`/agent/funnel-stages/${businessId}/${stageId}`),
+  reorder: (businessId: string, stageIds: string[]) =>
+    api.put(`/agent/funnel-stages/${businessId}/reorder`, { stageIds }),
+  getExtractionFields: (businessId: string) =>
+    api.get(`/agent/extraction-fields/${businessId}`)
+};
