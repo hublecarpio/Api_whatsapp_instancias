@@ -3909,4 +3909,395 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
   }
 });
 
+// ============ RAG KNOWLEDGE SECTIONS ============
+
+import { generateEmbedding, retrieveRelevantSections, formatSectionsForPrompt, getRAGStats } from '../services/ragService.js';
+
+router.post('/parse-prompt-sections', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, rawPrompt, instanceId } = req.body;
+    
+    if (!business_id || !rawPrompt) {
+      return res.status(400).json({ error: 'business_id and rawPrompt are required' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!geminiService.isConfigured()) {
+      return res.status(503).json({ error: 'Gemini API not configured' });
+    }
+    
+    console.log(`[RAG-IMPORT] Parsing prompt to sections for business ${business_id}, length: ${rawPrompt.length}`);
+    
+    const result = await geminiService.parsePromptToSections(rawPrompt);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error || 'Failed to parse prompt' });
+    }
+    
+    const existingSections = await prisma.promptSection.findMany({
+      where: { 
+        businessId: business_id,
+        ...(instanceId ? { OR: [{ instanceId }, { instanceId: null }] } : {})
+      },
+      select: { type: true, title: true }
+    });
+    
+    const existingTypes = new Set(existingSections.map(s => s.type));
+    
+    res.json({
+      success: true,
+      sections: result.sections,
+      missingCategories: result.missingCategories,
+      existingSections: existingSections.length,
+      existingTypes: Array.from(existingTypes)
+    });
+  } catch (error: any) {
+    console.error('Parse prompt sections error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/import-sections', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, sections, instanceId, replaceExisting = false } = req.body;
+    
+    if (!business_id || !sections || !Array.isArray(sections)) {
+      return res.status(400).json({ error: 'business_id and sections array are required' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    console.log(`[RAG-IMPORT] Importing ${sections.length} sections for business ${business_id}, replaceExisting: ${replaceExisting}`);
+    
+    if (replaceExisting) {
+      const deleted = await prisma.promptSection.deleteMany({
+        where: {
+          businessId: business_id,
+          ...(instanceId ? { instanceId } : {}),
+          sourceType: 'import'
+        }
+      });
+      console.log(`[RAG-IMPORT] Deleted ${deleted.count} existing imported sections`);
+    }
+    
+    const results = { created: 0, skipped: 0, errors: [] as string[] };
+    
+    for (const section of sections) {
+      try {
+        if (!section.title || !section.content || !section.type) {
+          results.errors.push(`Section missing required fields: ${JSON.stringify(section).substring(0, 100)}`);
+          continue;
+        }
+        
+        let embedding: number[] | null = null;
+        if (!section.isCore) {
+          embedding = await generateEmbedding(`${section.title}\n${section.content}`);
+        }
+        
+        await prisma.promptSection.create({
+          data: {
+            businessId: business_id,
+            instanceId: instanceId || null,
+            type: section.type,
+            title: section.title,
+            content: section.content,
+            isCore: section.isCore || false,
+            priority: section.priority || 0,
+            keywords: section.keywords || [],
+            embedding: embedding as any,
+            sourceType: 'import',
+            enabled: true
+          }
+        });
+        results.created++;
+      } catch (err: any) {
+        results.errors.push(`${section.title}: ${err.message}`);
+      }
+    }
+    
+    console.log(`[RAG-IMPORT] Import complete: ${results.created} created, ${results.errors.length} errors`);
+    
+    res.json({
+      success: true,
+      created: results.created,
+      skipped: results.skipped,
+      errors: results.errors
+    });
+  } catch (error: any) {
+    console.error('Import sections error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/knowledge-sections/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { instanceId } = req.query;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const where: any = { businessId, enabled: true };
+    if (instanceId) {
+      where.OR = [{ instanceId: instanceId as string }, { instanceId: null }];
+    }
+    
+    const sections = await prisma.promptSection.findMany({
+      where,
+      orderBy: [{ isCore: 'desc' }, { priority: 'desc' }, { type: 'asc' }],
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        content: true,
+        isCore: true,
+        priority: true,
+        keywords: true,
+        sourceType: true,
+        instanceId: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+    
+    const byType: Record<string, typeof sections> = {};
+    for (const section of sections) {
+      if (!byType[section.type]) {
+        byType[section.type] = [];
+      }
+      byType[section.type].push(section);
+    }
+    
+    const allTypes = ['CORE', 'TONE', 'SALES', 'POLICIES', 'FAQ', 'OBJECTIONS', 'CLOSING', 'OTHER'];
+    const missingTypes = allTypes.filter(t => !byType[t] || byType[t].length === 0);
+    
+    res.json({
+      sections,
+      byType,
+      totalSections: sections.length,
+      missingTypes,
+      coverage: ((allTypes.length - missingTypes.length) / allTypes.length * 100).toFixed(0) + '%'
+    });
+  } catch (error: any) {
+    console.error('Get knowledge sections error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/knowledge-sections', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, instanceId, type, title, content, isCore, priority, keywords } = req.body;
+    
+    if (!business_id || !type || !title || !content) {
+      return res.status(400).json({ error: 'business_id, type, title, and content are required' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    let embedding: number[] | null = null;
+    if (!isCore) {
+      embedding = await generateEmbedding(`${title}\n${content}`);
+    }
+    
+    const section = await prisma.promptSection.create({
+      data: {
+        businessId: business_id,
+        instanceId: instanceId || null,
+        type,
+        title,
+        content,
+        isCore: isCore || false,
+        priority: priority || 5,
+        keywords: keywords || [],
+        embedding: embedding as any,
+        sourceType: 'manual',
+        enabled: true
+      }
+    });
+    
+    console.log(`[RAG] Created section ${section.id} (${type}) for business ${business_id}`);
+    
+    res.json({ success: true, section });
+  } catch (error: any) {
+    console.error('Create knowledge section error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/knowledge-sections/:sectionId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { sectionId } = req.params;
+    const { title, content, isCore, priority, keywords, enabled } = req.body;
+    
+    const section = await prisma.promptSection.findUnique({
+      where: { id: sectionId },
+      include: { business: true }
+    });
+    
+    if (!section || section.business.userId !== req.userId) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+    
+    let embedding = section.embedding;
+    if (title !== undefined || content !== undefined) {
+      const newTitle = title || section.title;
+      const newContent = content || section.content;
+      if (!section.isCore) {
+        embedding = await generateEmbedding(`${newTitle}\n${newContent}`) as any;
+      }
+    }
+    
+    const updated = await prisma.promptSection.update({
+      where: { id: sectionId },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(content !== undefined && { content }),
+        ...(isCore !== undefined && { isCore }),
+        ...(priority !== undefined && { priority }),
+        ...(keywords !== undefined && { keywords }),
+        ...(enabled !== undefined && { enabled }),
+        embedding
+      }
+    });
+    
+    res.json({ success: true, section: updated });
+  } catch (error: any) {
+    console.error('Update knowledge section error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/knowledge-sections/:sectionId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { sectionId } = req.params;
+    
+    const section = await prisma.promptSection.findUnique({
+      where: { id: sectionId },
+      include: { business: true }
+    });
+    
+    if (!section || section.business.userId !== req.userId) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+    
+    await prisma.promptSection.delete({ where: { id: sectionId } });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete knowledge section error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/query-knowledge', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, query, instanceId, categories, topK = 5 } = req.body;
+    
+    if (!business_id || !query) {
+      return res.status(400).json({ error: 'business_id and query are required' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const result = await retrieveRelevantSections(business_id, query, topK);
+    const formattedContext = formatSectionsForPrompt(result);
+    
+    res.json({
+      success: true,
+      coreSections: result.coreSections,
+      ragSections: result.ragSections,
+      totalTokensEstimate: result.totalTokensEstimate,
+      formattedContext
+    });
+  } catch (error: any) {
+    console.error('Query knowledge error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/knowledge-stats/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const stats = await getRAGStats(businessId);
+    
+    res.json({ success: true, stats });
+  } catch (error: any) {
+    console.error('Get knowledge stats error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/suggest-missing-content', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, category } = req.body;
+    
+    if (!business_id || !category) {
+      return res.status(400).json({ error: 'business_id and category are required' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const existingSections = await prisma.promptSection.findMany({
+      where: { businessId: business_id, enabled: true },
+      select: { title: true, content: true }
+    });
+    
+    const result = await geminiService.suggestMissingContent(
+      category,
+      existingSections,
+      { name: business.name, industry: business.industry || undefined }
+    );
+    
+    res.json(result);
+  } catch (error: any) {
+    console.error('Suggest missing content error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

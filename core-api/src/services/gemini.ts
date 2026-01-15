@@ -950,6 +950,234 @@ REGLAS:
       };
     }
   }
+
+  async parsePromptToSections(
+    rawPrompt: string
+  ): Promise<{
+    success: boolean;
+    sections: {
+      type: 'CORE' | 'TONE' | 'SALES' | 'POLICIES' | 'FAQ' | 'OBJECTIONS' | 'CLOSING' | 'OTHER';
+      title: string;
+      content: string;
+      isCore: boolean;
+      priority: number;
+      keywords: string[];
+    }[];
+    missingCategories: string[];
+    error?: string;
+  }> {
+    if (!this.isConfigured()) {
+      return { 
+        success: false, 
+        sections: [],
+        missingCategories: [],
+        error: 'Gemini API not configured' 
+      };
+    }
+
+    try {
+      console.log('[GEMINI] Parsing prompt to RAG sections, length:', rawPrompt.length);
+      
+      const prompt = `Eres un experto en estructurar conocimiento para sistemas RAG (Retrieval Augmented Generation). Tu tarea es dividir el siguiente texto de contexto de negocio en SECCIONES ESTRUCTURADAS que puedan ser consultadas de forma independiente.
+
+## TEXTO A ANALIZAR:
+${rawPrompt.substring(0, 15000)}
+
+## CATEGORÍAS DE SECCIONES (usa estas exactamente):
+- **CORE**: Información fundamental del negocio (nombre, qué hace, propósito) - SIEMPRE se incluye
+- **TONE**: Personalidad, tono de voz, estilo de comunicación del agente
+- **SALES**: Técnicas de venta, argumentos, propuesta de valor
+- **POLICIES**: Políticas de envío, devoluciones, garantías, horarios
+- **FAQ**: Preguntas frecuentes y sus respuestas
+- **OBJECTIONS**: Manejo de objeciones comunes (precio, tiempo, confianza)
+- **CLOSING**: Técnicas de cierre, llamados a acción, urgencia
+- **OTHER**: Información adicional que no encaja en otras categorías
+
+## REGLAS DE DIVISIÓN:
+1. Cada sección debe ser AUTO-CONTENIDA (no depender de otras para entenderse)
+2. Máximo 500 palabras por sección (si es más largo, divídelo)
+3. Incluye 3-5 palabras clave por sección para búsqueda
+4. CORE e información esencial van con isCore: true, priority: 10
+5. Información de consulta frecuente: priority: 7-9
+6. Información específica/detallada: priority: 3-6
+7. NO inventes información, solo estructura lo que está en el texto
+
+## RESPONDE EN JSON:
+{
+  "sections": [
+    {
+      "type": "CORE",
+      "title": "Sobre [Nombre del Negocio]",
+      "content": "Texto auto-contenido de la sección...",
+      "isCore": true,
+      "priority": 10,
+      "keywords": ["palabra1", "palabra2", "palabra3"]
+    },
+    {
+      "type": "POLICIES",
+      "title": "Política de Envíos",
+      "content": "Texto de la política...",
+      "isCore": false,
+      "priority": 7,
+      "keywords": ["envío", "delivery", "zonas"]
+    }
+  ],
+  "missingCategories": ["FAQ", "OBJECTIONS"]
+}
+
+IMPORTANTE:
+- Genera al menos una sección CORE siempre
+- missingCategories lista categorías donde NO encontraste información (el negocio debería agregarla)
+- Cada sección debe tener sentido de forma aislada`;
+
+      let text = '';
+
+      try {
+        if (this.apiKey) {
+          const response = await axios.post(
+            `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+            {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 8192
+              }
+            },
+            {
+              headers: { 'Content-Type': 'application/json' },
+              timeout: 120000
+            }
+          );
+          text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        } else {
+          throw new Error('No Gemini API key');
+        }
+      } catch (directError: any) {
+        if (this.hasOpenRouterFallback()) {
+          const fallbackResult = await this.callOpenRouter(prompt, {
+            temperature: 0.2,
+            maxTokens: 8192
+          });
+          if (fallbackResult.success) {
+            text = fallbackResult.text;
+          } else {
+            throw new Error(fallbackResult.error || 'Fallback failed');
+          }
+        } else {
+          throw directError;
+        }
+      }
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return { 
+          success: false, 
+          sections: [],
+          missingCategories: [],
+          error: 'Invalid response format'
+        };
+      }
+
+      const result = JSON.parse(jsonMatch[0]);
+      console.log('[GEMINI] Parsed prompt into sections:', {
+        count: result.sections?.length || 0,
+        types: result.sections?.map((s: any) => s.type) || [],
+        missing: result.missingCategories || []
+      });
+
+      return {
+        success: true,
+        sections: result.sections || [],
+        missingCategories: result.missingCategories || []
+      };
+    } catch (error: any) {
+      console.error('[GEMINI] Parse prompt to sections failed:', error.message);
+      return {
+        success: false,
+        sections: [],
+        missingCategories: [],
+        error: error.message
+      };
+    }
+  }
+
+  async suggestMissingContent(
+    category: string,
+    existingSections: { title: string; content: string }[],
+    businessInfo?: { name?: string; industry?: string }
+  ): Promise<{
+    success: boolean;
+    suggestions: string[];
+    sampleContent?: string;
+    error?: string;
+  }> {
+    if (!this.isConfigured()) {
+      return { success: false, suggestions: [], error: 'Gemini API not configured' };
+    }
+
+    try {
+      const existingContext = existingSections.length > 0
+        ? `Contexto existente del negocio:\n${existingSections.map(s => `- ${s.title}`).join('\n')}`
+        : 'No hay secciones existentes.';
+
+      const businessContext = businessInfo?.name
+        ? `Negocio: ${businessInfo.name}${businessInfo.industry ? ` (${businessInfo.industry})` : ''}`
+        : 'Negocio sin identificar';
+
+      const prompt = `Eres un consultor de negocios ayudando a completar la base de conocimiento de un chatbot de ventas.
+
+${businessContext}
+${existingContext}
+
+La categoría "${category}" está VACÍA. Necesitas sugerir qué información debería incluir.
+
+## CATEGORÍAS Y SU PROPÓSITO:
+- CORE: Información fundamental (qué hace el negocio, misión)
+- TONE: Cómo debe hablar el bot (formal/informal, emojis, etc)
+- SALES: Argumentos de venta, beneficios, propuesta de valor
+- POLICIES: Envíos, devoluciones, garantías, horarios
+- FAQ: Preguntas frecuentes de clientes
+- OBJECTIONS: Respuestas a objeciones ("es muy caro", "lo pienso")
+- CLOSING: Técnicas para cerrar ventas, urgencia
+
+Responde en JSON:
+{
+  "suggestions": [
+    "¿Cuál es el tiempo de entrega?",
+    "¿Cuál es la política de devoluciones?",
+    "..."
+  ],
+  "sampleContent": "Ejemplo de texto que podrían agregar para esta categoría..."
+}`;
+
+      const response = await axios.post(
+        `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 30000
+        }
+      );
+
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return { success: false, suggestions: [], error: 'Invalid response' };
+      }
+
+      const result = JSON.parse(jsonMatch[0]);
+      return {
+        success: true,
+        suggestions: result.suggestions || [],
+        sampleContent: result.sampleContent
+      };
+    } catch (error: any) {
+      return { success: false, suggestions: [], error: error.message };
+    }
+  }
 }
 
 export const geminiService = new GeminiService();

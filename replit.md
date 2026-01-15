@@ -53,6 +53,13 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Multi-Instance WhatsApp Support**: PRO/Enterprise users can connect multiple WhatsApp numbers, each with independent configuration.
 *   **Sales Funnel System (Flujo de Venta)**: Sequential stage-based conversation flow where each stage has required data fields that must be collected before advancing, and topics that can be blocked until requirements are met. Integrates with ContactExtractedData for automatic stage progression.
 *   **Intelligent Prompt Importer**: AI-powered onboarding tool that allows users to paste raw business context (products, prices, delivery zones, extraction fields, objection handling, funnel stages) and have Gemini 2.5 automatically parse and structure it into configuration data. Features a 3-step modal flow: input raw text → AI-powered preview with diagnostics → import confirmation with detailed results. Includes conflict detection and skip-on-conflict behavior to avoid overwriting existing data.
+*   **RAG Knowledge Architecture**: Scalable knowledge management system replacing monolithic prompts with structured, queryable sections. Features:
+    *   **Structured Categories**: CORE, TONE, SALES, POLICIES, FAQ, OBJECTIONS, CLOSING, OTHER
+    *   **Semantic Embeddings**: OpenAI text-embedding-3-small for non-core sections enabling RAG retrieval
+    *   **Instance Isolation**: Sections support `instanceId` for multi-instance configuration with fallback to shared (null) sections
+    *   **Priority System**: Core sections (priority 10) always included, non-core sections retrieved via cosine similarity + keyword boosting
+    *   **Gemini-Powered Import**: `parsePromptToSections()` uses Gemini to automatically categorize raw prompts into structured sections
+    *   **Content Suggestions**: `suggestMissingContent()` provides AI-generated suggestions for missing categories
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.

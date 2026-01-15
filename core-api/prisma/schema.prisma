@@ -358,6 +358,8 @@ model Business {
   funnelStages      FunnelStage[]
   userRoles         UserBusinessRole[]
   deliveryZones     DeliveryZone[]
+  knowledgeChunks   BusinessKnowledgeChunk[]
+  promptSections    PromptSection[]
 }
 
 model GoogleCalendarCredential {
@@ -438,6 +440,8 @@ model WhatsAppInstance {
   products         Product[]                 @relation("ProductInstance")
   orders           Order[]                   @relation("OrderInstance")
   funnelStages     FunnelStage[]
+  knowledgeChunks  BusinessKnowledgeChunk[]  @relation("KnowledgeChunkInstance")
+  promptSections   PromptSection[]           @relation("PromptSectionInstance")
 
   @@unique([businessId, instanceNumber])
   @@index([businessId])
@@ -622,6 +626,44 @@ model AgentFile {
 
   @@index([promptId, enabled])
   @@index([promptId, order])
+}
+
+enum KnowledgeCategory {
+  BUSINESS_INFO
+  PRODUCTS
+  POLICIES
+  FAQ
+  PROCESSES
+  OBJECTIONS
+  DELIVERY
+  PROMOTIONS
+  CUSTOM
+}
+
+model BusinessKnowledgeChunk {
+  id          String            @id @default(uuid())
+  businessId  String
+  instanceId  String?
+  category    KnowledgeCategory
+  title       String
+  content     String
+  embedding   Float[]
+  keywords    String[]          @default([])
+  priority    Int               @default(0)
+  isActive    Boolean           @default(true)
+  sourceType  String            @default("manual")
+  sourceId    String?
+  metadata    Json?
+  tokenCount  Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance WhatsAppInstance? @relation("KnowledgeChunkInstance", fields: [instanceId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, category])
+  @@index([businessId, instanceId, category])
+  @@index([businessId, isActive])
 }
 
 model AgentTool {
@@ -1167,6 +1209,7 @@ enum PromptSectionType {
 model PromptSection {
   id          String            @id @default(uuid())
   businessId  String
+  instanceId  String?
   title       String
   content     String
   type        PromptSectionType @default(OTHER)
@@ -1174,11 +1217,17 @@ model PromptSection {
   priority    Int               @default(0)
   embedding   Json?
   metadata    Json?
+  sourceType  String            @default("manual")
+  keywords    String[]          @default([])
   enabled     Boolean           @default(true)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance WhatsAppInstance? @relation("PromptSectionInstance", fields: [instanceId], references: [id], onDelete: SetNull)
+
   @@index([businessId])
+  @@index([businessId, instanceId])
   @@index([businessId, enabled])
   @@index([businessId, isCore])
   @@index([businessId, type])
