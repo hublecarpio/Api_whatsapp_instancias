@@ -2456,6 +2456,11 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
       productWhere.instanceId = instanceId as string;
     }
     
+    // Build instance filter for resources that support it
+    const instanceFilter = instanceId && String(instanceId).trim() !== '' 
+      ? { instanceId: instanceId as string }
+      : {};
+    
     const [business, promptSections, leadStages, extractionFields, reminders, products] = await Promise.all([
       prisma.business.findFirst({
         where: { id: businessId, userId: req.userId },
@@ -2477,12 +2482,12 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
         select: { id: true, title: true, type: true, isCore: true, embedding: true, content: true }
       }),
       prisma.tag.findMany({
-        where: { businessId },
+        where: { businessId, ...instanceFilter },
         select: { id: true, name: true, description: true, color: true },
         orderBy: { createdAt: 'asc' }
       }),
       prisma.extractionField.findMany({
-        where: { businessId, enabled: true },
+        where: { businessId, enabled: true, ...instanceFilter },
         select: { id: true, fieldKey: true, fieldLabel: true, description: true, fieldType: true }
       }),
       prisma.reminder.findMany({
