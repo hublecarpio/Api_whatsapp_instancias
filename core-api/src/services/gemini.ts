@@ -5,7 +5,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_GEMINI_MODEL = 'google/gemini-2.0-flash-001';
+const OPENROUTER_GEMINI_MODEL = 'google/gemini-2.5-pro-preview-05-06';
 
 interface GeminiResponse {
   success: boolean;
