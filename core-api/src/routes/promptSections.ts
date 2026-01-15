@@ -3,6 +3,7 @@ import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/billing.js';
 import OpenAI from 'openai';
+import { geminiService } from '../services/gemini.js';
 
 const router = Router();
 
@@ -417,6 +418,137 @@ router.post('/:businessId/context', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error getting prompt context:', error);
     return res.status(500).json({ error: 'Failed to get context' });
+  }
+});
+
+// Parse prompt into RAG sections using Gemini
+router.post('/:businessId/parse-from-prompt', authMiddleware, requireActiveSubscription, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { rawPrompt, instanceId } = req.body;
+
+    if (!rawPrompt || rawPrompt.length < 50) {
+      return res.status(400).json({ error: 'Prompt must be at least 50 characters' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    if (!geminiService.isConfigured()) {
+      return res.status(503).json({ error: 'Gemini API not configured' });
+    }
+
+    console.log(`[RAG-PARSE] Parsing prompt to sections for business ${businessId}, length: ${rawPrompt.length}`);
+
+    const result = await geminiService.parsePromptToSections(rawPrompt);
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error || 'Failed to parse prompt' });
+    }
+
+    // Get existing sections
+    const existingSections = await prisma.promptSection.findMany({
+      where: { businessId },
+      select: { type: true, title: true }
+    });
+
+    const existingTypes = [...new Set(existingSections.map(s => s.type))];
+
+    return res.json({
+      success: true,
+      sections: result.sections,
+      missingCategories: result.missingCategories,
+      existingSections: existingSections.length,
+      existingTypes
+    });
+  } catch (error) {
+    console.error('Error parsing prompt to sections:', error);
+    return res.status(500).json({ error: 'Failed to parse prompt' });
+  }
+});
+
+// Import parsed sections into database
+router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscription, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { sections, instanceId, replaceExisting = false } = req.body;
+
+    if (!sections || !Array.isArray(sections) || sections.length === 0) {
+      return res.status(400).json({ error: 'Sections array is required' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    console.log(`[RAG-IMPORT] Importing ${sections.length} sections for business ${businessId}`);
+
+    // Delete existing imported sections if replacing
+    if (replaceExisting) {
+      const deleted = await prisma.promptSection.deleteMany({
+        where: {
+          businessId,
+          sourceType: 'import'
+        }
+      });
+      console.log(`[RAG-IMPORT] Deleted ${deleted.count} existing imported sections`);
+    }
+
+    const results = { created: 0, errors: [] as string[] };
+
+    for (const section of sections) {
+      try {
+        if (!section.title || !section.content || !section.type) {
+          results.errors.push(`Missing required fields in section`);
+          continue;
+        }
+
+        // Generate embedding for non-core sections
+        let embedding: number[] | null = null;
+        if (!section.isCore) {
+          embedding = await generateEmbedding(`${section.title}\n${section.content}`);
+        }
+
+        await prisma.promptSection.create({
+          data: {
+            businessId,
+            instanceId: instanceId || null,
+            type: section.type,
+            title: section.title,
+            content: section.content,
+            isCore: section.isCore || false,
+            priority: section.priority || 5,
+            keywords: section.keywords || [],
+            embedding: embedding as any,
+            sourceType: 'import',
+            enabled: true
+          }
+        });
+        results.created++;
+      } catch (err: any) {
+        results.errors.push(`${section.title}: ${err.message}`);
+      }
+    }
+
+    console.log(`[RAG-IMPORT] Import complete: ${results.created} created, ${results.errors.length} errors`);
+
+    return res.json({
+      success: true,
+      created: results.created,
+      errors: results.errors
+    });
+  } catch (error) {
+    console.error('Error importing sections:', error);
+    return res.status(500).json({ error: 'Failed to import sections' });
   }
 });
 

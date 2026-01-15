@@ -120,7 +120,11 @@ export const promptSectionsApi = {
   }) => api.put(`/prompt-sections/${businessId}/${sectionId}`, data),
   delete: (businessId: string, sectionId: string) => api.delete(`/prompt-sections/${businessId}/${sectionId}`),
   search: (businessId: string, query: string, limit?: number) => 
-    api.post(`/prompt-sections/${businessId}/search`, { query, limit, includeCore: true })
+    api.post(`/prompt-sections/${businessId}/search`, { query, limit, includeCore: true }),
+  parseFromPrompt: (businessId: string, rawPrompt: string, instanceId?: string) =>
+    api.post(`/prompt-sections/${businessId}/parse-from-prompt`, { rawPrompt, instanceId }),
+  importSections: (businessId: string, sections: any[], instanceId?: string, replaceExisting?: boolean) =>
+    api.post(`/prompt-sections/${businessId}/import-sections`, { sections, instanceId, replaceExisting })
 };
 
 export const toolsApi = {

@@ -108,6 +108,7 @@ interface PromptSection {
   createdAt: string;
   updatedAt?: string;
   metadata?: any;
+  sourceType?: string;
 }
 
 const SECTION_TYPES: { value: PromptSectionType; label: string; description: string }[] = [
@@ -196,6 +197,10 @@ export default function PromptPage() {
     isCore: false,
     priority: 0
   });
+  const [showGenerateSections, setShowGenerateSections] = useState(false);
+  const [generatingSections, setGeneratingSections] = useState(false);
+  const [parsedSections, setParsedSections] = useState<any[]>([]);
+  const [importingSections, setImportingSections] = useState(false);
   
   const [apiKeyInfo, setApiKeyInfo] = useState<{ hasApiKey: boolean; prefix: string | null; createdAt: string | null } | null>(null);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
@@ -333,6 +338,46 @@ export default function PromptPage() {
       console.error('Error loading prompt sections:', err);
     } finally {
       setLoadingSections(false);
+    }
+  };
+
+  const handleGenerateSectionsFromPrompt = async () => {
+    if (!currentBusiness || !prompt.trim()) {
+      setError('Debes tener un prompt maestro configurado para generar secciones');
+      return;
+    }
+    setGeneratingSections(true);
+    setError('');
+    try {
+      const res = await promptSectionsApi.parseFromPrompt(currentBusiness.id, prompt);
+      setParsedSections(res.data.sections || []);
+      setShowGenerateSections(true);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al analizar el prompt');
+    } finally {
+      setGeneratingSections(false);
+    }
+  };
+
+  const handleImportParsedSections = async (replaceExisting: boolean = false) => {
+    if (!currentBusiness || parsedSections.length === 0) return;
+    setImportingSections(true);
+    setError('');
+    try {
+      const res = await promptSectionsApi.importSections(
+        currentBusiness.id, 
+        parsedSections,
+        undefined,
+        replaceExisting
+      );
+      setSuccess(`${res.data.created} secciones importadas correctamente`);
+      setShowGenerateSections(false);
+      setParsedSections([]);
+      loadPromptSections();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al importar secciones');
+    } finally {
+      setImportingSections(false);
     }
   };
 
@@ -1433,15 +1478,39 @@ export default function PromptPage() {
                 las demas se recuperan via RAG segun el contexto del mensaje.
               </p>
             </div>
-            <button
-              onClick={() => setShowSectionForm(true)}
-              className="btn btn-primary flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Agregar Seccion
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleGenerateSectionsFromPrompt}
+                disabled={generatingSections || !prompt.trim()}
+                className="btn bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white flex items-center gap-2 disabled:opacity-50"
+              >
+                {generatingSections ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                    </svg>
+                    Analizando...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Generar desde Prompt
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowSectionForm(true)}
+                className="btn btn-primary flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Agregar Seccion
+              </button>
+            </div>
           </div>
 
           {loadingSections ? (
@@ -1669,6 +1738,91 @@ export default function PromptPage() {
                     className="btn btn-primary"
                   >
                     {loading ? 'Guardando...' : editingSection ? 'Actualizar' : 'Crear'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showGenerateSections && parsedSections.length > 0 && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-dark-card rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Secciones Detectadas</h3>
+                    <p className="text-sm text-gray-400">
+                      Se detectaron {parsedSections.length} secciones en tu prompt. Revisa y confirma la importacion.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setShowGenerateSections(false); setParsedSections([]); }}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  {parsedSections.map((section, index) => (
+                    <div 
+                      key={index}
+                      className={`p-4 rounded-lg border ${section.isCore ? 'bg-neon-purple/10 border-neon-purple/30' : 'bg-dark-hover border-gray-700'}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              section.isCore ? 'bg-neon-purple/20 text-neon-purple' : 'bg-neon-blue/20 text-neon-blue'
+                            }`}>
+                              {section.type}
+                            </span>
+                            {section.isCore && (
+                              <span className="px-2 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400">
+                                CORE
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-white font-medium">{section.title}</h4>
+                          <p className="text-gray-400 text-sm mt-1 line-clamp-2">{section.content}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {promptSections.length > 0 && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-4">
+                    <p className="text-yellow-400 text-sm">
+                      Ya tienes {promptSections.length} secciones existentes. 
+                      Puedes agregar las nuevas o reemplazar las importadas anteriormente.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button 
+                    onClick={() => { setShowGenerateSections(false); setParsedSections([]); }}
+                    className="btn btn-secondary"
+                  >
+                    Cancelar
+                  </button>
+                  {promptSections.some(s => s.sourceType === 'import') && (
+                    <button
+                      onClick={() => handleImportParsedSections(true)}
+                      disabled={importingSections}
+                      className="btn bg-orange-600 hover:bg-orange-700 text-white"
+                    >
+                      {importingSections ? 'Importando...' : 'Reemplazar Importadas'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleImportParsedSections(false)}
+                    disabled={importingSections}
+                    className="btn btn-primary"
+                  >
+                    {importingSections ? 'Importando...' : 'Agregar Secciones'}
                   </button>
                 </div>
               </div>
