@@ -150,9 +150,11 @@ export default function ProductsPage() {
 
   const downloadCsvExample = () => {
     const csvContent = `title,description,price,stock,imageUrl
-"Producto ejemplo 1","Descripcion del producto 1",29.99,100,https://ejemplo.com/imagen1.jpg
-"Producto ejemplo 2","Descripcion del producto 2",49.99,50,
-"Producto sin descripcion",,19.99,25,https://ejemplo.com/imagen3.jpg`;
+"Camiseta Negra Basica","Camiseta 100% algodon, talla unica",29.99,100,https://ejemplo.com/camiseta-negra.jpg
+"Pantalon Jeans Clasico","Pantalon de mezclilla corte recto, disponible en azul",89.99,50,https://ejemplo.com/jeans-azul.jpg
+"Zapatillas Deportivas","Zapatillas running con amortiguacion, blanco/negro",149.99,25,
+"Gorra Bordada Logo","Gorra ajustable con logo bordado",24.99,200,https://ejemplo.com/gorra.jpg
+"Pack 3 Calcetines","Set de 3 pares calcetines deportivos",19.99,150,`;
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');

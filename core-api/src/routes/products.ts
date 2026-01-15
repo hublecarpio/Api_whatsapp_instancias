@@ -246,7 +246,7 @@ router.post('/find-best-match', async (req: AuthRequest, res: Response) => {
 
 router.post('/bulk', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, products } = req.body;
+    const { businessId, instanceId, products } = req.body;
     
     if (!businessId || !Array.isArray(products) || products.length === 0) {
       return res.status(400).json({ error: 'businessId and products array are required' });
@@ -266,6 +266,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
     const created = await prisma.product.createMany({
       data: validProducts.map((p: any) => ({
         businessId,
+        instanceId: instanceId || null,
         title: String(p.title).trim(),
         description: p.description ? String(p.description).trim() : null,
         price: parseFloat(p.price),
