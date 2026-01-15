@@ -687,22 +687,26 @@ model SalesObjection {
 }
 
 model FunnelStage {
-  id              String   @id @default(uuid())
-  businessId      String
-  name            String
-  order           Int      @default(0)
-  description     String?
-  promptContext   String?
-  toolsAllowed    String[]
-  autoTransition  Json?
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
+  id                String   @id @default(uuid())
+  businessId        String
+  name              String
+  order             Int      @default(0)
+  description       String?
+  promptContext     String?
+  toolsAllowed      String[]
+  requiredFieldKeys String[] @default([])
+  blockedTopics     String[] @default([])
+  autoTransition    Json?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   contacts ContactFunnelState[]
 
   @@unique([businessId, name])
   @@index([businessId, order])
+  @@index([businessId, isActive])
 }
 
 model ContactFunnelState {
