@@ -2508,8 +2508,17 @@ router.get('/health/:businessId', authMiddleware, async (req: AuthRequest, res: 
     const isSalesMode = objective !== 'APPOINTMENTS';
     const isAppointmentMode = objective === 'APPOINTMENTS';
     const productCount = products.length;
-    const customTools = business.agentPrompts?.[0]?.tools || [];
-    const agentFiles = business.agentPrompts?.[0]?.files || [];
+    
+    // Find the correct prompt for the selected instance
+    let selectedPrompt = business.agentPrompts?.[0];
+    if (instanceId && String(instanceId).trim() !== '') {
+      const instancePrompt = business.agentPrompts?.find((p: any) => p.instanceId === instanceId);
+      if (instancePrompt) {
+        selectedPrompt = instancePrompt;
+      }
+    }
+    const customTools = selectedPrompt?.tools || [];
+    const agentFiles = selectedPrompt?.files || [];
     const hasAvailability = business.availability?.some((a: any) => !a.isBlocked) || false;
     const instanceConnected = business.instances?.some((i: any) => i.status === 'open' || i.status === 'connected') || false;
     const paymentLinkEnabled = business.user?.paymentLinkEnabled ?? false;
