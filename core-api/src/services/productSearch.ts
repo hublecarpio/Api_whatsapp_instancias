@@ -100,14 +100,24 @@ interface SearchResult {
 export async function searchProductsIntelligent(
   businessId: string,
   query: string,
-  limit: number = 5
+  limit: number = 5,
+  instanceId?: string | null
 ): Promise<{
   products: SearchResult[];
   exactMatch: boolean;
   bestMatch: SearchResult | null;
 }> {
+  const whereClause: any = { businessId };
+  // Filter by instanceId if provided, or include products with null instanceId (shared products)
+  if (instanceId) {
+    whereClause.OR = [
+      { instanceId },
+      { instanceId: null }
+    ];
+  }
+  
   const allProducts = await prisma.product.findMany({
-    where: { businessId }
+    where: whereClause
   });
 
   const normalizedQuery = normalizeText(query);
@@ -150,9 +160,10 @@ export async function searchProductsIntelligent(
 
 export async function findBestProductMatch(
   businessId: string,
-  query: string
+  query: string,
+  instanceId?: string | null
 ): Promise<SearchResult | null> {
-  const result = await searchProductsIntelligent(businessId, query, 1);
+  const result = await searchProductsIntelligent(businessId, query, 1, instanceId);
   
   if (result.bestMatch && result.bestMatch.similarity >= 0.4) {
     return result.bestMatch;

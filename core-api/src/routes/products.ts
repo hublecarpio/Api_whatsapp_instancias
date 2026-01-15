@@ -141,7 +141,7 @@ router.post('/upload-image', upload.single('file'), async (req: AuthRequest, res
 
 router.post('/search', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, query, limit = 10, intelligent = true } = req.body;
+    const { businessId, instanceId, query, limit = 10, intelligent = true } = req.body;
     
     if (!businessId || !query) {
       return res.status(400).json({ error: 'businessId and query are required' });
@@ -153,7 +153,7 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
     }
 
     if (intelligent) {
-      const result = await searchProductsIntelligent(businessId, query, Math.min(limit, 20));
+      const result = await searchProductsIntelligent(businessId, query, Math.min(limit, 20), instanceId);
       
       res.json({
         products: result.products,
@@ -209,7 +209,7 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
 
 router.post('/find-best-match', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, query } = req.body;
+    const { businessId, instanceId, query } = req.body;
     
     if (!businessId || !query) {
       return res.status(400).json({ error: 'businessId and query are required' });
@@ -220,7 +220,7 @@ router.post('/find-best-match', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
 
-    const bestMatch = await findBestProductMatch(businessId, query);
+    const bestMatch = await findBestProductMatch(businessId, query, instanceId);
     
     if (bestMatch) {
       res.json({
@@ -331,11 +331,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
     
     const whereClause: any = { businessId: business_id as string };
-    if (instance_id) {
+    // Only filter by instanceId if a specific value is provided
+    // If not provided, show ALL products for the business
+    if (instance_id && String(instance_id).trim() !== '') {
       whereClause.instanceId = instance_id as string;
-    } else {
-      whereClause.instanceId = null;
     }
+    // Note: We no longer filter for null instanceId when not specified
     
     const products = await prisma.product.findMany({
       where: whereClause,

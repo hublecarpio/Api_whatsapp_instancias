@@ -978,10 +978,20 @@ async function processWithAgent(
     include: {
       policy: true,
       agentPrompts: { include: { tools: { where: { enabled: true } } } },
-      products: true,
       instances: { include: { metaCredential: true, metaCoexistCredential: true } },
       user: { select: { isPro: true, paymentLinkEnabled: true } }
     }
+  });
+  
+  // Load products filtered by instanceId - includes instance-specific products and shared products (null instanceId)
+  const products = await prisma.product.findMany({
+    where: {
+      businessId,
+      OR: instanceId 
+        ? [{ instanceId }, { instanceId: null }]
+        : [{ instanceId: null }]
+    },
+    orderBy: { createdAt: 'desc' }
   });
   
   if (!business) {
@@ -1172,13 +1182,13 @@ async function processWithAgent(
   }
   
   const currencySymbol = business.currencySymbol || 'S/.';
-  const productCount = business.products?.length || 0;
+  const productCount = products?.length || 0;
   const isAppointmentMode = business.businessObjective === 'APPOINTMENTS';
   
   // Add product catalog info only for SALES mode
   if (!isAppointmentMode && productCount > 0 && productCount <= 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
-    business.products.forEach((product: any) => {
+    products.forEach((product: any) => {
       systemPrompt += `\n- [ID:${product.id}] ${product.title}: ${currencySymbol}${product.price}`;
       if (product.stock !== undefined) {
         systemPrompt += ` (Stock: ${product.stock})`;
@@ -1565,9 +1575,9 @@ async function processWithAgent(
         const args = JSON.parse(fn.arguments);
         const searchQuery = args.consulta || args.query || '';
         
-        console.log(`[PRODUCT SEARCH] Query: "${searchQuery}" (intelligent matching)`);
+        console.log(`[PRODUCT SEARCH] Query: "${searchQuery}" (intelligent matching, instanceId: ${instanceId || 'all'})`);
         
-        const searchResult = await searchProductsIntelligent(businessId, searchQuery, 10);
+        const searchResult = await searchProductsIntelligent(businessId, searchQuery, 10, instanceId);
         
         const productResults = searchResult.products.map(p => ({
           id: p.id,
