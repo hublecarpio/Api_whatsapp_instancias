@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import prisma from '../services/prisma';
 import { isOpenAIConfigured, getOpenAIClient, getDefaultModel, logTokenUsage } from '../services/openaiService.js';
+import { getContactStageStatus } from '../services/funnelStageService.js';
 
 const router = Router();
 
@@ -806,16 +807,8 @@ router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req:
       include: { tag: true }
     });
     
-    // Get funnel stage for this contact
-    const funnelState = await prisma.contactFunnelState.findUnique({
-      where: {
-        businessId_contactPhone: {
-          businessId: business_id as string,
-          contactPhone: contact_phone
-        }
-      },
-      include: { stage: true }
-    });
+    // Get funnel stage status for this contact (auto-creates if not exists and funnel stages are configured)
+    const funnelStatus = await getContactStageStatus(business_id as string, contact_phone);
     
     res.json({
       extractedData,
@@ -824,10 +817,10 @@ router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req:
         name: currentTag.tag.name,
         color: currentTag.tag.color
       } : null,
-      funnelStage: funnelState?.stage ? {
-        id: funnelState.stage.id,
-        name: funnelState.stage.name,
-        order: funnelState.stage.order
+      funnelStage: funnelStatus.currentStage ? {
+        id: funnelStatus.currentStage.id,
+        name: funnelStatus.currentStage.name,
+        order: funnelStatus.currentStage.order
       } : null,
       assignedAt: currentTag?.assignedAt,
       source: currentTag?.source
