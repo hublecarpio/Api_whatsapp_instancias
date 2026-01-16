@@ -1298,6 +1298,7 @@ export default function PromptPage() {
               businessId={currentBusiness.id} 
               onImportComplete={() => {
                 loadData();
+                loadPromptSections();
                 setSuccess('Configuracion importada exitosamente');
                 setTimeout(() => setSuccess(''), 3000);
               }}
