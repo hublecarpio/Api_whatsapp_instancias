@@ -7,28 +7,6 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const DEFAULT_MODEL = 'gpt-4.1-mini';
 
-function isOpenRouterModel(model: string): boolean {
-  const modelConfig = AVAILABLE_MODELS.find(m => m.id === model);
-  if (modelConfig?.provider === 'openrouter') return true;
-  if (model.includes('/')) return true;
-  return false;
-}
-
-let openrouterClient: OpenAI | null = null;
-
-function getOpenRouterClient(): OpenAI {
-  if (!openrouterClient) {
-    if (!OPENROUTER_API_KEY) {
-      throw new Error('OPENROUTER_API_KEY is not configured');
-    }
-    openrouterClient = new OpenAI({
-      apiKey: OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1'
-    });
-  }
-  return openrouterClient;
-}
-
 const PRICING_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
   'gpt-4.1': { input: 0.002, output: 0.008 },
   'gpt-4.1-mini': { input: 0.0004, output: 0.0016 },
@@ -61,6 +39,46 @@ export const AVAILABLE_MODELS = [
 ];
 
 export const REASONING_EFFORTS: ReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh'];
+
+function isOpenRouterModel(model: string): boolean {
+  const modelConfig = AVAILABLE_MODELS.find(m => m.id === model);
+  if (modelConfig?.provider === 'openrouter') return true;
+  if (model.includes('/')) return true;
+  if (model.toLowerCase().includes('gemini') || model.toLowerCase().includes('claude')) return true;
+  return false;
+}
+
+function normalizeModel(model: string): string {
+  const modelLower = model.toLowerCase();
+  if (modelLower === 'gemini-3-flash' || modelLower === 'gemini-3-flash-preview') {
+    return 'google/gemini-3-flash-preview';
+  }
+  if (modelLower === 'gemini-2.5-flash' || modelLower === 'gemini-2.5-flash-preview') {
+    return 'google/gemini-2.5-flash-preview';
+  }
+  if (modelLower === 'gemini-2.5-pro' || modelLower === 'gemini-2.5-pro-preview') {
+    return 'google/gemini-2.5-pro-preview';
+  }
+  if (modelLower === 'claude-sonnet-4') {
+    return 'anthropic/claude-sonnet-4';
+  }
+  return model;
+}
+
+let openrouterClient: OpenAI | null = null;
+
+function getOpenRouterClient(): OpenAI {
+  if (!openrouterClient) {
+    if (!OPENROUTER_API_KEY) {
+      throw new Error('OPENROUTER_API_KEY is not configured');
+    }
+    openrouterClient = new OpenAI({
+      apiKey: OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1'
+    });
+  }
+  return openrouterClient;
+}
 
 let cachedSettings: {
   defaultModelV1: string;
@@ -298,9 +316,11 @@ function optimizeMessages(
 }
 
 export async function callOpenAI(options: CallOpenAIOptions): Promise<CallOpenAIResult> {
-  const { model, reasoningEffort = 'none', maxTokens = 1000, temperature = 0.7, context } = options;
+  const { model: rawModel, reasoningEffort = 'none', maxTokens = 1000, temperature = 0.7, context } = options;
   
+  const model = normalizeModel(rawModel);
   const useOpenRouter = isOpenRouterModel(model);
+  console.log(`[AI] callOpenAI rawModel="${rawModel}" model="${model}" useOpenRouter=${useOpenRouter}`);
   const client = useOpenRouter ? getOpenRouterClient() : getOpenAIClient();
   
   const maxHistoryTokens = options.maxHistoryTokens || 3000;
