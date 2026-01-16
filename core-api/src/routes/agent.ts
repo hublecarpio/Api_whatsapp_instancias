@@ -1448,11 +1448,19 @@ async function processWithAgent(
   }
   
   if (isSalesMode && productCount > 0) {
+    const canUsePaymentLink = business.user?.paymentLinkEnabled ?? false;
+    
+    // Use different tool name/description based on payment mode
+    const orderToolName = canUsePaymentLink ? 'crear_enlace_pago' : 'registrar_pedido';
+    const orderToolDescription = canUsePaymentLink 
+      ? 'Genera un enlace de pago para que el cliente complete su compra. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío.'
+      : 'Registra un pedido para el cliente que pagará por transferencia/voucher. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío. El pedido quedará pendiente hasta que el cliente envíe el comprobante de pago.';
+    
     openaiTools.push({
       type: 'function' as const,
       function: {
-        name: 'crear_enlace_pago',
-        description: 'Genera un enlace de pago para que el cliente complete su compra. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío.',
+        name: orderToolName,
+        description: orderToolDescription,
         parameters: {
           type: 'object',
           properties: {
@@ -1670,7 +1678,7 @@ async function processWithAgent(
         continue;
       }
       
-      if (toolName === 'crear_enlace_pago') {
+      if (toolName === 'crear_enlace_pago' || toolName === 'registrar_pedido') {
         const args = JSON.parse(fn.arguments);
         let productId = args.producto_id;
         const quantity = args.cantidad || 1;

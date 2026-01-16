@@ -153,6 +153,7 @@ export default function ChatPage() {
   const [editingValue, setEditingValue] = useState('');
   const [savingField, setSavingField] = useState(false);
   const [currentStage, setCurrentStage] = useState<{id: string; name: string; color: string} | null>(null);
+  const [funnelStage, setFunnelStage] = useState<{id: string; name: string; order: number} | null>(null);
   const [showContactPanel, setShowContactPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
@@ -497,10 +498,12 @@ export default function ChatPage() {
       });
       setContactData(dataMap);
       setCurrentStage(stageRes.data.currentStage || null);
+      setFunnelStage(stageRes.data.funnelStage || null);
     } catch (err) {
       console.error('Failed to fetch contact extracted data:', err);
       setContactData({});
       setExtractedFields([]);
+      setFunnelStage(null);
     }
   };
 
@@ -1366,11 +1369,18 @@ export default function ChatPage() {
                 <div className="px-4 py-3 border-b border-dark-border bg-dark-surface">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-sm font-medium text-white">Datos del Contacto</h4>
-                    {currentStage && (
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${currentStage.color}20`, color: currentStage.color }}>
-                        {currentStage.name}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {funnelStage && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30" title="Etapa del flujo de venta">
+                          🎯 {funnelStage.name}
+                        </span>
+                      )}
+                      {currentStage && (
+                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${currentStage.color}20`, color: currentStage.color }} title="Etapa CRM">
+                          {currentStage.name}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {extractedFields.length > 0 ? (
                     <div className="space-y-2">

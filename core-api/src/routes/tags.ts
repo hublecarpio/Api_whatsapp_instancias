@@ -806,12 +806,28 @@ router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req:
       include: { tag: true }
     });
     
+    // Get funnel stage for this contact
+    const funnelState = await prisma.contactFunnelState.findUnique({
+      where: {
+        businessId_contactPhone: {
+          businessId: business_id as string,
+          contactPhone: contact_phone
+        }
+      },
+      include: { stage: true }
+    });
+    
     res.json({
       extractedData,
       currentStage: currentTag?.tag ? {
         id: currentTag.tag.id,
         name: currentTag.tag.name,
         color: currentTag.tag.color
+      } : null,
+      funnelStage: funnelState?.stage ? {
+        id: funnelState.stage.id,
+        name: funnelState.stage.name,
+        order: funnelState.stage.order
       } : null,
       assignedAt: currentTag?.assignedAt,
       source: currentTag?.source

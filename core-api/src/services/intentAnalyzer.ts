@@ -357,10 +357,11 @@ export function buildDynamicPrompt(
       dynamicPrompt += `\n- Confirma los detalles del pedido (solo si no los has confirmado antes)`;
       dynamicPrompt += `\n- Solicita datos de envío SOLO si no los tienes`;
       if (paymentLinkEnabled) {
-        dynamicPrompt += `\n- Usa la herramienta crear_enlace_pago para generar el link de pago`;
+        dynamicPrompt += `\n- USA la herramienta crear_enlace_pago para generar el link de pago`;
         dynamicPrompt += `\n- Una vez generado, comparte el enlace con el cliente`;
       } else {
-        dynamicPrompt += `\n- MODO VOUCHER: Indica los datos bancarios para transferencia (si los tienes en tu contexto)`;
+        dynamicPrompt += `\n- USA la herramienta registrar_pedido para crear el pedido`;
+        dynamicPrompt += `\n- Indica los datos bancarios para transferencia (si los tienes en tu contexto)`;
         dynamicPrompt += `\n- Pide al cliente que envíe el comprobante/voucher una vez realizada la transferencia`;
         dynamicPrompt += `\n- NO menciones "enlace de pago" - el cliente debe hacer transferencia manual`;
       }
