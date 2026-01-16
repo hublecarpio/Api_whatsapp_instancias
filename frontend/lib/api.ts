@@ -632,5 +632,7 @@ export const promptImporterApi = {
   analyze: (businessId: string, rawPrompt: string) =>
     api.post('/agent/analyze-prompt', { business_id: businessId, rawPrompt }),
   import: (businessId: string, config: any, options?: { skipConflicts?: boolean }) =>
-    api.post('/agent/import-config', { business_id: businessId, config, options })
+    api.post('/agent/import-config', { business_id: businessId, config, options }),
+  importFull: (businessId: string, rawPrompt: string, instanceId?: string, options?: { skipConflicts?: boolean; clearExisting?: boolean }) =>
+    api.post('/agent/import-full-prompt', { business_id: businessId, rawPrompt, instanceId, options })
 };

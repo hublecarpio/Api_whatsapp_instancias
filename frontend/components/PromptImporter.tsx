@@ -70,10 +70,36 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'input' | 'preview' | 'result'>('input');
   const [mounted, setMounted] = useState(false);
+  const [fullImportResult, setFullImportResult] = useState<any>(null);
+  const [importMode, setImportMode] = useState<'simple' | 'full'>('full');
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const handleFullImport = async () => {
+    if (!rawPrompt.trim()) {
+      setError('Por favor ingresa el texto del prompt');
+      return;
+    }
+
+    setImporting(true);
+    setError(null);
+
+    try {
+      const res = await promptImporterApi.importFull(businessId, rawPrompt, undefined, { 
+        skipConflicts: true, 
+        clearExisting: false 
+      });
+      setFullImportResult(res.data);
+      setStep('result');
+      onImportComplete?.();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al importar el prompt');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!rawPrompt.trim()) {
@@ -118,8 +144,10 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
     setRawPrompt('');
     setAnalysis(null);
     setImportResult(null);
+    setFullImportResult(null);
     setError(null);
     setStep('input');
+    setImportMode('full');
   };
 
   const getConfidenceColor = (confidence: number) => {
@@ -186,6 +214,42 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                     </div>
                   )}
 
+                  <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+                    <h3 className="text-purple-400 font-medium mb-3">Modo de Importacion</h3>
+                    <div className="space-y-3">
+                      <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg bg-[#2a2a2a] border-2 transition-all hover:border-purple-500/50" style={{ borderColor: importMode === 'full' ? 'rgb(168 85 247)' : 'transparent' }}>
+                        <input 
+                          type="radio" 
+                          name="importMode" 
+                          checked={importMode === 'full'} 
+                          onChange={() => setImportMode('full')}
+                          className="mt-1 accent-purple-500"
+                        />
+                        <div>
+                          <span className="text-white font-medium">Importacion Completa (Recomendado)</span>
+                          <p className="text-sm text-gray-400 mt-1">
+                            Genera automaticamente el Prompt Maestro + Secciones RAG + Productos + Campos + Etapas
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg bg-[#2a2a2a] border-2 transition-all hover:border-gray-500/50" style={{ borderColor: importMode === 'simple' ? 'rgb(156 163 175)' : 'transparent' }}>
+                        <input 
+                          type="radio" 
+                          name="importMode" 
+                          checked={importMode === 'simple'} 
+                          onChange={() => setImportMode('simple')}
+                          className="mt-1 accent-gray-500"
+                        />
+                        <div>
+                          <span className="text-white font-medium">Solo Datos Estructurados</span>
+                          <p className="text-sm text-gray-400 mt-1">
+                            Extrae productos, campos, etapas. Muestra preview antes de importar.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
                   <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
                     <h3 className="text-blue-400 font-medium mb-2">Que puede detectar:</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm text-gray-300">
@@ -194,7 +258,7 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                       <span>• Campos a extraer</span>
                       <span>• Etapas del funnel</span>
                       <span>• Manejo de objeciones</span>
-                      <span>• Prompt del agente</span>
+                      <span>• Prompt Maestro + Secciones</span>
                     </div>
                   </div>
                 </div>
@@ -380,49 +444,118 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                 </div>
               )}
 
-              {step === 'result' && importResult && (
+              {step === 'result' && (importResult || fullImportResult) && (
                 <div className="space-y-4">
                   <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-6 text-center">
                     <svg className="w-16 h-16 text-green-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <h3 className="text-xl font-semibold text-white mb-2">Importacion Completada</h3>
-                    <div className="flex justify-center gap-6 text-sm">
-                      <div>
-                        <p className="text-2xl font-bold text-green-400">{importResult.summary.totalCreated}</p>
-                        <p className="text-gray-400">Creados</p>
-                      </div>
-                      <div>
-                        <p className="text-2xl font-bold text-yellow-400">{importResult.summary.totalSkipped}</p>
-                        <p className="text-gray-400">Omitidos</p>
-                      </div>
-                      {importResult.summary.totalErrors > 0 && (
+                    
+                    {importResult && (
+                      <div className="flex justify-center gap-6 text-sm">
                         <div>
-                          <p className="text-2xl font-bold text-red-400">{importResult.summary.totalErrors}</p>
-                          <p className="text-gray-400">Errores</p>
+                          <p className="text-2xl font-bold text-green-400">{importResult.summary.totalCreated}</p>
+                          <p className="text-gray-400">Creados</p>
                         </div>
-                      )}
-                    </div>
+                        <div>
+                          <p className="text-2xl font-bold text-yellow-400">{importResult.summary.totalSkipped}</p>
+                          <p className="text-gray-400">Omitidos</p>
+                        </div>
+                        {importResult.summary.totalErrors > 0 && (
+                          <div>
+                            <p className="text-2xl font-bold text-red-400">{importResult.summary.totalErrors}</p>
+                            <p className="text-gray-400">Errores</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {fullImportResult && (
+                      <div className="flex justify-center gap-6 text-sm mt-2">
+                        <div>
+                          <p className="text-2xl font-bold text-green-400">{fullImportResult.results?.masterPrompt?.updated ? 1 : 0}</p>
+                          <p className="text-gray-400">Prompt Maestro</p>
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold text-purple-400">{fullImportResult.results?.sections?.created || 0}</p>
+                          <p className="text-gray-400">Secciones</p>
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold text-blue-400">
+                            {(fullImportResult.results?.config?.products || 0) + 
+                             (fullImportResult.results?.config?.fields || 0) + 
+                             (fullImportResult.results?.config?.stages || 0) +
+                             (fullImportResult.results?.config?.objections || 0) +
+                             (fullImportResult.results?.config?.zones || 0)}
+                          </p>
+                          <p className="text-gray-400">Configuraciones</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="bg-[#2a2a2a] rounded-lg p-4">
-                    <h4 className="text-white font-medium mb-3">Detalles por categoria:</h4>
-                    <div className="space-y-2">
-                      {Object.entries(importResult.details).map(([key, value]) => (
-                        value.created > 0 || value.skipped > 0 ? (
-                          <div key={key} className="flex justify-between text-sm">
-                            <span className="text-gray-300 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
-                            <span>
-                              <span className="text-green-400">{value.created} creados</span>
-                              {value.skipped > 0 && (
-                                <span className="text-yellow-400 ml-2">{value.skipped} omitidos</span>
-                              )}
-                            </span>
-                          </div>
-                        ) : null
-                      ))}
+                  {importResult && (
+                    <div className="bg-[#2a2a2a] rounded-lg p-4">
+                      <h4 className="text-white font-medium mb-3">Detalles por categoria:</h4>
+                      <div className="space-y-2">
+                        {Object.entries(importResult.details).map(([key, value]) => (
+                          value.created > 0 || value.skipped > 0 ? (
+                            <div key={key} className="flex justify-between text-sm">
+                              <span className="text-gray-300 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                              <span>
+                                <span className="text-green-400">{value.created} creados</span>
+                                {value.skipped > 0 && (
+                                  <span className="text-yellow-400 ml-2">{value.skipped} omitidos</span>
+                                )}
+                              </span>
+                            </div>
+                          ) : null
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {fullImportResult && (
+                    <div className="space-y-4">
+                      <div className="bg-[#2a2a2a] rounded-lg p-4">
+                        <h4 className="text-white font-medium mb-3">Prompt Maestro Generado</h4>
+                        <p className="text-sm text-gray-300 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                          {fullImportResult.masterPromptPreview}
+                        </p>
+                      </div>
+                      
+                      <div className="bg-[#2a2a2a] rounded-lg p-4">
+                        <h4 className="text-white font-medium mb-3">Resumen de Importacion</h4>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Secciones creadas:</span>
+                            <span className="text-green-400">{fullImportResult.results?.sections?.created || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Secciones omitidas:</span>
+                            <span className="text-yellow-400">{fullImportResult.results?.sections?.skipped || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Productos:</span>
+                            <span className="text-blue-400">{fullImportResult.results?.config?.products || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Campos:</span>
+                            <span className="text-blue-400">{fullImportResult.results?.config?.fields || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Etapas:</span>
+                            <span className="text-blue-400">{fullImportResult.results?.config?.stages || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Objeciones:</span>
+                            <span className="text-blue-400">{fullImportResult.results?.config?.objections || 0}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -436,25 +569,47 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
                   >
                     Cancelar
                   </button>
-                  <button
-                    onClick={handleAnalyze}
-                    disabled={analyzing || !rawPrompt.trim()}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white rounded-lg transition-colors"
-                  >
-                    {analyzing ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        Analizando...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        Analizar con IA
-                      </>
-                    )}
-                  </button>
+                  {importMode === 'full' ? (
+                    <button
+                      onClick={handleFullImport}
+                      disabled={importing || !rawPrompt.trim()}
+                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white rounded-lg transition-colors"
+                    >
+                      {importing ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          Importando...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          Importar Todo
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleAnalyze}
+                      disabled={analyzing || !rawPrompt.trim()}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 disabled:opacity-50 text-white rounded-lg transition-colors"
+                    >
+                      {analyzing ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          Analizando...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          Analizar con IA
+                        </>
+                      )}
+                    </button>
+                  )}
                 </>
               )}
 

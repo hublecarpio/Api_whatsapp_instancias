@@ -4075,6 +4075,287 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
   }
 });
 
+// ============ FULL PROMPT IMPORT (Master + Sections + Config) ============
+
+router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, rawPrompt, instanceId, options = {} } = req.body;
+    
+    if (!business_id || !rawPrompt) {
+      return res.status(400).json({ error: 'business_id and rawPrompt are required' });
+    }
+    
+    if (rawPrompt.length > 60000) {
+      return res.status(400).json({ error: 'Prompt too long (max 60,000 characters)' });
+    }
+    
+    const business = await prisma.business.findFirst({
+      where: { id: business_id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!geminiService.isConfigured()) {
+      return res.status(503).json({ error: 'Gemini API not configured' });
+    }
+    
+    const { skipConflicts = true, clearExisting = false } = options;
+    
+    console.log(`[IMPORT-FULL] Starting full import for business ${business_id}, length: ${rawPrompt.length}`);
+    
+    // Run both analyses in parallel
+    const [masterResult, configResult] = await Promise.all([
+      geminiService.generateMasterPromptAndSections(rawPrompt),
+      geminiService.analyzeBusinessPrompt(rawPrompt)
+    ]);
+    
+    if (!masterResult.success) {
+      return res.status(500).json({ error: masterResult.error || 'Failed to generate master prompt and sections' });
+    }
+    
+    const results = {
+      masterPrompt: { updated: false, error: null as string | null },
+      sections: { created: 0, skipped: 0, cleared: 0, errors: [] as string[] },
+      config: { products: 0, fields: 0, stages: 0, objections: 0, zones: 0 }
+    };
+    
+    // 1. Update Master Prompt
+    try {
+      const existingPrompt = await prisma.agentPrompt.findFirst({
+        where: { 
+          businessId: business_id, 
+          ...(instanceId ? { instanceId } : { instanceId: null })
+        }
+      });
+      
+      if (existingPrompt) {
+        await prisma.agentPrompt.update({
+          where: { id: existingPrompt.id },
+          data: { 
+            prompt: masterResult.masterPrompt,
+            bufferSeconds: 10,
+            historyLimit: 15
+          }
+        });
+      } else {
+        await prisma.agentPrompt.create({
+          data: {
+            businessId: business_id,
+            instanceId: instanceId || undefined,
+            prompt: masterResult.masterPrompt,
+            bufferSeconds: 10,
+            historyLimit: 15
+          }
+        });
+      }
+      results.masterPrompt.updated = true;
+      console.log(`[IMPORT-FULL] Master prompt updated, length: ${masterResult.masterPrompt.length}`);
+    } catch (err: any) {
+      results.masterPrompt.error = err.message;
+    }
+    
+    // 2. Clear existing sections if requested
+    if (clearExisting) {
+      const deleted = await prisma.promptSection.deleteMany({
+        where: { 
+          businessId: business_id,
+          ...(instanceId ? { instanceId } : {})
+        }
+      });
+      results.sections.cleared = deleted.count;
+    }
+    
+    // 3. Create Sections
+    const existingSections = await prisma.promptSection.findMany({
+      where: { businessId: business_id },
+      select: { title: true, type: true }
+    });
+    const existingKeys = new Set(existingSections.map(s => `${s.type}:${s.title.toLowerCase()}`));
+    
+    for (const section of masterResult.sections) {
+      const key = `${section.type}:${section.title.toLowerCase()}`;
+      if (skipConflicts && existingKeys.has(key)) {
+        results.sections.skipped++;
+        continue;
+      }
+      
+      try {
+        await prisma.promptSection.create({
+          data: {
+            businessId: business_id,
+            instanceId: instanceId || null,
+            title: section.title,
+            content: section.content,
+            type: section.type,
+            isCore: section.isCore,
+            priority: section.priority,
+            enabled: true,
+            metadata: { keywords: section.keywords, sourceType: 'auto-import' }
+          }
+        });
+        results.sections.created++;
+      } catch (err: any) {
+        results.sections.errors.push(`${section.title}: ${err.message}`);
+      }
+    }
+    
+    // 4. Import structured config (products, fields, stages, etc) from analyzeBusinessPrompt
+    if (configResult.success && configResult.config) {
+      const cfg = configResult.config;
+      
+      // Products
+      if (cfg.products?.length > 0) {
+        const existingTitles = new Set((await prisma.product.findMany({
+          where: { businessId: business_id },
+          select: { title: true }
+        })).map(p => p.title.toLowerCase()));
+        
+        for (const product of cfg.products) {
+          if (skipConflicts && existingTitles.has(product.title.toLowerCase())) continue;
+          try {
+            await prisma.product.create({
+              data: {
+                businessId: business_id,
+                instanceId: instanceId || null,
+                title: product.title,
+                description: product.description || null,
+                price: product.price || 0
+              }
+            });
+            results.config.products++;
+          } catch {}
+        }
+      }
+      
+      // Extraction Fields
+      if (cfg.extractionFields?.length > 0) {
+        const existingKeys = new Set((await prisma.extractionField.findMany({
+          where: { businessId: business_id },
+          select: { fieldKey: true }
+        })).map(f => f.fieldKey));
+        
+        let order = ((await prisma.extractionField.aggregate({
+          where: { businessId: business_id },
+          _max: { order: true }
+        }))._max.order || 0) + 1;
+        
+        for (const field of cfg.extractionFields) {
+          if (skipConflicts && existingKeys.has(field.key)) continue;
+          try {
+            await prisma.extractionField.create({
+              data: {
+                businessId: business_id,
+                instanceId: instanceId || null,
+                fieldKey: field.key,
+                fieldLabel: field.label,
+                fieldType: 'text',
+                order: order++,
+                enabled: true
+              }
+            });
+            results.config.fields++;
+          } catch {}
+        }
+      }
+      
+      // Funnel Stages
+      if (cfg.funnelStages?.length > 0) {
+        const existingNames = new Set((await prisma.funnelStage.findMany({
+          where: { businessId: business_id },
+          select: { name: true }
+        })).map(s => s.name.toLowerCase()));
+        
+        let order = ((await prisma.funnelStage.aggregate({
+          where: { businessId: business_id },
+          _max: { order: true }
+        }))._max.order || 0) + 1;
+        
+        for (const stage of cfg.funnelStages) {
+          if (skipConflicts && existingNames.has(stage.name.toLowerCase())) continue;
+          try {
+            await prisma.funnelStage.create({
+              data: {
+                businessId: business_id,
+                instanceId: instanceId || null,
+                name: stage.name,
+                description: stage.description || null,
+                order: order++,
+                requiredFieldKeys: stage.requiredFields || [],
+                blockedTopics: stage.blockedTopics || [],
+                isActive: true
+              }
+            });
+            results.config.stages++;
+          } catch {}
+        }
+      }
+      
+      // Objections
+      if (cfg.objections?.length > 0) {
+        const existingNames = new Set((await prisma.salesObjection.findMany({
+          where: { businessId: business_id },
+          select: { name: true }
+        })).map(o => o.name.toLowerCase()));
+        
+        for (const objection of cfg.objections) {
+          if (skipConflicts && existingNames.has(objection.trigger.toLowerCase())) continue;
+          try {
+            await prisma.salesObjection.create({
+              data: {
+                businessId: business_id,
+                name: objection.trigger,
+                triggerPhrases: [objection.trigger],
+                responseScript: objection.response,
+                category: objection.category || 'general',
+                isActive: true
+              }
+            });
+            results.config.objections++;
+          } catch {}
+        }
+      }
+      
+      // Delivery Zones
+      if (cfg.deliveryZones?.length > 0) {
+        const existingNames = new Set((await prisma.deliveryZone.findMany({
+          where: { businessId: business_id },
+          select: { name: true }
+        })).map(z => z.name.toLowerCase()));
+        
+        for (const zone of cfg.deliveryZones) {
+          if (skipConflicts && existingNames.has(zone.name.toLowerCase())) continue;
+          try {
+            await prisma.deliveryZone.create({
+              data: {
+                businessId: business_id,
+                name: zone.name,
+                cost: zone.price || 0,
+                deliveryTime: zone.estimatedTime || null,
+                isActive: true
+              }
+            });
+            results.config.zones++;
+          } catch {}
+        }
+      }
+    }
+    
+    console.log(`[IMPORT-FULL] Completed for business ${business_id}:`, results);
+    
+    res.json({
+      success: true,
+      results,
+      masterPromptPreview: masterResult.masterPrompt.substring(0, 500) + '...',
+      sectionsGenerated: masterResult.sections.length
+    });
+  } catch (error: any) {
+    console.error('[IMPORT-FULL] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============ RAG KNOWLEDGE SECTIONS ============
 
 import { generateEmbedding, retrieveRelevantSections, formatSectionsForPrompt, getRAGStats } from '../services/ragService.js';

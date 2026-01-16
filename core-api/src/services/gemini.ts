@@ -951,6 +951,143 @@ REGLAS:
     }
   }
 
+  // ========== GENERATE MASTER PROMPT + SECTIONS ==========
+  
+  async generateMasterPromptAndSections(
+    rawPrompt: string
+  ): Promise<{
+    success: boolean;
+    masterPrompt: string;
+    sections: Array<{
+      type: 'CORE' | 'TONE' | 'SALES' | 'POLICIES' | 'FAQ' | 'OBJECTIONS' | 'CLOSING' | 'OTHER';
+      title: string;
+      content: string;
+      isCore: boolean;
+      priority: number;
+      keywords: string[];
+    }>;
+    error?: string;
+  }> {
+    if (!this.isConfigured()) {
+      return { success: false, masterPrompt: '', sections: [], error: 'Gemini API not configured' };
+    }
+
+    try {
+      console.log('[GEMINI] Generating master prompt and sections, length:', rawPrompt.length);
+      
+      const prompt = `Eres un experto en estructurar prompts para agentes de IA de ventas. Analiza el siguiente texto de configuración de negocio y genera DOS COSAS:
+
+1. **PROMPT MAESTRO (raíz)**: Un prompt conciso que contiene SOLO el contexto ESENCIAL:
+   - IDENTIDAD: Nombre del vendedor, empresa, país, descripción breve
+   - OBJETIVO PRINCIPAL: Meta de la conversación (ej: cerrar pedido con X datos)
+   - REGLAS CRÍTICAS: Reglas que NUNCA deben violarse (ej: no mencionar precios sin X datos)
+   - TONO/PERSONALIDAD: Estilo de comunicación en 1-2 líneas
+   - NO incluir FAQs, flujos detallados, objeciones específicas, etc. (eso va en secciones)
+
+2. **SECCIONES (ramas)**: Contenido especializado dividido en categorías:
+   - CORE: Instrucciones fundamentales adicionales
+   - TONE: Detalles de personalidad, emojis, formato
+   - POLICIES: Políticas de envío, pagos, devoluciones, palabras prohibidas
+   - FAQ: Preguntas frecuentes con sus respuestas exactas
+   - OBJECTIONS: Manejo de objeciones específicas
+   - SALES: Flujo operativo, técnicas de venta, argumentos
+   - CLOSING: Mensajes de cierre, confirmaciones, derivación
+   - OTHER: Información que no encaja en otras categorías
+
+## TEXTO A ANALIZAR:
+${rawPrompt.substring(0, 25000)}
+
+## RESPONDE EN JSON:
+{
+  "masterPrompt": "Prompt maestro conciso con identidad, objetivo, reglas críticas y tono...",
+  "sections": [
+    {
+      "type": "FAQ",
+      "title": "Preguntas sobre Envíos",
+      "content": "Contenido completo con las FAQs sobre envíos...",
+      "isCore": false,
+      "priority": 7,
+      "keywords": ["envio", "entrega", "shalom", "demora"]
+    },
+    {
+      "type": "POLICIES",
+      "title": "Métodos de Pago",
+      "content": "Yape, Plin, contra entrega con adelanto mínimo del 50%...",
+      "isCore": false,
+      "priority": 8,
+      "keywords": ["pago", "yape", "plin", "adelanto"]
+    }
+  ]
+}
+
+REGLAS CRÍTICAS:
+- El masterPrompt debe ser CONCISO (máx 600 palabras) pero COMPLETO en identidad/objetivo/reglas/tono
+- Las secciones deben contener TODO el contenido especializado del texto original
+- Las FAQs deben preservar las respuestas EXACTAS del texto
+- Cada sección debe tener keywords relevantes para búsqueda semántica
+- priority: CORE=10, TONE=9, POLICIES=8, FAQ=7, SALES=6, OBJECTIONS=5, CLOSING=4, OTHER=3
+- isCore: true solo para CORE y TONE`;
+
+      let text = '';
+      
+      if (this.apiKey) {
+        const response = await axios.post(
+          `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+          {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.15, maxOutputTokens: 16000 }
+          },
+          { headers: { 'Content-Type': 'application/json' }, timeout: 180000 }
+        );
+        text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else if (this.hasOpenRouterFallback()) {
+        const result = await this.callOpenRouter(prompt, { temperature: 0.15, maxTokens: 16000 });
+        if (result.success) {
+          text = result.text;
+        } else {
+          throw new Error(result.error || 'OpenRouter failed');
+        }
+      } else {
+        throw new Error('No AI provider configured');
+      }
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.error('[GEMINI] Invalid response format for master prompt generation');
+        return { success: false, masterPrompt: '', sections: [], error: 'Invalid response format' };
+      }
+
+      const result = JSON.parse(jsonMatch[0]);
+      
+      console.log('[GEMINI] Generated master prompt and sections:', {
+        masterPromptLength: result.masterPrompt?.length || 0,
+        sectionsCount: result.sections?.length || 0,
+        sectionTypes: result.sections?.map((s: any) => s.type) || []
+      });
+
+      return {
+        success: true,
+        masterPrompt: result.masterPrompt || '',
+        sections: (result.sections || []).map((s: any) => ({
+          type: s.type || 'OTHER',
+          title: s.title || 'Sin título',
+          content: s.content || '',
+          isCore: s.isCore ?? (s.type === 'CORE' || s.type === 'TONE'),
+          priority: s.priority ?? 5,
+          keywords: s.keywords || []
+        }))
+      };
+    } catch (error: any) {
+      console.error('[GEMINI] Generate master prompt failed:', error.response?.data || error.message);
+      return {
+        success: false,
+        masterPrompt: '',
+        sections: [],
+        error: error.response?.data?.error?.message || error.message
+      };
+    }
+  }
+
   // ========== MULTI-PASS PROMPT IMPORTER ==========
   
   private chunkText(text: string, chunkSize: number = 6000, overlap: number = 900): { chunk: string; index: number; start: number; end: number }[] {
