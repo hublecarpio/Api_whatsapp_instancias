@@ -4180,7 +4180,7 @@ router.put('/knowledge-sections/:sectionId', authMiddleware, async (req: AuthReq
         ...(priority !== undefined && { priority }),
         ...(keywords !== undefined && { keywords }),
         ...(enabled !== undefined && { enabled }),
-        embedding
+        ...(embedding !== undefined && { embedding: embedding as any })
       }
     });
     
