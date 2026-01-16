@@ -56,6 +56,7 @@ export const AVAILABLE_MODELS = [
   { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro', tier: 'enterprise', family: 'gpt-5', provider: 'openai' },
   { id: 'google/gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash', tier: 'standard', family: 'gemini', provider: 'openrouter' },
   { id: 'google/gemini-2.5-pro-preview', name: 'Gemini 2.5 Pro', tier: 'premium', family: 'gemini', provider: 'openrouter' },
+  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', tier: 'standard', family: 'gemini', provider: 'openrouter' },
   { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', tier: 'premium', family: 'claude', provider: 'openrouter' }
 ];
 
