@@ -4,7 +4,30 @@ import prisma from './prisma.js';
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const DEFAULT_MODEL = 'gpt-4.1-mini';
+
+function isOpenRouterModel(model: string): boolean {
+  const modelConfig = AVAILABLE_MODELS.find(m => m.id === model);
+  if (modelConfig?.provider === 'openrouter') return true;
+  if (model.includes('/')) return true;
+  return false;
+}
+
+let openrouterClient: OpenAI | null = null;
+
+function getOpenRouterClient(): OpenAI {
+  if (!openrouterClient) {
+    if (!OPENROUTER_API_KEY) {
+      throw new Error('OPENROUTER_API_KEY is not configured');
+    }
+    openrouterClient = new OpenAI({
+      apiKey: OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1'
+    });
+  }
+  return openrouterClient;
+}
 
 const PRICING_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
   'gpt-4.1': { input: 0.002, output: 0.008 },
@@ -274,13 +297,15 @@ function optimizeMessages(
 }
 
 export async function callOpenAI(options: CallOpenAIOptions): Promise<CallOpenAIResult> {
-  const client = getOpenAIClient();
   const { model, reasoningEffort = 'none', maxTokens = 1000, temperature = 0.7, context } = options;
+  
+  const useOpenRouter = isOpenRouterModel(model);
+  const client = useOpenRouter ? getOpenRouterClient() : getOpenAIClient();
   
   const maxHistoryTokens = options.maxHistoryTokens || 3000;
   const optimizedMessages = optimizeMessages(options.messages, maxHistoryTokens);
   
-  const useResponsesAPI = isGPT5Model(model);
+  const useResponsesAPI = !useOpenRouter && isGPT5Model(model);
   const includeReasoning = useResponsesAPI && reasoningEffort !== 'none';
   
   let content = '';
