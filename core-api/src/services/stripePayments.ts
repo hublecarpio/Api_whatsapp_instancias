@@ -309,12 +309,15 @@ export async function getOrdersByBusiness(businessId: string, status?: string, l
   if (status) {
     where.status = status;
   }
-  // Only filter by instanceId if a specific non-empty value is provided
-  // If instanceId is undefined, empty string, or not passed - show ALL orders for the business
+  // When instanceId is provided, show orders for that instance AND legacy orders (null instanceId)
+  // This ensures backward compatibility with orders created before multi-instance support
   if (instanceId && instanceId.trim() !== '') {
-    where.instanceId = instanceId;
+    where.OR = [
+      { instanceId: instanceId },
+      { instanceId: null }
+    ];
   }
-  // Note: We no longer filter for null instanceId, so all orders appear regardless of instance
+  // If no instanceId provided, show ALL orders for the business (no instance filter)
 
   return prisma.order.findMany({
     where,
