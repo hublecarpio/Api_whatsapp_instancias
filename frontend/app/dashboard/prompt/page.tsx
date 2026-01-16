@@ -1335,7 +1335,7 @@ export default function PromptPage() {
         >
           Archivos ({agentFiles.length})
         </button>
-        {(currentBusiness as any)?.businessObjective === 'SALES' && (
+        {((selectedInstanceId && getSelectedInstance()?.businessObjective) || currentBusiness?.businessObjective) === 'SALES' && (
           <button
             onClick={() => { setActiveTab('shipping'); setActiveV2Tab('shipping'); }}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
