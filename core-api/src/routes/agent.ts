@@ -1324,16 +1324,33 @@ async function processWithAgent(
     console.log(`[Agent V1] Dynamic prompt built with intent context`);
   }
   
+  // Filter by instanceId if available to avoid mixing conversations from different instances
+  // Build phone filter that matches any variant of the contact phone
+  const phoneVariants = [contactPhone, phone].filter(Boolean);
+  const phoneConditions = phoneVariants.flatMap(p => [
+    { sender: p },
+    { recipient: p }
+  ]);
+  
+  const messageFilter: any = { 
+    businessId,
+    OR: phoneConditions
+  };
+  
+  // If we have an instanceId, add it as an AND condition with fallback to null (legacy messages)
+  if (instanceId) {
+    messageFilter.AND = [
+      {
+        OR: [
+          { instanceId: instanceId },
+          { instanceId: null } // Include legacy messages without instanceId
+        ]
+      }
+    ];
+  }
+  
   const recentMessages = await prisma.messageLog.findMany({
-    where: { 
-      businessId,
-      OR: [
-        { sender: contactPhone },
-        { recipient: contactPhone },
-        { sender: phone },
-        { recipient: phone }
-      ]
-    },
+    where: messageFilter,
     orderBy: { createdAt: 'desc' },
     take: historyLimit
   });

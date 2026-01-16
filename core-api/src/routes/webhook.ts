@@ -193,7 +193,31 @@ router.post('/:businessId', async (req: Request, res: Response) => {
         break;
         
       case 'message.received':
-        if (data && (data.text || data.mediaUrl)) {
+        // Normalize message type and content - handle all possible message formats
+        // Location can come as: data.type='location', data.latitude, or nested data.locationMessage
+        const hasLocationData = data?.latitude !== undefined || 
+          data?.type === 'location' || 
+          data?.type === 'live_location' ||
+          data?.locationMessage || 
+          data?.liveLocationMessage;
+        
+        // Product/order messages from catalog
+        const hasProductData = data?.type === 'product' ||
+          data?.productMessage ||
+          data?.orderMessage ||
+          (data?.availableTypes && (
+            data.availableTypes.includes('productMessage') || 
+            data.availableTypes.includes('orderMessage')
+          ));
+        
+        const hasContent = data && (
+          data.text || 
+          data.mediaUrl || 
+          hasLocationData || 
+          hasProductData
+        );
+        
+        if (hasContent) {
           const fromJid = data.from || '';
           if (fromJid.endsWith('@g.us') || fromJid.includes('@g.us')) {
             console.log(`Ignoring group message from ${fromJid}`);
@@ -374,6 +398,57 @@ router.post('/:businessId', async (req: Request, res: Response) => {
             }
           }
           
+          // Build message text - include location info if present
+          let messageText = data.text || null;
+          
+          // Normalize location data from various sources
+          let latitude: number | undefined;
+          let longitude: number | undefined;
+          let isLocationMessage = false;
+          
+          if (data.type === 'location' || data.type === 'live_location') {
+            isLocationMessage = true;
+            latitude = data.latitude;
+            longitude = data.longitude;
+          } else if (data.locationMessage) {
+            isLocationMessage = true;
+            latitude = data.locationMessage.degreesLatitude;
+            longitude = data.locationMessage.degreesLongitude;
+          } else if (data.liveLocationMessage) {
+            isLocationMessage = true;
+            latitude = data.liveLocationMessage.degreesLatitude;
+            longitude = data.liveLocationMessage.degreesLongitude;
+          }
+          
+          // Normalize product data
+          let isProductMessage = false;
+          let productInfo: any = null;
+          
+          if (data.productMessage) {
+            isProductMessage = true;
+            productInfo = data.productMessage;
+          } else if (data.orderMessage) {
+            isProductMessage = true;
+            productInfo = data.orderMessage;
+          } else if (data.availableTypes?.includes('productMessage') || data.availableTypes?.includes('orderMessage')) {
+            isProductMessage = true;
+          }
+          
+          if (isLocationMessage && latitude !== undefined && longitude !== undefined) {
+            messageText = `📍 Ubicación compartida: https://www.google.com/maps?q=${latitude},${longitude}`;
+            if (!mediaAnalysis) {
+              mediaAnalysis = `El cliente compartió su ubicación: latitud ${latitude}, longitud ${longitude}. Puedes usar estas coordenadas para el envío.`;
+            }
+          }
+          
+          if (isProductMessage) {
+            const productTitle = productInfo?.product?.title || productInfo?.title || '';
+            messageText = messageText || `🛒 El cliente envió un producto del catálogo${productTitle ? `: ${productTitle}` : ''}`;
+            if (!mediaAnalysis) {
+              mediaAnalysis = `El cliente seleccionó un producto del catálogo de WhatsApp Business${productTitle ? ` (${productTitle})` : ''}. Confirma el producto y procede con la venta.`;
+            }
+          }
+          
           const messageLog = await prisma.messageLog.create({
             data: {
               businessId,
@@ -382,7 +457,7 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               direction: isFromMe ? 'outbound' : 'inbound',
               sender: isFromMe ? undefined : contactPhone,
               recipient: isFromMe ? contactPhone : undefined,
-              message: data.text || null,
+              message: messageText,
               mediaUrl: data.mediaUrl || null,
               metadata: {
                 ...data,
@@ -393,7 +468,12 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                 isLidMessage: isLidMessage || undefined,
                 originalLid: originalLid || undefined,
                 mediaAnalysis: mediaAnalysis || undefined,
-                mediaType: mediaType || undefined
+                mediaType: mediaType || undefined,
+                isLocationMessage: isLocationMessage || undefined,
+                latitude: latitude,
+                longitude: longitude,
+                isProductMessage: isProductMessage || undefined,
+                productInfo: productInfo || undefined
               }
             }
           });
@@ -401,17 +481,21 @@ router.post('/:businessId', async (req: Request, res: Response) => {
           // Dispatch user_message webhook for incoming messages
           if (!isFromMe) {
             console.log(`[WEBHOOK] Dispatching user_message webhook for business ${businessId}, contact ${contactPhone}, instance ${instance?.id}`);
+            // Use messageText which already includes location/product info
+            const dispatchMessage = mediaAnalysis ? `${messageText || ''}\n[Media: ${mediaAnalysis}]` : (messageText || '');
             dispatchUserMessage(
               businessId,
               contactPhone,
               contactName,
-              mediaAnalysis ? `${data.text || ''}\n[Media: ${mediaAnalysis}]` : (data.text || ''),
-              mediaType || 'text',
+              dispatchMessage,
+              isLocationMessage ? 'location' : (isProductMessage ? 'product' : (mediaType || 'text')),
               data.mediaUrl,
               {
                 analysis: mediaAnalysis || undefined,
                 efficoreMessageId: messageLog.id,
-                baileysMessageId: providerMessageId
+                baileysMessageId: providerMessageId,
+                latitude: latitude,
+                longitude: longitude
               },
               instance?.id
             ).catch(err => console.error('[WEBHOOK] Failed to dispatch user_message webhook:', err.message));
