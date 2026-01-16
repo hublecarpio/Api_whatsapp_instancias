@@ -1,0 +1,100 @@
+  telefono_alternativo: null
+}
+[LEAD DATA] Extracted data for 51992544801: { ciudad: 'Lima' }
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.9,
+  reasoning: 'El agente está esperando la confirmación de la dirección (distrito y departamento) para coordinar la entrega. El cliente ya ha proporcionado información, pero el agente necesita la información completa. La conversación muestra un seguimiento activo para obtener la información faltante.',
+  shouldChange: false,
+  currentStage: 'Pendiente'
+}
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.9,
+  reasoning: "El agente está esperando la confirmación de la dirección (distrito y departamento) para coordinar la entrega. Aunque el cliente dice haber dado la información, el agente insiste en la confirmación, lo que indica que la información no es clara o no se ha recibido correctamente. El cliente no responde a las múltiples solicitudes del agente, por lo que sigue 'Pendiente' de respuesta.",
+  shouldChange: false,
+  currentStage: 'Pendiente'
+}
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: 'Lima',
+  telefono_alternativo: null
+}
+[LEAD DATA] Extracted data for 51992544801: { ciudad: 'Lima' }
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.9,
+  reasoning: "El agente está intentando obtener información necesaria para coordinar la entrega, lo que indica que se está esperando una respuesta del cliente para poder avanzar. La insistencia del agente en obtener la información faltante refuerza que el lead sigue en estado 'Pendiente'.",
+  shouldChange: false,
+  currentStage: 'Pendiente'
+}
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.9,
+  reasoning: 'El agente está esperando la información de ubicación del cliente para asegurar la entrega. La conversación muestra múltiples intentos de contacto sin respuesta del cliente.',
+  shouldChange: false,
+  currentStage: 'Pendiente'
+}
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.9,
+  reasoning: "El agente está esperando la información de ubicación del cliente para asegurar la entrega. Los múltiples mensajes 'hola' y otros caracteres sin sentido sugieren un problema de comunicación o falta de respuesta del cliente, lo que refuerza que la etapa 'Pendiente' es la correcta.",
+  shouldChange: false,
+  currentStage: 'Pendiente'
+}
+[ExpiredBuffer] Checking for expired buffers...
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: 'Lima',
+  telefono_alternativo: null
+}
+[LEAD DATA] Extracted data for 51992544801: { ciudad: 'Lima' }
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: 'Lima',
+  telefono_alternativo: null
+}
+[LEAD DATA] Extracted data for 51992544801: { ciudad: 'Lima' }
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: 'Lima',
+  telefono_alternativo: null
+}
+[LEAD DATA] Extracted data for 51992544801: { ciudad: 'Lima' }
+[GEMINI] Contact data extraction: {
+  nombre: null,
+  email: null,
+  direccion: null,
+  ciudad: 'Lima',
+  telefono_alternativo: null
+}
+[LEAD DATA] Extracted data for 51992544801: { ciudad: 'Lima' }
+[ExpiredBuffer] Checking for expired buffers...
+Webhook received for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc: message.status
+Webhook payload: {
+  "messageId": "3EB00837E5D610827F5102",
+  "remoteJid": "259326316945539@lid",
+  "status": "delivered",
+  "statusCode": 3
+}
+[Agent Buffer] Processing buffer for 51992544801 after 10s delay
+[Agent Buffer] Found 6 messages to process for 51992544801
+[Agent Buffer] Calling processWithAgentQueuedWithIds for 51992544801
+[Agent Processor] Starting processWithAgentQueuedWithIds for 51992544801 with 6 messages
+[Agent Processor] Attempting to queue message for 51992544801
+[AI Queue] Job queued: ai-5f2b9218-cf3a-4928-834a-50e6a8d583cc-51992544801-1768552353115 (concurrency: 40, workerRunning: true)
+[Agent] Message queued for parallel processing with 0 message IDs: ai-5f2b9218-cf3a-4928-834a-50e6a8d583cc-51992544801-1768552353115
+[AI Worker] Processing job ai-5f2b9218-cf3a-4928-834a-50e6a8d583cc-51992544801-1768552353115 for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc, contact 51992544801, provider=unknown, messageIds=0
+[AI Worker] Bot test mode enabled for contact 51992544801, processing despite global disable
+[RAG] Retrieved 2 core + 0 RAG sections in 270ms (~397 tokens)
+[AI] RAG: 2 core + 0 dynamic sections (~397 tokens)
+[AI Worker] Job ai-5f2b9218-cf3a-4928-834a-50e6a8d583cc-51992544801-1768552353115 failed: 400 invalid model ID
+[AI Worker] Job ai-5f2b9218-cf3a-4928-834a-50e6a8d583cc-51992544801-1768552353115 failed: 400 invalid model ID
