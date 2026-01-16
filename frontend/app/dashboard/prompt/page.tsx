@@ -167,7 +167,7 @@ export default function PromptPage() {
   const [testVariables, setTestVariables] = useState<Record<string, string>>({});
   const [testLoading, setTestLoading] = useState(false);
   const [testResponse, setTestResponse] = useState<{ status?: number; data?: any; error?: string; duration?: number; debug?: { interpolatedUrl?: string; method?: string; variables?: Record<string, string>; requestBody?: any } } | null>(null);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'config' | 'tools' | 'files' | 'api' | 'shipping' | 'funnel'>('prompt');
+  const [activeTab, setActiveTab] = useState<'prompt' | 'sections' | 'config' | 'tools' | 'files' | 'shipping' | 'funnel'>('prompt');
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedToolForLogs, setSelectedToolForLogs] = useState<Tool | null>(null);
   const [toolLogs, setToolLogs] = useState<ToolLog[]>([]);
@@ -184,7 +184,7 @@ export default function PromptPage() {
   const [leadMemories, setLeadMemories] = useState<LeadMemory[]>([]);
   const [learnedRules, setLearnedRules] = useState<LearnedRule[]>([]);
   const [loadingV2, setLoadingV2] = useState(false);
-  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'tools' | 'files' | 'config' | 'api' | 'shipping' | 'funnel'>('prompt');
+  const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'tools' | 'files' | 'config' | 'shipping' | 'funnel'>('prompt');
   
   const [promptSections, setPromptSections] = useState<PromptSection[]>([]);
   const [loadingSections, setLoadingSections] = useState(false);
@@ -1287,152 +1287,95 @@ export default function PromptPage() {
         </div>
       </div>
 
-      {agentVersion === 'v1' ? (
-        <div className="flex flex-wrap items-center gap-2 mb-6">
+      {/* Unified tabs for both v1 and v2 */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <button
+          onClick={() => { setActiveTab('prompt'); setActiveV2Tab('prompt'); }}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'prompt' 
+              ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+              : 'bg-dark-card text-gray-400 hover:text-white'
+          }`}
+        >
+          Prompt Maestro
+        </button>
+        <button
+          onClick={() => { setActiveTab('sections'); setActiveV2Tab('sections'); }}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'sections' 
+              ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+              : 'bg-dark-card text-gray-400 hover:text-white'
+          }`}
+        >
+          Secciones ({promptSections.length})
+        </button>
+        <button
+          onClick={() => { setActiveTab('tools'); setActiveV2Tab('tools'); }}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'tools' 
+              ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+              : 'bg-dark-card text-gray-400 hover:text-white'
+          }`}
+        >
+          Tools ({tools.length})
+        </button>
+        <button
+          onClick={() => { setActiveTab('files'); setActiveV2Tab('files'); }}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'files' 
+              ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+              : 'bg-dark-card text-gray-400 hover:text-white'
+          }`}
+        >
+          Archivos ({agentFiles.length})
+        </button>
+        {(currentBusiness as any)?.businessObjective === 'SALES' && (
           <button
-            onClick={() => setActiveTab('prompt')}
+            onClick={() => { setActiveTab('shipping'); setActiveV2Tab('shipping'); }}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'prompt' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
+              (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'shipping' 
+                ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+                : 'bg-dark-card text-gray-400 hover:text-white'
             }`}
           >
-            Prompt Maestro
+            Envíos
           </button>
+        )}
+        <button
+          onClick={() => { setActiveTab('funnel'); setActiveV2Tab('funnel'); }}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'funnel' 
+              ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+              : 'bg-dark-card text-gray-400 hover:text-white'
+          }`}
+        >
+          Flujo de Venta
+        </button>
+        <button
+          onClick={() => { setActiveTab('config'); setActiveV2Tab('config'); }}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'config' 
+              ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+              : 'bg-dark-card text-gray-400 hover:text-white'
+          }`}
+        >
+          Configuracion
+        </button>
+        {agentVersion === 'v2' && learnedRules.length > 0 && (
           <button
-            onClick={() => setActiveTab('config')}
+            onClick={() => setActiveV2Tab('rules')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'config' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
+              activeV2Tab === 'rules' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
             }`}
           >
-            Configuracion
+            Reglas ({learnedRules.length})
           </button>
-          <button
-            onClick={() => setActiveTab('files')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'files' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Archivos
-          </button>
-          {(currentBusiness as any)?.businessObjective === 'SALES' && (
-            <button
-              onClick={() => setActiveTab('shipping')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeTab === 'shipping' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-              }`}
-            >
-              Envíos
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab('funnel')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'funnel' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Flujo de Venta
-          </button>
-          {((user?.proBonusExpiresAt && new Date(user.proBonusExpiresAt) > new Date()) || user?.planType === 'pro') && (
-            <>
-              <button
-                onClick={() => setActiveTab('tools')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === 'tools' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-                }`}
-              >
-                Tools ({tools.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('api')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === 'api' ? 'bg-neon-blue text-dark-bg' : 'bg-dark-card text-gray-400 hover:text-white'
-                }`}
-              >
-                API & Webhooks
-              </button>
-            </>
-          )}
-          <div className="ml-auto">
-            {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} instanceId={selectedInstanceId} />}
-          </div>
+        )}
+        <div className="ml-auto">
+          {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} instanceId={selectedInstanceId} />}
         </div>
-      ) : (
-        <div className="flex flex-wrap gap-2 mb-6">
-          <button
-            onClick={() => setActiveV2Tab('prompt')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'prompt' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Prompt Maestro
-          </button>
-          <button
-            onClick={() => setActiveV2Tab('sections')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'sections' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Secciones ({promptSections.length})
-          </button>
-          {learnedRules.length > 0 && (
-            <button
-              onClick={() => setActiveV2Tab('rules')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeV2Tab === 'rules' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-              }`}
-            >
-              Reglas ({learnedRules.length})
-            </button>
-          )}
-          <button
-            onClick={() => setActiveV2Tab('tools')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'tools' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Tools ({tools.length})
-          </button>
-          <button
-            onClick={() => setActiveV2Tab('files')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'files' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Archivos ({agentFiles.length})
-          </button>
-          {(currentBusiness as any)?.businessObjective === 'SALES' && (
-            <button
-              onClick={() => setActiveV2Tab('shipping')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeV2Tab === 'shipping' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-              }`}
-            >
-              Envíos
-            </button>
-          )}
-          <button
-            onClick={() => setActiveV2Tab('funnel')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'funnel' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Flujo de Venta
-          </button>
-          <button
-            onClick={() => {
-              setActiveV2Tab('config');
-              setActiveTab('config');
-            }}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeV2Tab === 'config' ? 'bg-neon-purple text-white' : 'bg-dark-card text-gray-400 hover:text-white'
-            }`}
-          >
-            Configuracion
-          </button>
-          <div className="ml-auto">
-            {currentBusiness && <AgentHealthDashboard businessId={currentBusiness.id} instanceId={selectedInstanceId} />}
-          </div>
-        </div>
-      )}
+      </div>
+
 
       {agentVersion === 'v2' && activeV2Tab === 'prompt' && (
         <div className="card">
@@ -1468,7 +1411,7 @@ export default function PromptPage() {
         </div>
       )}
 
-      {agentVersion === 'v2' && activeV2Tab === 'sections' && (
+      {((agentVersion === 'v1' && activeTab === 'sections') || (agentVersion === 'v2' && activeV2Tab === 'sections')) && (
         <div className="card">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
@@ -2035,215 +1978,7 @@ export default function PromptPage() {
         </div>
       )}
 
-      {agentVersion === 'v1' && activeTab === 'files' && (
-        <div className="space-y-6">
-          <div className="card">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-white">Archivos del Agente</h2>
-                <p className="text-sm text-gray-400">
-                  Sube documentos, fotos o archivos que el agente puede enviar automaticamente segun el contexto de la conversacion.
-                </p>
-              </div>
-              {!showFileForm && (
-                <button
-                  onClick={() => setShowFileForm(true)}
-                  className="btn btn-primary w-full sm:w-auto"
-                >
-                  + Subir Archivo
-                </button>
-              )}
-            </div>
-
-            {showFileForm && (
-              <div className="border border-dark-hover rounded-lg p-4 mb-4 space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-white">Nuevo Archivo</h3>
-                  <button
-                    onClick={() => { setShowFileForm(false); setSelectedFile(null); setNewFile({ name: '', description: '', triggerKeywords: '', triggerContext: '' }); }}
-                    className="text-sm text-gray-400 hover:text-white"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Archivo</label>
-                  <input
-                    type="file"
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
-                    className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-dark-hover file:text-white hover:file:bg-neon-blue/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Nombre (opcional)</label>
-                  <input
-                    type="text"
-                    value={newFile.name}
-                    onChange={(e) => setNewFile({ ...newFile, name: e.target.value })}
-                    placeholder="Nombre descriptivo del archivo"
-                    className="input"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Descripcion</label>
-                  <textarea
-                    value={newFile.description}
-                    onChange={(e) => setNewFile({ ...newFile, description: e.target.value })}
-                    placeholder="Describe el contenido del archivo para que el agente sepa cuando usarlo"
-                    className="input resize-none"
-                    rows={2}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Palabras Clave de Activacion</label>
-                  <input
-                    type="text"
-                    value={newFile.triggerKeywords}
-                    onChange={(e) => setNewFile({ ...newFile, triggerKeywords: e.target.value })}
-                    placeholder="planos, triptico, catalogo, precios (separadas por comas)"
-                    className="input"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Palabras que el cliente debe mencionar para que el agente envie este archivo</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Contexto de Envio</label>
-                  <textarea
-                    value={newFile.triggerContext}
-                    onChange={(e) => setNewFile({ ...newFile, triggerContext: e.target.value })}
-                    placeholder="Ej: Cuando el cliente pregunte por los planos de departamentos o quiera ver opciones disponibles"
-                    className="input resize-none"
-                    rows={2}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Describe el contexto o situacion en que el agente debe enviar este archivo</p>
-                </div>
-
-                <button
-                  onClick={handleUploadFile}
-                  disabled={uploadingFile || !selectedFile}
-                  className="btn btn-primary w-full"
-                >
-                  {uploadingFile ? 'Subiendo...' : 'Subir Archivo'}
-                </button>
-              </div>
-            )}
-
-            {loadingFiles ? (
-              <div className="flex justify-center py-8">
-                <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : agentFiles.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <svg className="w-12 h-12 mx-auto mb-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-                <p>No hay archivos configurados</p>
-                <p className="text-sm text-gray-500 mt-1">Sube archivos que el agente pueda enviar a tus clientes</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {agentFiles.map((file, idx) => (
-                  <div key={file.id} className={`border rounded-lg p-4 ${file.enabled ? 'border-dark-hover bg-dark-surface' : 'border-gray-700 bg-gray-800/50 opacity-60'}`}>
-                    <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0">
-                        {file.fileType === 'image' ? (
-                          <img src={file.fileUrl} alt={file.name} className="w-16 h-16 object-cover rounded-lg" />
-                        ) : (
-                          <div className="w-16 h-16 bg-dark-hover rounded-lg flex items-center justify-center">
-                            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs px-2 py-0.5 bg-neon-blue/20 text-neon-blue rounded">#{idx + 1}</span>
-                          <h3 className="font-medium text-white truncate">{file.name}</h3>
-                        </div>
-                        {file.description && (
-                          <p className="text-sm text-gray-400 mt-1 line-clamp-2">{file.description}</p>
-                        )}
-                        {file.triggerKeywords && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {file.triggerKeywords.split(',').map((kw, i) => (
-                              <span key={i} className="text-xs px-2 py-0.5 bg-dark-hover text-gray-300 rounded">{kw.trim()}</span>
-                            ))}
-                          </div>
-                        )}
-                        {file.triggerContext && (
-                          <p className="text-xs text-gray-500 mt-2 italic">{file.triggerContext}</p>
-                        )}
-                      </div>
-                      
-                      <div className="flex flex-col gap-1">
-                        <button onClick={() => handleMoveFile(file.id, 'up')} disabled={idx === 0} className="p-1.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded disabled:opacity-30 disabled:cursor-not-allowed">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-                        </button>
-                        <button onClick={() => handleMoveFile(file.id, 'down')} disabled={idx === agentFiles.length - 1} className="p-1.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded disabled:opacity-30 disabled:cursor-not-allowed">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                        </button>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleUpdateFile(file.id, { enabled: !file.enabled })}
-                          className={`p-2 rounded-lg transition-colors ${file.enabled ? 'text-accent-success hover:bg-accent-success/10' : 'text-gray-500 hover:bg-gray-700'}`}
-                          title={file.enabled ? 'Desactivar' : 'Activar'}
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            {file.enabled ? (
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            ) : (
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            )}
-                          </svg>
-                        </button>
-                        <a href={file.fileUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-gray-400 hover:text-white hover:bg-dark-hover rounded-lg" title="Ver archivo">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                        </a>
-                        <button onClick={() => handleDeleteFile(file.id)} className="p-2 text-gray-400 hover:text-accent-error hover:bg-accent-error/10 rounded-lg" title="Eliminar">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="card bg-dark-surface/50">
-            <h3 className="text-sm font-semibold text-gray-300 mb-2">Como funciona</h3>
-            <ul className="text-sm text-gray-400 space-y-2">
-              <li className="flex items-start gap-2">
-                <span className="text-neon-blue">1.</span>
-                <span>Sube archivos como tripticos, catalogos, planos o fotos de productos</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-neon-blue">2.</span>
-                <span>Define palabras clave y contexto para que el agente sepa cuando enviarlos</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-neon-blue">3.</span>
-                <span>El orden determina la prioridad: archivos arriba tienen precedencia</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-neon-blue">4.</span>
-                <span>El agente enviara automaticamente el archivo mas relevante segun la conversacion</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {agentVersion === 'v1' && activeTab === 'tools' && (
+      {((agentVersion === 'v1' && activeTab === 'tools') || (agentVersion === 'v2' && activeV2Tab === 'tools')) && (
         <div className="space-y-4">
           <div className="card">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -2432,105 +2167,7 @@ export default function PromptPage() {
         </div>
       )}
 
-      {agentVersion === 'v1' && activeTab === 'shipping' && currentBusiness && (
-        <div className="card">
-          <DeliveryZones 
-            businessId={currentBusiness.id} 
-            currencySymbol={(currentBusiness as any).currencySymbol || 'S/.'} 
-          />
-        </div>
-      )}
-
-      {agentVersion === 'v1' && activeTab === 'funnel' && currentBusiness && (
-        <div className="card">
-          <FunnelStages businessId={currentBusiness.id} />
-        </div>
-      )}
-
-      {agentVersion === 'v1' && activeTab === 'api' && (
-        <div className="space-y-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold text-white mb-2">API Key</h2>
-            <p className="text-sm text-gray-400 mb-4">
-              Genera una API key para acceder a los endpoints de tu negocio desde aplicaciones externas.
-            </p>
-
-            {newApiKey && (
-              <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-4 mb-4">
-                <p className="text-sm text-accent-success font-medium mb-2">Tu nueva API key (guardala ahora):</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-dark-surface p-2 rounded text-xs text-white font-mono break-all">
-                    {newApiKey}
-                  </code>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(newApiKey);
-                      setSuccess('API key copiada');
-                    }}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    Copiar
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  Esta es la unica vez que veras esta key. Guardala en un lugar seguro.
-                </p>
-              </div>
-            )}
-
-            {apiKeyInfo?.hasApiKey && !newApiKey && (
-              <div className="bg-dark-surface rounded-lg p-4 mb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-300">API Key activa</p>
-                    <p className="text-xs text-gray-500 font-mono mt-1">{apiKeyInfo.prefix}...</p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Creada: {apiKeyInfo.createdAt ? new Date(apiKeyInfo.createdAt).toLocaleDateString() : '-'}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleGenerateApiKey}
-                disabled={loadingApiKey}
-                className="btn btn-primary"
-              >
-                {loadingApiKey ? 'Generando...' : apiKeyInfo?.hasApiKey ? 'Regenerar API Key' : 'Generar API Key'}
-              </button>
-              {apiKeyInfo?.hasApiKey && (
-                <button
-                  onClick={handleRevokeApiKey}
-                  disabled={loadingApiKey}
-                  className="btn btn-danger"
-                >
-                  Revocar
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="card bg-accent-purple/10 border-accent-purple/30">
-            <h2 className="text-lg font-semibold text-white mb-2">Webhooks</h2>
-            <p className="text-sm text-gray-400 mb-4">
-              Configura webhooks para recibir eventos en tiempo real cuando el agente responde, llegan mensajes, o cambian estados.
-            </p>
-            <a 
-              href="/dashboard/api-docs" 
-              className="btn btn-primary inline-flex items-center gap-2"
-            >
-              Configurar Webhooks
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
-            </a>
-          </div>
-        </div>
-      )}
-
-      {agentVersion === 'v2' && activeV2Tab === 'files' && (
+      {((agentVersion === 'v1' && activeTab === 'files') || (agentVersion === 'v2' && activeV2Tab === 'files')) && (
         <div className="space-y-6">
           <div className="card">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -2738,7 +2375,7 @@ export default function PromptPage() {
         </div>
       )}
 
-      {agentVersion === 'v2' && activeV2Tab === 'shipping' && currentBusiness && (
+      {((agentVersion === 'v1' && activeTab === 'shipping') || (agentVersion === 'v2' && activeV2Tab === 'shipping')) && currentBusiness && (
         <div className="card">
           <DeliveryZones 
             businessId={currentBusiness.id} 
@@ -2747,500 +2384,13 @@ export default function PromptPage() {
         </div>
       )}
 
-      {agentVersion === 'v2' && activeV2Tab === 'funnel' && currentBusiness && (
+      {((agentVersion === 'v1' && activeTab === 'funnel') || (agentVersion === 'v2' && activeV2Tab === 'funnel')) && currentBusiness && (
         <div className="card">
           <FunnelStages businessId={currentBusiness.id} />
         </div>
       )}
 
-      {agentVersion === 'v2' && activeV2Tab === 'tools' && (
-        <div className="space-y-4">
-          <div className="card">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-white">Tools Personalizados</h2>
-                <p className="text-sm text-gray-400">
-                  Agrega endpoints externos que el agente puede usar para obtener informacion.
-                </p>
-              </div>
-              {!showToolForm && (
-                <button
-                  onClick={() => setShowToolForm(true)}
-                  className="btn btn-primary w-full sm:w-auto"
-                >
-                  + Nuevo Tool
-                </button>
-              )}
-            </div>
-
-            {showToolForm && (
-              <div className="border border-dark-hover rounded-lg p-4 mb-4 space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-white">
-                    {editingTool ? 'Editar Tool' : 'Nuevo Tool'}
-                  </h3>
-                  <button
-                    onClick={handleCancelToolForm}
-                    className="text-sm text-gray-400 hover:text-white"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Nombre
-                  </label>
-                  <input
-                    type="text"
-                    value={newTool.name}
-                    onChange={(e) => setNewTool({ ...newTool, name: e.target.value })}
-                    className="input"
-                    placeholder="buscar_inventario"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Descripcion
-                  </label>
-                  <input
-                    type="text"
-                    value={newTool.description}
-                    onChange={(e) => setNewTool({ ...newTool, description: e.target.value })}
-                    className="input"
-                    placeholder="Busca productos en el inventario externo"
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      URL
-                    </label>
-                    <input
-                      type="text"
-                      value={newTool.url}
-                      onChange={(e) => setNewTool({ ...newTool, url: e.target.value })}
-                      className="input"
-                      placeholder="https://api.example.com/search"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Metodo
-                    </label>
-                    <select
-                      value={newTool.method}
-                      onChange={(e) => setNewTool({ ...newTool, method: e.target.value })}
-                      className="input"
-                    >
-                      <option value="POST">POST</option>
-                      <option value="GET">GET</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Headers (JSON opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={newTool.headers}
-                    onChange={(e) => setNewTool({ ...newTool, headers: e.target.value })}
-                    className="input font-mono text-sm"
-                    placeholder='{"Authorization": "Bearer xxx"}'
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Body Template (JSON opcional)
-                  </label>
-                  <textarea
-                    value={newTool.bodyTemplate}
-                    onChange={(e) => setNewTool({ ...newTool, bodyTemplate: e.target.value })}
-                    className="input font-mono text-sm resize-none"
-                    rows={3}
-                    placeholder='{"orderId": "{{orderId}}", "email": "{{email}}"}'
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Usa {"{{paramName}}"} para insertar parametros dinamicos
-                  </p>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-300">
-                      Parametros
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setNewTool({
-                        ...newTool,
-                        parameters: [...newTool.parameters, { name: '', type: 'string', description: '', required: true }]
-                      })}
-                      className="text-sm text-neon-blue hover:text-cyan-400"
-                    >
-                      + Agregar Parametro
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-2">
-                    Define los campos que el agente debe extraer para llamar este endpoint.
-                  </p>
-                  
-                  {newTool.parameters.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-2">Sin parametros definidos</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {newTool.parameters.map((param, index) => (
-                        <div key={index} className="flex flex-wrap gap-2 items-center bg-dark-hover p-2 rounded">
-                          <input
-                            type="text"
-                            value={param.name}
-                            onChange={(e) => {
-                              const params = [...newTool.parameters];
-                              params[index].name = e.target.value;
-                              setNewTool({ ...newTool, parameters: params });
-                            }}
-                            className="input flex-1 min-w-[100px]"
-                            placeholder="nombre"
-                          />
-                          <select
-                            value={param.type}
-                            onChange={(e) => {
-                              const params = [...newTool.parameters];
-                              params[index].type = e.target.value;
-                              setNewTool({ ...newTool, parameters: params });
-                            }}
-                            className="input w-24"
-                          >
-                            <option value="string">string</option>
-                            <option value="number">number</option>
-                            <option value="boolean">boolean</option>
-                          </select>
-                          <input
-                            type="text"
-                            value={param.description}
-                            onChange={(e) => {
-                              const params = [...newTool.parameters];
-                              params[index].description = e.target.value;
-                              setNewTool({ ...newTool, parameters: params });
-                            }}
-                            className="input flex-1 min-w-[150px]"
-                            placeholder="Descripcion"
-                          />
-                          <label className="flex items-center gap-1 text-xs text-gray-400">
-                            <input
-                              type="checkbox"
-                              checked={param.required}
-                              onChange={(e) => {
-                                const params = [...newTool.parameters];
-                                params[index].required = e.target.checked;
-                                setNewTool({ ...newTool, parameters: params });
-                              }}
-                              className="w-4 h-4 rounded border-gray-600 bg-dark-surface text-neon-blue"
-                            />
-                            Req
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const params = newTool.parameters.filter((_, i) => i !== index);
-                              setNewTool({ ...newTool, parameters: params });
-                            }}
-                            className="text-accent-error hover:text-red-400"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-300">
-                      Variables Dinamicas (AI)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setNewTool({
-                        ...newTool,
-                        dynamicVariables: [...newTool.dynamicVariables, { name: '', description: '', formatExample: '' }]
-                      })}
-                      className="text-sm text-purple-400 hover:text-purple-300"
-                    >
-                      + Agregar Variable
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-2">
-                    Define variables que el AI extraera de la conversacion. Usa {"{{nombre}}"} en la URL o Body.
-                  </p>
-                  
-                  {newTool.dynamicVariables.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-2">Sin variables dinamicas</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {newTool.dynamicVariables.map((v, index) => (
-                        <div key={index} className="bg-dark-hover p-3 rounded space-y-2">
-                          <div className="flex gap-2 items-center">
-                            <input
-                              type="text"
-                              value={v.name}
-                              onChange={(e) => {
-                                const vars = [...newTool.dynamicVariables];
-                                vars[index].name = e.target.value.replace(/[^a-zA-Z0-9_]/g, '');
-                                setNewTool({ ...newTool, dynamicVariables: vars });
-                              }}
-                              className="input flex-1"
-                              placeholder="nombre_variable"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const vars = newTool.dynamicVariables.filter((_, i) => i !== index);
-                                setNewTool({ ...newTool, dynamicVariables: vars });
-                              }}
-                              className="text-accent-error hover:text-red-400"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          <input
-                            type="text"
-                            value={v.description}
-                            onChange={(e) => {
-                              const vars = [...newTool.dynamicVariables];
-                              vars[index].description = e.target.value;
-                              setNewTool({ ...newTool, dynamicVariables: vars });
-                            }}
-                            className="input w-full"
-                            placeholder="Descripcion para que el AI sepa que extraer"
-                          />
-                          <input
-                            type="text"
-                            value={v.formatExample}
-                            onChange={(e) => {
-                              const vars = [...newTool.dynamicVariables];
-                              vars[index].formatExample = e.target.value;
-                              setNewTool({ ...newTool, dynamicVariables: vars });
-                            }}
-                            className="input w-full font-mono text-sm"
-                            placeholder="Formato ejemplo: 2025-01-15 o 2025-01-15T10:30:00Z"
-                          />
-                          <p className="text-xs text-purple-400">
-                            Usa: {"{{" + (v.name || 'variable') + "}}"}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={handleCancelToolForm}
-                    className="btn btn-secondary flex-1"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={editingTool ? handleUpdateTool : handleCreateTool}
-                    disabled={loading || !newTool.name || !newTool.url}
-                    className="btn btn-primary flex-1"
-                  >
-                    {loading ? 'Guardando...' : editingTool ? 'Actualizar' : 'Crear'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {tools.length === 0 && !showToolForm ? (
-              <div className="text-center py-8">
-                <div className="text-4xl mb-2">🔧</div>
-                <p className="text-gray-400">No tienes tools configurados.</p>
-                <p className="text-sm text-gray-500">Agrega endpoints externos para que el agente pueda consultar informacion.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {tools.map(tool => (
-                  <div key={tool.id} className="border border-dark-hover rounded-lg p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-white">{tool.name}</h3>
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            tool.enabled ? 'bg-accent-success/20 text-accent-success' : 'bg-gray-700 text-gray-400'
-                          }`}>
-                            {tool.enabled ? 'Activo' : 'Inactivo'}
-                          </span>
-                          <span className="px-2 py-0.5 bg-dark-hover text-gray-400 rounded text-xs">
-                            {tool.method}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-400">{tool.description}</p>
-                        <p className="text-xs text-gray-500 mt-1 truncate">{tool.url}</p>
-                        {tool.parameters && tool.parameters.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {tool.parameters.map((p, i) => (
-                              <span key={i} className="text-xs bg-neon-blue/20 text-neon-blue px-2 py-0.5 rounded">
-                                {p.name}{p.required ? '*' : ''}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {tool.dynamicVariables && tool.dynamicVariables.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {tool.dynamicVariables.map((v, i) => (
-                              <span key={i} className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded" title={v.description + (v.formatExample ? ` (ej: ${v.formatExample})` : '')}>
-                                {"{{" + v.name + "}}"}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-1">
-                        <button
-                          onClick={() => handleToggleTool(tool)}
-                          className="btn btn-secondary btn-sm"
-                          title={tool.enabled ? 'Desactivar' : 'Activar'}
-                        >
-                          {tool.enabled ? '⏸' : '▶'}
-                        </button>
-                        <button
-                          onClick={() => handleViewLogs(tool)}
-                          className="btn btn-secondary btn-sm"
-                          title="Ver logs"
-                        >
-                          📋
-                        </button>
-                        <button
-                          onClick={() => handleOpenTestModal(tool)}
-                          className="btn btn-secondary btn-sm"
-                          title="Probar Tool"
-                        >
-                          🧪
-                        </button>
-                        <button
-                          onClick={() => handleEditTool(tool)}
-                          className="btn btn-secondary btn-sm"
-                          title="Editar"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTool(tool.id)}
-                          className="btn btn-danger btn-sm"
-                          title="Eliminar"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                    {testResult && testResult.toolId === tool.id && (
-                      <div className={`mt-3 p-2 rounded text-sm ${
-                        testResult.error ? 'bg-accent-error/10 text-accent-error' : 'bg-accent-success/10 text-accent-success'
-                      }`}>
-                        <pre className="whitespace-pre-wrap text-xs">
-                          {JSON.stringify(testResult, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {agentVersion === 'v2' && activeV2Tab === 'api' && (
-        <div className="space-y-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold text-white mb-2">API Key</h2>
-            <p className="text-sm text-gray-400 mb-4">
-              Genera una API key para acceder a los endpoints de tu negocio desde aplicaciones externas.
-            </p>
-
-            {newApiKey && (
-              <div className="bg-accent-success/10 border border-accent-success/30 rounded-lg p-4 mb-4">
-                <p className="text-sm text-accent-success font-medium mb-2">Tu nueva API key (guardala ahora):</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-dark-surface p-2 rounded text-xs text-white font-mono break-all">
-                    {newApiKey}
-                  </code>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(newApiKey);
-                      setSuccess('API key copiada');
-                    }}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    Copiar
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  Esta es la unica vez que veras esta key. Guardala en un lugar seguro.
-                </p>
-              </div>
-            )}
-
-            {apiKeyInfo?.hasApiKey && !newApiKey && (
-              <div className="bg-dark-surface rounded-lg p-4 mb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-300">API Key activa</p>
-                    <p className="text-xs text-gray-500 font-mono mt-1">{apiKeyInfo.prefix}...</p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Creada: {apiKeyInfo.createdAt ? new Date(apiKeyInfo.createdAt).toLocaleDateString() : '-'}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleGenerateApiKey}
-                disabled={loadingApiKey}
-                className="btn btn-primary"
-              >
-                {loadingApiKey ? 'Generando...' : apiKeyInfo?.hasApiKey ? 'Regenerar API Key' : 'Generar API Key'}
-              </button>
-              {apiKeyInfo?.hasApiKey && (
-                <button
-                  onClick={handleRevokeApiKey}
-                  disabled={loadingApiKey}
-                  className="btn btn-danger"
-                >
-                  Revocar
-                </button>
-              )}
-            </div>
-
-            <div className="mt-4 p-3 bg-dark-surface rounded-lg">
-              <p className="text-xs text-gray-400 mb-2">Uso:</p>
-              <code className="text-xs text-gray-300 font-mono">
-                Authorization: Bearer efk_...
-              </code>
-            </div>
-          </div>
-
-          <div className="card bg-accent-purple/10 border-accent-purple/30">
-            <h2 className="text-lg font-semibold text-white mb-2">Webhooks</h2>
-            <p className="text-sm text-gray-400 mb-4">
-              Configura webhooks para recibir eventos en tiempo real cuando el agente responde, llegan mensajes, o cambian estados.
-            </p>
-            <a 
-              href="/dashboard/api-docs" 
-              className="btn btn-primary inline-flex items-center gap-2"
-            >
-              Configurar Webhooks
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
-            </a>
-          </div>
-        </div>
-      )}
+      {/* Note: Tools, Files, Shipping, Funnel tabs are all unified above */}
 
       {showLogsModal && selectedToolForLogs && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
