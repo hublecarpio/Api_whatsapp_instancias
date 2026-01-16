@@ -15,6 +15,7 @@ interface User {
   hasActiveBonus?: boolean;
   hasStripeSubscription?: boolean;
   planType?: 'pro' | 'basic' | 'trial' | 'none';
+  subscriptionTier?: 'BASIC' | 'PRO' | 'ENTERPRISE';
   role?: 'ADMIN' | 'ASESOR';
   parentUserId?: string | null;
 }

@@ -138,6 +138,8 @@ export default function PromptPage() {
   const { user } = useAuthStore();
   const { instances, setInstances, selectedInstanceId, setSelectedInstanceId, getSelectedInstance } = useInstanceStore();
   const isPro = user?.isPro ?? false;
+  const subscriptionTier = (user as any)?.subscriptionTier || 'BASIC';
+  const hasAdvancedFeatures = subscriptionTier === 'PRO' || subscriptionTier === 'ENTERPRISE';
   const [prompt, setPrompt] = useState('');
   const [promptId, setPromptId] = useState<string | null>(null);
   const [bufferSeconds, setBufferSeconds] = useState(7);
@@ -1299,26 +1301,30 @@ export default function PromptPage() {
         >
           Prompt Maestro
         </button>
-        <button
-          onClick={() => { setActiveTab('sections'); setActiveV2Tab('sections'); }}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'sections' 
-              ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
-              : 'bg-dark-card text-gray-400 hover:text-white'
-          }`}
-        >
-          Secciones ({promptSections.length})
-        </button>
-        <button
-          onClick={() => { setActiveTab('tools'); setActiveV2Tab('tools'); }}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'tools' 
-              ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
-              : 'bg-dark-card text-gray-400 hover:text-white'
-          }`}
-        >
-          Tools ({tools.length})
-        </button>
+        {hasAdvancedFeatures && (
+          <button
+            onClick={() => { setActiveTab('sections'); setActiveV2Tab('sections'); }}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'sections' 
+                ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+                : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Secciones ({promptSections.length})
+          </button>
+        )}
+        {hasAdvancedFeatures && (
+          <button
+            onClick={() => { setActiveTab('tools'); setActiveV2Tab('tools'); }}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'tools' 
+                ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
+                : 'bg-dark-card text-gray-400 hover:text-white'
+            }`}
+          >
+            Tools ({tools.length})
+          </button>
+        )}
         <button
           onClick={() => { setActiveTab('files'); setActiveV2Tab('files'); }}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${

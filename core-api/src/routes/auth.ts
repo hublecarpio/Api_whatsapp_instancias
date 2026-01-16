@@ -429,6 +429,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         emailVerified: true,
         createdAt: true,
         subscriptionStatus: true,
+        subscriptionTier: true,
         trialEndAt: true,
         stripeCustomerId: true,
         stripeSubscriptionId: true,
