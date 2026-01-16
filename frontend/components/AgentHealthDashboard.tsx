@@ -9,6 +9,7 @@ const AVAILABLE_MODELS = [
   { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'OpenAI' },
   { id: 'google/gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash', provider: 'Google' },
   { id: 'google/gemini-2.5-pro-preview', name: 'Gemini 2.5 Pro', provider: 'Google' },
+  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'Google' },
   { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'Anthropic' }
 ];
 
@@ -248,7 +249,7 @@ export default function AgentHealthDashboard({ businessId, instanceId }: Props) 
                   <span className="text-xs">▼</span>
                 </div>
                 {showModelSelector && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface border border-dark-border rounded-lg shadow-xl z-20 max-h-60 overflow-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface/95 backdrop-blur-md border border-dark-border rounded-lg shadow-xl z-20 max-h-60 overflow-auto">
                     {AVAILABLE_MODELS.map(model => (
                       <button
                         key={model.id}
