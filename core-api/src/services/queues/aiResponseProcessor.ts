@@ -1,7 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { AIResponseJobData, QUEUE_NAMES, getQueueConnection, getAIResponseQueue } from './index.js';
 import prisma from '../prisma.js';
-import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage, logTokenUsage, checkUserTokenLimit } from '../openaiService.js';
+import { isOpenAIConfigured, callOpenAI, getModelForAgent, ChatMessage, logTokenUsage, checkUserTokenLimit, getOpenAIClient, getClientForModel } from '../openaiService.js';
 import { replacePromptVariables } from '../promptVariables.js';
 import { generateWithAgentV2, buildBusinessContext, buildConversationHistory, isAgentV2Available } from '../agentV2Service.js';
 import { searchProductsIntelligent } from '../productSearch.js';
@@ -795,11 +795,10 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
     return { response: aiResponse, tokensUsed };
   }
   
-  const { getOpenAIClient, logTokenUsage: logTokens } = await import('../openaiService.js');
-  const openai = getOpenAIClient();
+  const { client: openai, normalizedModel } = getClientForModel(modelConfig.model);
   
   const chatParams: any = {
-    model: modelConfig.model,
+    model: normalizedModel,
     messages: [
       { role: 'system', content: systemPrompt },
       ...conversationHistory
@@ -1298,15 +1297,15 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   
   const aiResponse = completion.choices[0]?.message?.content || '';
   
-  await logTokens({
+  await logTokenUsage({
     businessId: business.id,
     userId: business.userId,
     feature: 'agent_v1_worker',
-    model: modelConfig.model,
+    model: normalizedModel,
     promptTokens: Math.floor(totalTokens * 0.7),
     completionTokens: Math.floor(totalTokens * 0.3),
     totalTokens
-  }).catch(err => console.error('[AI Worker] Token logging failed:', err.message));
+  }).catch((err: any) => console.error('[AI Worker] Token logging failed:', err.message));
   
   if (instanceId && aiResponse) {
     await sendWhatsAppResponse(instanceId, phone, aiResponse, business);

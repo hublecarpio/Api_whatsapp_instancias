@@ -80,6 +80,14 @@ function getOpenRouterClient(): OpenAI {
   return openrouterClient;
 }
 
+export function getClientForModel(model: string): { client: OpenAI; normalizedModel: string } {
+  const normalizedModel = normalizeModel(model);
+  const useOpenRouter = isOpenRouterModel(normalizedModel);
+  console.log(`[AI] getClientForModel rawModel="${model}" normalizedModel="${normalizedModel}" useOpenRouter=${useOpenRouter}`);
+  const client = useOpenRouter ? getOpenRouterClient() : getOpenAIClient();
+  return { client, normalizedModel };
+}
+
 let cachedSettings: {
   defaultModelV1: string;
   defaultModelV2: string;
