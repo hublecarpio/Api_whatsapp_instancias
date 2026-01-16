@@ -1566,7 +1566,6 @@ REGLAS:
     rawPrompt: string
   ): Promise<{
     success: boolean;
-    masterPrompt: string;
     sections: Array<{
       type: string;
       title: string;
@@ -1591,8 +1590,7 @@ REGLAS:
   }> {
     if (!this.isConfigured()) {
       return { 
-        success: false,
-        masterPrompt: '',
+        success: false, 
         sections: [],
         structuredData: { products: [], deliveryZones: [], extractionFields: [], businessHours: [], contactInfo: {} },
         missingCategories: [],
@@ -1665,11 +1663,7 @@ REGLAS:
       // Step 5: Get structured data result
       const structuredData = await structuredDataPromise;
       
-      // Step 6: Generate Master Prompt (essential context for all conversations)
-      await delay(RATE_LIMIT_DELAY);
-      const masterPrompt = await this.generateMasterPrompt(rawPrompt);
-      
-      // Step 7: Identify missing categories
+      // Step 6: Identify missing categories
       const foundTypes = new Set(mergedSections.map(s => s.type));
       const missingCategories = categories.filter(c => !foundTypes.has(c));
       
@@ -1681,7 +1675,6 @@ REGLAS:
       console.log(`[GEMINI-V2] Extraction complete:`, {
         chunks: chunks.length,
         sections: mergedSections.length,
-        masterPromptLength: masterPrompt.length,
         structured: {
           products: structuredData.products.length,
           zones: structuredData.deliveryZones.length,
@@ -1693,7 +1686,6 @@ REGLAS:
       
       return {
         success: true,
-        masterPrompt,
         sections: mergedSections,
         structuredData,
         missingCategories,
@@ -1707,7 +1699,6 @@ REGLAS:
       console.error('[GEMINI-V2] Multi-pass extraction failed:', error.message);
       return {
         success: false,
-        masterPrompt: '',
         sections: [],
         structuredData: { products: [], deliveryZones: [], extractionFields: [], businessHours: [], contactInfo: {} },
         missingCategories: [],
