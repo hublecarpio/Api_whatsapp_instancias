@@ -92,6 +92,8 @@ services:
         - "traefik.http.routers.whatsapp_core.entrypoints=websecure"
         - "traefik.http.routers.whatsapp_core.tls.certresolver=le"
         - "traefik.http.routers.whatsapp_core.priority=200"
+        - "traefik.http.routers.whatsapp_core.middlewares=core-buffering@docker"
+        - "traefik.http.middlewares.core-buffering.buffering.maxRequestBodyBytes=52428800"
         - "traefik.http.services.whatsapp_core.loadbalancer.server.port=4001"
         - "traefik.http.services.whatsapp_core.loadbalancer.sticky.cookie=true"
         - "traefik.http.services.whatsapp_core.loadbalancer.sticky.cookie.name=core_sticky"

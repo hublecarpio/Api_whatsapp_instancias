@@ -60,6 +60,8 @@ services:
         - "traefik.http.routers.whatsapp_core.rule=Host(`${CORE_API_DOMAIN}`)"
         - "traefik.http.routers.whatsapp_core.entrypoints=websecure"
         - "traefik.http.routers.whatsapp_core.tls.certresolver=le"
+        - "traefik.http.routers.whatsapp_core.middlewares=core-buffering@docker"
+        - "traefik.http.middlewares.core-buffering.buffering.maxRequestBodyBytes=52428800"
         - "traefik.http.services.whatsapp_core.loadbalancer.server.port=${CORE_API_PORT:-3001}"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:${CORE_API_PORT:-3001}/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
