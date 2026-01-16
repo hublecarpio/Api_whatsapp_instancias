@@ -1452,6 +1452,10 @@ async function processWithAgent(
             pais: {
               type: 'string',
               description: 'País de envío'
+            },
+            coordenadas_ubicacion: {
+              type: 'string',
+              description: 'Coordenadas GPS de la ubicación del cliente en formato "latitud,longitud" (ejemplo: -12.046374,-77.042793). Se obtiene cuando el cliente comparte su ubicación actual por WhatsApp.'
             }
           },
           required: ['producto_id', 'nombre_cliente', 'direccion_envio']
@@ -1647,6 +1651,7 @@ async function processWithAgent(
         const shippingAddress = args.direccion_envio;
         const city = args.ciudad || '';
         const country = args.pais || '';
+        const locationCoordinates = args.coordenadas_ubicacion || null;
         
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
         if (!isUUID) {
@@ -1701,6 +1706,7 @@ async function processWithAgent(
                 shippingAddress,
                 shippingCity: city,
                 shippingCountry: country,
+                locationCoordinates,
                 totalAmount,
                 currencyCode: business.currencyCode || 'PEN',
                 currencySymbol: business.currencySymbol || 'S/.',

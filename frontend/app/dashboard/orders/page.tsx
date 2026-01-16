@@ -29,6 +29,7 @@ interface Order {
   shippingState: string | null;
   shippingZip: string | null;
   shippingCountry: string | null;
+  locationCoordinates: string | null;
   notes: string | null;
   totalAmount: number;
   currencyCode: string;
@@ -611,15 +612,32 @@ export default function OrdersPage() {
                         </div>
                       )}
 
-                      {order.shippingAddress && (
+                      {(order.shippingAddress || order.locationCoordinates) && (
                         <div>
                           <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-1">Direccion</p>
-                          <p className="text-white text-xs sm:text-sm">{order.shippingAddress}</p>
+                          {order.shippingAddress && (
+                            <p className="text-white text-xs sm:text-sm">{order.shippingAddress}</p>
+                          )}
                           {order.shippingCity && (
                             <p className="text-gray-400 text-xs sm:text-sm">
                               {order.shippingCity}
                               {order.shippingCountry && `, ${order.shippingCountry}`}
                             </p>
+                          )}
+                          {order.locationCoordinates && (
+                            <a
+                              href={`https://www.google.com/maps?q=${order.locationCoordinates}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs rounded-lg transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              Ver en Google Maps
+                            </a>
                           )}
                         </div>
                       )}

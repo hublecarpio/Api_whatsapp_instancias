@@ -190,7 +190,7 @@ router.get('/details/:sessionId', async (req, res) => {
 
 router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
   try {
-    const { businessId, contactPhone, contactName, items, shippingAddress, shippingCity, shippingCountry } = req.body;
+    const { businessId, contactPhone, contactName, items, shippingAddress, shippingCity, shippingCountry, locationCoordinates } = req.body;
 
     if (!businessId || !contactPhone || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'businessId, contactPhone y items son requeridos' });
@@ -243,6 +243,7 @@ router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
           shippingAddress,
           shippingCity,
           shippingCountry,
+          locationCoordinates,
           totalAmount,
           currencyCode: business.currencyCode || 'PEN',
           currencySymbol: business.currencySymbol || 'S/.',

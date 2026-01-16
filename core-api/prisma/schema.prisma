@@ -1006,6 +1006,7 @@ model Order {
   shippingState         String?
   shippingZip           String?
   shippingCountry       String?
+  locationCoordinates   String?
   notes                 String?
   totalAmount           Float
   currencyCode          String      @default("PEN")
