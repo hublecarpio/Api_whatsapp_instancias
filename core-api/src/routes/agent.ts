@@ -1148,6 +1148,9 @@ async function processWithAgent(
   
   let systemPrompt = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
   
+  // Store extracted data for later use in buildDynamicPrompt
+  let extractedDataForPrompt: Record<string, any> = {};
+  
   // Add extracted contact data to prompt so agent knows what info we already have
   if (contactSettings?.notes) {
     try {
@@ -1156,12 +1159,13 @@ async function processWithAgent(
       const dataEntries = Object.entries(extractedData).filter(([_, v]) => v && String(v).trim() !== '');
       
       if (dataEntries.length > 0) {
+        extractedDataForPrompt = Object.fromEntries(dataEntries);
         systemPrompt += `\n\n## DATOS YA RECOLECTADOS DEL CLIENTE (NO volver a pedir):`;
         dataEntries.forEach(([key, value]) => {
           systemPrompt += `\n- ${key}: ${value}`;
         });
         systemPrompt += `\n\nIMPORTANTE: YA tienes estos datos. NO los vuelvas a pedir. Usa esta información para avanzar en la conversación.`;
-        console.log(`[Agent V1] Loaded extracted data for context: ${JSON.stringify(Object.fromEntries(dataEntries))}`);
+        console.log(`[Agent V1] Loaded extracted data for context: ${JSON.stringify(extractedDataForPrompt)}`);
       }
     } catch (parseError) {
       // Notes not valid JSON, ignore
@@ -1314,14 +1318,20 @@ async function processWithAgent(
     systemPrompt += `\n\nIMPORTANTE: Cuando detectes que el cliente pregunta por algo relacionado a estos archivos (por keywords o contexto), usa enviar_archivo con el ID correspondiente.`;
   }
   
+  const paymentLinkEnabled = business.user?.paymentLinkEnabled ?? false;
+  
   if (intentAnalysis) {
     systemPrompt = buildDynamicPrompt(
       systemPrompt,
       intentAnalysis,
       conversationContext,
-      businessObjective
+      businessObjective,
+      {
+        paymentLinkEnabled,
+        extractedData: extractedDataForPrompt
+      }
     );
-    console.log(`[Agent V1] Dynamic prompt built with intent context`);
+    console.log(`[Agent V1] Dynamic prompt built with intent context (paymentMode: ${paymentLinkEnabled ? 'STRIPE' : 'VOUCHER'})`);
   }
   
   // Filter by instanceId if available to avoid mixing conversations from different instances

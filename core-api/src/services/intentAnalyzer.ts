@@ -289,13 +289,35 @@ export function selectToolsForIntent(
     ['buscar_producto', 'crear_enlace_pago', 'enviar_archivo'].includes(t));
 }
 
+export interface DynamicPromptOptions {
+  paymentLinkEnabled?: boolean;
+  extractedData?: Record<string, any>;
+}
+
 export function buildDynamicPrompt(
   basePrompt: string,
   intent: IntentAnalysis,
   conversationContext: ConversationContext,
-  businessObjective: 'SALES' | 'APPOINTMENTS'
+  businessObjective: 'SALES' | 'APPOINTMENTS',
+  options: DynamicPromptOptions = {}
 ): string {
   let dynamicPrompt = basePrompt;
+  const { paymentLinkEnabled = false, extractedData } = options;
+  
+  dynamicPrompt += `\n\n## REGLAS DE COMUNICACIÓN EFICIENTE:`;
+  dynamicPrompt += `\n- NO repitas información que ya confirmaste en mensajes anteriores`;
+  dynamicPrompt += `\n- NO hagas preguntas cuyas respuestas ya tienes en el contexto`;
+  dynamicPrompt += `\n- Sé conciso y avanza hacia la acción/cierre`;
+  dynamicPrompt += `\n- Si ya tienes nombre, dirección y producto, procede directamente`;
+  
+  if (extractedData && Object.keys(extractedData).length > 0) {
+    dynamicPrompt += `\n\n## DATOS YA EXTRAÍDOS DEL CLIENTE (NO volver a preguntar):`;
+    for (const [key, value] of Object.entries(extractedData)) {
+      if (value) {
+        dynamicPrompt += `\n- ${key}: ${value}`;
+      }
+    }
+  }
   
   dynamicPrompt += `\n\n## CONTEXTO ACTUAL DE ESTA CONVERSACIÓN:`;
   dynamicPrompt += `\n- Intención detectada: ${intent.intent} (confianza: ${(intent.confidence * 100).toFixed(0)}%)`;
@@ -332,10 +354,18 @@ export function buildDynamicPrompt(
       
     case 'READY_TO_BUY':
       dynamicPrompt += `\n\n## CLIENTE LISTO PARA COMPRAR:`;
-      dynamicPrompt += `\n- Confirma los detalles del pedido`;
-      dynamicPrompt += `\n- Solicita datos de envío si no los tienes`;
-      dynamicPrompt += `\n- Genera el enlace de pago o indica cómo pagar`;
+      dynamicPrompt += `\n- Confirma los detalles del pedido (solo si no los has confirmado antes)`;
+      dynamicPrompt += `\n- Solicita datos de envío SOLO si no los tienes`;
+      if (paymentLinkEnabled) {
+        dynamicPrompt += `\n- Usa la herramienta crear_enlace_pago para generar el link de pago`;
+        dynamicPrompt += `\n- Una vez generado, comparte el enlace con el cliente`;
+      } else {
+        dynamicPrompt += `\n- MODO VOUCHER: Indica los datos bancarios para transferencia (si los tienes en tu contexto)`;
+        dynamicPrompt += `\n- Pide al cliente que envíe el comprobante/voucher una vez realizada la transferencia`;
+        dynamicPrompt += `\n- NO menciones "enlace de pago" - el cliente debe hacer transferencia manual`;
+      }
       dynamicPrompt += `\n- Muestra entusiasmo pero sin exagerar`;
+      dynamicPrompt += `\n- NO vuelvas a preguntar cosas que ya confirmaste`;
       break;
       
     case 'SCHEDULE_APPOINTMENT':
