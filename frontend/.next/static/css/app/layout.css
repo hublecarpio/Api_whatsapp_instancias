@@ -1990,6 +1990,9 @@ body.glass-mode .mobile-drawer {
 .border-yellow-600\/30 {
   border-color: rgb(202 138 4 / 0.3);
 }
+.border-red-600\/50 {
+  border-color: rgb(220 38 38 / 0.5);
+}
 .border-b-transparent {
   border-bottom-color: transparent;
 }

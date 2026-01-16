@@ -21,7 +21,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         name,
         description,
         industry,
-        logoUrl
+        logoUrl,
+        agentPrompts: {
+          create: {
+            prompt: '',
+            bufferSeconds: 10,
+            historyLimit: 15,
+            splitMessages: true
+          }
+        }
       }
     });
     
@@ -56,7 +64,15 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           userId: req.userId,
           name: 'Mi Empresa',
           description: 'Configura los datos de tu empresa',
-          botEnabled: true
+          botEnabled: true,
+          agentPrompts: {
+            create: {
+              prompt: '',
+              bufferSeconds: 10,
+              historyLimit: 15,
+              splitMessages: true
+            }
+          }
         },
         include: {
           instances: true,
@@ -303,6 +319,72 @@ router.get('/:id/injection-code', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Get injection code error:', error);
     res.status(500).json({ error: 'Failed to get code' });
+  }
+});
+
+router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await prisma.business.findFirst({
+      where: { id: req.params.id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    // Get all prompt IDs for this business
+    const prompts = await prisma.agentPrompt.findMany({
+      where: { businessId: req.params.id },
+      select: { id: true }
+    });
+    const promptIds = prompts.map(p => p.id);
+    
+    // Delete all configuration data in transaction
+    await prisma.$transaction([
+      // Delete products
+      prisma.product.deleteMany({ where: { businessId: req.params.id } }),
+      // Delete delivery zones
+      prisma.deliveryZone.deleteMany({ where: { businessId: req.params.id } }),
+      // Delete extraction fields
+      prisma.extractionField.deleteMany({ where: { businessId: req.params.id } }),
+      // Delete funnel stages
+      prisma.funnelStage.deleteMany({ where: { businessId: req.params.id } }),
+      // Delete prompt sections
+      prisma.promptSection.deleteMany({ where: { businessId: req.params.id } }),
+      // Delete agent files (related to prompts)
+      prisma.agentFile.deleteMany({ where: { promptId: { in: promptIds } } }),
+      // Delete custom tools (related to prompts)
+      prisma.agentTool.deleteMany({ where: { promptId: { in: promptIds } } }),
+      // Reset agent prompts to defaults
+      prisma.agentPrompt.updateMany({ 
+        where: { businessId: req.params.id },
+        data: {
+          prompt: '',
+          bufferSeconds: 10,
+          historyLimit: 15,
+          splitMessages: true
+        }
+      })
+    ]);
+    
+    console.log(`[Business] Reset config for business ${req.params.id}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Configuracion reiniciada completamente',
+      deletedItems: {
+        products: true,
+        deliveryZones: true,
+        extractionFields: true,
+        funnelStages: true,
+        promptSections: true,
+        agentFiles: true,
+        customTools: true
+      }
+    });
+  } catch (error) {
+    console.error('Reset config error:', error);
+    res.status(500).json({ error: 'Failed to reset configuration' });
   }
 });
 

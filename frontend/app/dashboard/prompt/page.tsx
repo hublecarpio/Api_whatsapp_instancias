@@ -229,6 +229,8 @@ export default function PromptPage() {
   const [gptUrl, setGptUrl] = useState<string | null>(null);
   const [loadingInjection, setLoadingInjection] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resettingConfig, setResettingConfig] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -822,6 +824,32 @@ export default function PromptPage() {
       setError(err.response?.data?.error || 'Error al guardar');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResetConfig = async () => {
+    if (!currentBusiness) return;
+    
+    setResettingConfig(true);
+    setError('');
+    setSuccess('');
+    
+    try {
+      await businessApi.resetConfig(currentBusiness.id);
+      setSuccess('Configuracion limpiada completamente. Recarga la pagina para ver los cambios.');
+      setShowResetConfirm(false);
+      // Reset local state
+      setPrompt('');
+      setBufferSeconds(10);
+      setHistoryLimit(15);
+      setSplitMessages(true);
+      setTools([]);
+      setPromptSections([]);
+      setAgentFiles([]);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al limpiar configuracion');
+    } finally {
+      setResettingConfig(false);
     }
   };
 
@@ -1972,7 +2000,13 @@ export default function PromptPage() {
             </label>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="btn bg-red-600/20 text-red-400 border border-red-600/50 hover:bg-red-600/30"
+            >
+              Limpiar Configuracion Total
+            </button>
             <button
               onClick={handleSavePrompt}
               disabled={loading}
@@ -1980,6 +2014,46 @@ export default function PromptPage() {
             >
               {loading ? 'Guardando...' : 'Guardar Configuracion'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {showResetConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card rounded-xl max-w-md w-full p-6 border border-dark-hover">
+            <h3 className="text-xl font-bold text-white mb-4">Limpiar Configuracion Total</h3>
+            <p className="text-gray-400 mb-4">
+              Esta accion eliminara permanentemente:
+            </p>
+            <ul className="text-gray-400 text-sm mb-6 space-y-1 list-disc list-inside">
+              <li>Todos los productos</li>
+              <li>Todas las zonas de envio</li>
+              <li>Todos los campos de extraccion</li>
+              <li>Todas las etapas del flujo de venta</li>
+              <li>Todas las secciones del prompt</li>
+              <li>Todos los archivos del agente</li>
+              <li>Todas las herramientas personalizadas</li>
+              <li>El prompt del agente</li>
+            </ul>
+            <p className="text-red-400 text-sm mb-6">
+              Esta accion no se puede deshacer.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="btn bg-dark-hover text-gray-300"
+                disabled={resettingConfig}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleResetConfig}
+                disabled={resettingConfig}
+                className="btn bg-red-600 text-white hover:bg-red-700"
+              >
+                {resettingConfig ? 'Limpiando...' : 'Si, Limpiar Todo'}
+              </button>
+            </div>
           </div>
         </div>
       )}
