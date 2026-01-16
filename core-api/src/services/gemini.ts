@@ -951,6 +951,627 @@ REGLAS:
     }
   }
 
+  // ========== MULTI-PASS PROMPT IMPORTER ==========
+  
+  private chunkText(text: string, chunkSize: number = 6000, overlap: number = 900): { chunk: string; index: number; start: number; end: number }[] {
+    const chunks: { chunk: string; index: number; start: number; end: number }[] = [];
+    let start = 0;
+    let index = 0;
+    let prevStart = -1;
+    
+    while (start < text.length) {
+      // Prevent infinite loop
+      if (start === prevStart) {
+        start = prevStart + 1;
+      }
+      prevStart = start;
+      
+      const end = Math.min(start + chunkSize, text.length);
+      let chunkEnd = end;
+      
+      // Try to break at paragraph or sentence boundary
+      if (end < text.length) {
+        const paragraphBreak = text.lastIndexOf('\n\n', end);
+        const sentenceBreak = text.lastIndexOf('. ', end);
+        if (paragraphBreak > start + chunkSize * 0.7) {
+          chunkEnd = paragraphBreak + 2;
+        } else if (sentenceBreak > start + chunkSize * 0.7) {
+          chunkEnd = sentenceBreak + 2;
+        }
+      }
+      
+      chunks.push({
+        chunk: text.substring(start, chunkEnd),
+        index,
+        start,
+        end: chunkEnd
+      });
+      
+      // Exit if we've reached the end
+      if (chunkEnd >= text.length) break;
+      
+      // Calculate next start with protection against going backwards
+      const nextStart = chunkEnd - overlap;
+      start = Math.max(nextStart, prevStart + 1);
+      index++;
+      
+      // Safety limit to prevent runaway loops
+      if (index > 100) {
+        console.warn('[CHUNK] Safety limit reached, stopping at 100 chunks');
+        break;
+      }
+    }
+    
+    console.log(`[CHUNK] Split ${text.length} chars into ${chunks.length} chunks`);
+    return chunks;
+  }
+
+  private async extractCategory(
+    chunk: string,
+    category: 'CORE' | 'TONE' | 'POLICIES' | 'FAQ' | 'OBJECTIONS' | 'SALES' | 'CLOSING',
+    chunkIndex: number
+  ): Promise<{
+    sections: Array<{
+      type: string;
+      title: string;
+      content: string;
+      isCore: boolean;
+      priority: number;
+      keywords: string[];
+      confidence: number;
+      evidence: string;
+      chunkIndex: number;
+    }>;
+  }> {
+    const categoryPrompts: Record<string, { description: string; isCore: boolean; priority: number }> = {
+      'CORE': { 
+        description: 'Información fundamental: nombre del negocio, qué hace/vende, propósito, misión, ubicación principal',
+        isCore: true, 
+        priority: 10 
+      },
+      'TONE': { 
+        description: 'Personalidad y estilo de comunicación: formal/informal, uso de emojis, cómo saludar, cómo despedirse',
+        isCore: true, 
+        priority: 9 
+      },
+      'POLICIES': { 
+        description: 'Políticas del negocio: envíos, tiempos de entrega, devoluciones, garantías, horarios de atención, formas de pago',
+        isCore: false, 
+        priority: 8 
+      },
+      'FAQ': { 
+        description: 'Preguntas frecuentes y sus respuestas: dudas comunes de clientes sobre productos, servicios, procesos',
+        isCore: false, 
+        priority: 7 
+      },
+      'OBJECTIONS': { 
+        description: 'Objeciones de clientes y cómo manejarlas: "es muy caro", "lo pienso", "no tengo tiempo", "no confío"',
+        isCore: false, 
+        priority: 7 
+      },
+      'SALES': { 
+        description: 'Argumentos de venta, beneficios, propuesta de valor, diferenciadores, por qué elegir este negocio',
+        isCore: false, 
+        priority: 6 
+      },
+      'CLOSING': { 
+        description: 'Técnicas de cierre: urgencia, escasez, llamados a acción, cómo pedir la venta, promociones',
+        isCore: false, 
+        priority: 5 
+      }
+    };
+
+    const config = categoryPrompts[category];
+    
+    const prompt = `Extrae SOLO información de la categoría "${category}" de este texto.
+
+## CATEGORÍA: ${category}
+${config.description}
+
+## TEXTO (chunk ${chunkIndex + 1}):
+${chunk}
+
+## INSTRUCCIONES:
+1. Extrae SOLO lo relevante para ${category}, ignora todo lo demás
+2. Cada sección debe ser AUTO-CONTENIDA (entendible sin contexto adicional)
+3. Máximo 400 palabras por sección
+4. Incluye una CITA TEXTUAL breve como evidencia (max 50 chars)
+5. Si NO hay información de ${category} en este texto, devuelve sections: []
+
+## RESPONDE EN JSON:
+{
+  "sections": [
+    {
+      "title": "Título descriptivo",
+      "content": "Contenido completo y auto-contenido...",
+      "keywords": ["palabra1", "palabra2", "palabra3"],
+      "confidence": 0.95,
+      "evidence": "cita textual del original..."
+    }
+  ]
+}`;
+
+    // Retry logic with exponential backoff for rate limits
+    const maxRetries = 3;
+    let lastError: any;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        let text = '';
+        
+        if (this.apiKey) {
+          const response = await axios.post(
+            `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+            {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
+            },
+            { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
+          );
+          text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        } else if (this.hasOpenRouterFallback()) {
+          const result = await this.callOpenRouter(prompt, { temperature: 0.1, maxTokens: 2048 });
+          text = result.success ? result.text : '';
+        }
+        
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) return { sections: [] };
+        
+        const result = JSON.parse(jsonMatch[0]);
+        
+        return {
+          sections: (result.sections || []).map((s: any) => ({
+            type: category,
+            title: s.title || 'Sin título',
+            content: s.content || '',
+            isCore: config.isCore,
+            priority: config.priority,
+            keywords: s.keywords || [],
+            confidence: s.confidence || 0.5,
+            evidence: s.evidence || '',
+            chunkIndex
+          }))
+        };
+      } catch (error: any) {
+        lastError = error;
+        const isRateLimited = this.isQuotaError(error);
+        
+        if (isRateLimited && attempt < maxRetries) {
+          const delay = 1000 * Math.pow(2, attempt) + Math.random() * 500;
+          console.warn(`[GEMINI] ${category} rate limited, retrying in ${delay}ms (attempt ${attempt + 1})`);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          console.error(`[GEMINI] Extract ${category} failed:`, error.message);
+          return { sections: [] };
+        }
+      }
+    }
+    
+    console.error(`[GEMINI] Extract ${category} failed after retries:`, lastError?.message);
+    return { sections: [] };
+  }
+
+  private async extractStructuredData(
+    rawPrompt: string
+  ): Promise<{
+    products: Array<{ name: string; price?: number; currency?: string; description?: string; confidence: number }>;
+    deliveryZones: Array<{ name: string; price?: number; minOrder?: number; estimatedTime?: string; confidence: number }>;
+    extractionFields: Array<{ name: string; type: string; required: boolean; confidence: number }>;
+    businessHours: Array<{ day: string; open: string; close: string }>;
+    contactInfo: { phone?: string; email?: string; address?: string; whatsapp?: string };
+  }> {
+    const prompt = `Extrae DATOS ESTRUCTURADOS de este texto de negocio. Solo extrae lo que está EXPLÍCITAMENTE mencionado.
+
+## TEXTO:
+${rawPrompt.substring(0, 12000)}
+
+## EXTRAE:
+1. **PRODUCTOS**: Nombre, precio, descripción
+2. **ZONAS DE ENTREGA**: Nombre de zona, costo de envío, mínimo de compra, tiempo estimado
+3. **CAMPOS A PEDIR AL CLIENTE**: Qué datos necesitan (nombre, dirección, teléfono, etc)
+4. **HORARIOS**: Días y horas de atención
+5. **CONTACTO**: Teléfono, email, dirección física, WhatsApp
+
+## RESPONDE EN JSON:
+{
+  "products": [
+    {"name": "Producto X", "price": 29.99, "currency": "USD", "description": "...", "confidence": 0.9}
+  ],
+  "deliveryZones": [
+    {"name": "Centro", "price": 5, "minOrder": 20, "estimatedTime": "30-45 min", "confidence": 0.85}
+  ],
+  "extractionFields": [
+    {"name": "nombre", "type": "text", "required": true, "confidence": 0.95},
+    {"name": "direccion", "type": "address", "required": true, "confidence": 0.9}
+  ],
+  "businessHours": [
+    {"day": "Lunes-Viernes", "open": "09:00", "close": "18:00"}
+  ],
+  "contactInfo": {
+    "phone": "+51999999999",
+    "email": "contacto@negocio.com",
+    "address": "Av. Principal 123",
+    "whatsapp": "+51999999999"
+  }
+}
+
+REGLAS:
+- Solo incluye datos que estén CLARAMENTE en el texto
+- confidence: 0.9+ si está explícito, 0.7-0.89 si es inferido, <0.7 si es dudoso
+- Si no hay datos de una categoría, devuelve array vacío o null`;
+
+    try {
+      let text = '';
+      
+      if (this.apiKey) {
+        const response = await axios.post(
+          `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+          {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+          },
+          { headers: { 'Content-Type': 'application/json' }, timeout: 90000 }
+        );
+        text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else if (this.hasOpenRouterFallback()) {
+        const result = await this.callOpenRouter(prompt, { temperature: 0.1, maxTokens: 4096 });
+        text = result.success ? result.text : '';
+      }
+      
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return { products: [], deliveryZones: [], extractionFields: [], businessHours: [], contactInfo: {} };
+      }
+      
+      const result = JSON.parse(jsonMatch[0]);
+      console.log('[GEMINI] Extracted structured data:', {
+        products: result.products?.length || 0,
+        zones: result.deliveryZones?.length || 0,
+        fields: result.extractionFields?.length || 0
+      });
+      
+      return {
+        products: result.products || [],
+        deliveryZones: result.deliveryZones || [],
+        extractionFields: result.extractionFields || [],
+        businessHours: result.businessHours || [],
+        contactInfo: result.contactInfo || {}
+      };
+    } catch (error: any) {
+      console.error('[GEMINI] Extract structured data failed:', error.message);
+      return { products: [], deliveryZones: [], extractionFields: [], businessHours: [], contactInfo: {} };
+    }
+  }
+
+  // Helper for retrying API calls with exponential backoff
+  private async withRetry<T>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000
+  ): Promise<T> {
+    let lastError: any;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+        const isRateLimited = this.isQuotaError(error);
+        
+        if (isRateLimited && attempt < maxRetries) {
+          const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500;
+          console.warn(`[GEMINI] Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(r => setTimeout(r, delay));
+        } else if (!isRateLimited) {
+          throw error; // Non-rate-limit errors fail immediately
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  // Process structured data from all chunks for large texts
+  private async extractStructuredDataFromChunks(
+    chunks: string[]
+  ): Promise<{
+    products: Array<{ name: string; price?: number; currency?: string; description?: string; confidence: number }>;
+    deliveryZones: Array<{ name: string; price?: number; minOrder?: number; estimatedTime?: string; confidence: number }>;
+    extractionFields: Array<{ name: string; type: string; required: boolean; confidence: number }>;
+    businessHours: Array<{ day: string; open: string; close: string }>;
+    contactInfo: { phone?: string; email?: string; address?: string; whatsapp?: string };
+  }> {
+    // For small texts (1 chunk), use the standard method
+    if (chunks.length <= 1) {
+      return this.extractStructuredData(chunks[0] || '');
+    }
+    
+    // For large texts, process ALL chunks sequentially with rate limiting
+    console.log(`[GEMINI] Extracting structured data from ${chunks.length} chunks`);
+    
+    const allProducts: Array<{ name: string; price?: number; currency?: string; description?: string; confidence: number }> = [];
+    const allZones: Array<{ name: string; price?: number; minOrder?: number; estimatedTime?: string; confidence: number }> = [];
+    const allFields: Array<{ name: string; type: string; required: boolean; confidence: number }> = [];
+    const allHours: Array<{ day: string; open: string; close: string }> = [];
+    let contactInfo: { phone?: string; email?: string; address?: string; whatsapp?: string } = {};
+    
+    // Process ALL chunks (max 10) to ensure complete coverage
+    const maxChunks = Math.min(chunks.length, 10);
+    const chunksToProcess = chunks.slice(0, maxChunks);
+    
+    for (let i = 0; i < chunksToProcess.length; i++) {
+      const chunk = chunksToProcess[i];
+      try {
+        // Use retry with backoff for rate limit safety
+        const result = await this.withRetry(() => this.extractStructuredData(chunk));
+        
+        // Merge products (dedupe by name)
+        for (const product of result.products) {
+          if (!allProducts.some(p => p.name.toLowerCase() === product.name.toLowerCase())) {
+            allProducts.push(product);
+          }
+        }
+        
+        // Merge zones (dedupe by name)
+        for (const zone of result.deliveryZones) {
+          if (!allZones.some(z => z.name.toLowerCase() === zone.name.toLowerCase())) {
+            allZones.push(zone);
+          }
+        }
+        
+        // Merge fields (dedupe by name)
+        for (const field of result.extractionFields) {
+          if (!allFields.some(f => f.name.toLowerCase() === field.name.toLowerCase())) {
+            allFields.push(field);
+          }
+        }
+        
+        // Merge hours (dedupe by day)
+        for (const hours of result.businessHours) {
+          if (!allHours.some(h => h.day.toLowerCase() === hours.day.toLowerCase())) {
+            allHours.push(hours);
+          }
+        }
+        
+        // Merge contact info (prefer non-empty values)
+        if (result.contactInfo) {
+          contactInfo = {
+            phone: contactInfo.phone || result.contactInfo.phone,
+            email: contactInfo.email || result.contactInfo.email,
+            address: contactInfo.address || result.contactInfo.address,
+            whatsapp: contactInfo.whatsapp || result.contactInfo.whatsapp
+          };
+        }
+        
+        // Delay between chunks to avoid rate limits
+        if (i < chunksToProcess.length - 1) {
+          await new Promise(r => setTimeout(r, 800));
+        }
+      } catch (err) {
+        console.error(`[GEMINI] Chunk ${i} structured extraction failed:`, err);
+        // Continue with other chunks even if one fails
+      }
+    }
+    
+    console.log(`[GEMINI] Merged structured data from ${chunksToProcess.length} chunks:`, {
+      products: allProducts.length,
+      zones: allZones.length,
+      fields: allFields.length
+    });
+    
+    return {
+      products: allProducts,
+      deliveryZones: allZones,
+      extractionFields: allFields,
+      businessHours: allHours,
+      contactInfo
+    };
+  }
+
+  private mergeSections(
+    allSections: Array<{
+      type: string;
+      title: string;
+      content: string;
+      isCore: boolean;
+      priority: number;
+      keywords: string[];
+      confidence: number;
+      evidence: string;
+      chunkIndex: number;
+    }>
+  ): Array<{
+    type: string;
+    title: string;
+    content: string;
+    isCore: boolean;
+    priority: number;
+    keywords: string[];
+    confidence: number;
+    evidence: string;
+    needsReview: boolean;
+  }> {
+    const merged: Map<string, typeof allSections[0] & { needsReview: boolean }> = new Map();
+    
+    for (const section of allSections) {
+      const key = `${section.type}:${section.title.toLowerCase().trim()}`;
+      
+      if (!merged.has(key)) {
+        merged.set(key, { ...section, needsReview: section.confidence < 0.7 });
+      } else {
+        const existing = merged.get(key)!;
+        // Keep higher confidence version, merge keywords
+        if (section.confidence > existing.confidence) {
+          merged.set(key, {
+            ...section,
+            keywords: [...new Set([...existing.keywords, ...section.keywords])],
+            needsReview: section.confidence < 0.7
+          });
+        } else {
+          existing.keywords = [...new Set([...existing.keywords, ...section.keywords])];
+        }
+      }
+    }
+    
+    // Also check for similar content across different titles
+    const results = Array.from(merged.values());
+    
+    // Sort by priority and confidence
+    results.sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      return b.confidence - a.confidence;
+    });
+    
+    console.log(`[MERGE] Merged ${allSections.length} sections into ${results.length} unique sections`);
+    
+    return results.map(({ chunkIndex, ...rest }) => rest);
+  }
+
+  async parsePromptToSectionsV2(
+    rawPrompt: string
+  ): Promise<{
+    success: boolean;
+    sections: Array<{
+      type: string;
+      title: string;
+      content: string;
+      isCore: boolean;
+      priority: number;
+      keywords: string[];
+      confidence: number;
+      evidence: string;
+      needsReview: boolean;
+    }>;
+    structuredData: {
+      products: Array<{ name: string; price?: number; currency?: string; description?: string; confidence: number }>;
+      deliveryZones: Array<{ name: string; price?: number; minOrder?: number; estimatedTime?: string; confidence: number }>;
+      extractionFields: Array<{ name: string; type: string; required: boolean; confidence: number }>;
+      businessHours: Array<{ day: string; open: string; close: string }>;
+      contactInfo: { phone?: string; email?: string; address?: string; whatsapp?: string };
+    };
+    missingCategories: string[];
+    stats: { totalChunks: number; totalSections: number; avgConfidence: number };
+    error?: string;
+  }> {
+    if (!this.isConfigured()) {
+      return { 
+        success: false, 
+        sections: [],
+        structuredData: { products: [], deliveryZones: [], extractionFields: [], businessHours: [], contactInfo: {} },
+        missingCategories: [],
+        stats: { totalChunks: 0, totalSections: 0, avgConfidence: 0 },
+        error: 'Gemini API not configured' 
+      };
+    }
+
+    console.log(`[GEMINI-V2] Starting multi-pass extraction, text length: ${rawPrompt.length}`);
+    
+    // Helper for rate-limited sequential execution with delay
+    const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+    const RATE_LIMIT_DELAY = 500; // 500ms between API calls
+    
+    try {
+      // Step 1: Chunk the text if needed
+      const chunks = rawPrompt.length > 8000 
+        ? this.chunkText(rawPrompt, 6000, 900)
+        : [{ chunk: rawPrompt, index: 0, start: 0, end: rawPrompt.length }];
+      
+      // Step 2: Extract structured data from ALL chunks (not just first 12k)
+      // For large texts, process each chunk and merge results
+      const structuredDataPromise = this.extractStructuredDataFromChunks(chunks.map(c => c.chunk));
+      
+      // Step 3: Extract categories with rate limiting (max 2 parallel calls at a time)
+      const categories: Array<'CORE' | 'TONE' | 'POLICIES' | 'FAQ' | 'OBJECTIONS' | 'SALES' | 'CLOSING'> = 
+        ['CORE', 'TONE', 'POLICIES', 'FAQ', 'OBJECTIONS', 'SALES', 'CLOSING'];
+      
+      const allSections: Array<any> = [];
+      
+      // Process chunks sequentially, categories in small batches (max 2 parallel)
+      for (const chunk of chunks) {
+        // Batch 1: CORE and TONE (priority 1)
+        const [coreResult, toneResult] = await Promise.all([
+          this.extractCategory(chunk.chunk, 'CORE', chunk.index),
+          this.extractCategory(chunk.chunk, 'TONE', chunk.index)
+        ]);
+        allSections.push(...coreResult.sections, ...toneResult.sections);
+        await delay(RATE_LIMIT_DELAY);
+        
+        // Batch 2: POLICIES and FAQ
+        const [policiesResult, faqResult] = await Promise.all([
+          this.extractCategory(chunk.chunk, 'POLICIES', chunk.index),
+          this.extractCategory(chunk.chunk, 'FAQ', chunk.index)
+        ]);
+        allSections.push(...policiesResult.sections, ...faqResult.sections);
+        await delay(RATE_LIMIT_DELAY);
+        
+        // Batch 3: OBJECTIONS and SALES
+        const [objectionsResult, salesResult] = await Promise.all([
+          this.extractCategory(chunk.chunk, 'OBJECTIONS', chunk.index),
+          this.extractCategory(chunk.chunk, 'SALES', chunk.index)
+        ]);
+        allSections.push(...objectionsResult.sections, ...salesResult.sections);
+        await delay(RATE_LIMIT_DELAY);
+        
+        // Batch 4: CLOSING (single)
+        const closingResult = await this.extractCategory(chunk.chunk, 'CLOSING', chunk.index);
+        allSections.push(...closingResult.sections);
+        
+        // Delay before next chunk
+        if (chunks.indexOf(chunk) < chunks.length - 1) {
+          await delay(RATE_LIMIT_DELAY);
+        }
+      }
+      
+      // Step 4: Merge and deduplicate
+      const mergedSections = this.mergeSections(allSections);
+      
+      // Step 5: Get structured data result
+      const structuredData = await structuredDataPromise;
+      
+      // Step 6: Identify missing categories
+      const foundTypes = new Set(mergedSections.map(s => s.type));
+      const missingCategories = categories.filter(c => !foundTypes.has(c));
+      
+      // Calculate stats
+      const avgConfidence = mergedSections.length > 0
+        ? mergedSections.reduce((sum, s) => sum + s.confidence, 0) / mergedSections.length
+        : 0;
+      
+      console.log(`[GEMINI-V2] Extraction complete:`, {
+        chunks: chunks.length,
+        sections: mergedSections.length,
+        structured: {
+          products: structuredData.products.length,
+          zones: structuredData.deliveryZones.length,
+          fields: structuredData.extractionFields.length
+        },
+        missing: missingCategories,
+        avgConfidence: avgConfidence.toFixed(2)
+      });
+      
+      return {
+        success: true,
+        sections: mergedSections,
+        structuredData,
+        missingCategories,
+        stats: {
+          totalChunks: chunks.length,
+          totalSections: mergedSections.length,
+          avgConfidence
+        }
+      };
+    } catch (error: any) {
+      console.error('[GEMINI-V2] Multi-pass extraction failed:', error.message);
+      return {
+        success: false,
+        sections: [],
+        structuredData: { products: [], deliveryZones: [], extractionFields: [], businessHours: [], contactInfo: {} },
+        missingCategories: [],
+        stats: { totalChunks: 0, totalSections: 0, avgConfidence: 0 },
+        error: error.message
+      };
+    }
+  }
+
+  // Legacy method - kept for backward compatibility
   async parsePromptToSections(
     rawPrompt: string
   ): Promise<{
@@ -976,7 +1597,7 @@ REGLAS:
     }
 
     try {
-      console.log('[GEMINI] Parsing prompt to RAG sections, length:', rawPrompt.length);
+      console.log('[GEMINI] Parsing prompt to RAG sections (legacy), length:', rawPrompt.length);
       
       const prompt = `Eres un experto en estructurar conocimiento para sistemas RAG (Retrieval Augmented Generation). Tu tarea es dividir el siguiente texto de contexto de negocio en SECCIONES ESTRUCTURADAS que puedan ser consultadas de forma independiente.
 

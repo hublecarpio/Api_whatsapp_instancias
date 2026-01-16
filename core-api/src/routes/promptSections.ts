@@ -421,11 +421,11 @@ router.post('/:businessId/context', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Parse prompt into RAG sections using Gemini
+// Parse prompt into RAG sections using Gemini (V2 - Multi-pass with structured data)
 router.post('/:businessId/parse-from-prompt', authMiddleware, requireActiveSubscription, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { rawPrompt, instanceId } = req.body;
+    const { rawPrompt, instanceId, useV2 = true } = req.body;
 
     if (!rawPrompt || rawPrompt.length < 50) {
       return res.status(400).json({ error: 'Prompt must be at least 50 characters' });
@@ -443,24 +443,53 @@ router.post('/:businessId/parse-from-prompt', authMiddleware, requireActiveSubsc
       return res.status(503).json({ error: 'Gemini API not configured' });
     }
 
-    console.log(`[RAG-PARSE] Parsing prompt to sections for business ${businessId}, length: ${rawPrompt.length}`);
+    console.log(`[RAG-PARSE] Parsing prompt for business ${businessId}, length: ${rawPrompt.length}, v2: ${useV2}`);
 
+    // Get existing sections for conflict detection
+    const existingSections = await prisma.promptSection.findMany({
+      where: { businessId },
+      select: { type: true, title: true }
+    });
+    const existingTypes = [...new Set(existingSections.map(s => s.type))];
+
+    // Use V2 multi-pass extraction by default
+    if (useV2) {
+      const result = await geminiService.parsePromptToSectionsV2(rawPrompt);
+
+      if (!result.success) {
+        return res.status(500).json({ error: result.error || 'Failed to parse prompt' });
+      }
+
+      // Categorize sections by review status
+      const reviewNeeded = result.sections.filter(s => s.needsReview);
+      const confident = result.sections.filter(s => !s.needsReview);
+
+      return res.json({
+        success: true,
+        version: 'v2',
+        sections: result.sections,
+        structuredData: result.structuredData,
+        missingCategories: result.missingCategories,
+        stats: {
+          ...result.stats,
+          reviewNeeded: reviewNeeded.length,
+          confident: confident.length
+        },
+        existingSections: existingSections.length,
+        existingTypes
+      });
+    }
+
+    // Legacy V1 fallback
     const result = await geminiService.parsePromptToSections(rawPrompt);
 
     if (!result.success) {
       return res.status(500).json({ error: result.error || 'Failed to parse prompt' });
     }
 
-    // Get existing sections
-    const existingSections = await prisma.promptSection.findMany({
-      where: { businessId },
-      select: { type: true, title: true }
-    });
-
-    const existingTypes = [...new Set(existingSections.map(s => s.type))];
-
     return res.json({
       success: true,
+      version: 'v1',
       sections: result.sections,
       missingCategories: result.missingCategories,
       existingSections: existingSections.length,
@@ -549,6 +578,179 @@ router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscri
   } catch (error) {
     console.error('Error importing sections:', error);
     return res.status(500).json({ error: 'Failed to import sections' });
+  }
+});
+
+// Import structured data to motor IA tables (products, zones, extraction fields)
+router.post('/:businessId/import-structured', authMiddleware, requireActiveSubscription, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { structuredData, instanceId, skipExisting = true } = req.body;
+
+    if (!structuredData) {
+      return res.status(400).json({ error: 'Structured data is required' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    console.log(`[STRUCTURED-IMPORT] Importing structured data for business ${businessId}`);
+
+    const results = {
+      products: { created: 0, skipped: 0, errors: [] as string[] },
+      deliveryZones: { created: 0, skipped: 0, errors: [] as string[] },
+      extractionFields: { created: 0, skipped: 0, errors: [] as string[] },
+      objections: { created: 0, skipped: 0, errors: [] as string[] }
+    };
+
+    // Import products (schema uses 'title' not 'name')
+    if (structuredData.products && Array.isArray(structuredData.products)) {
+      for (const product of structuredData.products) {
+        try {
+          if (!product.name) continue;
+          
+          // Check if product exists by title
+          const existing = await prisma.product.findFirst({
+            where: { 
+              businessId, 
+              title: { equals: product.name, mode: 'insensitive' }
+            }
+          });
+          
+          if (existing && skipExisting) {
+            results.products.skipped++;
+            continue;
+          }
+          
+          if (existing) {
+            await prisma.product.update({
+              where: { id: existing.id },
+              data: {
+                price: product.price,
+                description: product.description
+              }
+            });
+          } else {
+            await prisma.product.create({
+              data: {
+                businessId,
+                instanceId: instanceId || null,
+                title: product.name,
+                price: product.price || 0,
+                description: product.description || ''
+              }
+            });
+          }
+          results.products.created++;
+        } catch (err: any) {
+          results.products.errors.push(`${product.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // Import delivery zones (schema uses 'cost', 'freeAbove', 'deliveryTime')
+    if (structuredData.deliveryZones && Array.isArray(structuredData.deliveryZones)) {
+      for (const zone of structuredData.deliveryZones) {
+        try {
+          if (!zone.name) continue;
+          
+          const existing = await prisma.deliveryZone.findFirst({
+            where: { 
+              businessId, 
+              name: { equals: zone.name, mode: 'insensitive' }
+            }
+          });
+          
+          if (existing && skipExisting) {
+            results.deliveryZones.skipped++;
+            continue;
+          }
+          
+          if (existing) {
+            await prisma.deliveryZone.update({
+              where: { id: existing.id },
+              data: {
+                cost: zone.price || 0,
+                freeAbove: zone.minOrder || null,
+                deliveryTime: zone.estimatedTime
+              }
+            });
+          } else {
+            await prisma.deliveryZone.create({
+              data: {
+                businessId,
+                name: zone.name,
+                cost: zone.price || 0,
+                freeAbove: zone.minOrder || null,
+                deliveryTime: zone.estimatedTime || '',
+                isActive: true
+              }
+            });
+          }
+          results.deliveryZones.created++;
+        } catch (err: any) {
+          results.deliveryZones.errors.push(`${zone.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // Import extraction fields (schema uses 'fieldKey', 'fieldLabel')
+    if (structuredData.extractionFields && Array.isArray(structuredData.extractionFields)) {
+      for (const field of structuredData.extractionFields) {
+        try {
+          if (!field.name) continue;
+          
+          const fieldKey = field.name.toLowerCase().replace(/\s+/g, '_');
+          
+          const existing = await prisma.extractionField.findFirst({
+            where: { businessId, fieldKey }
+          });
+          
+          if (existing && skipExisting) {
+            results.extractionFields.skipped++;
+            continue;
+          }
+          
+          if (!existing) {
+            await prisma.extractionField.create({
+              data: {
+                businessId,
+                instanceId: instanceId || null,
+                fieldKey,
+                fieldLabel: field.name,
+                fieldType: field.type || 'text',
+                required: field.required || false,
+                enabled: true
+              }
+            });
+            results.extractionFields.created++;
+          } else {
+            results.extractionFields.skipped++;
+          }
+        } catch (err: any) {
+          results.extractionFields.errors.push(`${field.name}: ${err.message}`);
+        }
+      }
+    }
+
+    console.log(`[STRUCTURED-IMPORT] Complete:`, {
+      products: results.products.created,
+      zones: results.deliveryZones.created,
+      fields: results.extractionFields.created
+    });
+
+    return res.json({
+      success: true,
+      results
+    });
+  } catch (error) {
+    console.error('Error importing structured data:', error);
+    return res.status(500).json({ error: 'Failed to import structured data' });
   }
 });
 
