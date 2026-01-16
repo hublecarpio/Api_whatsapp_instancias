@@ -15,6 +15,7 @@ import { getAIResponseQueue } from '../services/queues/index.js';
 import { scheduleFollowUp } from '../services/followUpService.js';
 import { dispatchAgentMessage, dispatchWebhook } from '../services/webhookService.js';
 import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsForIntent, IntentAnalysis } from '../services/intentAnalyzer.js';
+import { getContactStageStatus } from '../services/funnelStageService.js';
 
 const router = Router();
 
@@ -381,6 +382,84 @@ function cleanMarkdownForWhatsApp(text: string): string {
   cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
   return cleaned.trim();
+}
+
+interface ResponseValidation {
+  isValid: boolean;
+  issues: string[];
+  sanitizedResponse: string;
+}
+
+function validateAgentResponse(
+  response: string,
+  recentHistory: string[],
+  businessObjective: 'SALES' | 'APPOINTMENTS'
+): ResponseValidation {
+  const issues: string[] = [];
+  let sanitizedResponse = response;
+  
+  // Check for empty or too short responses
+  if (!response || response.trim().length < 10) {
+    issues.push('Response too short');
+    return { isValid: false, issues, sanitizedResponse: '' };
+  }
+  
+  // Check for excessively long responses (>800 chars might overwhelm)
+  if (response.length > 1500) {
+    issues.push('Response might be too long');
+    // Don't fail, just flag
+  }
+  
+  // Check for repetitive content (same phrase repeated)
+  const sentences = response.split(/[.!?]+/).filter(s => s.trim().length > 20);
+  const uniqueSentences = new Set(sentences.map(s => s.trim().toLowerCase()));
+  if (sentences.length > 2 && uniqueSentences.size < sentences.length * 0.6) {
+    issues.push('Response may contain repetitive content');
+  }
+  
+  // Check for hallucination patterns - fake data markers
+  const hallucniationPatterns = [
+    /\[INSERTAR.*\]/gi,
+    /\[AGREGAR.*\]/gi,
+    /\[AQUÍ.*\]/gi,
+    /ejemplo\.com/gi,
+    /xxx+/gi,
+    /\$\{.*\}/g,
+    /{{.*}}/g
+  ];
+  
+  for (const pattern of hallucniationPatterns) {
+    if (pattern.test(response)) {
+      issues.push('Response contains placeholder/template text');
+      sanitizedResponse = sanitizedResponse.replace(pattern, '');
+    }
+  }
+  
+  // Check if response mentions competitor products or services
+  const competitorPatterns = [
+    /amazon/gi, /mercadolibre/gi, /aliexpress/gi,
+    /chatgpt/gi, /gemini/gi, /claude/gi
+  ];
+  for (const pattern of competitorPatterns) {
+    if (pattern.test(response)) {
+      issues.push('Response mentions competitor');
+    }
+  }
+  
+  // For SALES: check if response tries to close without proper context
+  if (businessObjective === 'SALES') {
+    const closingWithoutProducts = /complet(a|e|ar)|finaliz(a|ar)|confirma(r)? (tu|el|la) (pedido|orden)/i.test(response);
+    const hasProductMention = /producto|artículo|precio|\$/i.test(response);
+    if (closingWithoutProducts && !hasProductMention && recentHistory.length < 5) {
+      issues.push('Trying to close sale prematurely');
+    }
+  }
+  
+  return {
+    isValid: issues.length === 0 || !issues.some(i => i.includes('too short') || i.includes('placeholder')),
+    issues,
+    sanitizedResponse: sanitizedResponse.trim()
+  };
 }
 
 function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedText: string } {
@@ -1099,6 +1178,7 @@ async function processWithAgent(
   
   const combinedMessage = messages.join(' ');
   const businessObjective = business.businessObjective as 'SALES' | 'APPOINTMENTS';
+  const normalizedContactPhone = contactPhone.replace(/@.*/, '').replace(/[^0-9]/g, '');
   
   const recentMessagesForIntent = await prisma.messageLog.findMany({
     where: { 
@@ -1124,7 +1204,8 @@ async function processWithAgent(
       businessId,
       combinedMessage,
       conversationHistoryForIntent,
-      businessObjective
+      businessObjective,
+      normalizedContactPhone
     );
     console.log(`[Agent V1] Intent detected: ${intentAnalysis.intent} (${(intentAnalysis.confidence * 100).toFixed(0)}%)`);
     
@@ -1137,8 +1218,18 @@ async function processWithAgent(
   
   const conversationContext = await getConversationContext(businessId, contactPhone);
   
+  // Initialize funnel stage for this contact (auto-creates if funnel stages exist)
+  let funnelStatus = null;
+  try {
+    funnelStatus = await getContactStageStatus(businessId, normalizedContactPhone);
+    if (funnelStatus.currentStage) {
+      console.log(`[Agent V1] Funnel stage: ${funnelStatus.currentStage.name} (missing: ${funnelStatus.missingFields.join(', ') || 'none'})`);
+    }
+  } catch (funnelError: any) {
+    console.log(`[Agent V1] Funnel stage check skipped: ${funnelError.message}`);
+  }
+  
   // Load extracted contact data from ContactSettings.notes
-  const normalizedContactPhone = contactPhone.replace(/@.*/, '').replace(/[^0-9]/g, '');
   const contactSettings = await prisma.contactSettings.findFirst({
     where: {
       businessId,
@@ -1255,7 +1346,7 @@ async function processWithAgent(
   if (contactAssignment?.tag) {
     const tag = contactAssignment.tag;
     systemPrompt += `\n\n## Estado actual del cliente:`;
-    systemPrompt += `\n- Etapa: ${tag.name}`;
+    systemPrompt += `\n- Etapa CRM: ${tag.name}`;
     if (tag.description) {
       systemPrompt += `\n- Contexto de etapa: ${tag.description}`;
     }
@@ -1267,6 +1358,29 @@ async function processWithAgent(
       if (tag.stagePrompt.promptOverride) {
         systemPrompt = tag.stagePrompt.promptOverride + `\n\n${systemPrompt}`;
       }
+    }
+  }
+  
+  // Add funnel stage context if available
+  if (funnelStatus?.currentStage) {
+    systemPrompt += `\n\n## FLUJO DE VENTA - Etapa actual: "${funnelStatus.currentStage.name}"`;
+    if (funnelStatus.currentStage.promptContext) {
+      systemPrompt += `\n${funnelStatus.currentStage.promptContext}`;
+    }
+    if (funnelStatus.missingFields.length > 0) {
+      systemPrompt += `\n\n### DATOS OBLIGATORIOS PENDIENTES (debes obtenerlos ANTES de avanzar):`;
+      funnelStatus.missingFields.forEach((field: string) => {
+        systemPrompt += `\n- ${field}`;
+      });
+      systemPrompt += `\n\nIMPORTANTE: NO avances a la siguiente etapa ni cierres la venta hasta tener TODOS estos datos.`;
+    } else if (funnelStatus.canAdvance && funnelStatus.nextStage) {
+      systemPrompt += `\n\n### Datos completos - puedes avanzar a "${funnelStatus.nextStage.name}"`;
+    }
+    if (funnelStatus.currentStage.blockedTopics && funnelStatus.currentStage.blockedTopics.length > 0) {
+      systemPrompt += `\n\n### TEMAS BLOQUEADOS en esta etapa (no abordar aún):`;
+      funnelStatus.currentStage.blockedTopics.forEach((topic: string) => {
+        systemPrompt += `\n- ${topic}`;
+      });
     }
   }
   
@@ -2102,7 +2216,18 @@ async function processWithAgent(
     });
   }
   
-  const aiResponse = completion.choices[0]?.message?.content || 'Lo siento, no pude procesar tu mensaje.';
+  let aiResponse = completion.choices[0]?.message?.content || 'Lo siento, no pude procesar tu mensaje.';
+  
+  // Validate response anti-saturation
+  const validation = validateAgentResponse(aiResponse, conversationHistoryForIntent, businessObjective);
+  if (!validation.isValid) {
+    console.warn(`[Agent V1] Response validation failed: ${validation.issues.join(', ')}`);
+    if (validation.sanitizedResponse) {
+      aiResponse = validation.sanitizedResponse;
+    }
+  } else if (validation.issues.length > 0) {
+    console.log(`[Agent V1] Response warnings: ${validation.issues.join(', ')}`);
+  }
   
   console.log(`[AI RESPONSE]:`, aiResponse.substring(0, 300));
   

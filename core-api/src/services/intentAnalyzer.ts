@@ -71,7 +71,8 @@ export async function analyzeIntent(
   businessId: string,
   message: string,
   conversationHistory: string[],
-  businessObjective: 'SALES' | 'APPOINTMENTS'
+  businessObjective: 'SALES' | 'APPOINTMENTS',
+  contactPhone?: string
 ): Promise<IntentAnalysis> {
   const objections = await prisma.salesObjection.findMany({
     where: { businessId, isActive: true },
@@ -149,7 +150,7 @@ Analiza la intención:`
     await prisma.intentLog.create({
       data: {
         businessId,
-        contactPhone: '',
+        contactPhone: contactPhone || '',
         detectedIntent: result.intent || 'OTHER',
         confidence: result.confidence || 0.5,
         objectionId: objectionData?.id,
@@ -267,7 +268,7 @@ export function selectToolsForIntent(
     'PRODUCT_INQUIRY': ['buscar_producto'],
     'PRICE_INQUIRY': ['buscar_producto'],
     'OBJECTION': [],
-    'READY_TO_BUY': ['crear_enlace_pago', 'buscar_producto'],
+    'READY_TO_BUY': ['registrar_pedido', 'buscar_producto'],
     'SCHEDULE_APPOINTMENT': ['consultar_disponibilidad', 'agendar_cita'],
     'SUPPORT_REQUEST': ['enviar_archivo'],
     'COMPLAINT': [],
@@ -286,7 +287,7 @@ export function selectToolsForIntent(
   }
   
   return prioritized.filter(t => availableTools.includes(t) || 
-    ['buscar_producto', 'crear_enlace_pago', 'enviar_archivo'].includes(t));
+    ['buscar_producto', 'crear_enlace_pago', 'registrar_pedido', 'enviar_archivo'].includes(t));
 }
 
 export interface DynamicPromptOptions {
