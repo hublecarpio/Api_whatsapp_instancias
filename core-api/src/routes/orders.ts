@@ -190,7 +190,7 @@ router.get('/details/:sessionId', async (req, res) => {
 
 router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
   try {
-    const { businessId, contactPhone, contactName, items, shippingAddress, shippingCity, shippingCountry, locationCoordinates } = req.body;
+    const { businessId, contactPhone, contactName, items, shippingAddress, shippingCity, shippingCountry, locationCoordinates, instanceId } = req.body;
 
     if (!businessId || !contactPhone || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'businessId, contactPhone y items son requeridos' });
@@ -238,6 +238,7 @@ router.post('/create-payment-link', authMiddleware, async (req: any, res) => {
       const order = await prisma.order.create({
         data: {
           businessId,
+          instanceId: instanceId || null,
           contactPhone,
           contactName,
           shippingAddress,

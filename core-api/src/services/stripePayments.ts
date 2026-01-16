@@ -48,6 +48,7 @@ interface CreatePaymentLinkParams {
   shippingAddress?: string;
   shippingCity?: string;
   shippingCountry?: string;
+  instanceId?: string;
   metadata?: Record<string, any>;
 }
 
@@ -73,7 +74,7 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
   error?: string;
 }> {
   try {
-    const { businessId, contactPhone, contactName, items, shippingAddress, shippingCity, shippingCountry, metadata } = params;
+    const { businessId, contactPhone, contactName, items, shippingAddress, shippingCity, shippingCountry, instanceId, metadata } = params;
 
     const business = await prisma.business.findUnique({
       where: { id: businessId }
@@ -147,6 +148,7 @@ export async function createProductPaymentLink(params: CreatePaymentLinkParams):
     const order = await prisma.order.create({
       data: {
         businessId,
+        instanceId: instanceId || null,
         contactPhone,
         contactName,
         shippingAddress,

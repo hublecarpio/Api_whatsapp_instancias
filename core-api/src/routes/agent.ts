@@ -1850,6 +1850,7 @@ async function processWithAgent(
             const order = await prisma.order.create({
               data: {
                 businessId,
+                instanceId: instanceId || null,
                 contactPhone,
                 contactName: customerName,
                 shippingAddress,
