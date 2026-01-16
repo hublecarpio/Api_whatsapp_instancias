@@ -52,7 +52,13 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Phone Verification System**: Users verify phone numbers via WhatsApp OTP through the Super Admin's delegated agent instance.
 *   **Multi-Instance WhatsApp Support**: PRO/Enterprise users can connect multiple WhatsApp numbers, each with independent configuration.
 *   **Sales Funnel System (Flujo de Venta)**: Sequential stage-based conversation flow where each stage has required data fields that must be collected before advancing, and topics that can be blocked until requirements are met. Integrates with ContactExtractedData for automatic stage progression.
-*   **Intelligent Prompt Importer**: AI-powered onboarding tool that allows users to paste raw business context (products, prices, delivery zones, extraction fields, objection handling, funnel stages) and have Gemini 2.5 automatically parse and structure it into configuration data. Features a 3-step modal flow: input raw text → AI-powered preview with diagnostics → import confirmation with detailed results. Includes conflict detection and skip-on-conflict behavior to avoid overwriting existing data.
+*   **Intelligent Prompt Importer V2**: Multi-pass AI-powered onboarding tool that allows users to paste raw business context (products, prices, delivery zones, extraction fields, objection handling, funnel stages) and have Gemini 2.5 automatically parse and structure it into configuration data. Features:
+    *   **Multi-Pass Chunking**: Processes texts up to 60k chars via intelligent chunking (6-8k chars with overlap)
+    *   **Category-Specific Extraction**: Batched execution (2 parallel calls max) for rate-limit safety with retry/exponential backoff
+    *   **Structured Data Extraction**: Processes up to 10 chunks for products, zones, extraction fields with deduplication
+    *   **Confidence Scoring**: 0-1 confidence scores with evidence quotes; items <0.7 flagged as needsReview
+    *   **3-Step Modal Flow**: Input raw text → AI-powered preview with diagnostics → import confirmation with detailed results
+    *   **Conflict Detection**: Skip-on-conflict behavior to avoid overwriting existing data
 *   **RAG Knowledge Architecture**: Scalable knowledge management system replacing monolithic prompts with structured, queryable sections. Features:
     *   **Structured Categories**: CORE, TONE, SALES, POLICIES, FAQ, OBJECTIONS, CLOSING, OTHER
     *   **Semantic Embeddings**: OpenAI text-embedding-3-small for non-core sections enabling RAG retrieval
