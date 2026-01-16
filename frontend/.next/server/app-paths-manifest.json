@@ -4,5 +4,5 @@
   "/dashboard/whatsapp/page": "app/dashboard/whatsapp/page.js",
   "/dashboard/chat/page": "app/dashboard/chat/page.js",
   "/dashboard/orders/page": "app/dashboard/orders/page.js",
-  "/dashboard/broadcasts/page": "app/dashboard/broadcasts/page.js"
+  "/dashboard/contacts/page": "app/dashboard/contacts/page.js"
 }
