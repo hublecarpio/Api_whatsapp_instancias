@@ -1,13 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
-import { ordersApi, waApi, tagsApi } from '@/lib/api';
+import { ordersApi, waApi, tagsApi, messageApi } from '@/lib/api';
 import ExtractionFieldsManager from '@/components/ExtractionFieldsManager';
 import CustomSelect from '@/components/ui/CustomSelect';
+
+interface ChatMessage {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  message?: string;
+  mediaUrl?: string;
+  createdAt: string;
+  metadata?: any;
+}
 
 interface OrderItem {
   id: string;
@@ -132,6 +141,14 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [extractedDataCache, setExtractedDataCache] = useState<Record<string, ExtractedDataItem[]>>({});
   const [loadingExtractedData, setLoadingExtractedData] = useState<string | null>(null);
+  
+  // Chat embebido
+  const [chatModalOpen, setChatModalOpen] = useState(false);
+  const [chatPhone, setChatPhone] = useState<string | null>(null);
+  const [chatContactName, setChatContactName] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const filteredOrders = orders.filter(order => {
     if (!searchQuery) return true;
@@ -266,8 +283,28 @@ export default function OrdersPage() {
     setExpandedOrderId(prev => prev === orderId ? null : orderId);
   };
 
-  const openConversation = (contactPhone: string) => {
-    const params = new URLSearchParams({ phone: contactPhone });
+  const openConversation = async (contactPhone: string, contactName?: string | null) => {
+    if (!currentBusiness) return;
+    setChatPhone(contactPhone);
+    setChatContactName(contactName || null);
+    setChatModalOpen(true);
+    setChatLoading(true);
+    setChatMessages([]);
+    
+    try {
+      const response = await messageApi.conversation(currentBusiness.id, contactPhone, selectedInstanceId || undefined);
+      setChatMessages(response.data || []);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    } catch (err) {
+      console.error('Error loading conversation:', err);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+  
+  const openFullConversation = () => {
+    if (!chatPhone) return;
+    const params = new URLSearchParams({ phone: chatPhone });
     if (selectedInstanceId) {
       params.set('instance', selectedInstanceId);
     }
@@ -580,7 +617,7 @@ export default function OrdersPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              openConversation(order.contactPhone);
+                              openConversation(order.contactPhone, order.contactName);
                             }}
                             className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 text-xs rounded-lg transition-colors"
                           >
@@ -959,6 +996,101 @@ export default function OrdersPage() {
             <p className="text-center text-gray-400 text-sm mt-2">
               Click fuera de la imagen para cerrar
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Chat Embebido */}
+      {chatModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#1a1a1a] rounded-xl w-full max-w-lg h-[80vh] max-h-[600px] flex flex-col shadow-2xl border border-gray-700">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-bold">
+                  {(chatContactName || chatPhone || 'U')[0].toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-white font-medium">{chatContactName || 'Cliente'}</p>
+                  <p className="text-gray-400 text-sm">{chatPhone ? `+${chatPhone.replace(/^51/, '51 ')}` : ''}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={openFullConversation}
+                  className="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-white"
+                  title="Abrir chat completo"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setChatModalOpen(false)}
+                  className="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-white"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {chatLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+                </div>
+              ) : chatMessages.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  <p>No hay mensajes en esta conversacion</p>
+                </div>
+              ) : (
+                chatMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                        msg.direction === 'outbound'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-700 text-white'
+                      }`}
+                    >
+                      {msg.mediaUrl && (
+                        <img
+                          src={msg.mediaUrl}
+                          alt="Media"
+                          className="max-w-full rounded mb-2 max-h-48 object-contain"
+                        />
+                      )}
+                      {msg.message && (
+                        <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
+                      )}
+                      <p className={`text-[10px] mt-1 ${msg.direction === 'outbound' ? 'text-green-200' : 'text-gray-400'}`}>
+                        {new Date(msg.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-700">
+              <button
+                onClick={openFullConversation}
+                className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                Abrir conversacion completa
+              </button>
+            </div>
           </div>
         </div>
       )}
