@@ -11,6 +11,7 @@ interface Conversation {
   contactName: string;
   lastMessage: string | null;
   lastMessageAt: string;
+  lastMessageDirection: 'inbound' | 'outbound';
   messageCount: number;
   instanceId?: string | null;
 }
@@ -130,6 +131,7 @@ export default function ChatPage() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [sendingTemplate, setSendingTemplate] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [responseFilter, setResponseFilter] = useState<'all' | 'responded' | 'waiting'>('all');
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [newChatPhone, setNewChatPhone] = useState('');
   const [newChatMessage, setNewChatMessage] = useState('');
@@ -738,6 +740,12 @@ export default function ChatPage() {
   };
 
   const filteredConversations = conversations.filter(conv => {
+    // Response filter (with fallback for undefined lastMessageDirection)
+    const direction = conv.lastMessageDirection || 'outbound';
+    if (responseFilter === 'responded' && direction !== 'inbound') return false;
+    if (responseFilter === 'waiting' && direction !== 'outbound') return false;
+    
+    // Search filter
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     const phoneMatch = conv.phone.toLowerCase().includes(query);
@@ -1199,6 +1207,28 @@ export default function ChatPage() {
                 </button>
               )}
             </div>
+            <div className="flex gap-1 mb-2">
+              <button 
+                onClick={() => setResponseFilter('all')} 
+                className={`flex-1 text-xs py-1.5 rounded-lg transition-colors ${responseFilter === 'all' ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:bg-dark-hover'}`}
+              >
+                Todos
+              </button>
+              <button 
+                onClick={() => setResponseFilter('responded')} 
+                className={`flex-1 text-xs py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1 ${responseFilter === 'responded' ? 'bg-accent-success/20 text-accent-success' : 'text-gray-400 hover:bg-dark-hover'}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                Respondieron
+              </button>
+              <button 
+                onClick={() => setResponseFilter('waiting')} 
+                className={`flex-1 text-xs py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1 ${responseFilter === 'waiting' ? 'bg-accent-warning/20 text-accent-warning' : 'text-gray-400 hover:bg-dark-hover'}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                Esperando
+              </button>
+            </div>
             {dailyContacts && (
               <div className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg mb-2 ${dailyContacts.remaining <= 10 ? 'bg-accent-error/20 text-accent-error' : dailyContacts.remaining <= 25 ? 'bg-accent-warning/20 text-accent-warning' : 'bg-accent-success/20 text-accent-success'}`}>
                 <span className="flex items-center gap-1">
@@ -1246,6 +1276,13 @@ export default function ChatPage() {
                         <span className="text-xs text-gray-500 flex-shrink-0 ml-2">{formatDate(conv.lastMessageAt)}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`flex-shrink-0 ${(conv.lastMessageDirection || 'outbound') === 'inbound' ? 'text-accent-success' : 'text-gray-500'}`} title={conv.lastMessageDirection === 'inbound' ? 'Cliente respondio' : 'Esperando respuesta'}>
+                          {(conv.lastMessageDirection || 'outbound') === 'inbound' ? (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                          )}
+                        </span>
                         <p className="text-sm text-gray-400 truncate flex-1">{conv.lastMessage || 'Sin mensajes'}</p>
                         {contactTag && viewMode === 'list' && <span className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: `${contactTag.color}20`, color: contactTag.color }}>{contactTag.name}</span>}
                       </div>

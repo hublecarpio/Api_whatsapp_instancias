@@ -121,6 +121,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       contactName: string;
       lastMessage: string | null;
       lastMessageAt: Date;
+      lastMessageDirection: 'inbound' | 'outbound';
       messageCount: number;
       unread: number;
       instanceId: string | null;
@@ -161,6 +162,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
           contactName,
           lastMessage: msg.message,
           lastMessageAt: msg.createdAt,
+          lastMessageDirection: msg.direction as 'inbound' | 'outbound',
           messageCount: 1,
           unread: msg.direction === 'inbound' ? 1 : 0,
           instanceId: msg.instanceId

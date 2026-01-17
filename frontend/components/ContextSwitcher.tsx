@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore, UserContext } from '@/store/auth';
 
 export default function ContextSwitcher() {
+  const router = useRouter();
   const { contexts, activeContext, setActiveContext } = useAuthStore();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -21,7 +23,14 @@ export default function ContextSwitcher() {
   const handleContextSwitch = (context: UserContext) => {
     setActiveContext(context);
     setIsOpen(false);
-    window.location.reload();
+    
+    // If switching to advisor role, navigate directly to chat (advisors only see assigned contacts)
+    if (context.role === 'ADVISOR') {
+      router.push('/dashboard/chat');
+    } else {
+      // For owner role, reload to refresh the dashboard
+      window.location.href = '/dashboard/business';
+    }
   };
 
   if (contexts.length <= 1) {
