@@ -892,7 +892,7 @@ model FollowUpConfig {
   id                  String            @id @default(uuid())
   businessId          String
   instanceId          String?           @unique
-  enabled             Boolean           @default(true)
+  enabled             Boolean           @default(false)
   firstDelayMinutes   Int               @default(15)
   secondDelayMinutes  Int               @default(60)
   thirdDelayMinutes   Int               @default(240)
