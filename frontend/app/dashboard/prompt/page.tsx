@@ -246,12 +246,9 @@ export default function PromptPage() {
           }
         }
       }).catch(() => {});
-      loadData();
-      loadAgentFiles();
       loadInjectionCode();
       if (version === 'v2') {
         loadV2Data();
-        loadPromptSections();
       }
     }
   }, [currentBusiness]);
@@ -559,19 +556,21 @@ export default function PromptPage() {
     if (!currentBusiness) return;
     
     try {
-      const res = await promptApi.get(currentBusiness.id);
+      const res = await promptApi.get(currentBusiness.id, selectedInstanceId || undefined);
       if (res.data) {
         setPrompt(res.data.prompt);
         setPromptId(res.data.id);
-        setBufferSeconds(res.data.bufferSeconds || 0);
-        setHistoryLimit(res.data.historyLimit || 10);
+        setBufferSeconds(res.data.bufferSeconds ?? 7);
+        setHistoryLimit(res.data.historyLimit ?? 10);
         setSplitMessages(res.data.splitMessages ?? true);
         setTools(res.data.tools || []);
       } else {
         setPrompt(DEFAULT_PROMPT);
+        setPromptId(null);
       }
     } catch {
       setPrompt(DEFAULT_PROMPT);
+      setPromptId(null);
     }
   };
 
