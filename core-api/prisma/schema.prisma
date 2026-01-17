@@ -419,6 +419,7 @@ model WhatsAppInstance {
   lastConnection    DateTime?
   webhookConfig     Json?
   createdAt         DateTime         @default(now())
+  archivedAt        DateTime?
   businessObjective BusinessObjective?
   
   apiKeyHash        String?
@@ -446,6 +447,7 @@ model WhatsAppInstance {
   @@unique([businessId, instanceNumber])
   @@index([businessId])
   @@index([apiKeyPrefix])
+  @@index([businessId, archivedAt])
 }
 
 enum InstanceEventType {
