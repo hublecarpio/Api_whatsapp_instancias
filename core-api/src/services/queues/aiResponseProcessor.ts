@@ -285,7 +285,12 @@ async function processWithAgentV2Worker(
   phone: string,
   instanceId: string | undefined
 ): Promise<{ response: string; tokensUsed?: number }> {
-  const historyLimit = business.agentPrompts?.[0]?.historyLimit || 10;
+  // Get the correct prompt config for this instance
+  const promptConfigV2 = 
+    (instanceId && business.agentPrompts?.find((p: any) => p.instanceId === instanceId)) ||
+    business.agentPrompts?.find((p: any) => !p.instanceId) ||
+    business.agentPrompts?.[0];
+  const historyLimit = promptConfigV2?.historyLimit || 10;
   
   // Get current lead stage for context
   const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
@@ -312,7 +317,7 @@ async function processWithAgentV2Worker(
     take: historyLimit
   });
   
-  const userTools = business.agentPrompts?.[0]?.tools || [];
+  const userTools = promptConfigV2?.tools || [];
   const toolsConfig = userTools.map((t: any) => ({
     name: t.name,
     description: t.description,
@@ -328,7 +333,7 @@ async function processWithAgentV2Worker(
   const conversationHistory = buildConversationHistory(recentMessages.reverse());
   const businessContext = buildBusinessContext(
     business, 
-    business.agentPrompts?.[0]?.prompt,
+    promptConfigV2?.prompt,
     toolsConfig
   );
   
@@ -401,7 +406,12 @@ async function processWithAgentV1Worker(
   });
   const currentLeadStage = currentTagAssignment?.tag?.name || null;
   
-  const promptConfig = business.agentPrompts?.[0];
+  // Get the correct prompt config for this instance
+  // Priority: 1) Prompt specific to instanceId, 2) Shared prompt (instanceId=null), 3) First available
+  const promptConfig = 
+    (instanceId && business.agentPrompts?.find((p: any) => p.instanceId === instanceId)) ||
+    business.agentPrompts?.find((p: any) => !p.instanceId) ||
+    business.agentPrompts?.[0];
   const historyLimit = promptConfig?.historyLimit || 10;
   const userTools = promptConfig?.tools || [];
   
@@ -485,7 +495,7 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   
   try {
     const userQuery = messages.join(' ');
-    const ragResult = await retrieveRelevantSections(business.id, userQuery, 5);
+    const ragResult = await retrieveRelevantSections(business.id, userQuery, 5, instanceId);
     
     if (ragResult.coreSections.length > 0 || ragResult.ragSections.length > 0) {
       const ragContent = formatSectionsForPrompt(ragResult);

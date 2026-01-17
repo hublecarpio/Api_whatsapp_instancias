@@ -65,19 +65,28 @@ function estimateTokens(text: string): number {
 export async function retrieveRelevantSections(
   businessId: string,
   query: string,
-  maxRagSections: number = MAX_RAG_SECTIONS
+  maxRagSections: number = MAX_RAG_SECTIONS,
+  instanceId?: string
 ): Promise<RAGResult> {
   const startTime = Date.now();
   
   const sections = await prisma.promptSection.findMany({
-    where: { businessId, enabled: true },
+    where: { 
+      businessId, 
+      enabled: true,
+      OR: [
+        { instanceId: instanceId || null },
+        { instanceId: null }
+      ]
+    },
     select: {
       id: true,
       title: true,
       content: true,
       type: true,
       isCore: true,
-      embedding: true
+      embedding: true,
+      instanceId: true
     }
   });
 
