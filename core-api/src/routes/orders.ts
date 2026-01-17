@@ -689,6 +689,77 @@ router.post('/:orderId/confirm-payment', authMiddleware, async (req: any, res) =
   }
 });
 
+router.patch('/:orderId/items', authMiddleware, async (req: any, res) => {
+  try {
+    const { orderId } = req.params;
+    const { items, shippingCost } = req.body;
+
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ error: 'items es requerido y debe ser un array' });
+    }
+
+    const order = await getOrderById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: order.businessId,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
+    await prisma.orderItem.deleteMany({
+      where: { orderId }
+    });
+
+    const productIds = items.filter((i: any) => i.productId).map((i: any) => i.productId);
+    const products = productIds.length > 0 ? await prisma.product.findMany({
+      where: { id: { in: productIds } }
+    }) : [];
+
+    const orderItems = items.map((item: any) => {
+      const product = products.find((p: any) => p.id === item.productId);
+      return {
+        orderId,
+        productId: item.productId || null,
+        productTitle: item.productTitle || product?.title || 'Producto',
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice ?? product?.price ?? 0,
+        imageUrl: item.imageUrl || product?.imageUrl || null
+      };
+    });
+
+    await prisma.orderItem.createMany({
+      data: orderItems
+    });
+
+    const subtotal = orderItems.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0);
+    const finalShippingCost = shippingCost !== undefined ? shippingCost : (order as any).shippingCost || 0;
+    const totalAmount = subtotal + finalShippingCost;
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        totalAmount,
+        shippingCost: finalShippingCost
+      },
+      include: { items: true }
+    });
+
+    console.log(`[ORDERS] Items updated for order ${orderId}: ${items.length} items, subtotal: ${subtotal}, shipping: ${finalShippingCost}, total: ${totalAmount}`);
+    res.json(updatedOrder);
+  } catch (error: any) {
+    console.error('[ORDERS] Error updating order items:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.patch('/:orderId/status', authMiddleware, async (req: any, res) => {
   try {
     const { orderId } = req.params;

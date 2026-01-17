@@ -1009,6 +1009,7 @@ model Order {
   locationCoordinates   String?
   notes                 String?
   totalAmount           Float
+  shippingCost          Float?      @default(0)
   currencyCode          String      @default("PEN")
   currencySymbol        String      @default("S/.")
   status                OrderStatus @default(PENDING_PAYMENT)

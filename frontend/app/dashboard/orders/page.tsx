@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
-import { ordersApi, waApi, tagsApi, messageApi } from '@/lib/api';
+import { ordersApi, waApi, tagsApi, messageApi, deliveryZonesApi, productApi } from '@/lib/api';
 import ExtractionFieldsManager from '@/components/ExtractionFieldsManager';
 import CustomSelect from '@/components/ui/CustomSelect';
 
@@ -27,6 +27,22 @@ interface OrderItem {
   imageUrl: string | null;
 }
 
+interface DeliveryZone {
+  id: string;
+  name: string;
+  districts: string[];
+  cost: number;
+  freeAbove: number | null;
+  deliveryTime: string | null;
+}
+
+interface Product {
+  id: string;
+  title: string;
+  price: number;
+  imageUrl: string | null;
+}
+
 interface Order {
   id: string;
   businessId: string;
@@ -41,6 +57,7 @@ interface Order {
   locationCoordinates: string | null;
   notes: string | null;
   totalAmount: number;
+  shippingCost: number | null;
   currencyCode: string;
   currencySymbol: string;
   status: string;
@@ -150,6 +167,16 @@ export default function OrdersPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Edición de productos en orden
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [editingItems, setEditingItems] = useState<OrderItem[]>([]);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [savingItems, setSavingItems] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [showProductSelector, setShowProductSelector] = useState(false);
+
   const filteredOrders = orders.filter(order => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -223,6 +250,103 @@ export default function OrdersPage() {
       setLoading(false);
     }
   };
+
+  const loadDeliveryZonesAndProducts = async () => {
+    if (!currentBusiness?.id) return;
+    try {
+      const [zonesRes, productsRes] = await Promise.all([
+        deliveryZonesApi.list(currentBusiness.id),
+        productApi.list(currentBusiness.id)
+      ]);
+      setDeliveryZones(zonesRes.data || []);
+      setProducts(productsRes.data?.products || productsRes.data || []);
+    } catch (error) {
+      console.error('Error loading zones/products:', error);
+    }
+  };
+
+  const startEditingOrder = (order: Order) => {
+    setEditingOrderId(order.id);
+    setEditingItems([...order.items]);
+    loadDeliveryZonesAndProducts();
+  };
+
+  const cancelEditing = () => {
+    setEditingOrderId(null);
+    setEditingItems([]);
+    setShowProductSelector(false);
+    setProductSearch('');
+  };
+
+  const addProductToOrder = (product: Product) => {
+    const existingIndex = editingItems.findIndex(i => i.productId === product.id);
+    if (existingIndex >= 0) {
+      const updated = [...editingItems];
+      updated[existingIndex].quantity += 1;
+      setEditingItems(updated);
+    } else {
+      setEditingItems([...editingItems, {
+        id: `new-${Date.now()}`,
+        productId: product.id,
+        productTitle: product.title,
+        quantity: 1,
+        unitPrice: product.price,
+        imageUrl: product.imageUrl
+      }]);
+    }
+    setShowProductSelector(false);
+    setProductSearch('');
+  };
+
+  const updateItemQuantity = (index: number, quantity: number) => {
+    if (quantity <= 0) {
+      setEditingItems(editingItems.filter((_, i) => i !== index));
+    } else {
+      const updated = [...editingItems];
+      updated[index].quantity = quantity;
+      setEditingItems(updated);
+    }
+  };
+
+  const removeItem = (index: number) => {
+    setEditingItems(editingItems.filter((_, i) => i !== index));
+  };
+
+  const getSelectedZoneCost = (order: Order): number => {
+    if (selectedZoneId) {
+      const zone = deliveryZones.find(z => z.id === selectedZoneId);
+      if (zone) {
+        const subtotal = editingItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+        if (zone.freeAbove && subtotal >= zone.freeAbove) return 0;
+        return zone.cost;
+      }
+    }
+    return order.shippingCost || 0;
+  };
+
+  const saveOrderItems = async (orderId: string, order: Order) => {
+    try {
+      setSavingItems(true);
+      const shippingCost = getSelectedZoneCost(order);
+      await ordersApi.updateItems(orderId, editingItems.map(item => ({
+        productId: item.productId || undefined,
+        productTitle: item.productTitle,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        imageUrl: item.imageUrl || undefined
+      })), shippingCost);
+      await loadOrders();
+      cancelEditing();
+    } catch (error) {
+      console.error('Error saving order items:', error);
+    } finally {
+      setSavingItems(false);
+    }
+  };
+
+  const filteredProducts = products.filter(p => 
+    p.title.toLowerCase().includes(productSearch.toLowerCase())
+  ).slice(0, 10);
 
   const loadPaymentLinks = async () => {
     if (!currentBusiness?.id) return;
@@ -738,29 +862,139 @@ export default function OrdersPage() {
                       )}
 
                       <div>
-                        <p className="text-gray-500 text-[10px] sm:text-xs uppercase mb-2">Productos</p>
-                        <div className="space-y-2">
-                          {order.items.map(item => (
-                            <div key={item.id} className="flex items-center gap-2 sm:gap-3 bg-[#2a2a2a] rounded-lg p-2">
-                              {item.imageUrl && (
-                                <img
-                                  src={item.imageUrl}
-                                  alt={item.productTitle}
-                                  className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded flex-shrink-0"
-                                />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}</p>
-                                <p className="text-gray-400 text-[10px] sm:text-xs">
-                                  {item.quantity} x {order.currencySymbol}{item.unitPrice.toFixed(2)}
-                                </p>
-                              </div>
-                              <p className="text-white text-xs sm:text-sm font-medium flex-shrink-0">
-                                {order.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}
-                              </p>
-                            </div>
-                          ))}
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-gray-500 text-[10px] sm:text-xs uppercase">Productos</p>
+                          {editingOrderId !== order.id && !['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(order.status) && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); startEditingOrder(order); }}
+                              className="text-neon-blue text-xs hover:underline"
+                            >
+                              Editar
+                            </button>
+                          )}
                         </div>
+                        
+                        {editingOrderId === order.id ? (
+                          <div className="space-y-3">
+                            <div className="space-y-2">
+                              {editingItems.map((item, index) => (
+                                <div key={item.id} className="flex items-center gap-2 bg-[#2a2a2a] rounded-lg p-2">
+                                  {item.imageUrl && (
+                                    <img src={item.imageUrl} alt={item.productTitle} className="w-8 h-8 object-cover rounded flex-shrink-0" />
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-white text-xs truncate">{item.productTitle}</p>
+                                    <p className="text-gray-400 text-[10px]">{order.currencySymbol}{item.unitPrice.toFixed(2)}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button onClick={(e) => { e.stopPropagation(); updateItemQuantity(index, item.quantity - 1); }} className="w-6 h-6 bg-gray-700 rounded text-white text-sm">-</button>
+                                    <span className="text-white text-xs w-6 text-center">{item.quantity}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); updateItemQuantity(index, item.quantity + 1); }} className="w-6 h-6 bg-gray-700 rounded text-white text-sm">+</button>
+                                  </div>
+                                  <button onClick={(e) => { e.stopPropagation(); removeItem(index); }} className="text-red-400 hover:text-red-300 text-xs ml-2">✕</button>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            <div className="relative">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setShowProductSelector(!showProductSelector); }}
+                                className="w-full py-2 border border-dashed border-gray-600 rounded-lg text-gray-400 text-xs hover:border-neon-blue hover:text-neon-blue transition-colors"
+                              >
+                                + Agregar Producto
+                              </button>
+                              {showProductSelector && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface border border-dark-border rounded-lg shadow-xl z-30 max-h-48 overflow-auto" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="text"
+                                    value={productSearch}
+                                    onChange={(e) => setProductSearch(e.target.value)}
+                                    placeholder="Buscar producto..."
+                                    className="w-full px-3 py-2 bg-dark-card border-b border-dark-border text-white text-sm outline-none"
+                                    autoFocus
+                                  />
+                                  {filteredProducts.map(product => (
+                                    <button
+                                      key={product.id}
+                                      onClick={(e) => { e.stopPropagation(); addProductToOrder(product); }}
+                                      className="w-full px-3 py-2 text-left hover:bg-dark-card flex items-center gap-2"
+                                    >
+                                      {product.imageUrl && <img src={product.imageUrl} alt="" className="w-6 h-6 object-cover rounded" />}
+                                      <span className="text-white text-sm flex-1 truncate">{product.title}</span>
+                                      <span className="text-gray-400 text-xs">{order.currencySymbol}{product.price.toFixed(2)}</span>
+                                    </button>
+                                  ))}
+                                  {filteredProducts.length === 0 && <p className="px-3 py-2 text-gray-500 text-xs">No hay productos</p>}
+                                </div>
+                              )}
+                            </div>
+
+                            {deliveryZones.length > 0 && (
+                              <div className="bg-[#2a2a2a] rounded-lg p-3">
+                                <p className="text-gray-400 text-xs mb-2">Zona de Envío</p>
+                                <select
+                                  value={selectedZoneId || ''}
+                                  onChange={(e) => setSelectedZoneId(e.target.value || null)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full bg-dark-card border border-dark-border rounded px-2 py-1 text-white text-sm"
+                                >
+                                  <option value="">Sin cambio ({order.currencySymbol}{(order.shippingCost || 0).toFixed(2)})</option>
+                                  {deliveryZones.map(zone => (
+                                    <option key={zone.id} value={zone.id}>
+                                      {zone.name} - {order.currencySymbol}{zone.cost.toFixed(2)}
+                                      {zone.freeAbove ? ` (Gratis +${order.currencySymbol}${zone.freeAbove})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-700">
+                              <span className="text-gray-400">Subtotal:</span>
+                              <span className="text-white">{order.currencySymbol}{editingItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-400">Envío:</span>
+                              <span className="text-white">{order.currencySymbol}{getSelectedZoneCost(order).toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm font-bold">
+                              <span className="text-white">Nuevo Total:</span>
+                              <span className="text-neon-blue">{order.currencySymbol}{(editingItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0) + getSelectedZoneCost(order)).toFixed(2)}</span>
+                            </div>
+
+                            <div className="flex gap-2 pt-2">
+                              <button onClick={(e) => { e.stopPropagation(); cancelEditing(); }} className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-lg">Cancelar</button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); saveOrderItems(order.id, order); }}
+                                disabled={savingItems || editingItems.length === 0}
+                                className="flex-1 py-2 bg-neon-blue hover:bg-neon-blue/80 disabled:opacity-50 text-white text-xs rounded-lg"
+                              >
+                                {savingItems ? 'Guardando...' : 'Guardar Cambios'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {order.items.map(item => (
+                              <div key={item.id} className="flex items-center gap-2 sm:gap-3 bg-[#2a2a2a] rounded-lg p-2">
+                                {item.imageUrl && (
+                                  <img src={item.imageUrl} alt={item.productTitle} className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded flex-shrink-0" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}</p>
+                                  <p className="text-gray-400 text-[10px] sm:text-xs">{item.quantity} x {order.currencySymbol}{item.unitPrice.toFixed(2)}</p>
+                                </div>
+                                <p className="text-white text-xs sm:text-sm font-medium flex-shrink-0">{order.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}</p>
+                              </div>
+                            ))}
+                            {(order.shippingCost ?? 0) > 0 && (
+                              <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-700/50">
+                                <span>Envío:</span>
+                                <span>{order.currencySymbol}{(order.shippingCost || 0).toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {(order.status === 'PAID' || order.status === 'PROCESSING' || order.status === 'SHIPPED') && (

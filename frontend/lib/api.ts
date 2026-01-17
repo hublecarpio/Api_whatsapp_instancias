@@ -410,6 +410,8 @@ export const ordersApi = {
   get: (orderId: string) => api.get(`/orders/${orderId}`),
   updateStatus: (orderId: string, status: string) =>
     api.patch(`/orders/${orderId}/status`, { status }),
+  updateItems: (orderId: string, items: Array<{ productId?: string; productTitle?: string; quantity: number; unitPrice: number; imageUrl?: string }>, shippingCost?: number) =>
+    api.patch(`/orders/${orderId}/items`, { items, shippingCost }),
   confirmPayment: (orderId: string) =>
     api.post(`/orders/${orderId}/confirm-payment`),
   attachVoucher: (orderId: string, voucherImageUrl: string) =>

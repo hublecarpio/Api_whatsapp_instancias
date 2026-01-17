@@ -114,6 +114,28 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/:id/delivery-zones', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await prisma.business.findFirst({
+      where: { id: req.params.id, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const deliveryZones = await prisma.deliveryZone.findMany({
+      where: { businessId: req.params.id, isActive: true },
+      orderBy: { order: 'asc' }
+    });
+    
+    res.json(deliveryZones);
+  } catch (error) {
+    console.error('Get delivery zones error:', error);
+    res.status(500).json({ error: 'Failed to get delivery zones' });
+  }
+});
+
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { name, description, industry, logoUrl, agentVersion, timezone, currencyCode, currencySymbol, businessObjective, onboardingCompleted, onboardingSkipped, openaiModel } = req.body;
