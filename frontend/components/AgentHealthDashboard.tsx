@@ -239,7 +239,7 @@ export default function AgentHealthDashboard({ businessId, instanceId }: Props) 
                 <div className="text-sm text-white">{health.objectiveLabel}</div>
               </div>
               <div 
-                className="bg-dark-card rounded-lg p-3 text-center border border-dark-border cursor-pointer hover:border-neon-blue transition-colors relative"
+                className={`bg-dark-card rounded-lg p-3 text-center border border-dark-border cursor-pointer hover:border-neon-blue transition-colors relative ${showModelSelector ? 'z-50' : ''}`}
                 onClick={() => setShowModelSelector(!showModelSelector)}
               >
                 <div className="text-2xl mb-1">🤖</div>
@@ -249,7 +249,7 @@ export default function AgentHealthDashboard({ businessId, instanceId }: Props) 
                   <span className="text-xs">▼</span>
                 </div>
                 {showModelSelector && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface/95 backdrop-blur-md border border-dark-border rounded-lg shadow-xl z-20 max-h-60 overflow-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface/95 backdrop-blur-md border border-dark-border rounded-lg shadow-xl z-50 max-h-60 overflow-auto">
                     {AVAILABLE_MODELS.map(model => (
                       <button
                         key={model.id}
