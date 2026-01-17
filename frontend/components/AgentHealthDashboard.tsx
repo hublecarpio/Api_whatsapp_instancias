@@ -7,10 +7,10 @@ const AVAILABLE_MODELS = [
   { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', provider: 'OpenAI' },
   { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', provider: 'OpenAI' },
   { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'OpenAI' },
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google' },
-  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google' },
-  { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', provider: 'Google' },
-  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'Anthropic' }
+  { id: 'google/gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash', provider: 'Google (OpenRouter)' },
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google (OpenRouter)' },
+  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'Google (OpenRouter)' },
+  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'Anthropic (OpenRouter)' }
 ];
 
 interface ToolInfo {

@@ -32,9 +32,9 @@ export const AVAILABLE_MODELS = [
   { id: 'gpt-5', name: 'GPT-5', tier: 'premium', family: 'gpt-5', provider: 'openai' },
   { id: 'gpt-5.2', name: 'GPT-5.2', tier: 'flagship', family: 'gpt-5', provider: 'openai' },
   { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro', tier: 'enterprise', family: 'gpt-5', provider: 'openai' },
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'standard', family: 'gemini', provider: 'openrouter' },
+  { id: 'google/gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash', tier: 'standard', family: 'gemini', provider: 'openrouter' },
   { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'premium', family: 'gemini', provider: 'openrouter' },
-  { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', tier: 'standard', family: 'gemini', provider: 'openrouter' },
+  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', tier: 'standard', family: 'gemini', provider: 'openrouter' },
   { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', tier: 'premium', family: 'claude', provider: 'openrouter' }
 ];
 
@@ -50,16 +50,16 @@ function isOpenRouterModel(model: string): boolean {
 
 function normalizeModel(model: string): string {
   const modelLower = model.toLowerCase();
-  if (modelLower === 'gemini-3-flash' || modelLower === 'gemini-3-flash-preview' || model === 'google/gemini-3-flash-preview') {
-    return 'google/gemini-3-flash';
+  if (modelLower === 'gemini-3-flash' || modelLower === 'gemini-3-flash-preview' || model === 'google/gemini-3-flash' || model === 'google/gemini-3-flash-preview') {
+    return 'google/gemini-3-flash-preview';
   }
-  if (modelLower === 'gemini-2.5-flash' || modelLower === 'gemini-2.5-flash-preview' || model === 'google/gemini-2.5-flash-preview') {
-    return 'google/gemini-2.5-flash';
+  if (modelLower === 'gemini-2.5-flash' || modelLower === 'gemini-2.5-flash-preview' || model === 'google/gemini-2.5-flash' || model === 'google/gemini-2.5-flash-preview') {
+    return 'google/gemini-2.5-flash-preview';
   }
-  if (modelLower === 'gemini-2.5-pro' || modelLower === 'gemini-2.5-pro-preview' || model === 'google/gemini-2.5-pro-preview') {
+  if (modelLower === 'gemini-2.5-pro' || modelLower === 'gemini-2.5-pro-preview' || model === 'google/gemini-2.5-pro' || model === 'google/gemini-2.5-pro-preview') {
     return 'google/gemini-2.5-pro';
   }
-  if (modelLower === 'claude-sonnet-4') {
+  if (modelLower === 'claude-sonnet-4' || model === 'anthropic/claude-sonnet-4') {
     return 'anthropic/claude-sonnet-4';
   }
   return model;
