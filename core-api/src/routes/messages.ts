@@ -361,4 +361,96 @@ router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: R
   }
 });
 
+router.delete('/conversation', async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id, phone, instance_id, include_orders, include_appointments } = req.query;
+    
+    if (!business_id || !phone) {
+      return res.status(400).json({ error: 'business_id and phone are required' });
+    }
+    
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, business_id as string, user.role, user.parentUserId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const normalizedPhone = (phone as string).replace(/\D/g, '');
+    const deletedCounts: Record<string, number> = {};
+    
+    const messageWhere: any = {
+      businessId: business_id as string,
+      OR: [
+        { sender: { contains: normalizedPhone } },
+        { recipient: { contains: normalizedPhone } }
+      ]
+    };
+    if (instance_id) {
+      messageWhere.instanceId = instance_id as string;
+    }
+    
+    const messages = await prisma.messageLog.deleteMany({ where: messageWhere });
+    deletedCounts.messages = messages.count;
+    
+    const extractedData = await prisma.contactExtractedData.deleteMany({
+      where: { businessId: business_id as string, contactPhone: normalizedPhone }
+    });
+    deletedCounts.extractedData = extractedData.count;
+    
+    const funnelState = await prisma.contactFunnelState.deleteMany({
+      where: { businessId: business_id as string, contactPhone: normalizedPhone }
+    });
+    deletedCounts.funnelState = funnelState.count;
+    
+    const tagAssignments = await prisma.tagAssignment.deleteMany({
+      where: { businessId: business_id as string, contactPhone: normalizedPhone }
+    });
+    deletedCounts.tagAssignments = tagAssignments.count;
+    
+    const messageBuffer = await prisma.messageBuffer.deleteMany({
+      where: { businessId: business_id as string, contactPhone: normalizedPhone }
+    });
+    deletedCounts.messageBuffer = messageBuffer.count;
+    
+    const intentLogs = await prisma.intentLog.deleteMany({
+      where: { businessId: business_id as string, contactPhone: normalizedPhone }
+    });
+    deletedCounts.intentLogs = intentLogs.count;
+    
+    const reminders = await prisma.reminder.deleteMany({
+      where: { businessId: business_id as string, contactPhone: normalizedPhone }
+    });
+    deletedCounts.reminders = reminders.count;
+    
+    if (include_orders === 'true') {
+      const orders = await prisma.order.deleteMany({
+        where: { businessId: business_id as string, contactPhone: normalizedPhone }
+      });
+      deletedCounts.orders = orders.count;
+    }
+    
+    if (include_appointments === 'true') {
+      const appointments = await prisma.appointment.deleteMany({
+        where: { businessId: business_id as string, contactPhone: normalizedPhone }
+      });
+      deletedCounts.appointments = appointments.count;
+    }
+    
+    console.log(`Deleted conversation for ${normalizedPhone}:`, deletedCounts);
+    
+    res.json({
+      success: true,
+      message: 'Conversation deleted successfully',
+      deleted: deletedCounts
+    });
+  } catch (error) {
+    console.error('Delete conversation error:', error);
+    res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+});
+
 export default router;

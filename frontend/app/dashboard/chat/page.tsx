@@ -159,6 +159,10 @@ export default function ChatPage() {
   const [showContactPanel, setShowContactPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingConversation, setDeletingConversation] = useState(false);
+  const [deleteIncludeOrders, setDeleteIncludeOrders] = useState(false);
+  const [deleteIncludeAppointments, setDeleteIncludeAppointments] = useState(false);
   const [invitations, setInvitations] = useState<AdvisorInvitation[]>([]);
   const [contactAssignments, setContactAssignments] = useState<ContactAssignment[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -563,6 +567,29 @@ export default function ChatPage() {
       console.error('Failed to toggle contact reminder:', err);
     } finally {
       setContactReminderToggling(false);
+    }
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!currentBusiness || !selectedPhone) return;
+    setDeletingConversation(true);
+    try {
+      await messageApi.deleteConversation(
+        currentBusiness.id, 
+        selectedPhone, 
+        selectedConversationInstanceId || undefined,
+        { includeOrders: deleteIncludeOrders, includeAppointments: deleteIncludeAppointments }
+      );
+      setShowDeleteConfirm(false);
+      setDeleteIncludeOrders(false);
+      setDeleteIncludeAppointments(false);
+      setMessages([]);
+      setSelectedPhone(null);
+      fetchConversations();
+    } catch (err) {
+      console.error('Failed to delete conversation:', err);
+    } finally {
+      setDeletingConversation(false);
     }
   };
 
@@ -1400,7 +1427,72 @@ export default function ChatPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </button>
+                <button 
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-2 rounded-full transition-colors text-gray-400 hover:text-accent-error hover:bg-accent-error/10"
+                  title="Eliminar conversacion y memoria del agente"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               </div>
+
+              {showDeleteConfirm && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowDeleteConfirm(false)}>
+                  <div className="bg-dark-card border border-dark-border rounded-lg p-6 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-accent-error/20 rounded-full flex items-center justify-center">
+                        <svg className="w-5 h-5 text-accent-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-white">Eliminar Conversacion</h3>
+                        <p className="text-sm text-gray-400">+{selectedPhone}</p>
+                      </div>
+                    </div>
+                    <p className="text-gray-300 text-sm mb-4">
+                      Esta accion eliminara todos los mensajes, datos extraidos del contacto, etapas del embudo y memoria del agente IA. El agente no recordara nada de esta conversacion.
+                    </p>
+                    <div className="space-y-2 mb-4 p-3 bg-dark-surface rounded-lg">
+                      <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={deleteIncludeOrders} 
+                          onChange={(e) => setDeleteIncludeOrders(e.target.checked)}
+                          className="w-4 h-4 rounded border-dark-border bg-dark-card text-accent-error focus:ring-accent-error"
+                        />
+                        Incluir pedidos de este contacto
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={deleteIncludeAppointments} 
+                          onChange={(e) => setDeleteIncludeAppointments(e.target.checked)}
+                          className="w-4 h-4 rounded border-dark-border bg-dark-card text-accent-error focus:ring-accent-error"
+                        />
+                        Incluir citas de este contacto
+                      </label>
+                    </div>
+                    <div className="flex gap-3 justify-end">
+                      <button 
+                        onClick={() => { setShowDeleteConfirm(false); setDeleteIncludeOrders(false); setDeleteIncludeAppointments(false); }}
+                        className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        onClick={handleDeleteConversation}
+                        disabled={deletingConversation}
+                        className="px-4 py-2 bg-accent-error text-white rounded-lg hover:bg-accent-error/80 transition-colors disabled:opacity-50"
+                      >
+                        {deletingConversation ? 'Eliminando...' : 'Eliminar Todo'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {showContactPanel && (
                 <div className="px-4 py-3 border-b border-dark-border bg-dark-surface">

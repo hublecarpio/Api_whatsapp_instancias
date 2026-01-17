@@ -283,7 +283,14 @@ export const messageApi = {
     return api.get(url);
   },
   send: (businessId: string, to: string, message: string) =>
-    api.post(`/wa/${businessId}/send`, { to, message })
+    api.post(`/wa/${businessId}/send`, { to, message }),
+  deleteConversation: (businessId: string, phone: string, instanceId?: string, options?: { includeOrders?: boolean; includeAppointments?: boolean }) => {
+    let url = `/messages/conversation?business_id=${businessId}&phone=${phone}`;
+    if (instanceId) url += `&instance_id=${instanceId}`;
+    if (options?.includeOrders) url += '&include_orders=true';
+    if (options?.includeAppointments) url += '&include_appointments=true';
+    return api.delete(url);
+  }
 };
 
 export const mediaApi = {
