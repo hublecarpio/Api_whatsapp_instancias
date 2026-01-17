@@ -256,7 +256,7 @@ export default function OrdersPage() {
     try {
       const [zonesRes, productsRes] = await Promise.all([
         deliveryZonesApi.list(currentBusiness.id),
-        productApi.list(currentBusiness.id)
+        productApi.list(currentBusiness.id, selectedInstanceId || undefined)
       ]);
       setDeliveryZones(zonesRes.data || []);
       setProducts(productsRes.data?.products || productsRes.data || []);
