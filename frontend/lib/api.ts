@@ -192,6 +192,13 @@ export const waApi = {
   deleteInstance: (instanceId: string, businessId: string) => 
     api.delete(`/wa/instances/${instanceId}?businessId=${businessId}`),
   
+  listArchivedInstances: (businessId: string) =>
+    api.get(`/wa/${businessId}/archived`),
+  restoreInstance: (instanceId: string, businessId: string) =>
+    api.post(`/wa/instances/${instanceId}/restore?businessId=${businessId}`),
+  permanentDeleteInstance: (instanceId: string, businessId: string, deleteMessages: boolean = false) =>
+    api.delete(`/wa/instances/${instanceId}/permanent?businessId=${businessId}&deleteMessages=${deleteMessages}`),
+  
   instanceStatus: (instanceId: string, businessId: string) => 
     api.get(`/wa/instances/${instanceId}/status?businessId=${businessId}`),
   instanceQr: (instanceId: string, businessId: string) => 

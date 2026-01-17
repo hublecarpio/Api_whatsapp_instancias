@@ -2009,6 +2009,9 @@ body.glass-mode .mobile-drawer {
 .border-yellow-600\/30 {
   border-color: rgb(202 138 4 / 0.3);
 }
+.border-yellow-700\/50 {
+  border-color: rgb(161 98 7 / 0.5);
+}
 .border-b-transparent {
   border-bottom-color: transparent;
 }
@@ -2407,6 +2410,10 @@ body.glass-mode .mobile-drawer {
 }
 .bg-yellow-900\/20 {
   background-color: rgb(113 63 18 / 0.2);
+}
+.bg-red-700 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(185 28 28 / var(--tw-bg-opacity, 1));
 }
 .bg-opacity-50 {
   --tw-bg-opacity: 0.5;
@@ -4014,6 +4021,11 @@ html[data-mobile="true"] .glass-sidebar {
 .hover\:bg-yellow-700:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(161 98 7 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-red-800:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(153 27 27 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:text-accent-error:hover {

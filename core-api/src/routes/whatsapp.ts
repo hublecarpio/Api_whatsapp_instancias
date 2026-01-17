@@ -138,7 +138,10 @@ router.get('/instances', async (req: AuthRequest, res: Response) => {
     }
     
     const instances = await prisma.whatsAppInstance.findMany({
-      where: { businessId: businessId as string },
+      where: { 
+        businessId: businessId as string,
+        archivedAt: null
+      },
       include: { metaCredential: { select: { id: true, phoneNumberId: true } } },
       orderBy: { createdAt: 'asc' }
     });
@@ -370,7 +373,7 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     }
     
     const existingInstances = await prisma.whatsAppInstance.findMany({
-      where: { businessId }
+      where: { businessId, archivedAt: null }
     });
     const instanceNumber = existingInstances.length + 1;
     const instanceName = name || `WhatsApp ${instanceNumber}`;
@@ -567,6 +570,7 @@ router.delete('/instances/:instanceId', requireEmailVerified, async (req: AuthRe
       return res.status(404).json({ error: 'Instance not found' });
     }
     
+    // Disconnect from WhatsApp backend but keep data for archive
     if (instance.provider === 'BAILEYS' && instance.instanceBackendId) {
       try {
         await axios.delete(`${WA_API_URL}/instances/${instance.instanceBackendId}`);
@@ -582,18 +586,23 @@ router.delete('/instances/:instanceId', requireEmailVerified, async (req: AuthRe
       previousProvider: instance.provider,
       previousStatus: instance.status,
       phoneNumber: instance.phoneNumber,
-      details: `Instance "${instance.name}" deleted`
+      details: `Instance "${instance.name}" archived (soft delete)`
     });
     
-    if (instance.metaCredential) {
-      await prisma.metaCredential.delete({ where: { instanceId: instance.id } }).catch(() => {});
-    }
+    // Soft delete: archive the instance instead of deleting
+    // This preserves all message history and related data
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: {
+        archivedAt: new Date(),
+        status: 'archived',
+        isActive: false,
+        qr: null,
+        instanceBackendId: null
+      }
+    });
     
-    await prisma.followUpConfig.deleteMany({ where: { instanceId: instance.id } });
-    await prisma.agentPrompt.deleteMany({ where: { instanceId: instance.id } });
-    await prisma.whatsAppInstance.delete({ where: { id: instance.id } });
-    
-    res.json({ success: true, message: `Instance "${instance.name}" deleted` });
+    res.json({ success: true, message: `Instance "${instance.name}" archived`, archived: true });
   } catch (error: any) {
     console.error('Delete instance error:', error.message);
     res.status(500).json({ error: 'Failed to delete instance' });
@@ -1083,11 +1092,18 @@ router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Respo
         }
       }
       
-      if (existing.metaCredential) {
-        await prisma.metaCredential.delete({ where: { instanceId: existing.id } }).catch(() => {});
-      }
-      await prisma.whatsAppInstance.delete({ where: { id: existing.id } });
-      console.log(`Cleaned up previous instance ${existing.id} before creating new Baileys instance`);
+      // Archive the existing instance instead of deleting (preserves message history)
+      await prisma.whatsAppInstance.update({
+        where: { id: existing.id },
+        data: {
+          archivedAt: new Date(),
+          status: 'archived',
+          isActive: false,
+          qr: null,
+          instanceBackendId: null
+        }
+      });
+      console.log(`Archived previous instance ${existing.id} before creating new Baileys instance`);
     }
     
     const instanceId = `biz_${businessId.substring(0, 8)}`;
@@ -1100,7 +1116,7 @@ router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Respo
     });
     
     const existingInstances = await prisma.whatsAppInstance.findMany({
-      where: { businessId }
+      where: { businessId, archivedAt: null }
     });
     const legacyInstanceNumber = existingInstances.length + 1;
     
@@ -1184,11 +1200,18 @@ router.post('/create-meta', requireEmailVerified, async (req: AuthRequest, res: 
         }
       }
       
-      if (existing.metaCredential) {
-        await prisma.metaCredential.delete({ where: { instanceId: existing.id } }).catch(() => {});
-      }
-      await prisma.whatsAppInstance.delete({ where: { id: existing.id } });
-      console.log(`Cleaned up previous instance ${existing.id} before creating Meta Cloud instance`);
+      // Archive the existing instance instead of deleting (preserves message history)
+      await prisma.whatsAppInstance.update({
+        where: { id: existing.id },
+        data: {
+          archivedAt: new Date(),
+          status: 'archived',
+          isActive: false,
+          qr: null,
+          instanceBackendId: null
+        }
+      });
+      console.log(`Archived previous instance ${existing.id} before creating Meta Cloud instance`);
     }
     
     const metaService = new MetaCloudService({
@@ -1209,7 +1232,7 @@ router.post('/create-meta', requireEmailVerified, async (req: AuthRequest, res: 
     }
     
     const existingInstances = await prisma.whatsAppInstance.findMany({
-      where: { businessId }
+      where: { businessId, archivedAt: null }
     });
     const legacyInstanceNumber = existingInstances.length + 1;
     
@@ -1810,9 +1833,19 @@ router.delete('/:businessId', async (req: AuthRequest, res: Response) => {
       console.log('WA backend delete failed (maybe already deleted)');
     }
     
-    await prisma.whatsAppInstance.delete({ where: { id: instance.id } });
+    // Soft delete: archive instead of delete to preserve message history
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: {
+        archivedAt: new Date(),
+        status: 'archived',
+        isActive: false,
+        qr: null,
+        instanceBackendId: null
+      }
+    });
     
-    res.json({ success: true });
+    res.json({ success: true, archived: true });
   } catch (error) {
     console.error('Delete instance error:', error);
     res.status(500).json({ error: 'Failed to delete instance' });
@@ -1833,6 +1866,158 @@ router.get('/:businessId/history', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Get instance history error:', error);
     res.status(500).json({ error: 'Failed to get instance history' });
+  }
+});
+
+router.get('/:businessId/archived', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await checkBusinessAccess(req.userId!, req.params.businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const archivedInstances = await prisma.whatsAppInstance.findMany({
+      where: {
+        businessId: req.params.businessId,
+        archivedAt: { not: null }
+      },
+      orderBy: { archivedAt: 'desc' },
+      include: {
+        _count: {
+          select: {
+            reminders: true,
+            appointments: true,
+            broadcasts: true
+          }
+        }
+      }
+    });
+    
+    const instancesWithMessageCount = await Promise.all(
+      archivedInstances.map(async (inst) => {
+        const messageCount = await prisma.messageLog.count({
+          where: { instanceId: inst.id }
+        });
+        return {
+          ...inst,
+          messageCount
+        };
+      })
+    );
+    
+    res.json(instancesWithMessageCount);
+  } catch (error) {
+    console.error('Get archived instances error:', error);
+    res.status(500).json({ error: 'Failed to get archived instances' });
+  }
+});
+
+router.post('/instances/:instanceId/restore', async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { 
+        id: instanceId, 
+        businessId: businessId as string,
+        archivedAt: { not: null }
+      }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Archived instance not found' });
+    }
+    
+    await prisma.whatsAppInstance.update({
+      where: { id: instance.id },
+      data: {
+        archivedAt: null,
+        status: 'pending_qr',
+        isActive: true
+      }
+    });
+    
+    await recordInstanceEvent({
+      instanceId: instance.id,
+      businessId: businessId as string,
+      eventType: 'RECONNECTED',
+      previousStatus: 'archived',
+      newStatus: 'pending_qr',
+      phoneNumber: instance.phoneNumber,
+      details: `Instance "${instance.name}" restored from archive`
+    });
+    
+    res.json({ success: true, message: `Instance "${instance.name}" restored` });
+  } catch (error: any) {
+    console.error('Restore instance error:', error.message);
+    res.status(500).json({ error: 'Failed to restore instance' });
+  }
+});
+
+router.delete('/instances/:instanceId/permanent', async (req: AuthRequest, res: Response) => {
+  try {
+    const { instanceId } = req.params;
+    const { businessId, deleteMessages } = req.query;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const instance = await prisma.whatsAppInstance.findFirst({
+      where: { 
+        id: instanceId, 
+        businessId: businessId as string,
+        archivedAt: { not: null }
+      },
+      include: { metaCredential: true, metaCoexistCredential: true }
+    });
+    
+    if (!instance) {
+      return res.status(404).json({ error: 'Archived instance not found. Only archived instances can be permanently deleted.' });
+    }
+    
+    if (deleteMessages === 'true') {
+      await prisma.messageLog.deleteMany({ where: { instanceId: instance.id } });
+    }
+    
+    if (instance.metaCredential) {
+      await prisma.metaCredential.delete({ where: { instanceId: instance.id } }).catch(() => {});
+    }
+    if (instance.metaCoexistCredential) {
+      await prisma.metaCoexistCredential.delete({ where: { instanceId: instance.id } }).catch(() => {});
+    }
+    
+    await prisma.followUpConfig.deleteMany({ where: { instanceId: instance.id } });
+    await prisma.agentPrompt.deleteMany({ where: { instanceId: instance.id } });
+    await prisma.promptSection.deleteMany({ where: { instanceId: instance.id } });
+    await prisma.tag.deleteMany({ where: { instanceId: instance.id } });
+    await prisma.funnelStage.deleteMany({ where: { instanceId: instance.id } });
+    
+    await prisma.whatsAppInstance.delete({ where: { id: instance.id } });
+    
+    res.json({ 
+      success: true, 
+      message: `Instance "${instance.name}" permanently deleted`,
+      messagesDeleted: deleteMessages === 'true'
+    });
+  } catch (error: any) {
+    console.error('Permanent delete instance error:', error.message);
+    res.status(500).json({ error: 'Failed to permanently delete instance' });
   }
 });
 
@@ -1870,6 +2055,7 @@ internalRouter.get('/baileys-instances', async (req, res) => {
       where: { 
         provider: 'BAILEYS', 
         isActive: true,
+        archivedAt: null,
         instanceBackendId: { not: null }
       },
       include: {

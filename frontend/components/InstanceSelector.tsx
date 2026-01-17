@@ -54,6 +54,12 @@ export default function InstanceSelector({
   const [metaAppSecret, setMetaAppSecret] = useState('');
   const [metaPhoneNumber, setMetaPhoneNumber] = useState('');
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const [showArchivedModal, setShowArchivedModal] = useState(false);
+  const [archivedInstances, setArchivedInstances] = useState<any[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [permanentDeleteId, setPermanentDeleteId] = useState<string | null>(null);
+  const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
   
   const COUNTRY_CODES = [
     { code: '+51', country: 'Peru', flag: '🇵🇪' },
@@ -193,6 +199,52 @@ export default function InstanceSelector({
     }
   };
 
+  const fetchArchivedInstances = async () => {
+    if (!businessId) return;
+    setArchivedLoading(true);
+    try {
+      const response = await waApi.listArchivedInstances(businessId);
+      setArchivedInstances(response.data || []);
+    } catch (error) {
+      console.error('Error fetching archived instances:', error);
+    } finally {
+      setArchivedLoading(false);
+    }
+  };
+
+  const handleRestoreInstance = async (instanceId: string) => {
+    setRestoringId(instanceId);
+    try {
+      await waApi.restoreInstance(instanceId, businessId);
+      await fetchArchivedInstances();
+      await fetchInstances();
+    } catch (error: any) {
+      console.error('Error restoring instance:', error);
+      setAddError(error.response?.data?.error || 'Error al restaurar instancia');
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  const handlePermanentDelete = async (instanceId: string, deleteMessages: boolean) => {
+    setPermanentDeleteLoading(true);
+    try {
+      await waApi.permanentDeleteInstance(instanceId, businessId, deleteMessages);
+      await fetchArchivedInstances();
+      setPermanentDeleteId(null);
+    } catch (error: any) {
+      console.error('Error permanently deleting instance:', error);
+      setAddError(error.response?.data?.error || 'Error al eliminar permanentemente');
+    } finally {
+      setPermanentDeleteLoading(false);
+    }
+  };
+
+  const handleOpenArchived = () => {
+    setShowArchivedModal(true);
+    fetchArchivedInstances();
+  };
+
   const handleStartCoexistence = async () => {
     if (!businessId) return;
     
@@ -264,11 +316,23 @@ export default function InstanceSelector({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">Numeros de WhatsApp</h3>
-        {limits && (
-          <span className="text-sm text-gray-400">
-            {limits.current} / {limits.max} numeros ({limits.tier})
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleOpenArchived}
+            className="text-sm text-gray-400 hover:text-neon-blue transition-colors flex items-center gap-1"
+            title="Ver instancias archivadas"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            Archivadas
+          </button>
+          {limits && (
+            <span className="text-sm text-gray-400">
+              {limits.current} / {limits.max} numeros ({limits.tier})
+            </span>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -734,6 +798,150 @@ export default function InstanceSelector({
                 ) : (
                   'Eliminar'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {showArchivedModal && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                Instancias Archivadas
+              </h3>
+              <button
+                onClick={() => setShowArchivedModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {archivedLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-neon-blue border-t-transparent"></div>
+              </div>
+            ) : archivedInstances.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                <p>No hay instancias archivadas</p>
+                <p className="text-sm mt-2">Las instancias eliminadas apareceran aqui</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-400 mb-4">
+                  Las instancias archivadas conservan todo el historial de mensajes. Puedes restaurarlas o eliminarlas permanentemente.
+                </p>
+                {archivedInstances.map((inst) => (
+                  <div key={inst.id} className="bg-dark-surface border border-dark-border rounded-xl p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center text-lg">
+                          {inst.provider === 'META_CLOUD' ? '☁️' : inst.provider === 'META_COEXIST' ? '🔗' : '📱'}
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-white">{inst.name}</h4>
+                          <p className="text-sm text-gray-400">
+                            {inst.phoneNumber || 'Sin numero'} - {inst.provider}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Archivada: {new Date(inst.archivedAt).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 bg-dark-hover px-2 py-1 rounded">
+                          {inst.messageCount || 0} mensajes
+                        </span>
+                        <button
+                          onClick={() => handleRestoreInstance(inst.id)}
+                          disabled={restoringId === inst.id}
+                          className="px-3 py-1.5 bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {restoringId === inst.id ? (
+                            <div className="w-4 h-4 border-2 border-neon-blue/30 border-t-neon-blue rounded-full animate-spin"></div>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Restaurar
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setPermanentDeleteId(inst.id)}
+                          className="px-3 py-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg text-sm transition-colors"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {permanentDeleteId && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card rounded-2xl p-6 max-w-md w-full">
+            <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              Eliminar Permanentemente
+            </h3>
+            <p className="text-gray-400 mb-6">
+              Esta accion no se puede deshacer. La instancia sera eliminada permanentemente.
+            </p>
+            <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-3 mb-6">
+              <p className="text-yellow-400 text-sm">
+                Puedes elegir si quieres eliminar tambien todos los mensajes asociados a esta instancia.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => handlePermanentDelete(permanentDeleteId, false)}
+                disabled={permanentDeleteLoading}
+                className="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {permanentDeleteLoading ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  'Eliminar (conservar mensajes)'
+                )}
+              </button>
+              <button
+                onClick={() => handlePermanentDelete(permanentDeleteId, true)}
+                disabled={permanentDeleteLoading}
+                className="w-full px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {permanentDeleteLoading ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  'Eliminar TODO (incluir mensajes)'
+                )}
+              </button>
+              <button
+                onClick={() => setPermanentDeleteId(null)}
+                disabled={permanentDeleteLoading}
+                className="w-full px-4 py-2 bg-dark-surface border border-dark-border rounded-lg hover:bg-dark-hover transition-colors disabled:opacity-50"
+              >
+                Cancelar
               </button>
             </div>
           </div>
