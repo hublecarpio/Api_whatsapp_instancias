@@ -48,6 +48,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
 router.get('/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
+    const { instance_id } = req.query;
 
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -58,7 +59,13 @@ router.get('/:businessId', authMiddleware, async (req: AuthRequest, res: Respons
     }
 
     const sections = await prisma.promptSection.findMany({
-      where: { businessId },
+      where: { 
+        businessId,
+        OR: [
+          { instanceId: instance_id as string || null },
+          { instanceId: null }
+        ]
+      },
       orderBy: [{ isCore: 'desc' }, { priority: 'desc' }, { createdAt: 'asc' }],
       select: {
         id: true,
@@ -70,7 +77,8 @@ router.get('/:businessId', authMiddleware, async (req: AuthRequest, res: Respons
         enabled: true,
         createdAt: true,
         updatedAt: true,
-        metadata: true
+        metadata: true,
+        instanceId: true
       }
     });
 
@@ -111,7 +119,7 @@ router.get('/:businessId/:sectionId', authMiddleware, async (req: AuthRequest, r
 router.post('/:businessId', authMiddleware, requireActiveSubscription, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { title, content, type = 'OTHER', isCore = false, priority = 0 } = req.body;
+    const { title, content, type = 'OTHER', isCore = false, priority = 0, instanceId } = req.body;
 
     if (!title || !content) {
       return res.status(400).json({ error: 'Title and content are required' });
@@ -131,6 +139,7 @@ router.post('/:businessId', authMiddleware, requireActiveSubscription, async (re
     const section = await prisma.promptSection.create({
       data: {
         businessId,
+        instanceId: instanceId || null,
         title,
         content,
         type,

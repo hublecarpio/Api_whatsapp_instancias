@@ -102,7 +102,8 @@ export const promptApi = {
 };
 
 export const promptSectionsApi = {
-  list: (businessId: string) => api.get(`/prompt-sections/${businessId}`),
+  list: (businessId: string, instanceId?: string) => 
+    api.get(`/prompt-sections/${businessId}${instanceId ? `?instance_id=${instanceId}` : ''}`),
   get: (businessId: string, sectionId: string) => api.get(`/prompt-sections/${businessId}/${sectionId}`),
   create: (businessId: string, data: {
     title: string;
@@ -110,6 +111,7 @@ export const promptSectionsApi = {
     type?: string;
     isCore?: boolean;
     priority?: number;
+    instanceId?: string;
   }) => api.post(`/prompt-sections/${businessId}`, data),
   update: (businessId: string, sectionId: string, data: {
     title?: string;
@@ -120,8 +122,8 @@ export const promptSectionsApi = {
     enabled?: boolean;
   }) => api.put(`/prompt-sections/${businessId}/${sectionId}`, data),
   delete: (businessId: string, sectionId: string) => api.delete(`/prompt-sections/${businessId}/${sectionId}`),
-  search: (businessId: string, query: string, limit?: number) => 
-    api.post(`/prompt-sections/${businessId}/search`, { query, limit, includeCore: true }),
+  search: (businessId: string, query: string, limit?: number, instanceId?: string) => 
+    api.post(`/prompt-sections/${businessId}/search`, { query, limit, includeCore: true, instanceId }),
   parseFromPrompt: (businessId: string, rawPrompt: string, instanceId?: string) =>
     api.post(`/prompt-sections/${businessId}/parse-from-prompt`, { rawPrompt, instanceId }),
   importSections: (businessId: string, sections: any[], instanceId?: string, replaceExisting?: boolean) =>

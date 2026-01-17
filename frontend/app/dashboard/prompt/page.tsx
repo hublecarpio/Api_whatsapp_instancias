@@ -308,7 +308,7 @@ export default function PromptPage() {
       loadWebhookConfig();
       loadPromptSections();
     }
-  }, [agentVersion]);
+  }, [agentVersion, selectedInstanceId]);
 
   const loadApiKeyInfo = async () => {
     if (!currentBusiness) return;
@@ -336,7 +336,7 @@ export default function PromptPage() {
     if (!currentBusiness) return;
     setLoadingSections(true);
     try {
-      const res = await promptSectionsApi.list(currentBusiness.id);
+      const res = await promptSectionsApi.list(currentBusiness.id, selectedInstanceId || undefined);
       setPromptSections(res.data.sections || []);
     } catch (err) {
       console.error('Error loading prompt sections:', err);
@@ -353,7 +353,7 @@ export default function PromptPage() {
     setGeneratingSections(true);
     setError('');
     try {
-      const res = await promptSectionsApi.parseFromPrompt(currentBusiness.id, prompt);
+      const res = await promptSectionsApi.parseFromPrompt(currentBusiness.id, prompt, selectedInstanceId || undefined);
       setParsedSections(res.data.sections || []);
       setShowGenerateSections(true);
     } catch (err: any) {
@@ -371,7 +371,7 @@ export default function PromptPage() {
       const res = await promptSectionsApi.importSections(
         currentBusiness.id, 
         parsedSections,
-        undefined,
+        selectedInstanceId || undefined,
         replaceExisting
       );
       setSuccess(`${res.data.created} secciones importadas correctamente`);
@@ -399,7 +399,8 @@ export default function PromptPage() {
         content: newSection.content,
         type: newSection.type,
         isCore: newSection.isCore,
-        priority: newSection.priority
+        priority: newSection.priority,
+        instanceId: selectedInstanceId || undefined
       });
       setShowSectionForm(false);
       setNewSection({ title: '', content: '', type: 'OTHER', isCore: false, priority: 0 });
