@@ -577,7 +577,7 @@ export default function ChatPage() {
       await messageApi.deleteConversation(
         currentBusiness.id, 
         selectedPhone, 
-        selectedConversationInstanceId || undefined,
+        undefined,
         { includeOrders: deleteIncludeOrders, includeAppointments: deleteIncludeAppointments }
       );
       setShowDeleteConfirm(false);
