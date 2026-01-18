@@ -474,7 +474,12 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (hasActiveBonus || user.isPro) {
       planType = 'pro';
     } else if (hasStripeSubscription && (effectiveStatus === 'ACTIVE' || effectiveStatus === 'TRIAL')) {
-      planType = 'basic';
+      // Check subscriptionTier to determine if PRO or BASIC
+      if (user.subscriptionTier === 'PRO' || user.subscriptionTier === 'ENTERPRISE') {
+        planType = 'pro';
+      } else {
+        planType = 'basic';
+      }
     } else if (user.demoPhase === 'DEMO') {
       planType = 'demo';
     } else if (effectiveStatus === 'TRIAL') {
