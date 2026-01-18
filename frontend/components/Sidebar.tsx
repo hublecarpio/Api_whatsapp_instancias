@@ -45,12 +45,12 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   
   const appointmentLinks = [
     { href: '/dashboard/appointments', label: 'Citas', icon: '📅' },
-    { href: '/dashboard/extraction', label: 'Datos Personalizados', icon: '📝' },
   ];
   
   const commonLinks = [
     { href: '/dashboard/contacts', label: 'Contactos', icon: '👥' },
     { href: '/dashboard/chat', label: 'Chat', icon: '💭' },
+    { href: '/dashboard/extraction', label: 'Datos Personalizados', icon: '📝' },
     { href: '/dashboard/broadcasts', label: 'Envio Masivo', icon: '📢' },
     { href: '/dashboard/tags', label: 'Etapas', icon: '🏷️' },
     { href: '/dashboard/reminders', label: 'Seguimientos', icon: '⏰' },
