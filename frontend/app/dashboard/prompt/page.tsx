@@ -251,11 +251,9 @@ export default function PromptPage() {
         setInstancesLoaded(true);
         // Load sections immediately after instances are ready (for v2)
         if (version === 'v2') {
-          // Use setTimeout to ensure state updates have propagated
-          setTimeout(() => {
-            const currentInstanceId = useInstanceStore.getState().selectedInstanceId;
-            loadPromptSectionsWithInstanceId(currentInstanceId);
-          }, 100);
+          const currentInstanceId = useInstanceStore.getState().selectedInstanceId;
+          console.log('[SECTIONS-INIT] Loading sections for v2, instanceId:', currentInstanceId);
+          loadPromptSectionsWithInstanceId(currentInstanceId);
         }
       }).catch(() => {
         // Also mark as loaded on error to unblock section loading
@@ -311,25 +309,19 @@ export default function PromptPage() {
       }
       
       loadAgentFiles();
-      
-      // Also load sections for v2 agents (use business value directly, not state)
-      const version = (currentBusiness as any).agentVersion || 'v1';
-      if (version === 'v2') {
-        loadPromptSectionsWithInstanceId(selectedInstanceId);
-      }
+      // Note: sections are loaded in the first useEffect after instances load
     };
     
     loadInstanceData();
   }, [currentBusiness?.id, selectedInstanceId]);
 
-  // Load sections when instancesLoaded becomes true OR when selectedInstanceId changes
+  // Load sections when selectedInstanceId changes (for instance switching)
   useEffect(() => {
-    if (currentBusiness && agentVersion === 'v2' && instancesLoaded) {
-      // Get the current instanceId directly from store to avoid stale closures
-      const instId = useInstanceStore.getState().selectedInstanceId;
-      loadPromptSectionsWithInstanceId(instId);
+    if (currentBusiness && agentVersion === 'v2' && instancesLoaded && selectedInstanceId) {
+      // Only reload when user explicitly changes instance
+      loadPromptSectionsWithInstanceId(selectedInstanceId);
     }
-  }, [currentBusiness?.id, agentVersion, instancesLoaded, selectedInstanceId]);
+  }, [selectedInstanceId]);
 
   const loadApiKeyInfo = async () => {
     if (!currentBusiness) return;
@@ -368,10 +360,15 @@ export default function PromptPage() {
   
   // Version that accepts instanceId directly (used after instances load)
   const loadPromptSectionsWithInstanceId = async (instanceId: string | null) => {
-    if (!currentBusiness) return;
+    if (!currentBusiness) {
+      console.log('[SECTIONS-LOAD] No business, skipping');
+      return;
+    }
+    console.log('[SECTIONS-LOAD] Loading for instance:', instanceId);
     setLoadingSections(true);
     try {
       const res = await promptSectionsApi.list(currentBusiness.id, instanceId || undefined);
+      console.log('[SECTIONS-LOAD] Got sections:', res.data.sections?.length || 0);
       setPromptSections(res.data.sections || []);
     } catch (err) {
       console.error('Error loading prompt sections:', err);
