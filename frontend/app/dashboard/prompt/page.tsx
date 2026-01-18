@@ -1541,48 +1541,47 @@ export default function PromptPage() {
                     </svg>
                     Secciones Core (siempre incluidas)
                   </h3>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {promptSections.filter(s => s.isCore).map(section => (
                       <div 
                         key={section.id} 
-                        className={`p-4 rounded-lg border ${section.enabled ? 'bg-neon-purple/10 border-neon-purple/30' : 'bg-dark-hover border-gray-700 opacity-50'}`}
+                        className={`p-3 sm:p-4 rounded-lg border ${section.enabled ? 'bg-neon-purple/10 border-neon-purple/30' : 'bg-dark-hover border-gray-700 opacity-50'}`}
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium text-white">{section.title}</span>
-                              <span className="text-xs px-2 py-0.5 rounded bg-neon-purple/20 text-neon-purple">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                              <span className="font-medium text-white text-sm sm:text-base">{section.title}</span>
+                              <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-neon-purple/20 text-neon-purple">
                                 {SECTION_TYPES.find(t => t.value === section.type)?.label || section.type}
                               </span>
                               {section.priority > 0 && (
-                                <span className="text-xs text-gray-500">P{section.priority}</span>
+                                <span className="text-[10px] sm:text-xs text-gray-500">P{section.priority}</span>
                               )}
                             </div>
-                            <p className="text-sm text-gray-400 line-clamp-2">{section.content}</p>
+                            <p className="text-xs sm:text-sm text-gray-400 line-clamp-2">{section.content}</p>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs text-gray-500">Activo</span>
+                          <div className="flex items-center gap-2 sm:gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-700/50 mt-2 sm:mt-0">
                             <button
                               onClick={() => handleToggleSectionEnabled(section)}
-                              className={`w-10 h-5 rounded-full transition-colors ${section.enabled ? 'bg-accent-success' : 'bg-gray-600'}`}
+                              className={`w-9 h-5 sm:w-10 sm:h-5 rounded-full transition-colors ${section.enabled ? 'bg-accent-success' : 'bg-gray-600'}`}
                             >
-                              <span className={`block w-4 h-4 rounded-full bg-white transform transition-transform ${section.enabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                              <span className={`block w-4 h-4 rounded-full bg-white transform transition-transform ${section.enabled ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0.5 sm:translate-x-1'}`} />
                             </button>
-                            <button onClick={() => handleEditSection(section)} className="p-1 text-gray-400 hover:text-white">
+                            <button onClick={() => handleEditSection(section)} className="p-1.5 text-gray-400 hover:text-white">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                             </button>
                             <button 
                               onClick={() => handleToggleSectionCore(section)}
-                              className="p-1 text-gray-400 hover:text-neon-blue"
+                              className="p-1.5 text-gray-400 hover:text-neon-blue"
                               title="Mover a secciones RAG"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
                             </button>
-                            <button onClick={() => handleDeleteSection(section.id)} className="p-1 text-gray-400 hover:text-accent-error">
+                            <button onClick={() => handleDeleteSection(section.id)} className="p-1.5 text-gray-400 hover:text-accent-error">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
@@ -1603,55 +1602,54 @@ export default function PromptPage() {
                     </svg>
                     Secciones RAG (recuperadas por contexto)
                   </h3>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {promptSections.filter(s => !s.isCore).map(section => (
                       <div 
                         key={section.id} 
-                        className={`p-4 rounded-lg border ${section.enabled ? 'bg-dark-card border-gray-700' : 'bg-dark-hover border-gray-800 opacity-50'}`}
+                        className={`p-3 sm:p-4 rounded-lg border ${section.enabled ? 'bg-dark-card border-gray-700' : 'bg-dark-hover border-gray-800 opacity-50'}`}
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium text-white">{section.title}</span>
-                              <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                              <span className="font-medium text-white text-sm sm:text-base">{section.title}</span>
+                              <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-gray-700 text-gray-300">
                                 {SECTION_TYPES.find(t => t.value === section.type)?.label || section.type}
                               </span>
                               {section.priority > 0 && (
-                                <span className="text-xs text-gray-500">P{section.priority}</span>
+                                <span className="text-[10px] sm:text-xs text-gray-500">P{section.priority}</span>
                               )}
                               {(section.metadata as any)?.hasEmbedding ? (
-                                <span className="text-xs text-accent-success" title="Embeddings generados - listo para RAG">
+                                <span className="text-[10px] sm:text-xs text-accent-success" title="Listo para RAG">
                                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
                                 </span>
                               ) : (
-                                <span className="text-xs text-amber-500" title="Sin embeddings - no aparecera en busquedas RAG">!</span>
+                                <span className="text-[10px] sm:text-xs text-amber-500" title="Sin embeddings">!</span>
                               )}
                             </div>
-                            <p className="text-sm text-gray-400 line-clamp-2">{section.content}</p>
+                            <p className="text-xs sm:text-sm text-gray-400 line-clamp-2">{section.content}</p>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs text-gray-500">Activo</span>
+                          <div className="flex items-center gap-2 sm:gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-700/50 mt-2 sm:mt-0">
                             <button
                               onClick={() => handleToggleSectionEnabled(section)}
-                              className={`w-10 h-5 rounded-full transition-colors ${section.enabled ? 'bg-accent-success' : 'bg-gray-600'}`}
+                              className={`w-9 h-5 sm:w-10 sm:h-5 rounded-full transition-colors ${section.enabled ? 'bg-accent-success' : 'bg-gray-600'}`}
                             >
-                              <span className={`block w-4 h-4 rounded-full bg-white transform transition-transform ${section.enabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                              <span className={`block w-4 h-4 rounded-full bg-white transform transition-transform ${section.enabled ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0.5 sm:translate-x-1'}`} />
                             </button>
-                            <button onClick={() => handleEditSection(section)} className="p-1 text-gray-400 hover:text-white">
+                            <button onClick={() => handleEditSection(section)} className="p-1.5 text-gray-400 hover:text-white">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                             </button>
                             <button 
                               onClick={() => handleToggleSectionCore(section)}
-                              className="p-1 text-gray-400 hover:text-neon-purple"
+                              className="p-1.5 text-gray-400 hover:text-neon-purple"
                               title="Mover a secciones Core"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                               </svg>
                             </button>
-                            <button onClick={() => handleDeleteSection(section.id)} className="p-1 text-gray-400 hover:text-accent-error">
+                            <button onClick={() => handleDeleteSection(section.id)} className="p-1.5 text-gray-400 hover:text-accent-error">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
@@ -1667,31 +1665,31 @@ export default function PromptPage() {
           )}
 
           {showSectionForm && typeof document !== 'undefined' && createPortal(
-            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-2 sm:p-4" onClick={handleCancelSectionForm}>
-              <div className="bg-[#1a1a2e] border border-gray-600 rounded-xl p-4 sm:p-6 w-full max-w-[95vw] sm:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                <h3 className="text-base sm:text-lg font-semibold text-white mb-4">
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-2" onClick={handleCancelSectionForm}>
+              <div className="bg-[#1a1a2e] border border-gray-600 rounded-lg p-3 sm:p-4 w-full max-w-[95vw] sm:max-w-xl lg:max-w-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-sm font-semibold text-white mb-2">
                   {editingSection ? 'Editar Seccion' : 'Nueva Seccion'}
                 </h3>
                 
-                <div className="space-y-3 sm:space-y-4">
+                <div className="space-y-2">
                   <div>
-                    <label className="block text-xs sm:text-sm text-gray-400 mb-1">Titulo</label>
+                    <label className="block text-xs text-gray-400 mb-0.5">Titulo</label>
                     <input
                       type="text"
                       value={newSection.title}
                       onChange={(e) => setNewSection({ ...newSection, title: e.target.value })}
-                      className="input text-sm"
+                      className="input text-xs py-1.5"
                       placeholder="Ej: Politica de envios"
                     />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-xs sm:text-sm text-gray-400 mb-1">Tipo</label>
+                      <label className="block text-xs text-gray-400 mb-0.5">Tipo</label>
                       <select
                         value={newSection.type}
                         onChange={(e) => setNewSection({ ...newSection, type: e.target.value as PromptSectionType })}
-                        className="input text-sm"
+                        className="input text-xs py-1.5"
                       >
                         {SECTION_TYPES.map(type => (
                           <option key={type.value} value={type.value}>{type.label}</option>
@@ -1699,54 +1697,49 @@ export default function PromptPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs sm:text-sm text-gray-400 mb-1">Prioridad</label>
+                      <label className="block text-xs text-gray-400 mb-0.5">Prioridad</label>
                       <input
                         type="number"
                         value={newSection.priority}
                         onChange={(e) => setNewSection({ ...newSection, priority: parseInt(e.target.value) || 0 })}
-                        className="input text-sm"
+                        className="input text-xs py-1.5"
                         min={0}
                         max={100}
                       />
                     </div>
+                    <div className="flex items-end pb-1">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-400">
+                        <input
+                          type="checkbox"
+                          checked={newSection.isCore}
+                          onChange={(e) => setNewSection({ ...newSection, isCore: e.target.checked })}
+                          className="rounded w-3 h-3"
+                        />
+                        <span>Core</span>
+                      </label>
+                    </div>
                   </div>
                   
                   <div>
-                    <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-400 mb-1">
-                      <input
-                        type="checkbox"
-                        checked={newSection.isCore}
-                        onChange={(e) => setNewSection({ ...newSection, isCore: e.target.checked })}
-                        className="rounded"
-                      />
-                      <span>Seccion Core (siempre incluida)</span>
-                    </label>
-                    <p className="text-xs text-gray-500 ml-6">
-                      Las secciones Core siempre se envian al agente. Las demas se recuperan via RAG segun relevancia.
-                    </p>
-                  </div>
-                  
-                  <div className="flex-1">
-                    <label className="block text-xs sm:text-sm text-gray-400 mb-1">Contenido</label>
+                    <label className="block text-xs text-gray-400 mb-0.5">Contenido</label>
                     <textarea
                       value={newSection.content}
                       onChange={(e) => setNewSection({ ...newSection, content: e.target.value })}
-                      className="input font-mono text-xs sm:text-sm resize-y w-full"
-                      rows={12}
-                      style={{ minHeight: '200px', maxHeight: '50vh' }}
+                      className="input font-mono text-[11px] leading-tight resize-none w-full"
+                      rows={10}
                       placeholder="Escribe el contenido de esta seccion..."
                     />
                   </div>
                 </div>
                 
-                <div className="flex justify-end gap-2 sm:gap-3 mt-4 sm:mt-6">
-                  <button onClick={handleCancelSectionForm} className="btn btn-secondary text-sm">
+                <div className="flex justify-end gap-2 mt-3">
+                  <button onClick={handleCancelSectionForm} className="btn btn-secondary text-xs py-1.5 px-3">
                     Cancelar
                   </button>
                   <button
                     onClick={editingSection ? handleUpdateSection : handleCreateSection}
                     disabled={loading || !newSection.title || !newSection.content}
-                    className="btn btn-primary text-sm"
+                    className="btn btn-primary text-xs py-1.5 px-3"
                   >
                     {loading ? 'Guardando...' : editingSection ? 'Actualizar' : 'Crear'}
                   </button>
