@@ -1687,8 +1687,8 @@ export default function PromptPage() {
           )}
 
           {showSectionForm && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-dark-card rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4" onClick={handleCancelSectionForm}>
+              <div className="bg-[#1a1a2e] border border-gray-700 rounded-xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <h3 className="text-lg font-semibold text-white mb-4">
                   {editingSection ? 'Editar Seccion' : 'Nueva Seccion'}
                 </h3>
