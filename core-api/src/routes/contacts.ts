@@ -859,12 +859,24 @@ router.post('/:phone/bot-test', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
-    const existing = await prisma.contact.findUnique({
+    // Try to find existing contact, or create if not exists
+    let existing = await prisma.contact.findUnique({
       where: { businessId_phone: { businessId: business.id, phone } }
     });
 
     if (!existing) {
-      return res.status(404).json({ error: 'Contacto no encontrado' });
+      // Create the contact if it doesn't exist
+      const now = new Date();
+      existing = await prisma.contact.create({
+        data: {
+          businessId: business.id,
+          phone,
+          botTestEnabled: false,
+          firstMessageAt: now,
+          lastMessageAt: now
+        }
+      });
+      console.log(`[CONTACTS] Created new contact ${phone} for business ${businessId}`);
     }
 
     const newValue = enabled !== undefined ? enabled : !existing.botTestEnabled;
