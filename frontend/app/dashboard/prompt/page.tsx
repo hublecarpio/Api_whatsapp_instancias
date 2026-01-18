@@ -316,18 +316,14 @@ export default function PromptPage() {
     loadInstanceData();
   }, [currentBusiness?.id, selectedInstanceId]);
 
+  // Load sections when instancesLoaded becomes true OR when selectedInstanceId changes
   useEffect(() => {
-    console.log('[SECTIONS-EFFECT] Check:', { 
-      hasBusiness: !!currentBusiness, 
-      agentVersion, 
-      instancesLoaded,
-      selectedInstanceId 
-    });
     if (currentBusiness && agentVersion === 'v2' && instancesLoaded) {
-      console.log('[SECTIONS-EFFECT] Calling loadPromptSections');
-      loadPromptSections();
+      // Get the current instanceId directly from store to avoid stale closures
+      const instId = useInstanceStore.getState().selectedInstanceId;
+      loadPromptSectionsWithInstanceId(instId);
     }
-  }, [currentBusiness?.id, agentVersion, selectedInstanceId, instancesLoaded]);
+  }, [currentBusiness?.id, agentVersion, instancesLoaded, selectedInstanceId]);
 
   const loadApiKeyInfo = async () => {
     if (!currentBusiness) return;
@@ -1373,7 +1369,15 @@ export default function PromptPage() {
         </button>
         {hasAdvancedFeatures && (
           <button
-            onClick={() => { setActiveTab('sections'); setActiveV2Tab('sections'); }}
+            onClick={() => { 
+              setActiveTab('sections'); 
+              setActiveV2Tab('sections'); 
+              // Load sections when clicking the tab
+              if (currentBusiness) {
+                const instId = useInstanceStore.getState().selectedInstanceId;
+                loadPromptSectionsWithInstanceId(instId);
+              }
+            }}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               (agentVersion === 'v1' ? activeTab : activeV2Tab) === 'sections' 
                 ? (agentVersion === 'v1' ? 'bg-neon-blue text-dark-bg' : 'bg-neon-purple text-white') 
