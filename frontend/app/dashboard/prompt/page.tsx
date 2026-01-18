@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { useInstanceStore } from '@/store/instance';
@@ -1686,9 +1687,9 @@ export default function PromptPage() {
             </div>
           )}
 
-          {showSectionForm && (
-            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4" onClick={handleCancelSectionForm}>
-              <div className="bg-[#1a1a2e] border border-gray-700 rounded-xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          {showSectionForm && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4" onClick={handleCancelSectionForm}>
+              <div className="bg-[#1a1a2e] border border-gray-600 rounded-xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <h3 className="text-lg font-semibold text-white mb-4">
                   {editingSection ? 'Editar Seccion' : 'Nueva Seccion'}
                 </h3>
@@ -1771,7 +1772,8 @@ export default function PromptPage() {
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
 
           {showGenerateSections && parsedSections.length > 0 && (
