@@ -67,9 +67,17 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     if (!user?.subscriptionStatus) return null;
     
     const planType = user.planType || 'none';
+    const subscriptionTier = (user as any)?.subscriptionTier;
     
     if (planType === 'pro') {
-      return { label: 'Avanzado', class: 'status-pro', dotClass: 'bg-accent-purple' };
+      // Differentiate between Enterprise (bonus code) and Pro (Stripe subscription)
+      // If user has active bonus (isPro true without Stripe PRO tier), it's Enterprise
+      // If subscriptionTier is ENTERPRISE, it's Enterprise
+      if (subscriptionTier === 'ENTERPRISE' || (user.isPro && !user.hasStripeSubscription)) {
+        return { label: 'Avanzado', class: 'status-pro', dotClass: 'bg-accent-purple' };
+      }
+      // PRO subscription via Stripe
+      return { label: 'Pro', class: 'status-pro', dotClass: 'bg-accent-success' };
     }
     
     if (planType === 'basic') {
