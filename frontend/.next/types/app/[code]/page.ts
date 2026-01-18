@@ -1,8 +1,8 @@
-// File: /home/runner/workspace/frontend/app/dashboard/whatsapp/page.tsx
-import * as entry from '../../../../../app/dashboard/whatsapp/page.js'
+// File: /home/runner/workspace/frontend/app/[code]/page.tsx
+import * as entry from '../../../../app/[code]/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
-type TEntry = typeof import('../../../../../app/dashboard/whatsapp/page.js')
+type TEntry = typeof import('../../../../app/[code]/page.js')
 
 // Check that the entry is a valid entry
 checkFields<Diff<{

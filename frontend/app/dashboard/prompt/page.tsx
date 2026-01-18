@@ -231,6 +231,8 @@ export default function PromptPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resettingConfig, setResettingConfig] = useState(false);
+  // Track if instances have been loaded at least once to prevent loading sections with stale instanceId
+  const [instancesLoaded, setInstancesLoaded] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -245,7 +247,12 @@ export default function PromptPage() {
             useInstanceStore.getState().setLimits(data.limits);
           }
         }
-      }).catch(() => {});
+        // Mark instances as loaded even if empty
+        setInstancesLoaded(true);
+      }).catch(() => {
+        // Also mark as loaded on error to unblock section loading
+        setInstancesLoaded(true);
+      });
       loadInjectionCode();
       if (version === 'v2') {
         loadV2Data();
@@ -303,9 +310,13 @@ export default function PromptPage() {
       loadV2Data();
       loadApiKeyInfo();
       loadWebhookConfig();
-      loadPromptSections();
+      // Only load sections after instances are loaded to ensure correct instanceId
+      // This prevents loading with null instanceId before Zustand rehydration completes
+      if (instancesLoaded) {
+        loadPromptSections();
+      }
     }
-  }, [agentVersion, selectedInstanceId]);
+  }, [agentVersion, selectedInstanceId, instancesLoaded]);
 
   const loadApiKeyInfo = async () => {
     if (!currentBusiness) return;
