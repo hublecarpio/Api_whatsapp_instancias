@@ -4121,7 +4121,7 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
     
     const { skipConflicts = true, clearExisting = false } = options;
     
-    console.log(`[IMPORT-FULL] Starting full import for business ${business_id}, length: ${rawPrompt.length}`);
+    console.log(`[IMPORT-FULL] Starting full import for business ${business_id}, instanceId: ${instanceId || 'NULL'}, length: ${rawPrompt.length}`);
     
     // Run both analyses in parallel
     const [masterResult, configResult] = await Promise.all([
@@ -4218,6 +4218,8 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
         results.sections.errors.push(`${section.title}: ${err.message}`);
       }
     }
+    
+    console.log(`[IMPORT-FULL] Sections: created=${results.sections.created}, skipped=${results.sections.skipped}, instanceId=${instanceId || 'NULL'}`);
     
     // 4. Import structured config (products, fields, stages, etc) from analyzeBusinessPrompt
     if (configResult.success && configResult.config) {

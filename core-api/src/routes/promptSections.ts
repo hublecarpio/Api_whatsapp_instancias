@@ -76,6 +76,9 @@ router.get('/:businessId', authMiddleware, async (req: AuthRequest, res: Respons
         { instanceId: normalizedInstanceId },
         { instanceId: null }
       ];
+      console.log(`[SECTIONS-GET] Loading sections for instance ${normalizedInstanceId} + shared (null)`);
+    } else {
+      console.log(`[SECTIONS-GET] Loading ALL sections for business ${businessId} (no instance filter)`);
     }
     // When no instanceId provided, show ALL sections for the business (no filter)
 

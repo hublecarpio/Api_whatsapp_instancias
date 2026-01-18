@@ -54,11 +54,23 @@ export const useInstanceStore = create<InstanceState>()(
         const safeInstances = Array.isArray(instances) ? instances : [];
         // Preserve user's selected instance if it exists in the new list
         // Only reset to first instance if current selection is not in the list
+        // Also clear stale selectedInstanceId from localStorage if instance no longer exists
         const currentSelectionExists = state.selectedInstanceId && 
           safeInstances.some(i => i.id === state.selectedInstanceId);
-        const newSelectedId = currentSelectionExists 
-          ? state.selectedInstanceId 
-          : (safeInstances.length > 0 ? safeInstances[0].id : null);
+        let newSelectedId: string | null;
+        
+        if (currentSelectionExists) {
+          newSelectedId = state.selectedInstanceId;
+        } else if (safeInstances.length > 0) {
+          // Clear stale selection and use first available instance
+          newSelectedId = safeInstances[0].id;
+          console.log('[InstanceStore] Cleared stale selectedInstanceId, using first instance:', newSelectedId);
+        } else {
+          // No instances available
+          newSelectedId = null;
+          console.log('[InstanceStore] No instances available, clearing selectedInstanceId');
+        }
+        
         set({ instances: safeInstances, selectedInstanceId: newSelectedId });
       },
       
