@@ -58,14 +58,20 @@ router.get('/:businessId', authMiddleware, async (req: AuthRequest, res: Respons
       return res.status(404).json({ error: 'Business not found' });
     }
 
+    // Build where clause based on whether instanceId is provided
+    const whereClause: any = { businessId };
+    
+    if (instance_id && typeof instance_id === 'string') {
+      // When instanceId is provided, show sections for that instance + shared sections (null)
+      whereClause.OR = [
+        { instanceId: instance_id },
+        { instanceId: null }
+      ];
+    }
+    // When no instanceId provided, show ALL sections for the business (no filter)
+
     const sections = await prisma.promptSection.findMany({
-      where: { 
-        businessId,
-        OR: [
-          { instanceId: instance_id as string || null },
-          { instanceId: null }
-        ]
-      },
+      where: whereClause,
       orderBy: [{ isCore: 'desc' }, { priority: 'desc' }, { createdAt: 'asc' }],
       select: {
         id: true,
