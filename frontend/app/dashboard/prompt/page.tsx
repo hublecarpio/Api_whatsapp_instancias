@@ -1557,22 +1557,11 @@ export default function PromptPage() {
                               {section.priority > 0 && (
                                 <span className="text-xs text-gray-500">P{section.priority}</span>
                               )}
-                              {(section.metadata as any)?.hasEmbedding && (
-                                <span className="text-xs text-accent-success" title="Embeddings generados">
-                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                                </span>
-                              )}
                             </div>
                             <p className="text-sm text-gray-400 line-clamp-2">{section.content}</p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => handleToggleSectionCore(section)}
-                              className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
-                              title="Mover a RAG"
-                            >
-                              RAG
-                            </button>
+                            <span className="text-xs text-gray-500">Activo</span>
                             <button
                               onClick={() => handleToggleSectionEnabled(section)}
                               className={`w-10 h-5 rounded-full transition-colors ${section.enabled ? 'bg-accent-success' : 'bg-gray-600'}`}
@@ -1582,6 +1571,15 @@ export default function PromptPage() {
                             <button onClick={() => handleEditSection(section)} className="p-1 text-gray-400 hover:text-white">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button 
+                              onClick={() => handleToggleSectionCore(section)}
+                              className="p-1 text-gray-400 hover:text-neon-blue"
+                              title="Mover a secciones RAG"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                               </svg>
                             </button>
                             <button onClick={() => handleDeleteSection(section.id)} className="p-1 text-gray-400 hover:text-accent-error">
@@ -1632,13 +1630,7 @@ export default function PromptPage() {
                             <p className="text-sm text-gray-400 line-clamp-2">{section.content}</p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => handleToggleSectionCore(section)}
-                              className="text-xs px-2 py-1 rounded bg-neon-purple/20 hover:bg-neon-purple/30 text-neon-purple"
-                              title="Marcar como Core"
-                            >
-                              Core
-                            </button>
+                            <span className="text-xs text-gray-500">Activo</span>
                             <button
                               onClick={() => handleToggleSectionEnabled(section)}
                               className={`w-10 h-5 rounded-full transition-colors ${section.enabled ? 'bg-accent-success' : 'bg-gray-600'}`}
@@ -1648,6 +1640,15 @@ export default function PromptPage() {
                             <button onClick={() => handleEditSection(section)} className="p-1 text-gray-400 hover:text-white">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button 
+                              onClick={() => handleToggleSectionCore(section)}
+                              className="p-1 text-gray-400 hover:text-neon-purple"
+                              title="Mover a secciones Core"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                               </svg>
                             </button>
                             <button onClick={() => handleDeleteSection(section.id)} className="p-1 text-gray-400 hover:text-accent-error">
