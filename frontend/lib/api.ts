@@ -131,9 +131,11 @@ export const promptSectionsApi = {
 };
 
 export const toolsApi = {
-  list: (businessId: string) => api.get(`/agent/tools?business_id=${businessId}`),
+  list: (businessId: string, instanceId?: string) => 
+    api.get(`/agent/tools?business_id=${businessId}${instanceId ? `&instance_id=${instanceId}` : ''}`),
   create: (data: {
     business_id: string;
+    instance_id?: string;
     name: string;
     description: string;
     url: string;

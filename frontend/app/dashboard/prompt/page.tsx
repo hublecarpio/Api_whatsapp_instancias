@@ -938,6 +938,7 @@ export default function PromptPage() {
 
       await toolsApi.create({
         business_id: currentBusiness.id,
+        instance_id: selectedInstanceId || undefined,
         name: newTool.name,
         description: newTool.description,
         url: newTool.url,

@@ -123,7 +123,7 @@ async function checkBusinessAccess(userId: string, businessId: string) {
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id } = req.query;
+    const { business_id, instance_id } = req.query;
     
     if (!business_id) {
       return res.status(400).json({ error: 'business_id is required' });
@@ -134,8 +134,16 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // Build where clause - filter by instanceId if provided
+    const whereClause: any = { businessId: business_id as string };
+    if (instance_id && typeof instance_id === 'string') {
+      whereClause.instanceId = instance_id;
+    } else {
+      whereClause.instanceId = null; // Get shared/default prompt tools
+    }
+    
     const prompt = await prisma.agentPrompt.findFirst({
-      where: { businessId: business_id as string },
+      where: whereClause,
       include: { tools: true }
     });
     
@@ -148,7 +156,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id, name, description, url, method, headers, bodyTemplate, parameters, dynamicVariables } = req.body;
+    const { business_id, instance_id, name, description, url, method, headers, bodyTemplate, parameters, dynamicVariables } = req.body;
     
     if (!business_id || !name || !description || !url) {
       return res.status(400).json({ error: 'business_id, name, description, and url are required' });
@@ -164,14 +172,23 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // Find prompt for specific instance or shared (null)
+    const whereClause: any = { businessId: business_id };
+    if (instance_id) {
+      whereClause.instanceId = instance_id;
+    } else {
+      whereClause.instanceId = null;
+    }
+    
     let prompt = await prisma.agentPrompt.findFirst({
-      where: { businessId: business_id }
+      where: whereClause
     });
     
     if (!prompt) {
       prompt = await prisma.agentPrompt.create({
         data: {
           businessId: business_id,
+          instanceId: instance_id || null,
           prompt: 'Eres un asistente de atención al cliente amable y profesional.'
         }
       });
