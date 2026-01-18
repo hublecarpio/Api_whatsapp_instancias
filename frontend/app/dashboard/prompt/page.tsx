@@ -1667,31 +1667,31 @@ export default function PromptPage() {
           )}
 
           {showSectionForm && typeof document !== 'undefined' && createPortal(
-            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4" onClick={handleCancelSectionForm}>
-              <div className="bg-[#1a1a2e] border border-gray-600 rounded-xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                <h3 className="text-lg font-semibold text-white mb-4">
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-2 sm:p-4" onClick={handleCancelSectionForm}>
+              <div className="bg-[#1a1a2e] border border-gray-600 rounded-xl p-4 sm:p-6 w-full max-w-[95vw] sm:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-base sm:text-lg font-semibold text-white mb-4">
                   {editingSection ? 'Editar Seccion' : 'Nueva Seccion'}
                 </h3>
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Titulo</label>
+                    <label className="block text-xs sm:text-sm text-gray-400 mb-1">Titulo</label>
                     <input
                       type="text"
                       value={newSection.title}
                       onChange={(e) => setNewSection({ ...newSection, title: e.target.value })}
-                      className="input"
+                      className="input text-sm"
                       placeholder="Ej: Politica de envios"
                     />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Tipo</label>
+                      <label className="block text-xs sm:text-sm text-gray-400 mb-1">Tipo</label>
                       <select
                         value={newSection.type}
                         onChange={(e) => setNewSection({ ...newSection, type: e.target.value as PromptSectionType })}
-                        className="input"
+                        className="input text-sm"
                       >
                         {SECTION_TYPES.map(type => (
                           <option key={type.value} value={type.value}>{type.label}</option>
@@ -1699,12 +1699,12 @@ export default function PromptPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Prioridad</label>
+                      <label className="block text-xs sm:text-sm text-gray-400 mb-1">Prioridad</label>
                       <input
                         type="number"
                         value={newSection.priority}
                         onChange={(e) => setNewSection({ ...newSection, priority: parseInt(e.target.value) || 0 })}
-                        className="input"
+                        className="input text-sm"
                         min={0}
                         max={100}
                       />
@@ -1712,7 +1712,7 @@ export default function PromptPage() {
                   </div>
                   
                   <div>
-                    <label className="flex items-center gap-2 text-sm text-gray-400 mb-1">
+                    <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-400 mb-1">
                       <input
                         type="checkbox"
                         checked={newSection.isCore}
@@ -1726,26 +1726,27 @@ export default function PromptPage() {
                     </p>
                   </div>
                   
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Contenido</label>
+                  <div className="flex-1">
+                    <label className="block text-xs sm:text-sm text-gray-400 mb-1">Contenido</label>
                     <textarea
                       value={newSection.content}
                       onChange={(e) => setNewSection({ ...newSection, content: e.target.value })}
-                      className="input font-mono text-sm resize-none"
-                      rows={8}
+                      className="input font-mono text-xs sm:text-sm resize-y w-full"
+                      rows={12}
+                      style={{ minHeight: '200px', maxHeight: '50vh' }}
                       placeholder="Escribe el contenido de esta seccion..."
                     />
                   </div>
                 </div>
                 
-                <div className="flex justify-end gap-3 mt-6">
-                  <button onClick={handleCancelSectionForm} className="btn btn-secondary">
+                <div className="flex justify-end gap-2 sm:gap-3 mt-4 sm:mt-6">
+                  <button onClick={handleCancelSectionForm} className="btn btn-secondary text-sm">
                     Cancelar
                   </button>
                   <button
                     onClick={editingSection ? handleUpdateSection : handleCreateSection}
                     disabled={loading || !newSection.title || !newSection.content}
-                    className="btn btn-primary"
+                    className="btn btn-primary text-sm"
                   >
                     {loading ? 'Guardando...' : editingSection ? 'Actualizar' : 'Crear'}
                   </button>

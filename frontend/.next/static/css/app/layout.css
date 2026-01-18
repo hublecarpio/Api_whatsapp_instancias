@@ -1433,6 +1433,9 @@ body.glass-mode .mobile-drawer {
 .max-w-\[85\%\] {
   max-width: 85%;
 }
+.max-w-\[95vw\] {
+  max-width: 95vw;
+}
 .max-w-full {
   max-width: 100%;
 }
@@ -1569,6 +1572,9 @@ body.glass-mode .mobile-drawer {
 }
 .resize-none {
   resize: none;
+}
+.resize-y {
+  resize: vertical;
 }
 .resize {
   resize: both;
@@ -4475,6 +4481,10 @@ html[data-mobile="true"] .glass-sidebar {
     width: auto;
   }
 
+  .sm\:max-w-2xl {
+    max-width: 42rem;
+  }
+
   .sm\:max-w-sm {
     max-width: 24rem;
   }
@@ -4846,6 +4856,10 @@ html[data-mobile="true"] .glass-sidebar {
 
   .lg\:col-span-2 {
     grid-column: span 2 / span 2;
+  }
+
+  .lg\:max-w-3xl {
+    max-width: 48rem;
   }
 
   .lg\:grid-cols-2 {
