@@ -249,6 +249,14 @@ export default function PromptPage() {
         }
         // Mark instances as loaded even if empty
         setInstancesLoaded(true);
+        // Load sections immediately after instances are ready (for v2)
+        if (version === 'v2') {
+          // Use setTimeout to ensure state updates have propagated
+          setTimeout(() => {
+            const currentInstanceId = useInstanceStore.getState().selectedInstanceId;
+            loadPromptSectionsWithInstanceId(currentInstanceId);
+          }, 100);
+        }
       }).catch(() => {
         // Also mark as loaded on error to unblock section loading
         setInstancesLoaded(true);
@@ -309,7 +317,14 @@ export default function PromptPage() {
   }, [currentBusiness?.id, selectedInstanceId]);
 
   useEffect(() => {
+    console.log('[SECTIONS-EFFECT] Check:', { 
+      hasBusiness: !!currentBusiness, 
+      agentVersion, 
+      instancesLoaded,
+      selectedInstanceId 
+    });
     if (currentBusiness && agentVersion === 'v2' && instancesLoaded) {
+      console.log('[SECTIONS-EFFECT] Calling loadPromptSections');
       loadPromptSections();
     }
   }, [currentBusiness?.id, agentVersion, selectedInstanceId, instancesLoaded]);
@@ -341,6 +356,20 @@ export default function PromptPage() {
     setLoadingSections(true);
     try {
       const res = await promptSectionsApi.list(currentBusiness.id, selectedInstanceId || undefined);
+      setPromptSections(res.data.sections || []);
+    } catch (err) {
+      console.error('Error loading prompt sections:', err);
+    } finally {
+      setLoadingSections(false);
+    }
+  };
+  
+  // Version that accepts instanceId directly (used after instances load)
+  const loadPromptSectionsWithInstanceId = async (instanceId: string | null) => {
+    if (!currentBusiness) return;
+    setLoadingSections(true);
+    try {
+      const res = await promptSectionsApi.list(currentBusiness.id, instanceId || undefined);
       setPromptSections(res.data.sections || []);
     } catch (err) {
       console.error('Error loading prompt sections:', err);
