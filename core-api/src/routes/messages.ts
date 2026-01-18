@@ -77,7 +77,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/conversations', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id, instance_id } = req.query;
+    const { business_id, instance_id, include_archived } = req.query;
     
     if (!business_id) {
       return res.status(400).json({ error: 'business_id is required' });
@@ -101,14 +101,44 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       }
     }
     
+    // Get list of archived instance IDs to filter out (unless include_archived is true)
+    let archivedInstanceIds: string[] = [];
+    if (include_archived !== 'true') {
+      const archivedInstances = await prisma.whatsAppInstance.findMany({
+        where: { 
+          businessId: business_id as string,
+          archivedAt: { not: null }
+        },
+        select: { id: true }
+      });
+      archivedInstanceIds = archivedInstances.map(i => i.id);
+    }
+    
     const whereClause: any = { businessId: business_id as string };
     
     if (instance_id) {
       whereClause.instanceId = instance_id as string;
+    } else if (archivedInstanceIds.length > 0) {
+      // Exclude messages from archived instances
+      whereClause.OR = [
+        { instanceId: { notIn: archivedInstanceIds } },
+        { instanceId: null }
+      ];
     }
     
     if (user.role === 'ASESOR' && assignedPhones.length > 0) {
-      whereClause.OR = assignedPhones.flatMap(p => [{ sender: p }, { recipient: p }]);
+      // Need to combine with assigned phones filter
+      const phoneFilter = assignedPhones.flatMap(p => [{ sender: p }, { recipient: p }]);
+      if (whereClause.OR) {
+        // Complex: need both archived filter AND phone filter
+        whereClause.AND = [
+          { OR: whereClause.OR },
+          { OR: phoneFilter }
+        ];
+        delete whereClause.OR;
+      } else {
+        whereClause.OR = phoneFilter;
+      }
     }
     
     const messages = await prisma.messageLog.findMany({
