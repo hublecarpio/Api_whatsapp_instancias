@@ -256,6 +256,9 @@ export default function PromptPage() {
       loadInjectionCode();
       if (version === 'v2') {
         loadV2Data();
+        // Load API key and webhook config immediately for v2
+        loadApiKeyInfo();
+        loadWebhookConfig();
       }
     }
   }, [currentBusiness]);
@@ -306,17 +309,10 @@ export default function PromptPage() {
   }, [currentBusiness?.id, selectedInstanceId]);
 
   useEffect(() => {
-    if (currentBusiness && agentVersion === 'v2') {
-      loadV2Data();
-      loadApiKeyInfo();
-      loadWebhookConfig();
-      // Only load sections after instances are loaded to ensure correct instanceId
-      // This prevents loading with null instanceId before Zustand rehydration completes
-      if (instancesLoaded) {
-        loadPromptSections();
-      }
+    if (currentBusiness && agentVersion === 'v2' && instancesLoaded) {
+      loadPromptSections();
     }
-  }, [agentVersion, selectedInstanceId, instancesLoaded]);
+  }, [currentBusiness?.id, agentVersion, selectedInstanceId, instancesLoaded]);
 
   const loadApiKeyInfo = async () => {
     if (!currentBusiness) return;
