@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// Normalize instanceId to handle malformed values from localStorage
+// Treats '', 'undefined', 'null' as null to match backend normalization
+const normalizeInstanceId = (id: string | null | undefined): string | null => {
+  if (!id || id === '' || id === 'undefined' || id === 'null') {
+    return null;
+  }
+  return id;
+};
+
 export interface WhatsAppInstance {
   id: string;
   businessId: string;
@@ -52,15 +61,17 @@ export const useInstanceStore = create<InstanceState>()(
       setInstances: (instances) => {
         const state = get();
         const safeInstances = Array.isArray(instances) ? instances : [];
+        // Normalize current selection to handle malformed localStorage values
+        const normalizedCurrentId = normalizeInstanceId(state.selectedInstanceId);
         // Preserve user's selected instance if it exists in the new list
         // Only reset to first instance if current selection is not in the list
         // Also clear stale selectedInstanceId from localStorage if instance no longer exists
-        const currentSelectionExists = state.selectedInstanceId && 
-          safeInstances.some(i => i.id === state.selectedInstanceId);
+        const currentSelectionExists = normalizedCurrentId && 
+          safeInstances.some(i => i.id === normalizedCurrentId);
         let newSelectedId: string | null;
         
         if (currentSelectionExists) {
-          newSelectedId = state.selectedInstanceId;
+          newSelectedId = normalizedCurrentId;
         } else if (safeInstances.length > 0) {
           // Clear stale selection and use first available instance
           newSelectedId = safeInstances[0].id;
@@ -74,7 +85,7 @@ export const useInstanceStore = create<InstanceState>()(
         set({ instances: safeInstances, selectedInstanceId: newSelectedId });
       },
       
-      setSelectedInstanceId: (id) => set({ selectedInstanceId: id }),
+      setSelectedInstanceId: (id) => set({ selectedInstanceId: normalizeInstanceId(id) }),
       
       setLimits: (limits) => set({ limits }),
       
