@@ -311,6 +311,11 @@ export default function PromptPage() {
       }
       
       loadAgentFiles();
+      
+      // Also load sections for v2 agents
+      if (agentVersion === 'v2') {
+        loadPromptSectionsWithInstanceId(selectedInstanceId);
+      }
     };
     
     loadInstanceData();
