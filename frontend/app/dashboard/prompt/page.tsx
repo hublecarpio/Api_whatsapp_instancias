@@ -2467,7 +2467,7 @@ export default function PromptPage() {
 
       {((agentVersion === 'v1' && activeTab === 'funnel') || (agentVersion === 'v2' && activeV2Tab === 'funnel')) && currentBusiness && (
         <div className="card">
-          <FunnelStages businessId={currentBusiness.id} />
+          <FunnelStages businessId={currentBusiness.id} instanceId={selectedInstanceId} />
         </div>
       )}
 

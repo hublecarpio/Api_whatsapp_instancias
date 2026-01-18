@@ -632,9 +632,9 @@ export const deliveryZonesApi = {
 };
 
 export const funnelStagesApi = {
-  list: (businessId: string) =>
-    api.get(`/agent/funnel-stages/${businessId}`),
-  create: (businessId: string, data: { name: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[] }) =>
+  list: (businessId: string, instanceId?: string) =>
+    api.get(`/agent/funnel-stages/${businessId}${instanceId ? `?instance_id=${instanceId}` : ''}`),
+  create: (businessId: string, data: { name: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[]; instanceId?: string }) =>
     api.post(`/agent/funnel-stages/${businessId}`, data),
   update: (businessId: string, stageId: string, data: { name?: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[]; isActive?: boolean }) =>
     api.put(`/agent/funnel-stages/${businessId}/${stageId}`, data),

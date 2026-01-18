@@ -23,9 +23,10 @@ interface FunnelStage {
 
 interface FunnelStagesProps {
   businessId: string;
+  instanceId?: string | null;
 }
 
-export default function FunnelStages({ businessId }: FunnelStagesProps) {
+export default function FunnelStages({ businessId, instanceId }: FunnelStagesProps) {
   const [stages, setStages] = useState<FunnelStage[]>([]);
   const [fields, setFields] = useState<ExtractionField[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,13 +47,13 @@ export default function FunnelStages({ businessId }: FunnelStagesProps) {
 
   useEffect(() => {
     loadData();
-  }, [businessId]);
+  }, [businessId, instanceId]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [stagesRes, fieldsRes] = await Promise.all([
-        funnelStagesApi.list(businessId),
+        funnelStagesApi.list(businessId, instanceId || undefined),
         funnelStagesApi.getExtractionFields(businessId)
       ]);
       setStages(stagesRes.data);
@@ -80,7 +81,8 @@ export default function FunnelStages({ businessId }: FunnelStagesProps) {
         description: form.description || undefined,
         promptContext: form.promptContext || undefined,
         requiredFieldKeys: form.requiredFieldKeys,
-        blockedTopics: form.blockedTopics
+        blockedTopics: form.blockedTopics,
+        instanceId: instanceId || undefined
       };
 
       if (editingStage) {
