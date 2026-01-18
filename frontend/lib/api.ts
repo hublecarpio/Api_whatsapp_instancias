@@ -620,16 +620,16 @@ export const advisorApi = {
 };
 
 export const deliveryZonesApi = {
-  list: (businessId: string) =>
-    api.get(`/agent/delivery-zones/${businessId}`),
-  create: (businessId: string, data: { name: string; districts?: string[]; address?: string; cost: number; freeAbove?: number; deliveryTime?: string; policy?: string }) =>
+  list: (businessId: string, instanceId?: string) =>
+    api.get(`/agent/delivery-zones/${businessId}${instanceId ? `?instanceId=${instanceId}` : ''}`),
+  create: (businessId: string, data: { name: string; districts?: string[]; address?: string; cost: number; freeAbove?: number; deliveryTime?: string; policy?: string; instanceId?: string }) =>
     api.post(`/agent/delivery-zones/${businessId}`, data),
   update: (businessId: string, zoneId: string, data: { name?: string; districts?: string[]; address?: string; cost?: number; freeAbove?: number; deliveryTime?: string; policy?: string; isActive?: boolean }) =>
     api.put(`/agent/delivery-zones/${businessId}/${zoneId}`, data),
   delete: (businessId: string, zoneId: string) =>
     api.delete(`/agent/delivery-zones/${businessId}/${zoneId}`),
-  import: (businessId: string, zones: any[]) =>
-    api.post(`/agent/delivery-zones/${businessId}/import`, { zones }),
+  import: (businessId: string, zones: any[], instanceId?: string) =>
+    api.post(`/agent/delivery-zones/${businessId}/import`, { zones, instanceId }),
   reorder: (businessId: string, zoneIds: string[]) =>
     api.put(`/agent/delivery-zones/${businessId}/reorder`, { zoneIds })
 };

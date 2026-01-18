@@ -385,6 +385,10 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
       transactions.push(
         // Delete instance-specific products
         prisma.product.deleteMany({ where: { businessId: req.params.id, instanceId } }),
+        // Delete instance-specific delivery zones
+        prisma.deliveryZone.deleteMany({ where: { businessId: req.params.id, instanceId } }),
+        // Delete instance-specific extraction fields
+        prisma.extractionField.deleteMany({ where: { businessId: req.params.id, instanceId } }),
         // Delete instance-specific funnel stages
         prisma.funnelStage.deleteMany({ where: { businessId: req.params.id, instanceId } }),
         // Delete instance-specific prompt sections
@@ -404,7 +408,6 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
           }
         })
       );
-      // Note: DeliveryZones and ExtractionFields are business-level, not instance-level
     } else {
       // Full business reset: delete everything
       transactions.push(
@@ -438,9 +441,15 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
         ? 'Configuracion de instancia reiniciada' 
         : 'Configuracion reiniciada completamente',
       scope: instanceId ? 'instance' : 'business',
-      deletedItems: instanceId 
-        ? { products: true, funnelStages: true, promptSections: true, agentFiles: true, customTools: true }
-        : { products: true, deliveryZones: true, extractionFields: true, funnelStages: true, promptSections: true, agentFiles: true, customTools: true }
+      deletedItems: { 
+        products: true, 
+        deliveryZones: true, 
+        extractionFields: true, 
+        funnelStages: true, 
+        promptSections: true, 
+        agentFiles: true, 
+        customTools: true 
+      }
     });
   } catch (error) {
     console.error('Reset config error:', error);

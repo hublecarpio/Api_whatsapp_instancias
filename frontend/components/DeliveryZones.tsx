@@ -18,10 +18,11 @@ interface DeliveryZone {
 
 interface DeliveryZonesProps {
   businessId: string;
+  instanceId?: string;
   currencySymbol?: string;
 }
 
-export default function DeliveryZones({ businessId, currencySymbol = 'S/.' }: DeliveryZonesProps) {
+export default function DeliveryZones({ businessId, instanceId, currencySymbol = 'S/.' }: DeliveryZonesProps) {
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -46,12 +47,12 @@ export default function DeliveryZones({ businessId, currencySymbol = 'S/.' }: De
 
   useEffect(() => {
     loadZones();
-  }, [businessId]);
+  }, [businessId, instanceId]);
 
   const loadZones = async () => {
     try {
       setLoading(true);
-      const response = await deliveryZonesApi.list(businessId);
+      const response = await deliveryZonesApi.list(businessId, instanceId);
       setZones(response.data);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error loading zones');
@@ -78,7 +79,8 @@ export default function DeliveryZones({ businessId, currencySymbol = 'S/.' }: De
         cost: parseFloat(form.cost),
         freeAbove: form.freeAbove ? parseFloat(form.freeAbove) : undefined,
         deliveryTime: form.deliveryTime || undefined,
-        policy: form.policy || undefined
+        policy: form.policy || undefined,
+        instanceId: instanceId || undefined
       };
       
       if (editingZone) {

@@ -380,6 +380,7 @@ model GoogleCalendarCredential {
 model DeliveryZone {
   id           String   @id @default(uuid())
   businessId   String
+  instanceId   String?
   name         String
   districts    String[]
   address      String?
@@ -392,10 +393,12 @@ model DeliveryZone {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
 
   @@index([businessId, isActive])
   @@index([businessId, order])
+  @@index([businessId, instanceId])
 }
 
 enum WhatsAppProvider {
@@ -443,6 +446,7 @@ model WhatsAppInstance {
   funnelStages     FunnelStage[]
   knowledgeChunks  BusinessKnowledgeChunk[]  @relation("KnowledgeChunkInstance")
   promptSections   PromptSection[]           @relation("PromptSectionInstance")
+  deliveryZones    DeliveryZone[]
 
   @@unique([businessId, instanceNumber])
   @@index([businessId])

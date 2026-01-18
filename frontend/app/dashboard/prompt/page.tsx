@@ -2036,19 +2036,14 @@ export default function PromptPage() {
             </p>
             <ul className="text-gray-400 text-sm mb-6 space-y-1 list-disc list-inside">
               <li>Productos{selectedInstanceId ? ' de la instancia' : ''}</li>
-              {!selectedInstanceId && <li>Zonas de envio</li>}
-              {!selectedInstanceId && <li>Campos de extraccion</li>}
+              <li>Zonas de envio{selectedInstanceId ? ' de la instancia' : ''}</li>
+              <li>Campos de extraccion{selectedInstanceId ? ' de la instancia' : ''}</li>
               <li>Etapas del flujo de venta{selectedInstanceId ? ' de la instancia' : ''}</li>
               <li>Secciones del prompt{selectedInstanceId ? ' de la instancia' : ''}</li>
               <li>Archivos del agente{selectedInstanceId ? ' de la instancia' : ''}</li>
               <li>Herramientas personalizadas{selectedInstanceId ? ' de la instancia' : ''}</li>
               <li>Prompt del agente{selectedInstanceId ? ' de la instancia' : ''}</li>
             </ul>
-            {selectedInstanceId && (
-              <p className="text-blue-400 text-sm mb-4">
-                Las zonas de envio y campos de extraccion compartidos NO seran afectados.
-              </p>
-            )}
             <p className="text-red-400 text-sm mb-6">
               Esta accion no se puede deshacer.
             </p>
@@ -2473,6 +2468,7 @@ export default function PromptPage() {
         <div className="card">
           <DeliveryZones 
             businessId={currentBusiness.id} 
+            instanceId={selectedInstanceId || undefined}
             currencySymbol={(currentBusiness as any).currencySymbol || 'S/.'} 
           />
         </div>

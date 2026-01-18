@@ -3322,6 +3322,7 @@ router.post('/webhook/:businessId/test', authMiddleware, async (req: AuthRequest
 router.get('/delivery-zones/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
+    const { instanceId } = req.query;
     
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -3331,8 +3332,14 @@ router.get('/delivery-zones/:businessId', authMiddleware, async (req: AuthReques
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // If instanceId provided, filter by instance; otherwise return all for business
+    const whereClause: any = { businessId };
+    if (instanceId) {
+      whereClause.instanceId = String(instanceId);
+    }
+    
     const zones = await prisma.deliveryZone.findMany({
-      where: { businessId },
+      where: whereClause,
       orderBy: { order: 'asc' }
     });
     
@@ -3346,7 +3353,7 @@ router.get('/delivery-zones/:businessId', authMiddleware, async (req: AuthReques
 router.post('/delivery-zones/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { name, districts, address, cost, freeAbove, deliveryTime, policy } = req.body;
+    const { name, districts, address, cost, freeAbove, deliveryTime, policy, instanceId } = req.body;
     
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -3364,6 +3371,7 @@ router.post('/delivery-zones/:businessId', authMiddleware, async (req: AuthReque
     const zone = await prisma.deliveryZone.create({
       data: {
         businessId,
+        instanceId: instanceId || null,
         name,
         districts: districts || [],
         address,
