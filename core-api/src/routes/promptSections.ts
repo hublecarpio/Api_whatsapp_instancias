@@ -790,4 +790,68 @@ router.post('/:businessId/import-structured', authMiddleware, requireActiveSubsc
   }
 });
 
+// Regenerate embeddings for sections without them
+router.post('/:businessId/regenerate-embeddings', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { instanceId } = req.body;
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    // Find non-core sections and filter for missing embeddings in memory
+    const allNonCoreSections = await prisma.promptSection.findMany({
+      where: {
+        businessId,
+        isCore: false,
+        ...(instanceId ? { OR: [{ instanceId }, { instanceId: null }] } : {})
+      }
+    });
+    
+    // Filter for sections without embeddings
+    const sectionsToProcess = allNonCoreSections.filter(s => !s.embedding);
+
+    console.log(`[EMBEDDING-REGEN] Found ${sectionsToProcess.length} sections without embeddings`);
+
+    let updated = 0;
+    let errors = 0;
+
+    for (const section of sectionsToProcess) {
+      try {
+        const embedding = await generateEmbedding(`${section.title}\n${section.content}`);
+        if (embedding) {
+          await prisma.promptSection.update({
+            where: { id: section.id },
+            data: { embedding: embedding as any }
+          });
+          updated++;
+          console.log(`[EMBEDDING-REGEN] Updated embedding for "${section.title}"`);
+        } else {
+          errors++;
+        }
+      } catch (err) {
+        errors++;
+        console.error(`[EMBEDDING-REGEN] Error for "${section.title}":`, err);
+      }
+    }
+
+    console.log(`[EMBEDDING-REGEN] Complete: ${updated} updated, ${errors} errors`);
+
+    return res.json({
+      success: true,
+      found: sectionsToProcess.length,
+      updated,
+      errors
+    });
+  } catch (error) {
+    console.error('Error regenerating embeddings:', error);
+    return res.status(500).json({ error: 'Failed to regenerate embeddings' });
+  }
+});
+
 export default router;

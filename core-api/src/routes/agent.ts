@@ -20,6 +20,26 @@ import { getContactStageStatus } from '../services/funnelStageService.js';
 const router = Router();
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+
+// Generate embedding for RAG sections
+async function generateSectionEmbedding(text: string): Promise<number[] | null> {
+  try {
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) {
+      console.warn('[EMBEDDING] OPENAI_API_KEY not set, skipping embedding');
+      return null;
+    }
+    const openai = new OpenAI({ apiKey: openaiKey });
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: text.slice(0, 8000)
+    });
+    return response.data[0].embedding;
+  } catch (error) {
+    console.error('[EMBEDDING] Error generating embedding:', error);
+    return null;
+  }
+}
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
 const USE_AI_QUEUE = process.env.USE_AI_QUEUE !== 'false';
 
@@ -4200,6 +4220,12 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
       }
       
       try {
+        // Generate embedding for non-core sections (core sections are always included)
+        let embedding: number[] | null = null;
+        if (!section.isCore) {
+          embedding = await generateSectionEmbedding(`${section.title}\n${section.content}`);
+        }
+        
         await prisma.promptSection.create({
           data: {
             businessId: business_id,
@@ -4210,10 +4236,12 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
             isCore: section.isCore,
             priority: section.priority,
             enabled: true,
+            embedding: embedding as any,
             metadata: { keywords: section.keywords, sourceType: 'auto-import' }
           }
         });
         results.sections.created++;
+        console.log(`[IMPORT-FULL] Created section "${section.title}" with embedding: ${!!embedding}`);
       } catch (err: any) {
         results.sections.errors.push(`${section.title}: ${err.message}`);
       }
