@@ -1299,7 +1299,8 @@ export default function PromptPage() {
         <div className="flex items-center gap-3">
           {currentBusiness?.id && (
             <PromptImporter 
-              businessId={currentBusiness.id} 
+              businessId={currentBusiness.id}
+              instanceId={selectedInstanceId || undefined}
               onImportComplete={() => {
                 loadData();
                 loadPromptSections();

@@ -6,6 +6,7 @@ import { promptImporterApi } from '@/lib/api';
 
 interface PromptImporterProps {
   businessId: string;
+  instanceId?: string;
   onImportComplete?: () => void;
 }
 
@@ -60,7 +61,7 @@ interface ImportResult {
   details: Record<string, { created: number; skipped: number; errors: string[] }>;
 }
 
-export default function PromptImporter({ businessId, onImportComplete }: PromptImporterProps) {
+export default function PromptImporter({ businessId, instanceId, onImportComplete }: PromptImporterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [rawPrompt, setRawPrompt] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
@@ -87,7 +88,7 @@ export default function PromptImporter({ businessId, onImportComplete }: PromptI
     setError(null);
 
     try {
-      const res = await promptImporterApi.importFull(businessId, rawPrompt, undefined, { 
+      const res = await promptImporterApi.importFull(businessId, rawPrompt, instanceId, { 
         skipConflicts: true, 
         clearExisting: false 
       });
