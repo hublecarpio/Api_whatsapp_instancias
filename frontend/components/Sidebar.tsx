@@ -68,12 +68,12 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     
     const planType = user.planType || 'none';
     const subscriptionTier = (user as any)?.subscriptionTier;
+    const hasActiveBonus = (user as any)?.hasActiveBonus;
     
     if (planType === 'pro') {
       // Differentiate between Enterprise (bonus code) and Pro (Stripe subscription)
-      // If user has active bonus (isPro true without Stripe PRO tier), it's Enterprise
-      // If subscriptionTier is ENTERPRISE, it's Enterprise
-      if (subscriptionTier === 'ENTERPRISE' || (user.isPro && !user.hasStripeSubscription)) {
+      // hasActiveBonus means they have an active Enterprise code (proBonusExpiresAt > now)
+      if (subscriptionTier === 'ENTERPRISE' || hasActiveBonus) {
         return { label: 'Avanzado', class: 'status-pro', dotClass: 'bg-accent-purple' };
       }
       // PRO subscription via Stripe
