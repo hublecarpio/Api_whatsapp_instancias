@@ -4088,7 +4088,7 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
 
 router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id, rawPrompt, instanceId, options = {} } = req.body;
+    const { business_id, rawPrompt, instanceId: rawInstanceId, options = {} } = req.body;
     
     if (!business_id || !rawPrompt) {
       return res.status(400).json({ error: 'business_id and rawPrompt are required' });
@@ -4097,6 +4097,15 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
     if (rawPrompt.length > 60000) {
       return res.status(400).json({ error: 'Prompt too long (max 60,000 characters)' });
     }
+    
+    // Normalize instanceId - treat empty string, 'undefined', 'null' as not provided
+    const instanceId = rawInstanceId && 
+      typeof rawInstanceId === 'string' && 
+      rawInstanceId.trim() !== '' && 
+      rawInstanceId !== 'undefined' && 
+      rawInstanceId !== 'null' 
+        ? rawInstanceId 
+        : null;
     
     const business = await prisma.business.findFirst({
       where: { id: business_id, userId: req.userId }

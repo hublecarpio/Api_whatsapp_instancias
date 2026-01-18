@@ -69,10 +69,19 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // Normalize instance_id - treat empty string, 'undefined', 'null' as not provided
+    const normalizedInstanceId = instance_id && 
+      typeof instance_id === 'string' && 
+      instance_id.trim() !== '' && 
+      instance_id !== 'undefined' && 
+      instance_id !== 'null' 
+        ? instance_id 
+        : null;
+    
     let prompt;
-    if (instance_id) {
+    if (normalizedInstanceId) {
       prompt = await prisma.agentPrompt.findUnique({
-        where: { instanceId: instance_id as string },
+        where: { instanceId: normalizedInstanceId },
         include: { tools: true }
       });
     }

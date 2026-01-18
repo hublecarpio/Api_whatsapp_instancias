@@ -61,10 +61,19 @@ router.get('/:businessId', authMiddleware, async (req: AuthRequest, res: Respons
     // Build where clause based on whether instanceId is provided
     const whereClause: any = { businessId };
     
-    if (instance_id && typeof instance_id === 'string') {
+    // Normalize instance_id - treat empty string, 'undefined', 'null' as not provided
+    const normalizedInstanceId = instance_id && 
+      typeof instance_id === 'string' && 
+      instance_id.trim() !== '' && 
+      instance_id !== 'undefined' && 
+      instance_id !== 'null' 
+        ? instance_id 
+        : null;
+    
+    if (normalizedInstanceId) {
       // When instanceId is provided, show sections for that instance + shared sections (null)
       whereClause.OR = [
-        { instanceId: instance_id },
+        { instanceId: normalizedInstanceId },
         { instanceId: null }
       ];
     }
@@ -520,11 +529,20 @@ router.post('/:businessId/parse-from-prompt', authMiddleware, requireActiveSubsc
 router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscription, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { sections, instanceId, replaceExisting = false } = req.body;
+    const { sections, instanceId: rawInstanceId, replaceExisting = false } = req.body;
 
     if (!sections || !Array.isArray(sections) || sections.length === 0) {
       return res.status(400).json({ error: 'Sections array is required' });
     }
+    
+    // Normalize instanceId - treat empty string, 'undefined', 'null' as not provided
+    const instanceId = rawInstanceId && 
+      typeof rawInstanceId === 'string' && 
+      rawInstanceId.trim() !== '' && 
+      rawInstanceId !== 'undefined' && 
+      rawInstanceId !== 'null' 
+        ? rawInstanceId 
+        : null;
 
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -534,7 +552,7 @@ router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscri
       return res.status(404).json({ error: 'Business not found' });
     }
 
-    console.log(`[RAG-IMPORT] Importing ${sections.length} sections for business ${businessId}`);
+    console.log(`[RAG-IMPORT] Importing ${sections.length} sections for business ${businessId}, instanceId: ${instanceId}`);
 
     // Delete existing imported sections if replacing
     if (replaceExisting) {
