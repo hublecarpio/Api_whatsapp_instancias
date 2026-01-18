@@ -312,29 +312,20 @@ export default function PromptPage() {
       
       loadAgentFiles();
       
-      // Load sections for v2 agents directly here
-      const version = (currentBusiness as any).agentVersion || 'v1';
-      if (version === 'v2') {
-        console.log('[SECTIONS-DIRECT] Loading sections for instance:', selectedInstanceId);
-        promptSectionsApi.list(currentBusiness.id, selectedInstanceId || undefined)
-          .then(res => {
-            console.log('[SECTIONS-DIRECT] Got:', res.data.sections?.length || 0);
-            setPromptSections(res.data.sections || []);
-          })
-          .catch(err => console.error('Error loading sections:', err));
-      }
+      // Always load sections (for badge count) regardless of agent version
+      console.log('[SECTIONS-DIRECT] Loading sections for instance:', selectedInstanceId);
+      promptSectionsApi.list(currentBusiness.id, selectedInstanceId || undefined)
+        .then(res => {
+          console.log('[SECTIONS-DIRECT] Got:', res.data.sections?.length || 0);
+          setPromptSections(res.data.sections || []);
+        })
+        .catch(err => console.error('Error loading sections:', err));
     };
     
     loadInstanceData();
   }, [currentBusiness?.id, selectedInstanceId]);
 
-  // Load sections when selectedInstanceId changes (for instance switching)
-  useEffect(() => {
-    if (currentBusiness && agentVersion === 'v2' && instancesLoaded && selectedInstanceId) {
-      // Only reload when user explicitly changes instance
-      loadPromptSectionsWithInstanceId(selectedInstanceId);
-    }
-  }, [selectedInstanceId]);
+  // Note: Sections are loaded in loadInstanceData when selectedInstanceId changes
 
   const loadApiKeyInfo = async () => {
     if (!currentBusiness) return;
