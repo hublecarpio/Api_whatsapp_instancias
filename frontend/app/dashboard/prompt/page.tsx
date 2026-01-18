@@ -312,8 +312,9 @@ export default function PromptPage() {
       
       loadAgentFiles();
       
-      // Also load sections for v2 agents
-      if (agentVersion === 'v2') {
+      // Also load sections for v2 agents (use business value directly, not state)
+      const version = (currentBusiness as any).agentVersion || 'v1';
+      if (version === 'v2') {
         loadPromptSectionsWithInstanceId(selectedInstanceId);
       }
     };
