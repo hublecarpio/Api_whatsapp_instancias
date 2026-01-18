@@ -189,6 +189,11 @@ export default function PromptPage() {
   const [activeV2Tab, setActiveV2Tab] = useState<'prompt' | 'sections' | 'skills' | 'memory' | 'rules' | 'tools' | 'files' | 'config' | 'shipping' | 'funnel'>('prompt');
   
   const [promptSections, setPromptSections] = useState<PromptSection[]>([]);
+  
+  // Debug: Log when promptSections changes
+  useEffect(() => {
+    console.log('[SECTIONS-STATE] promptSections updated, count:', promptSections.length);
+  }, [promptSections]);
   const [loadingSections, setLoadingSections] = useState(false);
   const [showSectionForm, setShowSectionForm] = useState(false);
   const [editingSection, setEditingSection] = useState<PromptSection | null>(null);
@@ -235,9 +240,11 @@ export default function PromptPage() {
   const [instancesLoaded, setInstancesLoaded] = useState(false);
 
   useEffect(() => {
+    console.log('[INIT-EFFECT] Running, currentBusiness:', !!currentBusiness);
     if (currentBusiness) {
       setBotEnabled(currentBusiness.botEnabled);
       const version = (currentBusiness as any).agentVersion || 'v1';
+      console.log('[INIT-EFFECT] Version:', version);
       setAgentVersion(version);
       waApi.listInstances(currentBusiness.id).then(res => {
         const data = res.data;
@@ -249,12 +256,7 @@ export default function PromptPage() {
         }
         // Mark instances as loaded even if empty
         setInstancesLoaded(true);
-        // Load sections immediately after instances are ready (for v2)
-        if (version === 'v2') {
-          const currentInstanceId = useInstanceStore.getState().selectedInstanceId;
-          console.log('[SECTIONS-INIT] Loading sections for v2, instanceId:', currentInstanceId);
-          loadPromptSectionsWithInstanceId(currentInstanceId);
-        }
+        // Note: Sections are loaded in loadInstanceData useEffect
       }).catch(() => {
         // Also mark as loaded on error to unblock section loading
         setInstancesLoaded(true);
@@ -309,7 +311,18 @@ export default function PromptPage() {
       }
       
       loadAgentFiles();
-      // Note: sections are loaded in the first useEffect after instances load
+      
+      // Load sections for v2 agents directly here
+      const version = (currentBusiness as any).agentVersion || 'v1';
+      if (version === 'v2') {
+        console.log('[SECTIONS-DIRECT] Loading sections for instance:', selectedInstanceId);
+        promptSectionsApi.list(currentBusiness.id, selectedInstanceId || undefined)
+          .then(res => {
+            console.log('[SECTIONS-DIRECT] Got:', res.data.sections?.length || 0);
+            setPromptSections(res.data.sections || []);
+          })
+          .catch(err => console.error('Error loading sections:', err));
+      }
     };
     
     loadInstanceData();
