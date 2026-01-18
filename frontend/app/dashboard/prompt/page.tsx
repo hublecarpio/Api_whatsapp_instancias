@@ -835,8 +835,11 @@ export default function PromptPage() {
     setSuccess('');
     
     try {
-      await businessApi.resetConfig(currentBusiness.id);
-      setSuccess('Configuracion limpiada completamente. Recarga la pagina para ver los cambios.');
+      await businessApi.resetConfig(currentBusiness.id, selectedInstanceId || undefined);
+      const instanceName = selectedInstanceId 
+        ? instances.find(i => i.id === selectedInstanceId)?.name || 'la instancia'
+        : 'el negocio';
+      setSuccess(`Configuracion de ${instanceName} limpiada completamente.`);
       setShowResetConfirm(false);
       // Reset local state
       setPrompt('');
@@ -2023,20 +2026,29 @@ export default function PromptPage() {
       {showResetConfirm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-dark-card rounded-xl max-w-md w-full p-6 border border-dark-hover">
-            <h3 className="text-xl font-bold text-white mb-4">Limpiar Configuracion Total</h3>
+            <h3 className="text-xl font-bold text-white mb-4">
+              {selectedInstanceId 
+                ? `Limpiar Configuracion de ${instances.find(i => i.id === selectedInstanceId)?.name || 'Instancia'}`
+                : 'Limpiar Configuracion Total'}
+            </h3>
             <p className="text-gray-400 mb-4">
-              Esta accion eliminara permanentemente:
+              Esta accion eliminara permanentemente{selectedInstanceId ? ' de esta instancia' : ''}:
             </p>
             <ul className="text-gray-400 text-sm mb-6 space-y-1 list-disc list-inside">
-              <li>Todos los productos</li>
-              <li>Todas las zonas de envio</li>
-              <li>Todos los campos de extraccion</li>
-              <li>Todas las etapas del flujo de venta</li>
-              <li>Todas las secciones del prompt</li>
-              <li>Todos los archivos del agente</li>
-              <li>Todas las herramientas personalizadas</li>
-              <li>El prompt del agente</li>
+              <li>Productos{selectedInstanceId ? ' de la instancia' : ''}</li>
+              {!selectedInstanceId && <li>Zonas de envio</li>}
+              {!selectedInstanceId && <li>Campos de extraccion</li>}
+              <li>Etapas del flujo de venta{selectedInstanceId ? ' de la instancia' : ''}</li>
+              <li>Secciones del prompt{selectedInstanceId ? ' de la instancia' : ''}</li>
+              <li>Archivos del agente{selectedInstanceId ? ' de la instancia' : ''}</li>
+              <li>Herramientas personalizadas{selectedInstanceId ? ' de la instancia' : ''}</li>
+              <li>Prompt del agente{selectedInstanceId ? ' de la instancia' : ''}</li>
             </ul>
+            {selectedInstanceId && (
+              <p className="text-blue-400 text-sm mb-4">
+                Las zonas de envio y campos de extraccion compartidos NO seran afectados.
+              </p>
+            )}
             <p className="text-red-400 text-sm mb-6">
               Esta accion no se puede deshacer.
             </p>

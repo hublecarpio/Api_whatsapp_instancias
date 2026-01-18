@@ -346,6 +346,8 @@ router.get('/:id/injection-code', async (req: AuthRequest, res: Response) => {
 
 router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
   try {
+    const { instanceId } = req.body;
+    
     const business = await prisma.business.findFirst({
       where: { id: req.params.id, userId: req.userId }
     });
@@ -354,55 +356,91 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    // Get all prompt IDs for this business
+    // If instanceId provided, verify it belongs to this business
+    if (instanceId) {
+      const instance = await prisma.whatsAppInstance.findFirst({
+        where: { id: instanceId, businessId: req.params.id }
+      });
+      if (!instance) {
+        return res.status(404).json({ error: 'Instance not found' });
+      }
+    }
+    
+    // Get prompt IDs based on scope (instance-specific or all business prompts)
+    const promptWhere = instanceId 
+      ? { businessId: req.params.id, instanceId }
+      : { businessId: req.params.id };
+    
     const prompts = await prisma.agentPrompt.findMany({
-      where: { businessId: req.params.id },
+      where: promptWhere,
       select: { id: true }
     });
     const promptIds = prompts.map(p => p.id);
     
-    // Delete all configuration data in transaction
-    await prisma.$transaction([
-      // Delete products
-      prisma.product.deleteMany({ where: { businessId: req.params.id } }),
-      // Delete delivery zones
-      prisma.deliveryZone.deleteMany({ where: { businessId: req.params.id } }),
-      // Delete extraction fields
-      prisma.extractionField.deleteMany({ where: { businessId: req.params.id } }),
-      // Delete funnel stages
-      prisma.funnelStage.deleteMany({ where: { businessId: req.params.id } }),
-      // Delete prompt sections
-      prisma.promptSection.deleteMany({ where: { businessId: req.params.id } }),
-      // Delete agent files (related to prompts)
-      prisma.agentFile.deleteMany({ where: { promptId: { in: promptIds } } }),
-      // Delete custom tools (related to prompts)
-      prisma.agentTool.deleteMany({ where: { promptId: { in: promptIds } } }),
-      // Reset agent prompts to defaults
-      prisma.agentPrompt.updateMany({ 
-        where: { businessId: req.params.id },
-        data: {
-          prompt: '',
-          bufferSeconds: 10,
-          historyLimit: 15,
-          splitMessages: true
-        }
-      })
-    ]);
+    // Build transaction based on scope
+    const transactions = [];
     
-    console.log(`[Business] Reset config for business ${req.params.id}`);
+    if (instanceId) {
+      // Instance-specific reset: only delete instance-specific data
+      transactions.push(
+        // Delete instance-specific products
+        prisma.product.deleteMany({ where: { businessId: req.params.id, instanceId } }),
+        // Delete instance-specific funnel stages
+        prisma.funnelStage.deleteMany({ where: { businessId: req.params.id, instanceId } }),
+        // Delete instance-specific prompt sections
+        prisma.promptSection.deleteMany({ where: { businessId: req.params.id, instanceId } }),
+        // Delete agent files for this instance's prompt
+        prisma.agentFile.deleteMany({ where: { promptId: { in: promptIds } } }),
+        // Delete custom tools for this instance's prompt
+        prisma.agentTool.deleteMany({ where: { promptId: { in: promptIds } } }),
+        // Reset instance-specific prompts
+        prisma.agentPrompt.updateMany({ 
+          where: { businessId: req.params.id, instanceId },
+          data: {
+            prompt: '',
+            bufferSeconds: 10,
+            historyLimit: 15,
+            splitMessages: true
+          }
+        })
+      );
+      // Note: DeliveryZones and ExtractionFields are business-level, not instance-level
+    } else {
+      // Full business reset: delete everything
+      transactions.push(
+        prisma.product.deleteMany({ where: { businessId: req.params.id } }),
+        prisma.deliveryZone.deleteMany({ where: { businessId: req.params.id } }),
+        prisma.extractionField.deleteMany({ where: { businessId: req.params.id } }),
+        prisma.funnelStage.deleteMany({ where: { businessId: req.params.id } }),
+        prisma.promptSection.deleteMany({ where: { businessId: req.params.id } }),
+        prisma.agentFile.deleteMany({ where: { promptId: { in: promptIds } } }),
+        prisma.agentTool.deleteMany({ where: { promptId: { in: promptIds } } }),
+        prisma.agentPrompt.updateMany({ 
+          where: { businessId: req.params.id },
+          data: {
+            prompt: '',
+            bufferSeconds: 10,
+            historyLimit: 15,
+            splitMessages: true
+          }
+        })
+      );
+    }
+    
+    await prisma.$transaction(transactions);
+    
+    const scope = instanceId ? `instance ${instanceId}` : `business ${req.params.id}`;
+    console.log(`[Business] Reset config for ${scope}`);
     
     res.json({ 
       success: true, 
-      message: 'Configuracion reiniciada completamente',
-      deletedItems: {
-        products: true,
-        deliveryZones: true,
-        extractionFields: true,
-        funnelStages: true,
-        promptSections: true,
-        agentFiles: true,
-        customTools: true
-      }
+      message: instanceId 
+        ? 'Configuracion de instancia reiniciada' 
+        : 'Configuracion reiniciada completamente',
+      scope: instanceId ? 'instance' : 'business',
+      deletedItems: instanceId 
+        ? { products: true, funnelStages: true, promptSections: true, agentFiles: true, customTools: true }
+        : { products: true, deliveryZones: true, extractionFields: true, funnelStages: true, promptSections: true, agentFiles: true, customTools: true }
     });
   } catch (error) {
     console.error('Reset config error:', error);

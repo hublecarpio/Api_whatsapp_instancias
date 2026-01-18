@@ -69,7 +69,8 @@ export const businessApi = {
   getInjectionCode: (id: string) => api.get(`/business/${id}/injection-code`),
   generateInjectionCode: (id: string) => api.post(`/business/${id}/generate-injection-code`),
   getStats: (id: string) => api.get(`/business/${id}/stats`),
-  resetConfig: (id: string) => api.post(`/business/${id}/reset-config`)
+  resetConfig: (id: string, instanceId?: string) => 
+    api.post(`/business/${id}/reset-config`, { instanceId })
 };
 
 export const productApi = {
