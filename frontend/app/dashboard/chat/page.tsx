@@ -239,9 +239,12 @@ export default function ChatPage() {
         
         if (newKeyboardHeight > 100) {
           setKeyboardHeight(newKeyboardHeight);
-          setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-          }, 100);
+          // Only scroll to bottom if user was already near the bottom
+          if (isNearBottomRef.current) {
+            setTimeout(() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }, 100);
+          }
         } else {
           setKeyboardHeight(0);
         }
@@ -982,9 +985,12 @@ export default function ChatPage() {
 
   const handleInputFocus = useCallback(() => {
     setIsInputFocused(true);
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }, 300);
+    // Only scroll to bottom if user was already near the bottom
+    if (isNearBottomRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 300);
+    }
   }, []);
 
   const handleInputBlur = useCallback(() => {
