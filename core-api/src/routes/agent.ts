@@ -1922,12 +1922,32 @@ async function processWithAgent(
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
         if (!isUUID) {
           console.log(`[PAYMENT LINK] productId "${productId}" is not a UUID, searching by name...`);
-          const productByName = await prisma.product.findFirst({
+          
+          // Strategy 1: Direct match
+          let productByName = await prisma.product.findFirst({
             where: {
               businessId,
               title: { contains: productId, mode: 'insensitive' }
             }
           });
+          
+          // Strategy 2: Search by individual words (for "Bleu de Chanel 100ml" -> try "Bleu", "Chanel")
+          if (!productByName) {
+            const words = productId.split(/\s+/).filter((w: string) => w.length > 3 && !['100ml', '50ml', '200ml', 'pack', 'ml'].includes(w.toLowerCase()));
+            for (const word of words) {
+              productByName = await prisma.product.findFirst({
+                where: {
+                  businessId,
+                  title: { contains: word, mode: 'insensitive' }
+                }
+              });
+              if (productByName) {
+                console.log(`[PAYMENT LINK] Found product by word "${word}": ${productByName.id} (${productByName.title})`);
+                break;
+              }
+            }
+          }
+          
           if (productByName) {
             console.log(`[PAYMENT LINK] Found product by name: ${productByName.id} (${productByName.title})`);
             productId = productByName.id;
