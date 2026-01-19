@@ -1779,20 +1779,36 @@ async function processWithAgent(
     chatParams.tool_choice = 'auto';
   }
   
+  // Log available tools for debugging
+  const toolNames = openaiTools.map(t => (t as any).function?.name || 'unknown');
+  console.log(`[Agent V1] Available tools: [${toolNames.join(', ')}] for business ${businessId}`);
+  
   let completion = await openai.chat.completions.create(chatParams);
   let totalTokens = completion.usage?.total_tokens || 0;
   let totalPromptTokens = completion.usage?.prompt_tokens || 0;
   let totalCompletionTokens = completion.usage?.completion_tokens || 0;
   
+  // CRITICAL LOGGING: Did OpenAI call any tools?
+  const hasToolCalls = !!completion.choices[0]?.message?.tool_calls;
+  const responseContent = completion.choices[0]?.message?.content || '';
+  console.log(`[Agent V1] OpenAI response - hasToolCalls: ${hasToolCalls}, responsePreview: "${responseContent.substring(0, 100)}..."`);
+  
+  if (!hasToolCalls && (responseContent.toLowerCase().includes('pedido') || responseContent.toLowerCase().includes('registrado') || responseContent.toLowerCase().includes('confirmado'))) {
+    console.warn(`[Agent V1] WARNING: Agent mentioned "pedido/registrado/confirmado" but DID NOT call registrar_pedido tool!`);
+    console.warn(`[Agent V1] Full response: ${responseContent}`);
+  }
+  
   const userId = business.userId;
   
   while (completion.choices[0]?.message?.tool_calls) {
     const toolCalls = completion.choices[0].message.tool_calls;
+    console.log(`[Agent V1] Processing ${toolCalls.length} tool calls: ${toolCalls.map((t: any) => t.function.name).join(', ')}`);
     const toolMessages: any[] = [completion.choices[0].message];
     
     for (const toolCall of toolCalls) {
       const fn = (toolCall as any).function;
       const toolName = fn.name;
+      console.log(`[Agent V1] Executing tool: ${toolName} with args: ${fn.arguments}`);
       
       if (toolName === 'buscar_producto') {
         const args = JSON.parse(fn.arguments);
