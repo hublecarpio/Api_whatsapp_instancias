@@ -1995,6 +1995,18 @@ router.delete('/instances/:instanceId/permanent', async (req: AuthRequest, res: 
       await prisma.messageLog.deleteMany({ where: { instanceId: instance.id } });
     }
     
+    // Delete from WhatsApp API service if BAILEYS provider
+    if (instance.provider === 'BAILEYS' && instance.instanceBackendId) {
+      try {
+        await fetch(`${WA_API_URL}/instances/${instance.instanceBackendId}`, {
+          method: 'DELETE'
+        });
+        console.log(`[WHATSAPP] Deleted instance ${instance.instanceBackendId} from WhatsApp API`);
+      } catch (waError) {
+        console.warn(`[WHATSAPP] Failed to delete instance from WhatsApp API (may already be gone):`, waError);
+      }
+    }
+    
     if (instance.metaCredential) {
       await prisma.metaCredential.delete({ where: { instanceId: instance.id } }).catch(() => {});
     }
