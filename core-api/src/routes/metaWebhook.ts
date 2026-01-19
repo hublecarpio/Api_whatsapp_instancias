@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import prisma from '../services/prisma.js';
+import prisma, { withRetry } from '../services/prisma.js';
 import { MetaCloudService, MetaWebhookPayload, ParsedMessage, ParsedStatus } from '../services/metaCloud.js';
 import { processIncomingMessage } from '../services/messageIngest.js';
 import { uploadBuffer, isS3Configured } from '../services/storage.js';
@@ -85,47 +85,49 @@ async function isMessageAlreadyProcessed(messageId: string): Promise<boolean> {
 const GLOBAL_WEBHOOK_VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'efficore_webhook_token_2024';
 
 async function findInstanceByPhoneNumberId(phoneNumberId: string) {
-  const metaCredential = await prisma.metaCredential.findFirst({
-    where: { phoneNumberId },
-    include: { 
-      instance: { 
-        include: { business: true } 
-      } 
+  return withRetry(async () => {
+    const metaCredential = await prisma.metaCredential.findFirst({
+      where: { phoneNumberId },
+      include: { 
+        instance: { 
+          include: { business: true } 
+        } 
+      }
+    });
+    
+    if (metaCredential?.instance) {
+      return {
+        instance: metaCredential.instance,
+        accessToken: metaCredential.accessToken,
+        phoneNumberId: metaCredential.phoneNumberId,
+        businessId: metaCredential.businessId,
+        providerType: 'META_CLOUD' as MetaProviderType
+      };
     }
-  });
-  
-  if (metaCredential?.instance) {
-    return {
-      instance: metaCredential.instance,
-      accessToken: metaCredential.accessToken,
-      phoneNumberId: metaCredential.phoneNumberId,
-      businessId: metaCredential.businessId,
-      providerType: 'META_CLOUD' as MetaProviderType
-    };
-  }
-  
-  const metaCoexistCredential = await prisma.metaCoexistCredential.findFirst({
-    where: { phoneNumberId },
-    include: { 
-      instance: { 
-        include: { business: true } 
-      } 
+    
+    const metaCoexistCredential = await prisma.metaCoexistCredential.findFirst({
+      where: { phoneNumberId },
+      include: { 
+        instance: { 
+          include: { business: true } 
+        } 
+      }
+    });
+    
+    if (metaCoexistCredential?.instance) {
+      return {
+        instance: metaCoexistCredential.instance,
+        accessToken: metaCoexistCredential.systemAccessToken || metaCoexistCredential.userAccessToken,
+        phoneNumberId: metaCoexistCredential.phoneNumberId,
+        businessId: metaCoexistCredential.metaBusinessId,
+        wabaId: metaCoexistCredential.wabaId,
+        platformBusinessId: metaCoexistCredential.instance.businessId,
+        providerType: 'META_COEXIST' as MetaProviderType
+      };
     }
+    
+    return null;
   });
-  
-  if (metaCoexistCredential?.instance) {
-    return {
-      instance: metaCoexistCredential.instance,
-      accessToken: metaCoexistCredential.systemAccessToken || metaCoexistCredential.userAccessToken,
-      phoneNumberId: metaCoexistCredential.phoneNumberId,
-      businessId: metaCoexistCredential.metaBusinessId,
-      wabaId: metaCoexistCredential.wabaId,
-      platformBusinessId: metaCoexistCredential.instance.businessId,
-      providerType: 'META_COEXIST' as MetaProviderType
-    };
-  }
-  
-  return null;
 }
 
 async function processWebhookPayload(payload: MetaWebhookPayload) {
@@ -499,11 +501,17 @@ router.post('/', async (req: Request, res: Response) => {
     
     res.status(200).send('EVENT_RECEIVED');
     
-    await processWebhookPayload(payload);
+    // Process in background - don't await to avoid blocking response
+    processWebhookPayload(payload).catch(error => {
+      console.error('[META WEBHOOK] BACKGROUND PROCESSING ERROR:', error);
+      webhookLogger.error({ error: error.message, stack: error.stack }, 'Webhook background processing error');
+    });
   } catch (error: any) {
     console.error('[META WEBHOOK] PROCESSING ERROR:', error);
     webhookLogger.error({ error: error.message, stack: error.stack }, 'Webhook processing error');
-    res.status(200).send('EVENT_RECEIVED');
+    if (!res.headersSent) {
+      res.status(200).send('EVENT_RECEIVED');
+    }
   }
 });
 
