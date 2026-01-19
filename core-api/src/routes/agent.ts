@@ -16,6 +16,7 @@ import { scheduleFollowUp } from '../services/followUpService.js';
 import { dispatchAgentMessage, dispatchWebhook } from '../services/webhookService.js';
 import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsForIntent, IntentAnalysis } from '../services/intentAnalyzer.js';
 import { getContactStageStatus } from '../services/funnelStageService.js';
+import { createAutoOrder } from '../services/orderAutoCreator.js';
 
 const router = Router();
 
@@ -1800,6 +1801,9 @@ async function processWithAgent(
   
   const userId = business.userId;
   
+  // Track if order tool was executed
+  let orderToolExecuted = false;
+  
   while (completion.choices[0]?.message?.tool_calls) {
     const toolCalls = completion.choices[0].message.tool_calls;
     console.log(`[Agent V1] Processing ${toolCalls.length} tool calls: ${toolCalls.map((t: any) => t.function.name).join(', ')}`);
@@ -1879,6 +1883,8 @@ async function processWithAgent(
       }
       
       if (toolName === 'crear_enlace_pago' || toolName === 'registrar_pedido') {
+        orderToolExecuted = true; // Mark that order tool was used
+        console.log(`[Agent V1] ORDER TOOL EXECUTED: ${toolName}`);
         const args = JSON.parse(fn.arguments);
         let productId = args.producto_id;
         const quantity = args.cantidad || 1;
@@ -2356,6 +2362,36 @@ async function processWithAgent(
   }
   
   console.log(`[AI RESPONSE]:`, aiResponse.substring(0, 300));
+  
+  // FALLBACK: If agent mentioned order confirmation but tool was NOT executed, try auto-create
+  const isSalesModeForFallback = business.businessObjective !== 'APPOINTMENTS';
+  const orderConfirmationPatterns = [
+    'pedido.*registrad', 'pedido.*confirmad', 'orden.*registrad', 'orden.*confirmad',
+    'order.*register', 'order.*confirm', 'registrado con éxito', 'confirmado con éxito',
+    'pedido fue registrado', 'orden fue registrada', 'tu pedido está listo'
+  ];
+  const mentionsOrderConfirmation = orderConfirmationPatterns.some(pattern => 
+    new RegExp(pattern, 'i').test(aiResponse)
+  );
+  
+  if (isSalesModeForFallback && mentionsOrderConfirmation && !orderToolExecuted) {
+    console.warn(`[Agent V1] FALLBACK TRIGGERED: Agent confirmed order without using tool! Attempting auto-create...`);
+    console.log(`[Agent V1] Response that triggered fallback: "${aiResponse.substring(0, 200)}..."`);
+    
+    try {
+      const autoOrderResult = await createAutoOrder(businessId, contactPhone, instanceId, true);
+      
+      if (autoOrderResult.created) {
+        console.log(`[Agent V1] FALLBACK SUCCESS: Auto-created order ${autoOrderResult.orderId}`);
+      } else if (autoOrderResult.orderId) {
+        console.log(`[Agent V1] FALLBACK: Order already exists or updated: ${autoOrderResult.orderId} - ${autoOrderResult.reason}`);
+      } else {
+        console.warn(`[Agent V1] FALLBACK FAILED: Could not auto-create order - ${autoOrderResult.reason}`);
+      }
+    } catch (fallbackError: any) {
+      console.error(`[Agent V1] FALLBACK ERROR:`, fallbackError.message);
+    }
+  }
   
   const { mediaItems } = extractMediaFromText(aiResponse);
   if (mediaItems.length > 0) {
