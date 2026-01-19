@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
-import { analyzeAndUpdateLeadStage, extractAndSaveContactData } from '../services/leadStageService.js';
+import { analyzeAndUpdateLeadStage } from '../services/leadStageService.js';
+import { processDataExtraction } from '../services/dataExtractionService.js';
+import { checkAndAdvanceStage } from '../services/funnelStageService.js';
 import { geminiService } from '../services/gemini.js';
 import { logTokenUsage } from '../services/tokenLogger.js';
 import { dispatchUserMessage } from '../services/webhookService.js';
@@ -583,11 +585,17 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               try {
                 // Normalize phone to digits only for consistent tag assignment
                 const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
-                console.log(`[WEBHOOK] Lead stage analysis for normalized phone: ${normalizedPhone} (original: ${contactPhone})`);
+                const instanceId = instance?.id;
+                console.log(`[WEBHOOK] Lead stage analysis for normalized phone: ${normalizedPhone} (original: ${contactPhone}), instanceId: ${instanceId || 'none'}`);
                 await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
-                await extractAndSaveContactData(businessId, normalizedPhone);
+                
+                // Use processDataExtraction which triggers auto-order creation
+                await processDataExtraction(businessId, normalizedPhone, instanceId);
+                
+                // Check if contact can advance to next funnel stage (also triggers auto-order)
+                await checkAndAdvanceStage(businessId, normalizedPhone, instanceId);
               } catch (err: any) {
-                console.error('Lead stage analysis failed:', err.message);
+                console.error('Lead stage/data extraction failed:', err.message);
               }
             });
           }

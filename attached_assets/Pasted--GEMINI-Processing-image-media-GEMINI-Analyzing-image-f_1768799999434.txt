@@ -1,0 +1,100 @@
+[GEMINI] Processing image media
+[GEMINI] Analyzing image from: https://memoriaback.iamhuble.space/whatsapp-media/whatsapp/biz_5f2b9218_1/032b0d51-4653-474c-bf17-0684283c31fa.jpg
+Webhook received for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc: message.status
+Webhook payload: {
+  "messageId": "3EB02C05E140347884B5FD",
+  "remoteJid": "259326316945539@lid",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc: message.status
+Webhook payload: {
+  "messageId": "3EB0ADD58A3452B68E8DA8",
+  "remoteJid": "259326316945539@lid",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc: message.status
+Webhook payload: {
+  "messageId": "3EB0255273DAE613B1107E",
+  "remoteJid": "259326316945539@lid",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc: message.status
+Webhook payload: {
+  "messageId": "3EB0F31D82811AF64ABDCF",
+  "remoteJid": "259326316945539@lid",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc: message.status
+Webhook payload: {
+  "messageId": "3EB049D2FF6C5A2A5FEE2F",
+  "remoteJid": "259326316945539@lid",
+  "status": "sent",
+  "statusCode": 2
+}
+Webhook received for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc: message.status
+Webhook payload: {
+  "messageId": "3EB03D4B1BFF9EE9B9889B",
+  "remoteJid": "259326316945539@lid",
+  "status": "sent",
+  "statusCode": 2
+}
+[ExpiredBuffer] Checking for expired buffers...
+[GEMINI] Image analysis: La imagen muestra una captura de pantalla de una transacción exitosa en la aplicación Yape. Se detal
+[TOKEN LOG] gemini/gemini-2.0-flash - image_analysis: 338 tokens, $0.000058
+[WEBHOOK] image processed: La imagen muestra una captura de pantalla de una transacción exitosa en la aplicación Yape. Se detal
+[WEBHOOK] Dispatching user_message webhook for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc, contact 51992544801, instance eeb9aed5-382f-4be2-9e75-d5b571831521
+[Webhook] Attempting dispatch for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc, event: user_message, instance: eeb9aed5-382f-4be2-9e75-d5b571831521
+[Webhook] No webhookUrl configured for business DUVON (5f2b9218-cf3a-4928-834a-50e6a8d583cc)
+[WEBHOOK] Bot globally disabled but Testing ON for contact 51992544801, processing with agent
+[WEBHOOK] Calling agent/think with backendId: biz_5f2b9218_1
+[Agent Middleware] Bot disabled globally but Testing ON for contact 51992544801, allowing...
+[Agent Think] Endpoint called - business_id: 5f2b9218-cf3a-4928-834a-50e6a8d583cc, phone: 51992544801@s.whatsapp.net
+[Agent Think] Bot disabled globally but Testing ON for contact 51992544801, processing...
+[Agent Think] Buffer config: 10s (instanceId: eeb9aed5-382f-4be2-9e75-d5b571831521, promptId: 37380cfa-ef45-4959-a666-50634a8a777d)
+[Agent Think] Creating/updating buffer for 51992544801 with 1 messages, expires at 2026-01-19T05:19:31.466Z
+[Agent Think] Buffer created/updated successfully for 51992544801
+[WEBHOOK] Lead stage analysis for normalized phone: 51992544801 (original: 51992544801)
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.95,
+  reasoning: 'El cliente ha proporcionado sus datos y está a punto de realizar el pago. Está pendiente de enviar el comprobante de pago para confirmar el pedido.',
+  shouldChange: false,
+  currentStage: 'Pendiente'
+}
+[GEMINI] Contact data extraction: {
+  nombre: 'Iam carpio',
+  email: null,
+  direccion: 'Av paseo la chana 229 ate',
+  ciudad: 'Lima',
+  telefono_alternativo: null
+}
+[LEAD DATA] Extracted data for 51992544801: {
+  nombre: 'Iam carpio',
+  direccion: 'Av paseo la chana 229 ate',
+  ciudad: 'Lima'
+}
+[ExpiredBuffer] Checking for expired buffers...
+[ExpiredBuffer] Checking for expired buffers...
+[Agent Buffer] Processing buffer for 51992544801 after 10s delay
+[Agent Buffer] Found 1 messages to process for 51992544801
+[Agent Buffer] Calling processWithAgentQueuedWithIds for 51992544801
+[Agent Processor] Starting processWithAgentQueuedWithIds for 51992544801 with 1 messages
+[Agent Processor] Attempting to queue message for 51992544801
+[AI Queue] Job queued: ai-5f2b9218-cf3a-4928-834a-50e6a8d583cc-51992544801-1768799971475 (concurrency: 40, workerRunning: true)
+[Agent] Message queued for parallel processing with 0 message IDs: ai-5f2b9218-cf3a-4928-834a-50e6a8d583cc-51992544801-1768799971475
+[AI Worker] Processing job ai-5f2b9218-cf3a-4928-834a-50e6a8d583cc-51992544801-1768799971475 for business 5f2b9218-cf3a-4928-834a-50e6a8d583cc, contact 51992544801, provider=unknown, messageIds=0
+[AI Worker] Bot test mode enabled for contact 51992544801, processing despite global disable
+[RAG] Retrieved 2 core + 5 RAG sections in 300ms (~1217 tokens)
+[AI] RAG: 2 core + 5 dynamic sections (~1217 tokens)
+[AI] getClientForModel rawModel="google/gemini-3-flash" normalizedModel="google/gemini-3-flash-preview" useOpenRouter=true
+[OUTBOUND_WORKER] Processing job msg_6ffc2a5f-5674-46cb-90a9-ff7bc5b6e156 for 51970349459 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Processing job msg_72c20383-5502-42f1-89a1-d4636a411a33 for 51970349459 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[Webhook] Attempting dispatch for business c79bdd29-6a0c-4434-82e7-e559a6f86454, event: agent_message, instance: 510a448a-dbbf-4507-abf0-333712bb9bd5
+[Webhook] Using instance-level webhook for 51925981193
+[Webhook] Event agent_message not in allowed events: user_message
+[OUTBOUND_WORKER] Job msg_6ffc2a5f-5674-46cb-90a9-ff7bc5b6e156 completed in 1164ms
+[OUTBOUND_WORKER] Job msg_6ffc2a5f-5674-46cb-90a9-ff7bc5b6e156 completed: wamid.HBgLNTE5NzAzNDk0NTkVAgARGBJGQUE5QzQ0N0E4MjcwQkQzMDkA
