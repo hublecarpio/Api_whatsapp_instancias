@@ -2392,7 +2392,19 @@ async function processWithAgent(
     'tu pedido.*registrad', 'tu pedido.*confirmad', 'pedido.*registrado con éxito',
     'pedido.*confirmado con éxito', 'orden.*registrada con éxito', 'tu orden.*lista',
     'hemos registrado tu pedido', 'queda registrado', 'pedido ha sido registrado',
-    'preparando.*pedido', 'preparando todo para.*recib'
+    'preparando.*pedido', 'preparando todo para.*recib',
+    // New patterns for gratitude-based confirmations
+    'gracias por (elegir|comprar|tu compra|tu pedido|preferir)',
+    'gracias por confiar',
+    'te esperamos', 'lo esperamos',
+    'tu (orden|pedido) está en camino',
+    '(listo|perfecto).*te avisamos',
+    'estaremos (enviando|llevando|despachando)',
+    'ya está todo listo',
+    'confirmamos tu (pedido|orden|compra)',
+    'todo listo para (entregar|enviar|despachar)',
+    'en breve (recibirás|te contactamos|te escribimos)',
+    'quedamos atentos a (confirmar|tu pago)'
   ];
   const mentionsStrongOrderConfirmation = strongOrderPatterns.some(pattern => 
     new RegExp(pattern, 'i').test(aiResponse)
