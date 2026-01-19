@@ -6,6 +6,32 @@ import { dispatchStateChange } from '../services/webhookService.js';
 const router = Router();
 const prisma = new PrismaClient();
 
+async function isAdvisorForBusiness(userId: string, businessId: string): Promise<boolean> {
+  const userBusinessRole = await prisma.userBusinessRole.findUnique({
+    where: {
+      userId_businessId: { userId, businessId }
+    }
+  });
+  return userBusinessRole?.role === 'ADVISOR' && userBusinessRole?.isActive === true;
+}
+
+async function checkBusinessAccess(userId: string, businessId: string): Promise<any> {
+  const ownBusiness = await prisma.business.findFirst({ where: { id: businessId, userId } });
+  if (ownBusiness) return ownBusiness;
+  
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, parentUserId: true } });
+  if (user?.role === 'ASESOR' && user?.parentUserId) {
+    const parentBusiness = await prisma.business.findFirst({ where: { id: businessId, userId: user.parentUserId } });
+    if (parentBusiness) return parentBusiness;
+  }
+  
+  const isAdvisor = await isAdvisorForBusiness(userId, businessId);
+  if (isAdvisor) {
+    return prisma.business.findFirst({ where: { id: businessId } });
+  }
+  return null;
+}
+
 router.use(authMiddleware);
 
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -127,9 +153,7 @@ router.get('/tags', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'businessId es requerido' });
     }
 
-    const business = await prisma.business.findFirst({
-      where: { id: businessId as string, userId }
-    });
+    const business = await checkBusinessAccess(userId!, businessId as string);
 
     if (!business) {
       return res.status(404).json({ error: 'Negocio no encontrado' });
@@ -699,9 +723,7 @@ router.post('/:phone/tags', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'businessId y tag son requeridos' });
     }
 
-    const business = await prisma.business.findFirst({
-      where: { id: businessId as string, userId }
-    });
+    const business = await checkBusinessAccess(userId!, businessId as string);
 
     if (!business) {
       return res.status(404).json({ error: 'Negocio no encontrado' });
@@ -746,9 +768,7 @@ router.delete('/:phone/tags/:tag', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'businessId es requerido' });
     }
 
-    const business = await prisma.business.findFirst({
-      where: { id: businessId as string, userId }
-    });
+    const business = await checkBusinessAccess(userId!, businessId as string);
 
     if (!business) {
       return res.status(404).json({ error: 'Negocio no encontrado' });
