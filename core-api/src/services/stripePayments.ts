@@ -335,8 +335,43 @@ export async function getOrderById(orderId: string): Promise<any | null> {
 }
 
 export async function updateOrderStatus(orderId: string, status: string): Promise<any> {
+  // Get current order to check previous status
+  const currentOrder = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true }
+  });
+
+  if (!currentOrder) {
+    throw new Error('Order not found');
+  }
+
+  // Reduce stock when order changes to DELIVERED (and wasn't already DELIVERED)
+  const stockReducingStatuses = ['DELIVERED'];
+  const shouldReduceStock = stockReducingStatuses.includes(status) && 
+                            !stockReducingStatuses.includes(currentOrder.status);
+
+  if (shouldReduceStock && currentOrder.items && currentOrder.items.length > 0) {
+    console.log(`[ORDERS] Reducing stock for order ${orderId} (status: ${status})`);
+    
+    // Reduce stock for each item with a productId
+    for (const item of currentOrder.items) {
+      if (item.productId) {
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: {
+            stock: {
+              decrement: item.quantity
+            }
+          }
+        });
+        console.log(`[ORDERS] Stock reduced for product ${item.productId}: -${item.quantity}`);
+      }
+    }
+  }
+
   return prisma.order.update({
     where: { id: orderId },
-    data: { status: status as any }
+    data: { status: status as any },
+    include: { items: true }
   });
 }
