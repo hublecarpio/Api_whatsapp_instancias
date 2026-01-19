@@ -98,6 +98,7 @@ export default function AsesorPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLengthRef = useRef(0);
 
   useEffect(() => {
     loadFromStorage();
@@ -261,7 +262,15 @@ export default function AsesorPage() {
   }, [selectedConversation, selectedBusiness]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const isNewConversation = prevMessagesLengthRef.current === 0 && messages.length > 0;
+    
+    // SOLO scroll automático cuando se abre una conversación nueva
+    // Después de eso, todo el scroll es manual por el usuario
+    if (isNewConversation) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    prevMessagesLengthRef.current = messages.length;
   }, [messages]);
 
   useEffect(() => {
@@ -312,6 +321,7 @@ export default function AsesorPage() {
   };
 
   const selectConversation = (conv: Conversation) => {
+    prevMessagesLengthRef.current = 0; // Reset para scroll al inicio
     setSelectedConversation(conv);
     setSidebarOpen(false);
   };
