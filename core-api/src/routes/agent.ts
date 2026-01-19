@@ -3676,6 +3676,15 @@ router.put('/funnel-stages/:businessId/:stageId', authMiddleware, async (req: Au
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // First check if the stage exists and belongs to this business
+    const existingStage = await prisma.funnelStage.findFirst({
+      where: { id: stageId, businessId }
+    });
+    
+    if (!existingStage) {
+      return res.status(404).json({ error: 'Etapa no encontrada. Es posible que haya sido eliminada. Por favor, recarga la página.' });
+    }
+    
     const stage = await prisma.funnelStage.update({
       where: { id: stageId },
       data: {
@@ -3693,6 +3702,9 @@ router.put('/funnel-stages/:businessId/:stageId', authMiddleware, async (req: Au
   } catch (error: any) {
     if (error.code === 'P2002') {
       return res.status(400).json({ error: 'A stage with this name already exists' });
+    }
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Etapa no encontrada. Por favor, recarga la página.' });
     }
     console.error('Update funnel stage error:', error);
     res.status(500).json({ error: error.message });
