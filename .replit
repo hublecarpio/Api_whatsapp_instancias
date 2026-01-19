@@ -61,13 +61,13 @@ waitForPort = 8080
 name = "Core API"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd core-api && npm run dev"
-waitForPort = 3001
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd core-api && DATABASE_URL=$EXTERNAL_DATABASE_URL npm run dev"
+waitForPort = 3001
 
 [[workflows.workflow]]
 name = "Frontend"
@@ -84,10 +84,6 @@ outputType = "webview"
 [[ports]]
 localPort = 3001
 externalPort = 3001
-
-[[ports]]
-localPort = 5000
-externalPort = 80
 
 [[ports]]
 localPort = 8080
