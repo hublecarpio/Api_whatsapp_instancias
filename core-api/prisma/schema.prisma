@@ -360,6 +360,7 @@ model Business {
   deliveryZones     DeliveryZone[]
   knowledgeChunks   BusinessKnowledgeChunk[]
   promptSections    PromptSection[]
+  configBackups     ConfigurationBackup[]
 }
 
 model GoogleCalendarCredential {
@@ -1452,4 +1453,20 @@ model BroadcastLog {
 
   @@index([campaignId, status])
   @@index([campaignId, createdAt])
+}
+
+model ConfigurationBackup {
+  id           String   @id @default(uuid())
+  businessId   String
+  instanceId   String?
+  configJson   Json
+  description  String?
+  backupType   String   @default("manual") // manual, auto_before_clear, auto_before_import
+  version      String   @default("1.0")
+  createdAt    DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([businessId, instanceId])
 }

@@ -4025,7 +4025,7 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
     
     const { skipConflicts = true } = options;
     const results: Record<string, { created: number; skipped: number; errors: string[] }> = {
-      products: { created: 0, skipped: 0, errors: [] },
+      // NOTE: Products are NOT imported here - they're managed separately via CSV import in Products UI
       extractionFields: { created: 0, skipped: 0, errors: [] },
       funnelStages: { created: 0, skipped: 0, errors: [] },
       objections: { created: 0, skipped: 0, errors: [] },
@@ -4033,34 +4033,6 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
       businessInfo: { created: 0, skipped: 0, errors: [] },
       agentPrompt: { created: 0, skipped: 0, errors: [] }
     };
-    
-    // Import Products
-    if (config.products?.length > 0) {
-      const existingTitles = (await prisma.product.findMany({
-        where: { businessId: business_id },
-        select: { title: true }
-      })).map((p: { title: string }) => p.title.toLowerCase());
-      
-      for (const product of config.products) {
-        try {
-          if (skipConflicts && existingTitles.includes(product.title.toLowerCase())) {
-            results.products.skipped++;
-            continue;
-          }
-          await prisma.product.create({
-            data: {
-              businessId: business_id,
-              title: product.title,
-              description: product.description || null,
-              price: product.price || 0
-            }
-          });
-          results.products.created++;
-        } catch (err: any) {
-          results.products.errors.push(`${product.title}: ${err.message}`);
-        }
-      }
-    }
     
     // Import Extraction Fields
     if (config.extractionFields?.length > 0) {
@@ -4317,7 +4289,8 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
     const results = {
       masterPrompt: { updated: false, error: null as string | null },
       sections: { created: 0, skipped: 0, cleared: 0, errors: [] as string[] },
-      config: { products: 0, fields: 0, stages: 0, objections: 0, zones: 0 }
+      // NOTE: Products are NOT imported via prompt importer - they're managed separately via CSV import
+      config: { fields: 0, stages: 0, objections: 0, zones: 0 }
     };
     
     // 1. Update Master Prompt
@@ -4410,33 +4383,10 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
     
     console.log(`[IMPORT-FULL] Sections: created=${results.sections.created}, skipped=${results.sections.skipped}, instanceId=${instanceId || 'NULL'}`);
     
-    // 4. Import structured config (products, fields, stages, etc) from analyzeBusinessPrompt
+    // 4. Import structured config (fields, stages, etc) from analyzeBusinessPrompt
+    // NOTE: Products are NOT imported here - they're managed separately via CSV import in Products UI
     if (configResult.success && configResult.config) {
       const cfg = configResult.config;
-      
-      // Products
-      if (cfg.products?.length > 0) {
-        const existingTitles = new Set((await prisma.product.findMany({
-          where: { businessId: business_id },
-          select: { title: true }
-        })).map(p => p.title.toLowerCase()));
-        
-        for (const product of cfg.products) {
-          if (skipConflicts && existingTitles.has(product.title.toLowerCase())) continue;
-          try {
-            await prisma.product.create({
-              data: {
-                businessId: business_id,
-                instanceId: instanceId || null,
-                title: product.title,
-                description: product.description || null,
-                price: product.price || 0
-              }
-            });
-            results.config.products++;
-          } catch {}
-        }
-      }
       
       // Extraction Fields
       if (cfg.extractionFields?.length > 0) {
@@ -4952,6 +4902,334 @@ router.post('/suggest-missing-content', authMiddleware, async (req: AuthRequest,
     res.json(result);
   } catch (error: any) {
     console.error('Suggest missing content error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List configuration backups
+router.get('/config/backups/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const instanceId = req.query.instance_id as string | undefined;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const where: any = { businessId };
+    if (instanceId) {
+      where.instanceId = instanceId;
+    }
+
+    const backups = await prisma.configurationBackup.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        instanceId: true,
+        description: true,
+        backupType: true,
+        version: true,
+        createdAt: true
+      }
+    });
+
+    res.json({ backups });
+  } catch (error: any) {
+    console.error('List backups error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single backup
+router.get('/config/backup/:backupId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { backupId } = req.params;
+    
+    const backup = await prisma.configurationBackup.findFirst({
+      where: { id: backupId },
+      include: { business: { select: { userId: true, name: true } } }
+    });
+    
+    if (!backup || backup.business.userId !== req.userId) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    res.json({ backup: { ...backup, business: { name: backup.business.name } } });
+  } catch (error: any) {
+    console.error('Get backup error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete backup
+router.delete('/config/backup/:backupId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { backupId } = req.params;
+    
+    const backup = await prisma.configurationBackup.findFirst({
+      where: { id: backupId },
+      include: { business: { select: { userId: true } } }
+    });
+    
+    if (!backup || backup.business.userId !== req.userId) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    await prisma.configurationBackup.delete({ where: { id: backupId } });
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete backup error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Restore configuration from backup
+router.post('/config/restore/:backupId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { backupId } = req.params;
+    const { mode = 'replace' } = req.body; // 'replace' clears existing, 'merge' adds to existing
+    
+    const backup = await prisma.configurationBackup.findFirst({
+      where: { id: backupId },
+      include: { business: { select: { userId: true, id: true } } }
+    });
+    
+    if (!backup || backup.business.userId !== req.userId) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    const config = backup.configJson as any;
+    const businessId = backup.business.id;
+    const instanceId = backup.instanceId;
+
+    const results = {
+      prompt: { restored: false, error: null as string | null },
+      tools: { restored: 0, errors: [] as string[] },
+      sections: { restored: 0, errors: [] as string[] },
+      extractionFields: { restored: 0, errors: [] as string[] },
+      funnelStages: { restored: 0, errors: [] as string[] },
+      deliveryZones: { restored: 0, errors: [] as string[] },
+      objections: { restored: 0, errors: [] as string[] }
+    };
+
+    // If replace mode, clear existing configuration first (same logic as reset-config but without backup)
+    if (mode === 'replace') {
+      const instanceFilter = instanceId ? { instanceId } : {};
+      const prompts = await prisma.agentPrompt.findMany({
+        where: { businessId, ...instanceFilter },
+        select: { id: true }
+      });
+      const promptIds = prompts.map(p => p.id);
+
+      const transactions = instanceId ? [
+        prisma.deliveryZone.deleteMany({ where: { businessId, instanceId } }),
+        prisma.extractionField.deleteMany({ where: { businessId, instanceId } }),
+        prisma.funnelStage.deleteMany({ where: { businessId, instanceId } }),
+        prisma.promptSection.deleteMany({ where: { businessId, instanceId } }),
+        prisma.agentFile.deleteMany({ where: { promptId: { in: promptIds } } }),
+        prisma.agentTool.deleteMany({ where: { promptId: { in: promptIds } } })
+      ] : [
+        prisma.deliveryZone.deleteMany({ where: { businessId } }),
+        prisma.extractionField.deleteMany({ where: { businessId } }),
+        prisma.funnelStage.deleteMany({ where: { businessId } }),
+        prisma.promptSection.deleteMany({ where: { businessId } }),
+        prisma.agentFile.deleteMany({ where: { promptId: { in: promptIds } } }),
+        prisma.agentTool.deleteMany({ where: { promptId: { in: promptIds } } })
+      ];
+      await prisma.$transaction(transactions);
+    }
+
+    // Restore prompt
+    if (config.prompt) {
+      try {
+        const existingPrompt = await prisma.agentPrompt.findFirst({
+          where: { businessId, ...(instanceId ? { instanceId } : { instanceId: null }) }
+        });
+
+        if (existingPrompt) {
+          await prisma.agentPrompt.update({
+            where: { id: existingPrompt.id },
+            data: {
+              prompt: config.prompt.prompt,
+              bufferSeconds: config.prompt.bufferSeconds,
+              historyLimit: config.prompt.historyLimit,
+              splitMessages: config.prompt.splitMessages
+            }
+          });
+        } else {
+          await prisma.agentPrompt.create({
+            data: {
+              businessId,
+              instanceId: instanceId || null,
+              prompt: config.prompt.prompt,
+              bufferSeconds: config.prompt.bufferSeconds || 10,
+              historyLimit: config.prompt.historyLimit || 15,
+              splitMessages: config.prompt.splitMessages ?? true
+            }
+          });
+        }
+        results.prompt.restored = true;
+      } catch (err: any) {
+        results.prompt.error = err.message;
+      }
+    }
+
+    // Restore sections
+    if (config.sections?.length > 0) {
+      for (const section of config.sections) {
+        try {
+          await prisma.promptSection.create({
+            data: {
+              businessId,
+              instanceId: instanceId || null,
+              title: section.title,
+              content: section.content,
+              type: section.type || 'OTHER',
+              isCore: section.isCore || false,
+              priority: section.priority || 0,
+              enabled: section.enabled ?? true
+            }
+          });
+          results.sections.restored++;
+        } catch (err: any) {
+          results.sections.errors.push(`${section.title}: ${err.message}`);
+        }
+      }
+    }
+
+    // Restore extraction fields
+    if (config.extractionFields?.length > 0) {
+      for (const field of config.extractionFields) {
+        try {
+          await prisma.extractionField.create({
+            data: {
+              businessId,
+              instanceId: instanceId || null,
+              fieldKey: field.fieldKey,
+              fieldLabel: field.fieldLabel,
+              fieldType: field.fieldType || 'text',
+              description: field.description,
+              required: field.required || false,
+              order: field.order || 0
+            }
+          });
+          results.extractionFields.restored++;
+        } catch (err: any) {
+          results.extractionFields.errors.push(`${field.fieldKey}: ${err.message}`);
+        }
+      }
+    }
+
+    // Restore funnel stages
+    if (config.funnelStages?.length > 0) {
+      for (const stage of config.funnelStages) {
+        try {
+          await prisma.funnelStage.create({
+            data: {
+              businessId,
+              instanceId: instanceId || null,
+              name: stage.name,
+              order: stage.order || 0,
+              requiredFieldKeys: stage.requiredFieldKeys || [],
+              blockedTopics: stage.blockedTopics || [],
+              promptContext: stage.promptContext,
+              autoTransition: stage.autoTransition || undefined
+            }
+          });
+          results.funnelStages.restored++;
+        } catch (err: any) {
+          results.funnelStages.errors.push(`${stage.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // Restore delivery zones
+    if (config.deliveryZones?.length > 0) {
+      for (const zone of config.deliveryZones) {
+        try {
+          await prisma.deliveryZone.create({
+            data: {
+              businessId,
+              instanceId: instanceId || null,
+              name: zone.name,
+              districts: zone.districts || [],
+              cost: zone.cost || 0,
+              deliveryTime: zone.deliveryTime,
+              isActive: zone.isActive ?? true
+            }
+          });
+          results.deliveryZones.restored++;
+        } catch (err: any) {
+          results.deliveryZones.errors.push(`${zone.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // Restore objections (business-wide, no instanceId)
+    if (config.objections?.length > 0) {
+      for (const obj of config.objections) {
+        try {
+          await prisma.salesObjection.create({
+            data: {
+              businessId,
+              name: obj.name,
+              triggerPhrases: obj.triggerPhrases || [],
+              responseScript: obj.responseScript,
+              category: obj.category,
+              priority: obj.priority || 0,
+              isActive: true
+            }
+          });
+          results.objections.restored++;
+        } catch (err: any) {
+          results.objections.errors.push(`${obj.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // Restore tools (need to get prompt ID first)
+    if (config.tools?.length > 0) {
+      const prompt = await prisma.agentPrompt.findFirst({
+        where: { businessId, ...(instanceId ? { instanceId } : { instanceId: null }) }
+      });
+
+      if (prompt) {
+        for (const tool of config.tools) {
+          try {
+            await prisma.agentTool.create({
+              data: {
+                promptId: prompt.id,
+                name: tool.name,
+                description: tool.description,
+                url: tool.url,
+                method: tool.method || 'POST',
+                headers: tool.headers,
+                bodyTemplate: tool.bodyTemplate,
+                parameters: tool.parameters,
+                dynamicVariables: tool.dynamicVariables,
+                enabled: true
+              }
+            });
+            results.tools.restored++;
+          } catch (err: any) {
+            results.tools.errors.push(`${tool.name}: ${err.message}`);
+          }
+        }
+      }
+    }
+
+    console.log(`[Config] Restored backup ${backupId} for business ${businessId}`);
+
+    res.json({ success: true, results, mode });
+  } catch (error: any) {
+    console.error('Restore backup error:', error);
     res.status(500).json({ error: error.message });
   }
 });

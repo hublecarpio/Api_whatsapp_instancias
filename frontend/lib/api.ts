@@ -160,7 +160,15 @@ export const configApi = {
   export: (businessId: string, instanceId?: string) =>
     api.get(`/agent/config/export/${businessId}${instanceId ? `?instance_id=${instanceId}` : ''}`),
   import: (businessId: string, config: any, mode: 'merge' | 'replace' = 'merge', instanceId?: string) =>
-    api.post(`/agent/config/import/${businessId}`, { config, mode, instanceId })
+    api.post(`/agent/config/import/${businessId}`, { config, mode, instanceId }),
+  listBackups: (businessId: string, instanceId?: string) =>
+    api.get(`/agent/config/backups/${businessId}${instanceId ? `?instance_id=${instanceId}` : ''}`),
+  getBackup: (backupId: string) =>
+    api.get(`/agent/config/backup/${backupId}`),
+  deleteBackup: (backupId: string) =>
+    api.delete(`/agent/config/backup/${backupId}`),
+  restoreBackup: (backupId: string, mode: 'merge' | 'replace' = 'replace') =>
+    api.post(`/agent/config/restore/${backupId}`, { mode })
 };
 
 export const waApi = {

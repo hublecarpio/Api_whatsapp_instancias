@@ -247,6 +247,10 @@ export default function PromptPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resettingConfig, setResettingConfig] = useState(false);
+  const [showBackupHistory, setShowBackupHistory] = useState(false);
+  const [backups, setBackups] = useState<Array<{id: string, instanceId: string | null, description: string, backupType: string, version: string, createdAt: string}>>([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState<string | null>(null);
   // Track if instances have been loaded at least once to prevent loading sections with stale instanceId
   const [instancesLoaded, setInstancesLoaded] = useState(false);
 
@@ -906,6 +910,52 @@ export default function PromptPage() {
       setResettingConfig(false);
     }
   };
+
+  const loadBackups = async () => {
+    if (!currentBusiness) return;
+    setLoadingBackups(true);
+    try {
+      const response = await configApi.listBackups(currentBusiness.id, selectedInstanceId || undefined);
+      setBackups(response.data.backups || []);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al cargar historial');
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
+  const handleRestoreBackup = async (backupId: string) => {
+    if (!currentBusiness) return;
+    setRestoringBackup(backupId);
+    setError('');
+    try {
+      await configApi.restoreBackup(backupId, 'replace');
+      setSuccess('Configuracion restaurada correctamente');
+      setShowBackupHistory(false);
+      // Reload configuration by calling loadData
+      loadData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al restaurar configuracion');
+    } finally {
+      setRestoringBackup(null);
+    }
+  };
+
+  const handleDeleteBackup = async (backupId: string) => {
+    try {
+      await configApi.deleteBackup(backupId);
+      setBackups(backups.filter(b => b.id !== backupId));
+      setSuccess('Backup eliminado');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al eliminar backup');
+    }
+  };
+
+  useEffect(() => {
+    if (showBackupHistory) {
+      loadBackups();
+    }
+  }, [showBackupHistory, selectedInstanceId]);
 
   const handleToggleBot = async () => {
     if (!currentBusiness) return;
@@ -2131,12 +2181,20 @@ export default function PromptPage() {
           </div>
 
           <div className="flex justify-between items-center">
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="btn bg-red-600/20 text-red-400 border border-red-600/50 hover:bg-red-600/30"
-            >
-              Limpiar Configuracion Total
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowResetConfirm(true)}
+                className="btn bg-red-600/20 text-red-400 border border-red-600/50 hover:bg-red-600/30"
+              >
+                Limpiar Configuracion Total
+              </button>
+              <button
+                onClick={() => setShowBackupHistory(true)}
+                className="btn bg-blue-600/20 text-blue-400 border border-blue-600/50 hover:bg-blue-600/30"
+              >
+                Historial de Versiones
+              </button>
+            </div>
             <button
               onClick={handleSavePrompt}
               disabled={loading}
@@ -2157,10 +2215,9 @@ export default function PromptPage() {
                 : 'Limpiar Configuracion Total'}
             </h3>
             <p className="text-gray-400 mb-4">
-              Esta accion eliminara permanentemente{selectedInstanceId ? ' de esta instancia' : ''}:
+              Esta accion eliminara la configuracion del agente IA{selectedInstanceId ? ' de esta instancia' : ''}:
             </p>
-            <ul className="text-gray-400 text-sm mb-6 space-y-1 list-disc list-inside">
-              <li>Productos{selectedInstanceId ? ' de la instancia' : ''}</li>
+            <ul className="text-gray-400 text-sm mb-4 space-y-1 list-disc list-inside">
               <li>Zonas de envio{selectedInstanceId ? ' de la instancia' : ''}</li>
               <li>Campos de extraccion{selectedInstanceId ? ' de la instancia' : ''}</li>
               <li>Etapas del flujo de venta{selectedInstanceId ? ' de la instancia' : ''}</li>
@@ -2169,8 +2226,11 @@ export default function PromptPage() {
               <li>Herramientas personalizadas{selectedInstanceId ? ' de la instancia' : ''}</li>
               <li>Prompt del agente{selectedInstanceId ? ' de la instancia' : ''}</li>
             </ul>
-            <p className="text-red-400 text-sm mb-6">
-              Esta accion no se puede deshacer.
+            <p className="text-blue-400 text-sm mb-2">
+              Los productos NO se eliminaran (se gestionan por separado).
+            </p>
+            <p className="text-green-400 text-sm mb-6">
+              Se creara un backup automatico que podras restaurar desde "Historial de Versiones".
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -2186,6 +2246,95 @@ export default function PromptPage() {
                 className="btn bg-red-600 text-white hover:bg-red-700"
               >
                 {resettingConfig ? 'Limpiando...' : 'Si, Limpiar Todo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBackupHistory && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card rounded-xl max-w-2xl w-full p-6 border border-dark-hover max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-white">Historial de Versiones</h3>
+              <button
+                onClick={() => setShowBackupHistory(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <p className="text-gray-400 text-sm mb-4">
+              Backups guardados automaticamente antes de limpiar configuracion. Puedes restaurar una version anterior.
+            </p>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {loadingBackups ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-neon-blue mx-auto"></div>
+                  <p className="text-gray-400 mt-2">Cargando historial...</p>
+                </div>
+              ) : backups.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-400">No hay backups guardados.</p>
+                  <p className="text-gray-500 text-sm mt-2">Los backups se crean automaticamente al limpiar configuracion.</p>
+                </div>
+              ) : (
+                backups.map((backup) => (
+                  <div key={backup.id} className="bg-dark-hover rounded-lg p-4 border border-gray-700">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-xs ${
+                            backup.backupType === 'auto_before_clear' 
+                              ? 'bg-yellow-500/20 text-yellow-400' 
+                              : backup.backupType === 'auto_before_import'
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {backup.backupType === 'auto_before_clear' ? 'Antes de limpiar' :
+                             backup.backupType === 'auto_before_import' ? 'Antes de importar' : 'Manual'}
+                          </span>
+                          <span className="text-gray-500 text-xs">v{backup.version}</span>
+                        </div>
+                        <p className="text-white text-sm mt-1">{backup.description || 'Sin descripcion'}</p>
+                        <p className="text-gray-500 text-xs mt-1">
+                          {new Date(backup.createdAt).toLocaleString('es-PE', { 
+                            dateStyle: 'medium', 
+                            timeStyle: 'short' 
+                          })}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 ml-4">
+                        <button
+                          onClick={() => handleRestoreBackup(backup.id)}
+                          disabled={restoringBackup === backup.id}
+                          className="btn btn-primary text-sm py-1 px-3"
+                        >
+                          {restoringBackup === backup.id ? 'Restaurando...' : 'Restaurar'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBackup(backup.id)}
+                          className="btn bg-red-600/20 text-red-400 text-sm py-1 px-3"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-dark-hover">
+              <button
+                onClick={() => setShowBackupHistory(false)}
+                className="btn bg-dark-hover text-gray-300 w-full"
+              >
+                Cerrar
               </button>
             </div>
           </div>
