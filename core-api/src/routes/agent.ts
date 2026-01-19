@@ -1269,8 +1269,8 @@ async function processWithAgent(
   
   let systemPrompt = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
   
-  // Load CORE sections (always included) and enabled sections for this instance
-  const coreSections = await prisma.promptSection.findMany({
+  // Load ALL enabled sections for this instance (CORE + non-CORE)
+  const allSections = await prisma.promptSection.findMany({
     where: {
       businessId,
       enabled: true,
@@ -1285,11 +1285,13 @@ async function processWithAgent(
     ]
   });
   
-  // Add CORE sections (always included) to the prompt
-  const coreOnlySections = coreSections.filter(s => s.isCore);
-  if (coreOnlySections.length > 0) {
-    console.log(`[Agent V1] Loading ${coreOnlySections.length} CORE sections`);
-    coreOnlySections.forEach(section => {
+  // Add ALL sections to the prompt (CORE first, then others by priority)
+  if (allSections.length > 0) {
+    const coreCount = allSections.filter(s => s.isCore).length;
+    const nonCoreCount = allSections.length - coreCount;
+    console.log(`[Agent V1] Loading ${allSections.length} sections (${coreCount} CORE, ${nonCoreCount} additional)`);
+    
+    allSections.forEach(section => {
       systemPrompt += `\n\n## ${section.title}:\n${section.content}`;
     });
   }
