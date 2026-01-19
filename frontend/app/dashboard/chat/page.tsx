@@ -243,12 +243,7 @@ export default function ChatPage() {
         
         if (newKeyboardHeight > 100) {
           setKeyboardHeight(newKeyboardHeight);
-          // Only scroll to bottom if user was already near the bottom
-          if (isNearBottomRef.current) {
-            setTimeout(() => {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-            }, 100);
-          }
+          // No auto-scroll - el usuario controla el scroll manualmente
         } else {
           setKeyboardHeight(0);
         }
@@ -817,9 +812,10 @@ export default function ChatPage() {
 
   useEffect(() => {
     const isNewConversation = prevMessagesLengthRef.current === 0 && messages.length > 0;
-    const hasNewMessages = messages.length > prevMessagesLengthRef.current;
     
-    if (isNewConversation || (hasNewMessages && isNearBottomRef.current)) {
+    // SOLO scroll automático cuando se abre una conversación nueva
+    // Después de eso, todo el scroll es manual por el usuario
+    if (isNewConversation) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
     
@@ -1017,12 +1013,7 @@ export default function ChatPage() {
 
   const handleInputFocus = useCallback(() => {
     setIsInputFocused(true);
-    // Only scroll to bottom if user was already near the bottom
-    if (isNearBottomRef.current) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 300);
-    }
+    // No auto-scroll - el usuario controla el scroll manualmente
   }, []);
 
   const handleInputBlur = useCallback(() => {
