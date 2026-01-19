@@ -2455,8 +2455,18 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       console.log(`[Agent Think] Bot disabled globally but Testing ON for contact ${contactPhone}, processing...`);
     }
     
-    const promptConfig = business.agentPrompts?.[0];
+    // Find the correct prompt config: instance-specific first, then shared (null instanceId), then first available
+    let promptConfig = instanceId 
+      ? business.agentPrompts?.find((p: any) => p.instanceId === instanceId)
+      : null;
+    
+    if (!promptConfig) {
+      promptConfig = business.agentPrompts?.find((p: any) => !p.instanceId) || business.agentPrompts?.[0];
+    }
+    
     const bufferSeconds = promptConfig?.bufferSeconds ?? 7;
+    console.log(`[Agent Think] Buffer config: ${bufferSeconds}s (instanceId: ${instanceId || 'none'}, promptId: ${promptConfig?.id || 'none'})`);
+    
     const bufferKey = `${business_id}:${contactPhone}`;
     
     if (bufferSeconds > 0) {
