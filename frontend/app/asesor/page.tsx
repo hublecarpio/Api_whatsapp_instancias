@@ -339,6 +339,25 @@ export default function AsesorPage() {
     return conversations.filter(c => phones.includes(c.phone));
   }, [conversations, tagAssignments]);
 
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const time = date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+    
+    if (date.toDateString() === today.toDateString()) {
+      return time;
+    }
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Ayer ${time}`;
+    }
+    
+    const dateFormatted = date.toLocaleDateString('es', { day: '2-digit', month: '2-digit' });
+    return `${dateFormatted} ${time}`;
+  };
+
   const filteredConversations = conversations.filter(conv => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -1011,7 +1030,7 @@ export default function AsesorPage() {
                           )}
                           {msg.message && <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>}
                           <p className={`text-[10px] mt-1 ${msg.direction === 'outbound' ? 'text-blue-200' : 'text-gray-500'}`}>
-                            {new Date(msg.createdAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                            {formatTime(msg.createdAt)}
                           </p>
                         </div>
                       </div>
