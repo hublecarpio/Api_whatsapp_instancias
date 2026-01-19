@@ -1191,7 +1191,17 @@ async function processWithAgent(
   }
   
   const openai = getOpenAIClient();
-  const promptConfig = business.agentPrompts?.[0];
+  
+  // Find the correct prompt config: instance-specific first, then shared (null instanceId), then first available
+  let promptConfig = instanceId 
+    ? business.agentPrompts?.find((p: any) => p.instanceId === instanceId)
+    : null;
+  
+  if (!promptConfig) {
+    promptConfig = business.agentPrompts?.find((p: any) => !p.instanceId) || business.agentPrompts?.[0];
+  }
+  console.log(`[Agent V1] Using prompt: ${promptConfig?.id || 'default'} (instanceId: ${instanceId || 'none'})`);
+  
   const historyLimit = promptConfig?.historyLimit || 10;
   const splitMessages = promptConfig?.splitMessages ?? true;
   const tools = promptConfig?.tools || [];
@@ -1258,6 +1268,31 @@ async function processWithAgent(
   });
   
   let systemPrompt = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
+  
+  // Load CORE sections (always included) and enabled sections for this instance
+  const coreSections = await prisma.promptSection.findMany({
+    where: {
+      businessId,
+      enabled: true,
+      OR: instanceId 
+        ? [{ instanceId }, { instanceId: null }]
+        : [{ instanceId: null }]
+    },
+    orderBy: [
+      { isCore: 'desc' },
+      { priority: 'desc' },
+      { createdAt: 'asc' }
+    ]
+  });
+  
+  // Add CORE sections (always included) to the prompt
+  const coreOnlySections = coreSections.filter(s => s.isCore);
+  if (coreOnlySections.length > 0) {
+    console.log(`[Agent V1] Loading ${coreOnlySections.length} CORE sections`);
+    coreOnlySections.forEach(section => {
+      systemPrompt += `\n\n## ${section.title}:\n${section.content}`;
+    });
+  }
   
   // Store extracted data for later use in buildDynamicPrompt
   let extractedDataForPrompt: Record<string, any> = {};
