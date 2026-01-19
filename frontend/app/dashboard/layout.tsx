@@ -79,14 +79,36 @@ export default function DashboardLayout({
           ]);
           
           setBusinesses(businessResponse.data);
-          if (businessResponse.data.length > 0) {
-            setCurrentBusiness(businessResponse.data[0]);
-          }
           
           if (userResponse.data) {
             setAuth(userResponse.data, storedToken, userResponse.data.contexts || []);
             if (userResponse.data.contexts?.length > 0) {
               setContexts(userResponse.data.contexts);
+              
+              // Find the active context from localStorage or use the first one
+              const savedActiveContextId = typeof window !== 'undefined' ? localStorage.getItem('activeContextId') : null;
+              const activeCtx = userResponse.data.contexts.find((c: any) => c.businessId === savedActiveContextId) || userResponse.data.contexts[0];
+              
+              // Load the business for the active context
+              if (activeCtx) {
+                try {
+                  const contextBusinessRes = await businessApi.get(activeCtx.businessId);
+                  if (contextBusinessRes.data) {
+                    setCurrentBusiness(contextBusinessRes.data);
+                  } else if (businessResponse.data.length > 0) {
+                    setCurrentBusiness(businessResponse.data[0]);
+                  }
+                } catch (err) {
+                  console.error('Error loading context business:', err);
+                  if (businessResponse.data.length > 0) {
+                    setCurrentBusiness(businessResponse.data[0]);
+                  }
+                }
+              } else if (businessResponse.data.length > 0) {
+                setCurrentBusiness(businessResponse.data[0]);
+              }
+            } else if (businessResponse.data.length > 0) {
+              setCurrentBusiness(businessResponse.data[0]);
             }
             
             if (userResponse.data.role === 'ASESOR') {

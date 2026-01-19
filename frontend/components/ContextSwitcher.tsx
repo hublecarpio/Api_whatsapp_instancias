@@ -3,10 +3,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore, UserContext } from '@/store/auth';
+import { useBusinessStore } from '@/store/business';
+import { businessApi } from '@/lib/api';
 
 export default function ContextSwitcher() {
   const router = useRouter();
   const { contexts, activeContext, setActiveContext } = useAuthStore();
+  const { setCurrentBusiness } = useBusinessStore();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -20,9 +23,19 @@ export default function ContextSwitcher() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleContextSwitch = (context: UserContext) => {
+  const handleContextSwitch = async (context: UserContext) => {
     setActiveContext(context);
     setIsOpen(false);
+    
+    // Load the business data for the new context
+    try {
+      const response = await businessApi.get(context.businessId);
+      if (response.data) {
+        setCurrentBusiness(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading business for context:', error);
+    }
     
     // If switching to advisor role, navigate directly to chat (advisors only see assigned contacts)
     if (context.role === 'ADVISOR') {

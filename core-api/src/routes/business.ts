@@ -7,6 +7,15 @@ const router = Router();
 
 router.use(authMiddleware);
 
+async function isAdvisorForBusiness(userId: string, businessId: string): Promise<boolean> {
+  const userBusinessRole = await prisma.userBusinessRole.findUnique({
+    where: {
+      userId_businessId: { userId, businessId }
+    }
+  });
+  return userBusinessRole?.role === 'ADVISOR' && userBusinessRole?.isActive === true;
+}
+
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const { name, description, industry, logoUrl } = req.body;
@@ -93,7 +102,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const business = await prisma.business.findFirst({
+    // First check if user owns the business
+    let business = await prisma.business.findFirst({
       where: { id: req.params.id, userId: req.userId },
       include: {
         instances: true,
@@ -102,6 +112,22 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         _count: { select: { products: true, messages: true } }
       }
     });
+    
+    // If not owner, check if user is an advisor for this business
+    if (!business) {
+      const isAdvisor = await isAdvisorForBusiness(req.userId!, req.params.id);
+      if (isAdvisor) {
+        business = await prisma.business.findFirst({
+          where: { id: req.params.id },
+          include: {
+            instances: true,
+            policy: true,
+            agentPrompts: true,
+            _count: { select: { products: true, messages: true } }
+          }
+        });
+      }
+    }
     
     if (!business) {
       return res.status(404).json({ error: 'Business not found' });
