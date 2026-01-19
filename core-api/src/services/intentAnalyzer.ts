@@ -249,6 +249,23 @@ function getDefaultIntentWithContext(
     };
   }
   
+  // Payment method confirmation keywords - indicates customer is confirming how they will pay
+  const paymentConfirmationKeywords = [
+    'al contado', 'contado', 'efectivo', 'transferencia', 'yape', 'plin',
+    'confirmo', 'confirmado', 'acepto', 'listo', 'va', 'dale', 'si quiero',
+    'lo llevo', 'me lo llevo', 'deposito', 'depósito', 'lo tomo', 'me interesa',
+    'enviame', 'envíame', 'mandame', 'mándame', 'procede', 'adelante'
+  ];
+  if (paymentConfirmationKeywords.some(kw => lowerMessage.includes(kw)) && businessObjective !== 'APPOINTMENTS') {
+    return {
+      intent: 'READY_TO_BUY',
+      confidence: 0.7,
+      reasoning: 'Payment method confirmation detected - customer confirming purchase',
+      suggestedTools: ['registrar_pedido', 'crear_enlace_pago'],
+      urgency: 'high'
+    };
+  }
+  
   return {
     intent: 'OTHER',
     confidence: 0.5,

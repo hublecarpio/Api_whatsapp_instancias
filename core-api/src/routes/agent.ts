@@ -1784,15 +1784,19 @@ async function processWithAgent(
       business.businessObjective !== 'APPOINTMENTS';
     
     if (shouldForceOrderTool) {
-      // Check if order tool is available
-      const hasOrderTool = openaiTools.some((t: any) => 
+      // Find the specific order tool name
+      const orderTool = openaiTools.find((t: any) => 
         t.function?.name === 'registrar_pedido' || t.function?.name === 'crear_enlace_pago'
       );
       
-      if (hasOrderTool) {
-        // Force the model to use a tool instead of just responding textually
-        chatParams.tool_choice = 'required';
-        console.log(`[Agent V1] FORCING tool_choice=required due to intent: ${intentAnalysis?.intent}`);
+      if (orderTool) {
+        const orderToolName = (orderTool as any).function?.name;
+        // Force the SPECIFIC order tool - required for Gemini/OpenRouter
+        chatParams.tool_choice = { 
+          type: 'function', 
+          function: { name: orderToolName } 
+        };
+        console.log(`[Agent V1] FORCING tool_choice to SPECIFIC tool: ${orderToolName} due to intent: ${intentAnalysis?.intent}`);
       } else {
         chatParams.tool_choice = 'auto';
       }
