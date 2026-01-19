@@ -4956,4 +4956,384 @@ router.post('/suggest-missing-content', authMiddleware, async (req: AuthRequest,
   }
 });
 
+// Export configuration to JSON
+router.get('/config/export/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const instanceId = req.query.instance_id as string | undefined;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    // Build instance filter - if instanceId provided, filter to that specific instance only
+    const instanceFilter = instanceId 
+      ? { instanceId }
+      : {};
+
+    // Get prompt - match specific instance if provided
+    const promptWhere: any = { businessId };
+    if (instanceId) {
+      promptWhere.instanceId = instanceId;
+    }
+    
+    const prompt = await prisma.agentPrompt.findFirst({
+      where: promptWhere,
+      include: {
+        tools: { where: { enabled: true } }
+      }
+    });
+
+    // Get sections - filter by instanceId if provided
+    const sections = await prisma.promptSection.findMany({
+      where: { businessId, ...instanceFilter },
+      select: {
+        title: true,
+        content: true,
+        type: true,
+        isCore: true,
+        priority: true,
+        enabled: true,
+        instanceId: true
+      }
+    });
+
+    // Get extraction fields - filter by instanceId if provided
+    const extractionFields = await prisma.extractionField.findMany({
+      where: { businessId, ...instanceFilter },
+      select: {
+        fieldKey: true,
+        fieldLabel: true,
+        fieldType: true,
+        description: true,
+        required: true,
+        order: true,
+        instanceId: true
+      }
+    });
+
+    // Get funnel stages - filter by instanceId if provided
+    const funnelStages = await prisma.funnelStage.findMany({
+      where: { businessId, ...instanceFilter },
+      orderBy: { order: 'asc' },
+      select: {
+        name: true,
+        order: true,
+        requiredFieldKeys: true,
+        blockedTopics: true,
+        promptContext: true,
+        autoTransition: true,
+        instanceId: true
+      }
+    });
+
+    // Get delivery zones - filter by instanceId if provided
+    const deliveryZones = await prisma.deliveryZone.findMany({
+      where: { businessId, ...instanceFilter },
+      select: {
+        name: true,
+        districts: true,
+        cost: true,
+        deliveryTime: true,
+        isActive: true,
+        instanceId: true
+      }
+    });
+
+    // Get objections (no instanceId field - always business-wide)
+    const objections = await prisma.salesObjection.findMany({
+      where: { businessId, isActive: true },
+      select: {
+        name: true,
+        triggerPhrases: true,
+        responseScript: true,
+        category: true,
+        priority: true
+      }
+    });
+
+    const config = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      businessName: business.name,
+      instanceId: instanceId || null,
+      prompt: prompt ? {
+        prompt: prompt.prompt,
+        bufferSeconds: prompt.bufferSeconds,
+        historyLimit: prompt.historyLimit,
+        splitMessages: prompt.splitMessages
+      } : null,
+      tools: prompt?.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        url: t.url,
+        method: t.method,
+        headers: t.headers,
+        bodyTemplate: t.bodyTemplate,
+        parameters: t.parameters,
+        dynamicVariables: t.dynamicVariables
+      })) || [],
+      sections,
+      extractionFields,
+      funnelStages,
+      deliveryZones,
+      objections
+    };
+
+    res.json({ success: true, config });
+  } catch (error: any) {
+    console.error('Export config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Import configuration from JSON
+router.post('/config/import/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { config, mode = 'merge', instanceId } = req.body;
+    
+    if (!config || !config.version) {
+      return res.status(400).json({ error: 'Invalid config format' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const results = {
+      prompt: { imported: false, error: null as string | null },
+      tools: { imported: 0, skipped: 0, errors: [] as string[] },
+      sections: { imported: 0, skipped: 0, errors: [] as string[] },
+      extractionFields: { imported: 0, skipped: 0, errors: [] as string[] },
+      funnelStages: { imported: 0, skipped: 0, errors: [] as string[] },
+      deliveryZones: { imported: 0, skipped: 0, errors: [] as string[] },
+      objections: { imported: 0, skipped: 0, errors: [] as string[] }
+    };
+
+    // Import prompt
+    if (config.prompt) {
+      try {
+        const existingPrompt = await prisma.agentPrompt.findFirst({
+          where: { businessId, ...(instanceId ? { instanceId } : { instanceId: null }) }
+        });
+
+        if (existingPrompt) {
+          await prisma.agentPrompt.update({
+            where: { id: existingPrompt.id },
+            data: {
+              prompt: config.prompt.prompt,
+              bufferSeconds: config.prompt.bufferSeconds,
+              historyLimit: config.prompt.historyLimit,
+              splitMessages: config.prompt.splitMessages
+            }
+          });
+        } else {
+          await prisma.agentPrompt.create({
+            data: {
+              businessId,
+              instanceId: instanceId || null,
+              prompt: config.prompt.prompt,
+              bufferSeconds: config.prompt.bufferSeconds || 7,
+              historyLimit: config.prompt.historyLimit || 10,
+              splitMessages: config.prompt.splitMessages ?? true
+            }
+          });
+        }
+        results.prompt.imported = true;
+      } catch (err: any) {
+        results.prompt.error = err.message;
+      }
+    }
+
+    // Import sections
+    if (config.sections && Array.isArray(config.sections)) {
+      for (const section of config.sections) {
+        try {
+          const existing = await prisma.promptSection.findFirst({
+            where: { businessId, title: section.title, ...(instanceId ? { instanceId } : {}) }
+          });
+
+          if (existing && mode === 'merge') {
+            results.sections.skipped++;
+            continue;
+          }
+
+          if (existing && mode === 'replace') {
+            await prisma.promptSection.delete({ where: { id: existing.id } });
+          }
+
+          await prisma.promptSection.create({
+            data: {
+              businessId,
+              instanceId: instanceId || null,
+              title: section.title,
+              content: section.content,
+              type: section.type || 'OTHER',
+              isCore: section.isCore || false,
+              priority: section.priority || 0,
+              enabled: section.enabled ?? true
+            }
+          });
+          results.sections.imported++;
+        } catch (err: any) {
+          results.sections.errors.push(`${section.title}: ${err.message}`);
+        }
+      }
+    }
+
+    // Import extraction fields
+    if (config.extractionFields && Array.isArray(config.extractionFields)) {
+      for (const field of config.extractionFields) {
+        try {
+          const fieldKey = field.fieldKey || field.fieldName;
+          const existing = await prisma.extractionField.findFirst({
+            where: { businessId, fieldKey }
+          });
+
+          if (existing && mode === 'merge') {
+            results.extractionFields.skipped++;
+            continue;
+          }
+
+          if (existing && mode === 'replace') {
+            await prisma.extractionField.delete({ where: { id: existing.id } });
+          }
+
+          await prisma.extractionField.create({
+            data: {
+              businessId,
+              fieldKey,
+              fieldLabel: field.fieldLabel || fieldKey,
+              fieldType: field.fieldType || 'text',
+              description: field.description || field.aiInstruction,
+              required: field.required || false,
+              order: field.order || 0
+            }
+          });
+          results.extractionFields.imported++;
+        } catch (err: any) {
+          results.extractionFields.errors.push(`${field.fieldKey || field.fieldName}: ${err.message}`);
+        }
+      }
+    }
+
+    // Import funnel stages
+    if (config.funnelStages && Array.isArray(config.funnelStages)) {
+      for (const stage of config.funnelStages) {
+        try {
+          const existing = await prisma.funnelStage.findFirst({
+            where: { businessId, name: stage.name }
+          });
+
+          if (existing && mode === 'merge') {
+            results.funnelStages.skipped++;
+            continue;
+          }
+
+          if (existing && mode === 'replace') {
+            await prisma.funnelStage.delete({ where: { id: existing.id } });
+          }
+
+          await prisma.funnelStage.create({
+            data: {
+              businessId,
+              name: stage.name,
+              order: stage.order || 0,
+              requiredFieldKeys: stage.requiredFieldKeys || stage.requiredFields || [],
+              blockedTopics: stage.blockedTopics || [],
+              promptContext: stage.promptContext,
+              autoTransition: stage.autoTransition || (stage.autoAdvance ? { enabled: true } : undefined)
+            }
+          });
+          results.funnelStages.imported++;
+        } catch (err: any) {
+          results.funnelStages.errors.push(`${stage.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // Import delivery zones
+    if (config.deliveryZones && Array.isArray(config.deliveryZones)) {
+      for (const zone of config.deliveryZones) {
+        try {
+          const existing = await prisma.deliveryZone.findFirst({
+            where: { businessId, name: zone.name }
+          });
+
+          if (existing && mode === 'merge') {
+            results.deliveryZones.skipped++;
+            continue;
+          }
+
+          if (existing && mode === 'replace') {
+            await prisma.deliveryZone.delete({ where: { id: existing.id } });
+          }
+
+          await prisma.deliveryZone.create({
+            data: {
+              businessId,
+              name: zone.name,
+              districts: zone.districts || zone.areas || [],
+              cost: zone.cost || zone.deliveryCost || 0,
+              deliveryTime: zone.deliveryTime || zone.estimatedTime,
+              isActive: zone.isActive ?? true
+            }
+          });
+          results.deliveryZones.imported++;
+        } catch (err: any) {
+          results.deliveryZones.errors.push(`${zone.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // Import objections
+    if (config.objections && Array.isArray(config.objections)) {
+      for (const objection of config.objections) {
+        try {
+          const existing = await prisma.salesObjection.findFirst({
+            where: { businessId, name: objection.name }
+          });
+
+          if (existing && mode === 'merge') {
+            results.objections.skipped++;
+            continue;
+          }
+
+          if (existing && mode === 'replace') {
+            await prisma.salesObjection.delete({ where: { id: existing.id } });
+          }
+
+          await prisma.salesObjection.create({
+            data: {
+              businessId,
+              name: objection.name,
+              triggerPhrases: objection.triggerPhrases || [],
+              responseScript: objection.responseScript || '',
+              category: objection.category,
+              priority: objection.priority || 0
+            }
+          });
+          results.objections.imported++;
+        } catch (err: any) {
+          results.objections.errors.push(`${objection.name}: ${err.message}`);
+        }
+      }
+    }
+
+    res.json({ success: true, results });
+  } catch (error: any) {
+    console.error('Import config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

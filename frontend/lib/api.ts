@@ -122,7 +122,8 @@ export const promptSectionsApi = {
     priority?: number;
     enabled?: boolean;
   }) => api.put(`/prompt-sections/${businessId}/${sectionId}`, data),
-  delete: (businessId: string, sectionId: string) => api.delete(`/prompt-sections/${businessId}/${sectionId}`),
+  delete: (businessId: string, sectionId: string, instanceId?: string) => 
+    api.delete(`/prompt-sections/${businessId}/${sectionId}${instanceId ? `?instance_id=${instanceId}` : ''}`),
   search: (businessId: string, query: string, limit?: number, instanceId?: string) => 
     api.post(`/prompt-sections/${businessId}/search`, { query, limit, includeCore: true, instanceId }),
   parseFromPrompt: (businessId: string, rawPrompt: string, instanceId?: string) =>
@@ -147,11 +148,19 @@ export const toolsApi = {
     dynamicVariables?: Array<{ name: string; description: string; formatExample?: string }>;
   }) => api.post('/agent/tools', data),
   update: (id: string, data: any) => api.put(`/agent/tools/${id}`, data),
-  delete: (id: string) => api.delete(`/agent/tools/${id}`),
+  delete: (id: string, instanceId?: string) => 
+    api.delete(`/agent/tools/${id}${instanceId ? `?instance_id=${instanceId}` : ''}`),
   test: (id: string, data?: any) => api.post(`/agent/tools/${id}/test`, data),
   logs: (id: string, limit?: number, offset?: number) => 
     api.get(`/agent/tools/${id}/logs?limit=${limit || 50}&offset=${offset || 0}`),
   stats: (id: string) => api.get(`/agent/tools/${id}/stats`)
+};
+
+export const configApi = {
+  export: (businessId: string, instanceId?: string) =>
+    api.get(`/agent/config/export/${businessId}${instanceId ? `?instance_id=${instanceId}` : ''}`),
+  import: (businessId: string, config: any, mode: 'merge' | 'replace' = 'merge', instanceId?: string) =>
+    api.post(`/agent/config/import/${businessId}`, { config, mode, instanceId })
 };
 
 export const waApi = {
@@ -548,8 +557,8 @@ export const agentFilesApi = {
     instanceId?: string;
   }) =>
     api.put(`/agent/files/${businessId}/${fileId}`, data),
-  delete: (businessId: string, fileId: string) =>
-    api.delete(`/agent/files/${businessId}/${fileId}`),
+  delete: (businessId: string, fileId: string, instanceId?: string) =>
+    api.delete(`/agent/files/${businessId}/${fileId}${instanceId ? `?instanceId=${instanceId}` : ''}`),
   reorder: (businessId: string, fileOrders: { id: string; order: number }[], instanceId?: string) =>
     api.put(`/agent/files/${businessId}/reorder`, { fileOrders, instanceId })
 };

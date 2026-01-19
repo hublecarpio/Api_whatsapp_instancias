@@ -262,6 +262,8 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: proAccess.message, tier: proAccess.tier, requiresPro: true });
     }
     
+    const instanceId = req.query.instance_id as string | undefined;
+    
     const existing = await prisma.agentTool.findUnique({
       where: { id: req.params.id },
       include: { prompt: { include: { business: { select: { userId: true } } } } }
@@ -269,6 +271,11 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     
     if (!existing || existing.prompt.business.userId !== req.userId) {
       return res.status(404).json({ error: 'Tool not found' });
+    }
+    
+    // Strict validation: if instanceId is provided, tool's prompt must match exactly
+    if (instanceId && existing.prompt.instanceId !== instanceId) {
+      return res.status(403).json({ error: 'Tool belongs to a different instance' });
     }
     
     await prisma.agentTool.delete({

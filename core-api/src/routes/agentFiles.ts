@@ -120,7 +120,7 @@ router.put('/:businessId/:fileId', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, fileId } = req.params;
     const userId = req.userId;
-    const { name, description, triggerKeywords, triggerContext, order, enabled } = req.body;
+    const { name, description, triggerKeywords, triggerContext, order, enabled, instanceId } = req.body;
 
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId }
@@ -130,20 +130,33 @@ router.put('/:businessId/:fileId', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
+    // Find prompt with optional instanceId filter
+    const promptWhere: any = { businessId };
+    if (instanceId) {
+      promptWhere.instanceId = instanceId;
+    }
+
     const prompt = await prisma.agentPrompt.findFirst({
-      where: { businessId }
+      where: promptWhere
     });
 
     if (!prompt) {
       return res.status(404).json({ error: 'Configuración de agente no encontrada' });
     }
 
+    // Find file and validate it belongs to the correct prompt
     const existingFile = await prisma.agentFile.findFirst({
-      where: { id: fileId, promptId: prompt.id }
+      where: { id: fileId, promptId: prompt.id },
+      include: { prompt: true }
     });
 
     if (!existingFile) {
       return res.status(404).json({ error: 'Archivo no encontrado' });
+    }
+
+    // Strict validation: if instanceId is provided, file's prompt must match exactly
+    if (instanceId && existingFile.prompt.instanceId !== instanceId) {
+      return res.status(403).json({ error: 'Archivo pertenece a otra instancia' });
     }
 
     const file = await prisma.agentFile.update({
@@ -169,6 +182,7 @@ router.delete('/:businessId/:fileId', async (req: AuthRequest, res: Response) =>
   try {
     const { businessId, fileId } = req.params;
     const userId = req.userId;
+    const instanceId = req.query.instanceId as string | undefined;
 
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId }
@@ -178,12 +192,33 @@ router.delete('/:businessId/:fileId', async (req: AuthRequest, res: Response) =>
       return res.status(404).json({ error: 'Negocio no encontrado' });
     }
 
+    // Find prompt - if instanceId provided, must match exactly
+    const promptWhere: any = { businessId };
+    if (instanceId) {
+      promptWhere.instanceId = instanceId;
+    }
+
     const prompt = await prisma.agentPrompt.findFirst({
-      where: { businessId }
+      where: promptWhere
     });
 
     if (!prompt) {
       return res.status(404).json({ error: 'Configuración de agente no encontrada' });
+    }
+
+    // Find the file and validate it belongs to the correct prompt/instance
+    const file = await prisma.agentFile.findFirst({
+      where: { id: fileId, promptId: prompt.id },
+      include: { prompt: true }
+    });
+
+    if (!file) {
+      return res.status(404).json({ error: 'Archivo no encontrado' });
+    }
+
+    // Strict validation: file must belong to prompt with matching instanceId
+    if (instanceId && file.prompt.instanceId !== instanceId) {
+      return res.status(403).json({ error: 'Archivo pertenece a otra instancia' });
     }
 
     await prisma.agentFile.delete({

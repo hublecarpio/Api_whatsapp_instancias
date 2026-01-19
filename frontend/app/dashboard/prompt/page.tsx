@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useBusinessStore } from '@/store/business';
 import { useAuthStore } from '@/store/auth';
 import { useInstanceStore } from '@/store/instance';
-import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi, waApi, deliveryZonesApi, funnelStagesApi } from '@/lib/api';
+import { promptApi, promptSectionsApi, toolsApi, businessApi, agentV2Api, agentFilesApi, agentApiKeyApi, agentWebhookApi, waApi, deliveryZonesApi, funnelStagesApi, configApi } from '@/lib/api';
 import DeliveryZones from '@/components/DeliveryZones';
 import FunnelStages from '@/components/FunnelStages';
 import CustomSelect from '@/components/ui/CustomSelect';
@@ -209,6 +209,16 @@ export default function PromptPage() {
   const [generatingSections, setGeneratingSections] = useState(false);
   const [parsedSections, setParsedSections] = useState<any[]>([]);
   const [importingSections, setImportingSections] = useState(false);
+  
+  // Config export/import states
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configMode, setConfigMode] = useState<'export' | 'import'>('export');
+  const [exportingConfig, setExportingConfig] = useState(false);
+  const [importingConfig, setImportingConfig] = useState(false);
+  const [importConfigText, setImportConfigText] = useState('');
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [importPreview, setImportPreview] = useState<any>(null);
+  const [importResults, setImportResults] = useState<any>(null);
   
   const [apiKeyInfo, setApiKeyInfo] = useState<{ hasApiKey: boolean; prefix: string | null; createdAt: string | null } | null>(null);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
@@ -479,7 +489,7 @@ export default function PromptPage() {
     if (!currentBusiness || !confirm('Eliminar esta seccion?')) return;
     
     try {
-      await promptSectionsApi.delete(currentBusiness.id, sectionId);
+      await promptSectionsApi.delete(currentBusiness.id, sectionId, selectedInstanceId || undefined);
       loadPromptSections();
       setSuccess('Seccion eliminada');
     } catch (err: any) {
@@ -695,13 +705,14 @@ export default function PromptPage() {
     if (!currentBusiness) return;
     
     try {
-      const cleanData: { name?: string; description?: string; triggerKeywords?: string; triggerContext?: string; order?: number; enabled?: boolean } = {};
+      const cleanData: { name?: string; description?: string; triggerKeywords?: string; triggerContext?: string; order?: number; enabled?: boolean; instanceId?: string } = {};
       if (data.name !== undefined && data.name !== null) cleanData.name = data.name;
       if (data.description !== undefined && data.description !== null) cleanData.description = data.description;
       if (data.triggerKeywords !== undefined && data.triggerKeywords !== null) cleanData.triggerKeywords = data.triggerKeywords;
       if (data.triggerContext !== undefined && data.triggerContext !== null) cleanData.triggerContext = data.triggerContext;
       if (data.order !== undefined) cleanData.order = data.order;
       if (data.enabled !== undefined) cleanData.enabled = data.enabled;
+      if (selectedInstanceId) cleanData.instanceId = selectedInstanceId;
       
       await agentFilesApi.update(currentBusiness.id, fileId, cleanData);
       setSuccess('Archivo actualizado');
@@ -716,7 +727,7 @@ export default function PromptPage() {
     if (!currentBusiness || !confirm('¿Eliminar este archivo?')) return;
     
     try {
-      await agentFilesApi.delete(currentBusiness.id, fileId);
+      await agentFilesApi.delete(currentBusiness.id, fileId, selectedInstanceId || undefined);
       setSuccess('Archivo eliminado');
       loadAgentFiles();
     } catch (err: any) {
@@ -1007,7 +1018,7 @@ export default function PromptPage() {
     if (!confirm('Estas seguro de eliminar este tool?')) return;
     
     try {
-      await toolsApi.delete(id);
+      await toolsApi.delete(id, selectedInstanceId || undefined);
       setTools(tools.filter(t => t.id !== id));
       setSuccess('Tool eliminado');
     } catch (err: any) {
@@ -1037,6 +1048,81 @@ export default function PromptPage() {
       dynamicVariables: tool.dynamicVariables || []
     });
     setShowToolForm(true);
+  };
+
+  // Config export/import handlers
+  const handleExportConfig = async () => {
+    if (!currentBusiness) return;
+    
+    setExportingConfig(true);
+    try {
+      const res = await configApi.export(currentBusiness.id, selectedInstanceId || undefined);
+      const configJson = JSON.stringify(res.data.config, null, 2);
+      
+      // Download as file
+      const blob = new Blob([configJson], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `config_${currentBusiness.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      setSuccess('Configuracion exportada correctamente');
+      setShowConfigModal(false);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al exportar configuracion');
+    } finally {
+      setExportingConfig(false);
+    }
+  };
+
+  const handleParseImportConfig = () => {
+    try {
+      const config = JSON.parse(importConfigText);
+      if (!config.version) {
+        setError('Formato de configuracion invalido: falta version');
+        return;
+      }
+      setImportPreview(config);
+      setError('');
+    } catch (err) {
+      setError('JSON invalido');
+      setImportPreview(null);
+    }
+  };
+
+  const handleImportConfig = async () => {
+    if (!currentBusiness || !importPreview) return;
+    
+    setImportingConfig(true);
+    try {
+      const res = await configApi.import(
+        currentBusiness.id, 
+        importPreview, 
+        importMode, 
+        selectedInstanceId || undefined
+      );
+      setImportResults(res.data.results);
+      setSuccess('Configuracion importada correctamente');
+      
+      // Reload data
+      loadData();
+      loadPromptSections();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al importar configuracion');
+    } finally {
+      setImportingConfig(false);
+    }
+  };
+
+  const resetImportState = () => {
+    setImportConfigText('');
+    setImportPreview(null);
+    setImportResults(null);
+    setImportMode('merge');
   };
 
   const handleUpdateTool = async () => {
@@ -1349,6 +1435,20 @@ export default function PromptPage() {
               }}
             />
           )}
+          <button
+            onClick={() => { setConfigMode('export'); setShowConfigModal(true); }}
+            className="px-3 py-1.5 text-sm rounded-lg bg-dark-hover text-gray-300 hover:bg-gray-600 flex items-center gap-1"
+            title="Exportar configuracion"
+          >
+            📤 Exportar
+          </button>
+          <button
+            onClick={() => { setConfigMode('import'); resetImportState(); setShowConfigModal(true); }}
+            className="px-3 py-1.5 text-sm rounded-lg bg-dark-hover text-gray-300 hover:bg-gray-600 flex items-center gap-1"
+            title="Importar configuracion"
+          >
+            📥 Importar
+          </button>
           <button
             onClick={handleToggleBot}
             disabled={loading}
@@ -2726,6 +2826,197 @@ export default function PromptPage() {
             <button onClick={handleCloseTestModal} className="btn btn-secondary w-full mt-4">
               Cerrar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Config Export/Import Modal */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-dark-card border border-dark-border rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">
+                {configMode === 'export' ? '📤 Exportar Configuracion' : '📥 Importar Configuracion'}
+              </h3>
+              <button 
+                onClick={() => { setShowConfigModal(false); resetImportState(); }}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => { setConfigMode('export'); resetImportState(); }}
+                className={`px-4 py-2 rounded-lg text-sm ${configMode === 'export' ? 'bg-neon-blue text-white' : 'bg-dark-hover text-gray-400'}`}
+              >
+                Exportar
+              </button>
+              <button
+                onClick={() => { setConfigMode('import'); resetImportState(); }}
+                className={`px-4 py-2 rounded-lg text-sm ${configMode === 'import' ? 'bg-neon-blue text-white' : 'bg-dark-hover text-gray-400'}`}
+              >
+                Importar
+              </button>
+            </div>
+
+            {configMode === 'export' ? (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-400">
+                  Exporta la configuracion completa del agente incluyendo:
+                </p>
+                <ul className="text-sm text-gray-500 space-y-1 list-disc list-inside">
+                  <li>Prompt principal y configuracion</li>
+                  <li>Secciones de conocimiento (RAG)</li>
+                  <li>Campos de extraccion</li>
+                  <li>Etapas del embudo de ventas</li>
+                  <li>Zonas de entrega</li>
+                  <li>Objeciones de venta</li>
+                  <li>Herramientas personalizadas</li>
+                </ul>
+                {selectedInstanceId && (
+                  <p className="text-xs text-neon-blue">
+                    Se exportara la configuracion de la instancia seleccionada
+                  </p>
+                )}
+                <button
+                  onClick={handleExportConfig}
+                  disabled={exportingConfig}
+                  className="btn btn-primary w-full"
+                >
+                  {exportingConfig ? 'Exportando...' : 'Descargar JSON'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {!importPreview && !importResults && (
+                  <>
+                    <p className="text-sm text-gray-400">
+                      Pega el JSON de configuracion exportado previamente:
+                    </p>
+                    <textarea
+                      value={importConfigText}
+                      onChange={(e) => setImportConfigText(e.target.value)}
+                      placeholder='{"version": "1.0", ...}'
+                      className="w-full h-48 bg-dark-surface border border-dark-border rounded-lg p-3 text-sm font-mono text-gray-300"
+                    />
+                    <button
+                      onClick={handleParseImportConfig}
+                      disabled={!importConfigText.trim()}
+                      className="btn btn-primary w-full"
+                    >
+                      Validar JSON
+                    </button>
+                  </>
+                )}
+
+                {importPreview && !importResults && (
+                  <>
+                    <div className="bg-dark-surface rounded-lg p-4 space-y-3">
+                      <h4 className="font-medium text-white">Vista previa:</h4>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="text-gray-400">Origen:</div>
+                        <div className="text-white">{importPreview.businessName || 'Desconocido'}</div>
+                        <div className="text-gray-400">Exportado:</div>
+                        <div className="text-white">{new Date(importPreview.exportedAt).toLocaleString()}</div>
+                        <div className="text-gray-400">Prompt:</div>
+                        <div className="text-white">{importPreview.prompt ? 'Si' : 'No'}</div>
+                        <div className="text-gray-400">Secciones:</div>
+                        <div className="text-white">{importPreview.sections?.length || 0}</div>
+                        <div className="text-gray-400">Campos extraccion:</div>
+                        <div className="text-white">{importPreview.extractionFields?.length || 0}</div>
+                        <div className="text-gray-400">Etapas embudo:</div>
+                        <div className="text-white">{importPreview.funnelStages?.length || 0}</div>
+                        <div className="text-gray-400">Zonas entrega:</div>
+                        <div className="text-white">{importPreview.deliveryZones?.length || 0}</div>
+                        <div className="text-gray-400">Objeciones:</div>
+                        <div className="text-white">{importPreview.objections?.length || 0}</div>
+                        <div className="text-gray-400">Herramientas:</div>
+                        <div className="text-white">{importPreview.tools?.length || 0}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <label className="text-sm text-gray-400">Modo:</label>
+                      <select
+                        value={importMode}
+                        onChange={(e) => setImportMode(e.target.value as 'merge' | 'replace')}
+                        className="bg-dark-surface border border-dark-border rounded px-3 py-1 text-sm text-white"
+                      >
+                        <option value="merge">Combinar (no sobreescribir existentes)</option>
+                        <option value="replace">Reemplazar (sobreescribir existentes)</option>
+                      </select>
+                    </div>
+
+                    {selectedInstanceId && (
+                      <p className="text-xs text-neon-blue">
+                        Se importara a la instancia seleccionada
+                      </p>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setImportPreview(null)}
+                        className="btn btn-secondary flex-1"
+                      >
+                        Atras
+                      </button>
+                      <button
+                        onClick={handleImportConfig}
+                        disabled={importingConfig}
+                        className="btn btn-primary flex-1"
+                      >
+                        {importingConfig ? 'Importando...' : 'Importar'}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {importResults && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-accent-success">Importacion completada</h4>
+                    <div className="bg-dark-surface rounded-lg p-4 space-y-2 text-sm">
+                      {importResults.prompt?.imported && (
+                        <div className="text-accent-success">✓ Prompt importado</div>
+                      )}
+                      {importResults.sections && (
+                        <div className="text-gray-300">
+                          Secciones: {importResults.sections.imported} importadas, {importResults.sections.skipped} omitidas
+                        </div>
+                      )}
+                      {importResults.extractionFields && (
+                        <div className="text-gray-300">
+                          Campos: {importResults.extractionFields.imported} importados, {importResults.extractionFields.skipped} omitidos
+                        </div>
+                      )}
+                      {importResults.funnelStages && (
+                        <div className="text-gray-300">
+                          Etapas: {importResults.funnelStages.imported} importadas, {importResults.funnelStages.skipped} omitidas
+                        </div>
+                      )}
+                      {importResults.deliveryZones && (
+                        <div className="text-gray-300">
+                          Zonas: {importResults.deliveryZones.imported} importadas, {importResults.deliveryZones.skipped} omitidas
+                        </div>
+                      )}
+                      {importResults.objections && (
+                        <div className="text-gray-300">
+                          Objeciones: {importResults.objections.imported} importadas, {importResults.objections.skipped} omitidas
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => { setShowConfigModal(false); resetImportState(); }}
+                      className="btn btn-primary w-full"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

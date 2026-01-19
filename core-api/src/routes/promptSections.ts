@@ -263,6 +263,7 @@ router.put('/:businessId/:sectionId', authMiddleware, requireActiveSubscription,
 router.delete('/:businessId/:sectionId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, sectionId } = req.params;
+    const instanceId = req.query.instance_id as string | undefined;
 
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -272,12 +273,23 @@ router.delete('/:businessId/:sectionId', authMiddleware, async (req: AuthRequest
       return res.status(404).json({ error: 'Business not found' });
     }
 
+    // Build query with instanceId validation - if instanceId provided, must match exactly
+    const sectionWhere: any = { id: sectionId, businessId };
+    if (instanceId) {
+      sectionWhere.instanceId = instanceId;
+    }
+
     const section = await prisma.promptSection.findFirst({
-      where: { id: sectionId, businessId }
+      where: sectionWhere
     });
 
     if (!section) {
       return res.status(404).json({ error: 'Section not found' });
+    }
+
+    // Strict validation: section must have matching instanceId (or both null)
+    if (instanceId && section.instanceId !== instanceId) {
+      return res.status(403).json({ error: 'Section belongs to a different instance' });
     }
 
     await prisma.promptSection.delete({
