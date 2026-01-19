@@ -1,5 +1,6 @@
 import prisma from './prisma.js';
 import { getExtractedDataForContact } from './dataExtractionService.js';
+import { tryAutoCreateOrderOnStageAdvance } from './orderAutoCreator.js';
 
 interface StageStatus {
   currentStage: {
@@ -147,6 +148,14 @@ export async function advanceContactStage(
   });
 
   console.log(`[FunnelStage] Contact ${normalizedPhone} advanced to stage: ${status.nextStage.name}`);
+  
+  tryAutoCreateOrderOnStageAdvance(businessId, normalizedPhone, status.nextStage.name)
+    .then(result => {
+      if (result.created) {
+        console.log(`[FunnelStage] Auto-order created on stage advance: ${result.orderId}`);
+      }
+    })
+    .catch(err => console.error('[FunnelStage] Auto-order error:', err.message));
   
   return { success: true, newStage: status.nextStage.name };
 }

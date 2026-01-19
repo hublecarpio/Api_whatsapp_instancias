@@ -1,6 +1,7 @@
 import prisma from './prisma.js';
 import { callOpenAI, ChatMessage, isOpenAIConfigured, logTokenUsage } from './openaiService.js';
 import { dispatchStateChange } from './webhookService.js';
+import { tryAutoCreateOrderOnDataUpdate } from './orderAutoCreator.js';
 
 interface ExtractionResult {
   fieldKey: string;
@@ -207,6 +208,15 @@ export async function saveExtractedData(
         { [data.fieldKey]: oldValue }, 
         { [data.fieldKey]: data.value }
       ).catch(err => console.error('[DataExtraction] Failed to dispatch state_change webhook:', err.message));
+      
+      // Try auto-create order when key fields are updated
+      tryAutoCreateOrderOnDataUpdate(businessId, contactPhone, data.fieldKey)
+        .then(result => {
+          if (result.created) {
+            console.log(`[DataExtraction] Auto-order created on data update: ${result.orderId}`);
+          }
+        })
+        .catch(err => console.error('[DataExtraction] Auto-order error:', err.message));
     }
   } catch (error: any) {
     console.error('[DataExtraction] Error saving extracted data:', error.message);
