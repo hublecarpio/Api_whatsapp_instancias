@@ -1850,7 +1850,7 @@ async function processWithAgent(
         }
         
         const canUsePaymentLink = business.user?.paymentLinkEnabled || false;
-        console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}, paymentLinkEnabled: ${canUsePaymentLink}`);
+        console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}, paymentLinkEnabled: ${canUsePaymentLink}, instanceId: ${instanceId || 'NULL'}`);
         
         let paymentResult: string;
         
@@ -1939,7 +1939,8 @@ async function processWithAgent(
             items: [{ productId, quantity }],
             shippingAddress,
             shippingCity: city,
-            shippingCountry: country
+            shippingCountry: country,
+            instanceId: instanceId || undefined
           });
           
           if (result.success && result.paymentUrl) {
