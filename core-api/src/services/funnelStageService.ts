@@ -132,6 +132,15 @@ export async function advanceContactStage(
   }
 
   if (!status.nextStage) {
+    // Already at final stage - try to create order with current stage
+    tryAutoCreateOrderOnStageAdvance(businessId, normalizedPhone, status.currentStage.name, instanceId)
+      .then(result => {
+        if (result.created) {
+          console.log(`[FunnelStage] Auto-order created at final stage: ${result.orderId}`);
+        }
+      })
+      .catch(err => console.error('[FunnelStage] Auto-order error at final stage:', err.message));
+    
     return { success: true, newStage: status.currentStage.name };
   }
 
