@@ -170,6 +170,7 @@ export default function ChatPage() {
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [roundRobinEnabled, setRoundRobinEnabled] = useState(false);
   const [roundRobinAdvisors, setRoundRobinAdvisors] = useState<string[]>([]);
+  const [roundRobinWeights, setRoundRobinWeights] = useState<Record<string, number>>({});
   const [savingRoundRobin, setSavingRoundRobin] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -321,6 +322,7 @@ export default function ChatPage() {
       setContactAssignments(assignmentsRes.data);
       setRoundRobinEnabled(roundRobinRes.data.roundRobinEnabled);
       setRoundRobinAdvisors(roundRobinRes.data.roundRobinAdvisors || []);
+      setRoundRobinWeights(roundRobinRes.data.roundRobinWeights || {});
     } catch (err) {
       console.error('Failed to fetch team data:', err);
     } finally {
@@ -349,10 +351,37 @@ export default function ChatPage() {
       const newAdvisors = roundRobinAdvisors.includes(advisorId)
         ? roundRobinAdvisors.filter(id => id !== advisorId)
         : [...roundRobinAdvisors, advisorId];
-      await advisorApi.updateRoundRobin(currentBusiness.id, { advisorIds: newAdvisors });
+      
+      // Keep existing weights for advisors that remain, add default weight for new ones
+      const newWeights = { ...roundRobinWeights };
+      if (!roundRobinAdvisors.includes(advisorId)) {
+        newWeights[advisorId] = 1; // Default weight for new advisor
+      }
+      
+      await advisorApi.updateRoundRobin(currentBusiness.id, { advisorIds: newAdvisors, weights: newWeights });
       setRoundRobinAdvisors(newAdvisors);
+      setRoundRobinWeights(newWeights);
     } catch (err) {
       console.error('Failed to update round-robin advisors:', err);
+    } finally {
+      setSavingRoundRobin(false);
+    }
+  };
+
+  const handleUpdateAdvisorWeight = async (advisorId: string, weight: number) => {
+    if (!currentBusiness) return;
+    const clampedWeight = Math.max(1, Math.min(10, Math.floor(weight)));
+    
+    // Update local state immediately for responsiveness
+    const newWeights = { ...roundRobinWeights, [advisorId]: clampedWeight };
+    setRoundRobinWeights(newWeights);
+    
+    // Debounce API call
+    setSavingRoundRobin(true);
+    try {
+      await advisorApi.updateRoundRobin(currentBusiness.id, { weights: newWeights });
+    } catch (err) {
+      console.error('Failed to update advisor weight:', err);
     } finally {
       setSavingRoundRobin(false);
     }
@@ -2025,29 +2054,45 @@ export default function ChatPage() {
                       </div>
                       <div className="space-y-2">
                         {advisors.map(advisor => (
-                          <label 
+                          <div 
                             key={advisor.id} 
-                            className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                            className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
                               roundRobinAdvisors.includes(advisor.id) ? 'bg-neon-blue/10' : 'bg-dark-surface hover:bg-dark-hover'
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={roundRobinAdvisors.includes(advisor.id)}
-                              onChange={() => handleToggleRoundRobinAdvisor(advisor.id)}
-                              disabled={savingRoundRobin}
-                              className="w-4 h-4 rounded border-dark-border bg-dark-surface text-neon-blue focus:ring-neon-blue focus:ring-offset-0"
-                            />
-                            <span className="text-sm text-white">{advisor.name}</span>
+                            <label className="flex items-center gap-3 flex-1 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={roundRobinAdvisors.includes(advisor.id)}
+                                onChange={() => handleToggleRoundRobinAdvisor(advisor.id)}
+                                disabled={savingRoundRobin}
+                                className="w-4 h-4 rounded border-dark-border bg-dark-surface text-neon-blue focus:ring-neon-blue focus:ring-offset-0"
+                              />
+                              <span className="text-sm text-white">{advisor.name}</span>
+                            </label>
                             {roundRobinAdvisors.includes(advisor.id) && (
-                              <span className="ml-auto text-xs text-neon-blue">En rotacion</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400">Capacidad:</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  value={roundRobinWeights[advisor.id] || 1}
+                                  onChange={(e) => handleUpdateAdvisorWeight(advisor.id, parseInt(e.target.value) || 1)}
+                                  disabled={savingRoundRobin}
+                                  className="w-14 px-2 py-1 bg-dark-surface border border-dark-border rounded text-white text-sm text-center focus:outline-none focus:border-neon-blue"
+                                />
+                              </div>
                             )}
-                          </label>
+                          </div>
                         ))}
                       </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        La capacidad (1-10) determina cuantos leads recibe cada asesor. Un asesor con capacidad 3 recibe 3x mas leads que uno con capacidad 1.
+                      </p>
                       {roundRobinEnabled && roundRobinAdvisors.length > 0 && (
                         <p className="mt-2 text-xs text-accent-success">
-                          Activo: Los nuevos leads se asignaran entre {roundRobinAdvisors.length} asesor{roundRobinAdvisors.length > 1 ? 'es' : ''}
+                          Activo: Los nuevos leads se asignaran entre {roundRobinAdvisors.length} asesor{roundRobinAdvisors.length > 1 ? 'es' : ''} segun su capacidad
                         </p>
                       )}
                     </div>

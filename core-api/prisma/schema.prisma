@@ -334,6 +334,7 @@ model Business {
   webhookSecret     String?
   roundRobinEnabled Boolean            @default(false)
   roundRobinAdvisors String[]          @default([])
+  roundRobinWeights  Json               @default("{}")
   roundRobinLastIndex Int              @default(0)
   onboardingCompleted Boolean          @default(false)
   onboardingSkipped   Boolean          @default(false)

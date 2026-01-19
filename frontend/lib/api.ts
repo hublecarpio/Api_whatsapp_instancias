@@ -628,7 +628,7 @@ export const advisorApi = {
     api.get(`/advisor/my-contacts/${businessId}`),
   getRoundRobin: (businessId: string) =>
     api.get(`/advisor/round-robin/${businessId}`),
-  updateRoundRobin: (businessId: string, data: { enabled?: boolean; advisorIds?: string[] }) =>
+  updateRoundRobin: (businessId: string, data: { enabled?: boolean; advisorIds?: string[]; weights?: Record<string, number> }) =>
     api.put(`/advisor/round-robin/${businessId}`, data),
   getContactInfo: (businessId: string, contactPhone: string) =>
     api.get(`/advisor/contact-info/${businessId}/${encodeURIComponent(contactPhone)}`),

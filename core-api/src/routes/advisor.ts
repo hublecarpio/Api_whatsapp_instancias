@@ -609,6 +609,7 @@ router.get('/round-robin/:businessId', async (req: AuthRequest, res: Response) =
       select: {
         roundRobinEnabled: true,
         roundRobinAdvisors: true,
+        roundRobinWeights: true,
         roundRobinLastIndex: true
       }
     });
@@ -627,7 +628,7 @@ router.get('/round-robin/:businessId', async (req: AuthRequest, res: Response) =
 router.put('/round-robin/:businessId', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId } = req.params;
-    const { enabled, advisorIds } = req.body;
+    const { enabled, advisorIds, weights } = req.body;
     
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -638,7 +639,8 @@ router.put('/round-robin/:businessId', async (req: AuthRequest, res: Response) =
     }
     
     if (advisorIds) {
-      const validAdvisors = await prisma.user.findMany({
+      // Check BOTH legacy system AND UserBusinessRole system
+      const legacyAdvisors = await prisma.user.findMany({
         where: {
           id: { in: advisorIds },
           parentUserId: req.userId,
@@ -647,14 +649,58 @@ router.put('/round-robin/:businessId', async (req: AuthRequest, res: Response) =
         select: { id: true }
       });
       
-      const validIds = validAdvisors.map(a => a.id);
+      const roleBasedAdvisors = await prisma.userBusinessRole.findMany({
+        where: {
+          userId: { in: advisorIds },
+          businessId,
+          role: 'ADVISOR',
+          isActive: true
+        },
+        select: { userId: true }
+      });
+      
+      // Merge valid IDs from both systems (deduplicated)
+      const validIdSet = new Set<string>();
+      legacyAdvisors.forEach(a => validIdSet.add(a.id));
+      roleBasedAdvisors.forEach(a => validIdSet.add(a.userId));
+      
+      // Only keep IDs that were requested AND are valid in either system
+      const validIds = advisorIds.filter((id: string) => validIdSet.has(id));
+      
+      // Build weights object - default to 1 if not specified
+      const weightsObj: Record<string, number> = {};
+      for (const id of validIds) {
+        weightsObj[id] = (weights && typeof weights[id] === 'number' && weights[id] >= 1) 
+          ? Math.floor(weights[id]) 
+          : 1;
+      }
       
       await prisma.business.update({
         where: { id: businessId },
         data: {
           roundRobinEnabled: enabled ?? business.roundRobinEnabled,
           roundRobinAdvisors: validIds,
+          roundRobinWeights: weightsObj,
           roundRobinLastIndex: 0
+        }
+      });
+      
+      console.log(`[ROUND-ROBIN] Updated for business ${businessId}: ${validIds.length} advisors, weights:`, weightsObj);
+    } else if (weights) {
+      // Only update weights without changing advisor list
+      const currentAdvisors = business.roundRobinAdvisors || [];
+      const weightsObj: Record<string, number> = {};
+      for (const id of currentAdvisors) {
+        weightsObj[id] = (weights && typeof weights[id] === 'number' && weights[id] >= 1) 
+          ? Math.floor(weights[id]) 
+          : 1;
+      }
+      
+      await prisma.business.update({
+        where: { id: businessId },
+        data: {
+          roundRobinEnabled: enabled ?? business.roundRobinEnabled,
+          roundRobinWeights: weightsObj
         }
       });
     } else {
@@ -811,6 +857,7 @@ export async function assignNextRoundRobinAdvisor(businessId: string, contactPho
     select: {
       roundRobinEnabled: true,
       roundRobinAdvisors: true,
+      roundRobinWeights: true,
       roundRobinLastIndex: true
     }
   });
@@ -827,8 +874,23 @@ export async function assignNextRoundRobinAdvisor(businessId: string, contactPho
     return existingAssignment.userId;
   }
   
-  const nextIndex = business.roundRobinLastIndex % business.roundRobinAdvisors.length;
-  const nextAdvisorId = business.roundRobinAdvisors[nextIndex];
+  // Build weighted advisor list - each advisor appears N times based on their weight
+  const weights = (business.roundRobinWeights as Record<string, number>) || {};
+  const weightedAdvisors: string[] = [];
+  
+  for (const advisorId of business.roundRobinAdvisors) {
+    const weight = weights[advisorId] || 1;
+    for (let i = 0; i < weight; i++) {
+      weightedAdvisors.push(advisorId);
+    }
+  }
+  
+  if (weightedAdvisors.length === 0) {
+    return null;
+  }
+  
+  const nextIndex = business.roundRobinLastIndex % weightedAdvisors.length;
+  const nextAdvisorId = weightedAdvisors[nextIndex];
   
   await prisma.$transaction([
     prisma.contactAssignment.create({
@@ -840,9 +902,11 @@ export async function assignNextRoundRobinAdvisor(businessId: string, contactPho
     }),
     prisma.business.update({
       where: { id: businessId },
-      data: { roundRobinLastIndex: (nextIndex + 1) % business.roundRobinAdvisors.length }
+      data: { roundRobinLastIndex: (nextIndex + 1) % weightedAdvisors.length }
     })
   ]);
+  
+  console.log(`[ROUND-ROBIN] Assigned ${contactPhone} to advisor ${nextAdvisorId} (index ${nextIndex}/${weightedAdvisors.length})`);
   
   return nextAdvisorId;
 }
