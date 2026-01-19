@@ -116,7 +116,8 @@ export async function getContactStageStatus(
 
 export async function advanceContactStage(
   businessId: string,
-  contactPhone: string
+  contactPhone: string,
+  instanceId?: string
 ): Promise<{ success: boolean; newStage?: string; error?: string }> {
   const normalizedPhone = contactPhone.replace(/\D/g, '');
   
@@ -149,7 +150,7 @@ export async function advanceContactStage(
 
   console.log(`[FunnelStage] Contact ${normalizedPhone} advanced to stage: ${status.nextStage.name}`);
   
-  tryAutoCreateOrderOnStageAdvance(businessId, normalizedPhone, status.nextStage.name)
+  tryAutoCreateOrderOnStageAdvance(businessId, normalizedPhone, status.nextStage.name, instanceId)
     .then(result => {
       if (result.created) {
         console.log(`[FunnelStage] Auto-order created on stage advance: ${result.orderId}`);
@@ -162,13 +163,14 @@ export async function advanceContactStage(
 
 export async function checkAndAdvanceStage(
   businessId: string,
-  contactPhone: string
+  contactPhone: string,
+  instanceId?: string
 ): Promise<void> {
   try {
     const status = await getContactStageStatus(businessId, contactPhone);
     
     if (status.canAdvance && status.nextStage) {
-      await advanceContactStage(businessId, contactPhone);
+      await advanceContactStage(businessId, contactPhone, instanceId);
     }
   } catch (err: any) {
     console.error('[FunnelStage] Error checking stage advancement:', err.message);

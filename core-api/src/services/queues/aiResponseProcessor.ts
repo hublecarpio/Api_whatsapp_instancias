@@ -264,10 +264,10 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       try {
         const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
         console.log(`[AI Worker] Extracting custom data for ${normalizedPhone}`);
-        await processDataExtraction(businessId, normalizedPhone);
+        await processDataExtraction(businessId, normalizedPhone, targetInstanceId);
         
         // Check if contact can advance to next funnel stage after data extraction
-        await checkAndAdvanceStage(businessId, normalizedPhone);
+        await checkAndAdvanceStage(businessId, normalizedPhone, targetInstanceId);
       } catch (err: any) {
         console.error('[AI Worker] Data extraction failed:', err.message);
       }

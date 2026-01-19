@@ -139,7 +139,8 @@ Responde SOLO con el JSON, sin explicaciones.`;
 export async function saveExtractedData(
   businessId: string,
   contactPhone: string,
-  extractedData: ExtractionResult[]
+  extractedData: ExtractionResult[],
+  instanceId?: string
 ): Promise<void> {
   try {
     for (const data of extractedData) {
@@ -210,7 +211,7 @@ export async function saveExtractedData(
       ).catch(err => console.error('[DataExtraction] Failed to dispatch state_change webhook:', err.message));
       
       // Try auto-create order when key fields are updated
-      tryAutoCreateOrderOnDataUpdate(businessId, contactPhone, data.fieldKey)
+      tryAutoCreateOrderOnDataUpdate(businessId, contactPhone, data.fieldKey, instanceId)
         .then(result => {
           if (result.created) {
             console.log(`[DataExtraction] Auto-order created on data update: ${result.orderId}`);
@@ -286,7 +287,8 @@ export async function getAppointmentFieldsData(
 
 export async function processDataExtraction(
   businessId: string,
-  contactPhone: string
+  contactPhone: string,
+  instanceId?: string
 ): Promise<void> {
   try {
     const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
@@ -319,7 +321,7 @@ export async function processDataExtraction(
     );
 
     if (extractedData.length > 0) {
-      await saveExtractedData(businessId, normalizedPhone, extractedData);
+      await saveExtractedData(businessId, normalizedPhone, extractedData, instanceId);
       console.log(`[DataExtraction] Extracted ${extractedData.length} fields for ${normalizedPhone}`);
     }
   } catch (error: any) {
