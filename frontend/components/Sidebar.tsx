@@ -12,13 +12,11 @@ import ContextSwitcher from './ContextSwitcher';
 export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, logout, activeContext, contexts, setActiveContext } = useAuthStore();
   const { currentBusiness } = useBusinessStore();
   
-  // Subscribe to instance store - get primitive values to ensure reactivity
   const { instances, selectedInstanceId } = useInstanceStore();
   
-  // Derive selected instance from primitives
   const safeInstances = Array.isArray(instances) ? instances : [];
   const selectedInstance = safeInstances.find(i => i.id === selectedInstanceId) || safeInstances[0] || null;
 
@@ -27,7 +25,17 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     router.push('/login');
   };
 
-  // Use selected instance's objective, fallback to business objective, then default to SALES
+  const isAdvisorMode = activeContext?.role === 'ADVISOR';
+  
+  const ownerContext = contexts.find(c => c.role === 'OWNER');
+  
+  const handleSwitchToOwner = () => {
+    if (ownerContext) {
+      setActiveContext(ownerContext);
+      window.location.href = '/dashboard/business';
+    }
+  };
+
   const businessObjective = selectedInstance?.businessObjective || currentBusiness?.businessObjective || 'SALES';
   const instanceProvider = selectedInstance?.provider || currentBusiness?.instances?.[0]?.provider;
   
@@ -63,6 +71,10 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     ...commonLinks
   ];
 
+  const advisorLinks = [
+    { href: '/dashboard/chat', label: 'Chat', icon: '💭' },
+  ];
+
   const getStatusInfo = () => {
     if (!user?.subscriptionStatus) return null;
     
@@ -71,12 +83,9 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
     const hasActiveBonus = (user as any)?.hasActiveBonus;
     
     if (planType === 'pro') {
-      // Differentiate between Enterprise (bonus code) and Pro (Stripe subscription)
-      // hasActiveBonus means they have an active Enterprise code (proBonusExpiresAt > now)
       if (subscriptionTier === 'ENTERPRISE' || hasActiveBonus) {
         return { label: 'Avanzado', class: 'status-pro', dotClass: 'bg-accent-purple' };
       }
-      // PRO subscription via Stripe
       return { label: 'Pro', class: 'status-pro', dotClass: 'bg-accent-success' };
     }
     
@@ -96,6 +105,102 @@ export default function Sidebar({ collapsed = false, onToggle }: { collapsed?: b
   };
 
   const statusInfo = getStatusInfo();
+
+  if (isAdvisorMode) {
+    return (
+      <aside className="bg-dark-surface border-r border-dark-border h-screen flex flex-col sticky top-0 w-64">
+        <div className="p-4 border-b border-dark-border flex-shrink-0">
+          <Logo size="md" />
+          <a 
+            href="https://hubleconsulting.com" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-[10px] text-gray-500 hover:text-gray-400 transition-colors mt-1 block"
+          >
+            by Huble Consulting LLC
+          </a>
+        </div>
+
+        <div className="px-4 py-3 border-b border-dark-border bg-amber-500/10">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <p className="text-xs text-amber-400 uppercase tracking-wider font-medium">Modo Asesor</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {activeContext?.logoUrl ? (
+              <img 
+                src={activeContext.logoUrl} 
+                alt="" 
+                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-amber-400 text-sm font-medium">
+                  {activeContext?.businessName?.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-white font-medium truncate">
+                {activeContext?.businessName}
+              </p>
+              <p className="text-xs text-gray-500">Atendiendo chats</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
+          <div className="p-4 space-y-1">
+            {advisorLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`sidebar-link ${pathname === link.href ? 'active' : ''}`}
+              >
+                <HoloIcon emoji={link.icon} size={22} />
+                <span>{link.label}</span>
+              </Link>
+            ))}
+          </div>
+        </nav>
+
+        {ownerContext && (
+          <div className="p-4 border-t border-dark-border flex-shrink-0">
+            <button
+              onClick={handleSwitchToOwner}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-neon-blue/20 hover:bg-neon-blue/30 text-neon-blue rounded-lg transition-colors font-medium"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span>Volver a mi negocio</span>
+            </button>
+          </div>
+        )}
+
+        <div className="p-4 border-t border-dark-border flex-shrink-0 bg-dark-surface">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-neon-blue/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-neon-blue font-medium">
+                {user?.name?.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">{user?.name}</p>
+              <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+            </div>
+          </div>
+          
+          <button
+            onClick={handleLogout}
+            className="btn btn-secondary w-full text-sm py-3"
+          >
+            Cerrar sesion
+          </button>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="bg-dark-surface border-r border-dark-border h-screen flex flex-col sticky top-0">
