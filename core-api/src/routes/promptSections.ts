@@ -580,7 +580,13 @@ router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscri
         // Generate embedding for non-core sections
         let embedding: number[] | null = null;
         if (!section.isCore) {
+          console.log(`[RAG-IMPORT] Generating embedding for section: ${section.title}`);
           embedding = await generateEmbedding(`${section.title}\n${section.content}`);
+          if (embedding) {
+            console.log(`[RAG-IMPORT] ✓ Embedding generated (${embedding.length} dimensions)`);
+          } else {
+            console.warn(`[RAG-IMPORT] ✗ No embedding generated for: ${section.title}`);
+          }
         }
 
         await prisma.promptSection.create({
@@ -595,7 +601,10 @@ router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscri
             keywords: section.keywords || [],
             embedding: embedding as any,
             sourceType: 'import',
-            enabled: true
+            enabled: true,
+            metadata: {
+              hasEmbedding: !!embedding
+            }
           }
         });
         results.created++;
