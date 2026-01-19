@@ -1037,6 +1037,8 @@ model Order {
   discountValue         Float?
   discountAmount        Float?      @default(0)
   giftItems             String?
+  idempotencyKey        String?
+  orderSource           String?
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
 
@@ -1044,11 +1046,13 @@ model Order {
   instance  WhatsAppInstance? @relation("OrderInstance", fields: [instanceId], references: [id], onDelete: SetNull)
   promotion Promotion?        @relation(fields: [promotionId], references: [id], onDelete: SetNull)
 
+  @@unique([businessId, contactPhone, idempotencyKey])
   @@index([businessId, status])
   @@index([businessId, contactPhone])
   @@index([businessId, instanceId])
   @@index([createdAt])
   @@index([promotionId])
+  @@index([idempotencyKey])
 }
 
 model Promotion {

@@ -1,8 +1,7 @@
 import prisma from './prisma.js';
-import { createHash } from 'crypto';
 import { getExtractedDataForContact } from './dataExtractionService.js';
 import { getContactStageStatus } from './funnelStageService.js';
-import { findMatchingPromotion, calculateDiscount } from '../routes/promotions.js';
+import { createOrder, findProductWithScope } from './orderService.js';
 
 interface OrderReadyData {
   productId: string | null;
@@ -15,48 +14,10 @@ interface OrderReadyData {
   shippingCountry?: string;
 }
 
-async function findProductByMatch(businessId: string, searchTerm: string, instanceId?: string) {
-  const productWhere: any = {
-    businessId,
-    OR: [
-      { title: { contains: searchTerm, mode: 'insensitive' } },
-      { description: { contains: searchTerm, mode: 'insensitive' } }
-    ]
-  };
-  
-  if (instanceId) {
-    productWhere.OR = [
-      { title: { contains: searchTerm, mode: 'insensitive' }, instanceId },
-      { title: { contains: searchTerm, mode: 'insensitive' }, instanceId: null },
-      { description: { contains: searchTerm, mode: 'insensitive' }, instanceId },
-      { description: { contains: searchTerm, mode: 'insensitive' }, instanceId: null }
-    ];
-  }
-
-  return prisma.product.findFirst({
-    where: productWhere,
-    orderBy: { createdAt: 'desc' }
-  });
-}
-
 interface AutoOrderResult {
   created: boolean;
   orderId?: string;
   reason: string;
-}
-
-const IDEMPOTENCY_WINDOW_MINUTES = 30;
-const IDEMPOTENCY_PREFIX = 'AUTO:';
-
-function generateIdempotencyKey(
-  businessId: string,
-  contactPhone: string,
-  productId: string | null,
-  quantity: number,
-  address: string
-): string {
-  const data = `${businessId}:${contactPhone}:${productId || 'manual'}:${quantity}:${address}`.toLowerCase();
-  return IDEMPOTENCY_PREFIX + createHash('sha256').update(data).digest('hex').substring(0, 24);
 }
 
 export async function checkOrderReady(
@@ -99,20 +60,7 @@ export async function checkOrderReady(
   // Enhanced product search with multiple strategies
   console.log(`[ORDER-AUTO] Searching product: "${productField}" for business ${businessId}, instance: ${instanceId || 'any'}`);
   
-  // Strategy 1: Direct match on title/description
-  let product = await findProductByMatch(businessId, productField, instanceId);
-  
-  // Strategy 2: Search by individual words if direct match fails
-  if (!product) {
-    const words = productField.split(/\s+/).filter((w: string) => w.length > 2);
-    for (const word of words) {
-      product = await findProductByMatch(businessId, word, instanceId);
-      if (product) {
-        console.log(`[ORDER-AUTO] Found product by word "${word}": ${product.title}`);
-        break;
-      }
-    }
-  }
+  const product = await findProductWithScope(businessId, productField, instanceId);
 
   if (!product) {
     console.log(`[ORDER-AUTO] Product not found in catalog: "${productField}". Will create manual order.`);
@@ -208,139 +156,35 @@ export async function createAutoOrder(
     }
 
     const { data } = readyCheck;
-    
-    const idempotencyKey = generateIdempotencyKey(
+
+    const orderResult = await createOrder({
       businessId,
-      normalizedPhone,
-      data.productId,
-      data.quantity,
-      data.shippingAddress
-    );
-
-    const recentOrder = await prisma.order.findFirst({
-      where: {
-        businessId,
-        contactPhone: normalizedPhone,
-        createdAt: {
-          gte: new Date(Date.now() - IDEMPOTENCY_WINDOW_MINUTES * 60 * 1000)
-        },
-        notes: { startsWith: idempotencyKey }
-      }
+      instanceId,
+      contactPhone: normalizedPhone,
+      contactName: data.contactName,
+      shippingAddress: data.shippingAddress,
+      shippingCity: data.shippingCity,
+      shippingCountry: data.shippingCountry,
+      items: [{
+        productId: data.productId,
+        productTitle: data.productTitle,
+        quantity: data.quantity,
+        unitPrice: data.unitPrice
+      }],
+      source: 'auto_creator',
+      applyPromotions: true
     });
 
-    if (recentOrder) {
-      console.log(`[ORDER-AUTO] Duplicate detected for ${normalizedPhone}, existing order: ${recentOrder.id}`);
-      return { created: false, orderId: recentOrder.id, reason: 'Duplicate order (idempotency)' };
+    if (orderResult.success) {
+      console.log(`[ORDER-AUTO] ✓ Order ${orderResult.isNew ? 'created' : 'updated'}: ${orderResult.orderId} for ${normalizedPhone}`);
+      return { 
+        created: orderResult.isNew, 
+        orderId: orderResult.orderId, 
+        reason: orderResult.isNew ? 'Order created automatically' : 'Updated existing pending order' 
+      };
     }
 
-    const existingPendingOrder = await prisma.order.findFirst({
-      where: {
-        businessId,
-        contactPhone: normalizedPhone,
-        instanceId: instanceId || null,
-        status: { in: ['PENDING_PAYMENT', 'AWAITING_VOUCHER'] }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    if (existingPendingOrder) {
-      console.log(`[ORDER-AUTO] Updating existing pending order ${existingPendingOrder.id} for ${normalizedPhone}`);
-      
-      await prisma.order.update({
-        where: { id: existingPendingOrder.id },
-        data: {
-          contactName: data.contactName,
-          shippingAddress: data.shippingAddress,
-          shippingCity: data.shippingCity,
-          notes: `${idempotencyKey} | Auto-updated: ${new Date().toISOString()}`
-        }
-      });
-
-      return { created: false, orderId: existingPendingOrder.id, reason: 'Updated existing pending order' };
-    }
-
-    const subtotalAmount = data.unitPrice * data.quantity;
-    
-    let promotionId: string | null = null;
-    let promotionName: string | null = null;
-    let discountType: string | null = null;
-    let discountValue: number | null = null;
-    let discountAmount: number = 0;
-    let giftItems: string | null = null;
-
-    const recentMessages = await prisma.messageLog.findMany({
-      where: {
-        businessId,
-        OR: [
-          { sender: { contains: normalizedPhone } },
-          { recipient: { contains: normalizedPhone } }
-        ],
-        createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      select: { message: true }
-    });
-
-    if (recentMessages.length > 0) {
-      const conversationText = recentMessages.map(m => m.message || '').join(' ');
-      const matchedPromo = await findMatchingPromotion(businessId, instanceId || null, conversationText);
-      
-      if (matchedPromo) {
-        promotionId = matchedPromo.id;
-        promotionName = matchedPromo.name;
-        discountType = matchedPromo.discountType;
-        discountValue = matchedPromo.discountValue;
-        discountAmount = calculateDiscount(subtotalAmount, matchedPromo.discountType, matchedPromo.discountValue);
-        giftItems = matchedPromo.giftItems;
-        
-        console.log(`[ORDER-AUTO] Applied promotion "${promotionName}": ${discountType} ${discountValue}${discountType === 'PERCENTAGE' ? '%' : ''} = discount ${discountAmount}`);
-        
-        await (prisma as any).promotion.update({
-          where: { id: promotionId },
-          data: { usedCount: { increment: 1 } }
-        });
-      }
-    }
-
-    const totalAmount = subtotalAmount - discountAmount;
-
-    const order = await (prisma as any).order.create({
-      data: {
-        businessId,
-        instanceId: instanceId || null,
-        contactPhone: normalizedPhone,
-        contactName: data.contactName,
-        shippingAddress: data.shippingAddress,
-        shippingCity: data.shippingCity || null,
-        shippingCountry: data.shippingCountry || null,
-        subtotalAmount,
-        totalAmount,
-        promotionId,
-        promotionName,
-        discountType,
-        discountValue,
-        discountAmount,
-        giftItems,
-        currencyCode: business.currencyCode || 'PEN',
-        currencySymbol: business.currencySymbol || 'S/.',
-        status: 'AWAITING_VOUCHER',
-        notes: `${idempotencyKey} | Auto-created: ${new Date().toISOString()}${promotionName ? ` | Promo: ${promotionName}` : ''}`,
-        items: {
-          create: [{
-            productId: data.productId,
-            productTitle: data.productTitle,
-            quantity: data.quantity,
-            unitPrice: data.unitPrice,
-            imageUrl: null
-          }]
-        }
-      }
-    });
-
-    console.log(`[ORDER-AUTO] ✓ Order created automatically: ${order.id} for ${normalizedPhone}`);
-
-    return { created: true, orderId: order.id, reason: 'Order created automatically' };
+    return { created: false, reason: orderResult.reason };
 
   } catch (error: any) {
     console.error(`[ORDER-AUTO] Error creating order:`, error.message);

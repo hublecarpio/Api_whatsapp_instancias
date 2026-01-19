@@ -17,6 +17,7 @@ import { dispatchAgentMessage, dispatchWebhook } from '../services/webhookServic
 import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsForIntent, IntentAnalysis } from '../services/intentAnalyzer.js';
 import { getContactStageStatus } from '../services/funnelStageService.js';
 import { createAutoOrder } from '../services/orderAutoCreator.js';
+import { createOrder, findProductWithScope, formatAgentToolResponse } from '../services/orderService.js';
 
 const router = Router();
 
@@ -1908,10 +1909,10 @@ async function processWithAgent(
       }
       
       if (toolName === 'crear_enlace_pago' || toolName === 'registrar_pedido') {
-        orderToolExecuted = true; // Mark that order tool was used
+        orderToolExecuted = true;
         console.log(`[Agent V1] ORDER TOOL EXECUTED: ${toolName}`);
         const args = JSON.parse(fn.arguments);
-        let productId = args.producto_id;
+        const productSearch = args.producto_id;
         const quantity = args.cantidad || 1;
         const customerName = args.nombre_cliente;
         const shippingAddress = args.direccion_envio;
@@ -1919,220 +1920,121 @@ async function processWithAgent(
         const country = args.pais || '';
         const locationCoordinates = args.coordenadas_ubicacion || null;
         
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
-        if (!isUUID) {
-          console.log(`[PAYMENT LINK] productId "${productId}" is not a UUID, searching by name...`);
-          
-          // Strategy 1: Direct match
-          let productByName = await prisma.product.findFirst({
-            where: {
-              businessId,
-              title: { contains: productId, mode: 'insensitive' }
-            }
-          });
-          
-          // Strategy 2: Search by individual words (for "Bleu de Chanel 100ml" -> try "Bleu", "Chanel")
-          if (!productByName) {
-            const words = productId.split(/\s+/).filter((w: string) => w.length > 3 && !['100ml', '50ml', '200ml', 'pack', 'ml'].includes(w.toLowerCase()));
-            for (const word of words) {
-              productByName = await prisma.product.findFirst({
-                where: {
-                  businessId,
-                  title: { contains: word, mode: 'insensitive' }
-                }
-              });
-              if (productByName) {
-                console.log(`[PAYMENT LINK] Found product by word "${word}": ${productByName.id} (${productByName.title})`);
-                break;
-              }
-            }
-          }
-          
-          if (productByName) {
-            console.log(`[PAYMENT LINK] Found product by name: ${productByName.id} (${productByName.title})`);
-            productId = productByName.id;
-          } else {
-            console.log(`[PAYMENT LINK] No product found matching name "${productId}"`);
-          }
-        }
-        
         const canUsePaymentLink = business.user?.paymentLinkEnabled || false;
-        console.log(`[PAYMENT LINK] Creating for product ${productId}, quantity ${quantity}, paymentLinkEnabled: ${canUsePaymentLink}, instanceId: ${instanceId || 'NULL'}`);
+        console.log(`[Agent V1] Order tool: product="${productSearch}", qty=${quantity}, paymentLink=${canUsePaymentLink}, instance=${instanceId || 'NULL'}`);
         
         let paymentResult: string;
         
         if (!canUsePaymentLink) {
-          const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
-          const product = isValidUUID ? await prisma.product.findUnique({
-            where: { id: productId }
-          }) : null;
+          const product = await findProductWithScope(businessId, productSearch, instanceId);
           
-          // If no product found, create MANUAL order with product name from agent
-          if (!product) {
-            console.log(`[REGISTRAR_PEDIDO] Product not in catalog, creating MANUAL order with name: "${args.producto_id}"`);
-            
-            // Create order without linking to product catalog (manual order)
-            const order = await prisma.order.create({
-              data: {
-                businessId,
-                instanceId: instanceId || null,
-                contactPhone,
-                contactName: customerName,
-                shippingAddress,
-                shippingCity: city,
-                shippingCountry: country,
-                locationCoordinates,
-                totalAmount: 0, // Price TBD - will be set manually
-                currencyCode: business.currencyCode || 'PEN',
-                currencySymbol: business.currencySymbol || 'S/.',
-                status: 'AWAITING_VOUCHER',
-                items: {
-                  create: [{
-                    productTitle: args.producto_id, // Use the product name from agent
-                    quantity,
-                    unitPrice: 0 // Price TBD
-                  }]
-                }
-              }
-            });
-            
-            await prisma.paymentLinkRequest.create({
-              data: {
-                businessId,
-                contactPhone,
-                triggerSource: 'agent',
-                productId: null,
-                productName: args.producto_id,
-                amount: 0,
-                quantity,
-                isSuccess: true,
-                orderId: order.id,
-                isPro: false
-              }
-            });
-            
-            paymentResult = JSON.stringify({
-              exito: true,
-              mensaje: 'Pedido registrado exitosamente (precio pendiente de confirmar)',
-              pedido_id: order.id,
-              producto: args.producto_id,
-              esperando_voucher: true,
-              instrucciones: 'El pedido fue registrado. Informa al cliente el precio y pide que envíe el comprobante de pago.'
-            });
-            console.log(`[REGISTRAR_PEDIDO] MANUAL order created: ${order.id} for product "${args.producto_id}"`);
-          } else {
-            const totalAmount = product.price * quantity;
-            const order = await prisma.order.create({
-              data: {
-                businessId,
-                instanceId: instanceId || null,
-                contactPhone,
-                contactName: customerName,
-                shippingAddress,
-                shippingCity: city,
-                shippingCountry: country,
-                locationCoordinates,
-                totalAmount,
-                currencyCode: business.currencyCode || 'PEN',
-                currencySymbol: business.currencySymbol || 'S/.',
-                status: 'AWAITING_VOUCHER',
-                items: {
-                  create: [{
-                    productId: product.id,
-                    productTitle: product.title,
-                    quantity,
-                    unitPrice: product.price,
-                    imageUrl: product.imageUrl
-                  }]
-                }
-              }
-            });
-            
-            await prisma.paymentLinkRequest.create({
-              data: {
-                businessId,
-                contactPhone,
-                triggerSource: 'agent',
-                productId: product.id,
-                productName: product.title,
-                amount: totalAmount,
-                quantity,
-                isSuccess: true,
-                orderId: order.id,
-                isPro: false
-              }
-            });
-            
-            paymentResult = JSON.stringify({
-              exito: true,
-              mensaje: 'Pedido creado exitosamente',
-              pedido_id: order.id,
-              esperando_voucher: true,
-              instrucciones: 'Pide al cliente que envíe el comprobante de pago (voucher/transferencia) para confirmar su pedido.'
-            });
-            console.log(`[REGISTRAR_PEDIDO] Order created with AWAITING_VOUCHER status: ${order.id}`);
-          }
-        } else {
-          const product = await prisma.product.findUnique({
-            where: { id: productId }
-          });
-          
-          const result = await createProductPaymentLink({
+          const orderResult = await createOrder({
             businessId,
+            instanceId,
             contactPhone,
             contactName: customerName,
-            items: [{ productId, quantity }],
             shippingAddress,
             shippingCity: city,
             shippingCountry: country,
-            instanceId: instanceId || undefined
+            locationCoordinates,
+            items: [{
+              productId: product?.id || null,
+              productTitle: product?.title || productSearch,
+              quantity,
+              unitPrice: product?.price || 0,
+              imageUrl: product?.imageUrl || null
+            }],
+            source: 'agent_tool'
           });
           
-          if (result.success && result.paymentUrl) {
+          const toolResponse = formatAgentToolResponse(orderResult, business.currencySymbol || 'S/.');
+          
+          if (orderResult.success && orderResult.orderId) {
             await prisma.paymentLinkRequest.create({
               data: {
                 businessId,
                 contactPhone,
                 triggerSource: 'agent',
-                productId,
-                productName: product?.title,
-                amount: result.totalAmount,
+                productId: product?.id || null,
+                productName: product?.title || productSearch,
+                amount: orderResult.totalAmount || 0,
                 quantity,
                 isSuccess: true,
-                orderId: result.orderId,
-                paymentSessionId: result.paymentSessionId,
-                isPro: true
+                orderId: orderResult.orderId,
+                isPro: false
               }
             });
-            
-            paymentResult = JSON.stringify({
-              exito: true,
-              mensaje: 'Enlace de pago generado exitosamente',
-              enlace_pago: result.paymentUrl,
-              pedido_id: result.orderId,
-              instrucciones: 'Comparte este enlace con el cliente para que complete su pago de forma segura.'
-            });
-            console.log(`[PAYMENT LINK] Created successfully: ${result.paymentUrl}`);
-          } else {
-            await prisma.paymentLinkRequest.create({
-              data: {
-                businessId,
-                contactPhone,
-                triggerSource: 'agent',
-                productId,
-                productName: product?.title,
-                quantity,
-                isSuccess: false,
-                failureReason: result.error || 'No se pudo generar el enlace de pago',
-                isPro: true
-              }
-            });
-            
+          }
+          
+          paymentResult = JSON.stringify(toolResponse);
+          console.log(`[Agent V1] Order result: ${orderResult.success ? 'SUCCESS' : 'FAILED'}, orderId: ${orderResult.orderId || 'N/A'}, isNew: ${orderResult.isNew}`);
+        } else {
+          const product = await findProductWithScope(businessId, productSearch, instanceId);
+          
+          if (!product) {
             paymentResult = JSON.stringify({
               exito: false,
-              error: result.error || 'No se pudo generar el enlace de pago'
+              error: `Producto "${productSearch}" no encontrado en el catálogo`
             });
-            console.log(`[PAYMENT LINK] Failed: ${result.error}`);
+            console.log(`[PAYMENT LINK] Product not found: ${productSearch}`);
+          } else {
+            const result = await createProductPaymentLink({
+              businessId,
+              contactPhone,
+              contactName: customerName,
+              items: [{ productId: product.id, quantity }],
+              shippingAddress,
+              shippingCity: city,
+              shippingCountry: country,
+              instanceId: instanceId || undefined
+            });
+            
+            if (result.success && result.paymentUrl) {
+              await prisma.paymentLinkRequest.create({
+                data: {
+                  businessId,
+                  contactPhone,
+                  triggerSource: 'agent',
+                  productId: product.id,
+                  productName: product.title,
+                  amount: result.totalAmount,
+                  quantity,
+                  isSuccess: true,
+                  orderId: result.orderId,
+                  paymentSessionId: result.paymentSessionId,
+                  isPro: true
+                }
+              });
+              
+              paymentResult = JSON.stringify({
+                exito: true,
+                mensaje: 'Enlace de pago generado exitosamente',
+                enlace_pago: result.paymentUrl,
+                pedido_id: result.orderId,
+                instrucciones: 'Comparte este enlace con el cliente para que complete su pago de forma segura.'
+              });
+              console.log(`[PAYMENT LINK] Created successfully: ${result.paymentUrl}`);
+            } else {
+              await prisma.paymentLinkRequest.create({
+                data: {
+                  businessId,
+                  contactPhone,
+                  triggerSource: 'agent',
+                  productId: product.id,
+                  productName: product.title,
+                  quantity,
+                  isSuccess: false,
+                  failureReason: result.error || 'No se pudo generar el enlace de pago',
+                  isPro: true
+                }
+              });
+              
+              paymentResult = JSON.stringify({
+                exito: false,
+                error: result.error || 'No se pudo generar el enlace de pago'
+              });
+              console.log(`[PAYMENT LINK] Failed: ${result.error}`);
+            }
           }
         }
         
