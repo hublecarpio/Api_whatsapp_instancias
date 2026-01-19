@@ -1777,7 +1777,28 @@ async function processWithAgent(
   
   if (openaiTools.length > 0) {
     chatParams.tools = openaiTools;
-    chatParams.tool_choice = 'auto';
+    
+    // Force tool usage when customer is ready to buy (READY_TO_BUY or CLOSING intent)
+    const shouldForceOrderTool = intentAnalysis && 
+      (intentAnalysis.intent === 'READY_TO_BUY' || intentAnalysis.intent === 'CLOSING') &&
+      business.businessObjective !== 'APPOINTMENTS';
+    
+    if (shouldForceOrderTool) {
+      // Check if order tool is available
+      const hasOrderTool = openaiTools.some((t: any) => 
+        t.function?.name === 'registrar_pedido' || t.function?.name === 'crear_enlace_pago'
+      );
+      
+      if (hasOrderTool) {
+        // Force the model to use a tool instead of just responding textually
+        chatParams.tool_choice = 'required';
+        console.log(`[Agent V1] FORCING tool_choice=required due to intent: ${intentAnalysis?.intent}`);
+      } else {
+        chatParams.tool_choice = 'auto';
+      }
+    } else {
+      chatParams.tool_choice = 'auto';
+    }
   }
   
   // Log available tools for debugging
@@ -2365,18 +2386,30 @@ async function processWithAgent(
   
   // FALLBACK: If agent mentioned order confirmation but tool was NOT executed, try auto-create
   const isSalesModeForFallback = business.businessObjective !== 'APPOINTMENTS';
-  const orderConfirmationPatterns = [
-    'pedido.*registrad', 'pedido.*confirmad', 'orden.*registrad', 'orden.*confirmad',
-    'order.*register', 'order.*confirm', 'registrado con éxito', 'confirmado con éxito',
-    'pedido fue registrado', 'orden fue registrada', 'tu pedido está listo'
+  
+  // Strong patterns that indicate definitive order confirmation (not just questions/info)
+  const strongOrderPatterns = [
+    'tu pedido.*registrad', 'tu pedido.*confirmad', 'pedido.*registrado con éxito',
+    'pedido.*confirmado con éxito', 'orden.*registrada con éxito', 'tu orden.*lista',
+    'hemos registrado tu pedido', 'queda registrado', 'pedido ha sido registrado',
+    'preparando.*pedido', 'preparando todo para.*recib'
   ];
-  const mentionsOrderConfirmation = orderConfirmationPatterns.some(pattern => 
+  const mentionsStrongOrderConfirmation = strongOrderPatterns.some(pattern => 
     new RegExp(pattern, 'i').test(aiResponse)
   );
   
-  if (isSalesModeForFallback && mentionsOrderConfirmation && !orderToolExecuted) {
-    console.warn(`[Agent V1] FALLBACK TRIGGERED: Agent confirmed order without using tool! Attempting auto-create...`);
-    console.log(`[Agent V1] Response that triggered fallback: "${aiResponse.substring(0, 200)}..."`);
+  // Also check if intent was purchase-related (from intent analyzer if available)
+  const hasPurchaseContext = intentAnalysis?.intent === 'READY_TO_BUY' || 
+                             intentAnalysis?.intent === 'CLOSING';
+  
+  const shouldTriggerFallback = isSalesModeForFallback && 
+                                 !orderToolExecuted && 
+                                 (mentionsStrongOrderConfirmation || hasPurchaseContext);
+  
+  if (shouldTriggerFallback) {
+    console.warn(`[Agent V1] FALLBACK TRIGGERED: Agent confirmed order without using tool!`);
+    console.warn(`[Agent V1] Trigger reason: strongPattern=${mentionsStrongOrderConfirmation}, purchaseContext=${hasPurchaseContext}`);
+    console.log(`[Agent V1] Response snippet: "${aiResponse.substring(0, 200)}..."`);
     
     try {
       const autoOrderResult = await createAutoOrder(businessId, contactPhone, instanceId, true);
@@ -2387,6 +2420,10 @@ async function processWithAgent(
         console.log(`[Agent V1] FALLBACK: Order already exists or updated: ${autoOrderResult.orderId} - ${autoOrderResult.reason}`);
       } else {
         console.warn(`[Agent V1] FALLBACK FAILED: Could not auto-create order - ${autoOrderResult.reason}`);
+        // Log missing fields for diagnostics
+        if (autoOrderResult.reason.includes('Missing fields')) {
+          console.warn(`[Agent V1] Contact ${contactPhone} missing data for auto-order. Manual intervention may be needed.`);
+        }
       }
     } catch (fallbackError: any) {
       console.error(`[Agent V1] FALLBACK ERROR:`, fallbackError.message);
