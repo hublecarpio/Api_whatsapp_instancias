@@ -756,7 +756,10 @@ function TokenUsageTab({ token }: { token: string }) {
                 'video_analysis': { label: 'Analisis Video', icon: '🎬' },
                 'lead_stage_analysis': { label: 'Analisis de Etapa', icon: '📊' },
                 'contact_extraction': { label: 'Extraccion Datos', icon: '📋' },
-                'product_search': { label: 'Busqueda Productos', icon: '🔍' }
+                'product_search': { label: 'Busqueda Productos', icon: '🔍' },
+                'prompt_importer': { label: 'Importador de Prompt', icon: '📥' },
+                'prompt_sections_generator': { label: 'Generador de Secciones', icon: '📑' },
+                'embeddings': { label: 'Embeddings (RAG)', icon: '🧠' }
               };
               const info = featureLabels[f.feature] || { label: f.feature, icon: '📌' };
               return (

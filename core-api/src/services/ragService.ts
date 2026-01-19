@@ -1,7 +1,9 @@
 import prisma from './prisma.js';
 import OpenAI from 'openai';
+import { logTokenUsage } from './tokenLogger.js';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
+const EMBEDDING_DIMENSIONS = 1536;
 const MAX_RAG_SECTIONS = 5;
 const MIN_SIMILARITY_THRESHOLD = 0.3;
 
@@ -20,7 +22,7 @@ interface RAGResult {
   totalTokensEstimate: number;
 }
 
-export async function generateEmbedding(text: string): Promise<number[] | null> {
+export async function generateEmbedding(text: string, businessId?: string): Promise<number[] | null> {
   try {
     const openaiKey = process.env.OPENAI_API_KEY;
     if (!openaiKey) {
@@ -29,10 +31,23 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
     }
 
     const openai = new OpenAI({ apiKey: openaiKey });
+    const truncatedText = text.slice(0, 8000);
     const response = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
-      input: text.slice(0, 8000)
+      input: truncatedText
     });
+
+    // Log token usage for embeddings
+    if (businessId && response.usage) {
+      await logTokenUsage({
+        businessId,
+        feature: 'embeddings',
+        provider: 'openai',
+        model: EMBEDDING_MODEL,
+        promptTokens: response.usage.prompt_tokens,
+        completionTokens: 0 // Embeddings don't have completion tokens
+      });
+    }
 
     return response.data[0].embedding;
   } catch (error) {
@@ -106,7 +121,7 @@ export async function retrieveRelevantSections(
       await Promise.all(batch.map(async (section) => {
         try {
           const text = `${section.title}\n${section.content}`;
-          const embedding = await generateEmbedding(text);
+          const embedding = await generateEmbedding(text, businessId);
           if (embedding) {
             await prisma.promptSection.update({
               where: { id: section.id },
@@ -125,7 +140,7 @@ export async function retrieveRelevantSections(
   let queryEmbedding: number[] | null = null;
   const sectionsWithEmbeddings = sections.filter(s => !s.isCore && s.embedding);
   if (sectionsWithEmbeddings.length > 0) {
-    queryEmbedding = await generateEmbedding(query);
+    queryEmbedding = await generateEmbedding(query, businessId);
   }
 
   for (const section of sections) {
@@ -227,7 +242,7 @@ export async function ensureSectionEmbeddings(businessId: string): Promise<numbe
   let updated = 0;
   for (const section of sectionsWithoutEmbedding) {
     const text = `${section.title}\n${section.content}`;
-    const embedding = await generateEmbedding(text);
+    const embedding = await generateEmbedding(text, businessId);
     
     if (embedding) {
       await prisma.promptSection.update({

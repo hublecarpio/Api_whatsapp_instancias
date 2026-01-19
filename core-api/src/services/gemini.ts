@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { logTokenUsage, estimateGeminiTokens } from './tokenLogger.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -692,7 +693,8 @@ REGLAS DE VALIDACIÓN:
   }
 
   async analyzeBusinessPrompt(
-    rawPrompt: string
+    rawPrompt: string,
+    businessId?: string
   ): Promise<{
     success: boolean;
     config: {
@@ -922,6 +924,20 @@ REGLAS:
         usedFallback
       });
 
+      // Log token usage for prompt importer
+      if (businessId) {
+        const promptTokens = estimateGeminiTokens(prompt);
+        const completionTokens = estimateGeminiTokens(text);
+        await logTokenUsage({
+          businessId,
+          feature: 'prompt_importer',
+          provider: usedFallback ? 'openai' : 'gemini',
+          model: usedFallback ? 'gemini-3-flash-preview' : GEMINI_MODEL,
+          promptTokens,
+          completionTokens
+        });
+      }
+
       return {
         success: true,
         config: {
@@ -954,7 +970,8 @@ REGLAS:
   // ========== GENERATE MASTER PROMPT + SECTIONS ==========
   
   async generateMasterPromptAndSections(
-    rawPrompt: string
+    rawPrompt: string,
+    businessId?: string
   ): Promise<{
     success: boolean;
     masterPrompt: string;
@@ -1064,6 +1081,21 @@ REGLAS CRÍTICAS:
         sectionsCount: result.sections?.length || 0,
         sectionTypes: result.sections?.map((s: any) => s.type) || []
       });
+
+      // Log token usage for master prompt generation
+      if (businessId) {
+        const promptTokens = estimateGeminiTokens(prompt);
+        const completionTokens = estimateGeminiTokens(text);
+        const usedOpenRouter = !this.apiKey && this.hasOpenRouterFallback();
+        await logTokenUsage({
+          businessId,
+          feature: 'prompt_sections_generator',
+          provider: usedOpenRouter ? 'openai' : 'gemini',
+          model: usedOpenRouter ? 'gemini-3-flash-preview' : GEMINI_MODEL,
+          promptTokens,
+          completionTokens
+        });
+      }
 
       return {
         success: true,

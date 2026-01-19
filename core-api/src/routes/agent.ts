@@ -3953,7 +3953,7 @@ router.post('/analyze-prompt', authMiddleware, async (req: AuthRequest, res: Res
     
     console.log(`[IMPORT] Analyzing prompt for business ${business_id}, length: ${rawPrompt.length}`);
     
-    const result = await geminiService.analyzeBusinessPrompt(rawPrompt);
+    const result = await geminiService.analyzeBusinessPrompt(rawPrompt, business_id);
     
     if (!result.success) {
       return res.status(500).json({ error: result.error || 'Failed to analyze prompt' });
@@ -4278,8 +4278,8 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
     
     // Run both analyses in parallel
     const [masterResult, configResult] = await Promise.all([
-      geminiService.generateMasterPromptAndSections(rawPrompt),
-      geminiService.analyzeBusinessPrompt(rawPrompt)
+      geminiService.generateMasterPromptAndSections(rawPrompt, business_id),
+      geminiService.analyzeBusinessPrompt(rawPrompt, business_id)
     ]);
     
     if (!masterResult.success) {
