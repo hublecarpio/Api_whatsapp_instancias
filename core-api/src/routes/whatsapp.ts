@@ -438,6 +438,38 @@ router.post('/instances/add', requireEmailVerified, async (req: AuthRequest, res
     const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
     const internalWebhookUrl = `${coreApiUrl}/webhook/${businessId}`;
     
+    // Always try to cleanup any orphaned instance with this ID from WA backend before creating
+    // This handles cases where previous deletion failed or instance was archived without proper cleanup
+    let cleanupSuccess = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[BAILEYS] Pre-cleanup attempt ${attempt}/3: deleting orphaned instance ${instanceBackendId} from WA backend`);
+        await axios.delete(`${WA_API_URL}/instances/${instanceBackendId}`, { timeout: 10000 });
+        console.log(`[BAILEYS] Pre-cleanup: successfully deleted orphaned instance ${instanceBackendId}`);
+        cleanupSuccess = true;
+        break;
+      } catch (cleanupErr: any) {
+        if (cleanupErr.response?.status === 404) {
+          // 404 means instance doesn't exist, which is expected and fine
+          console.log(`[BAILEYS] Pre-cleanup: instance ${instanceBackendId} not found (expected - no orphan)`);
+          cleanupSuccess = true;
+          break;
+        }
+        console.log(`[BAILEYS] Pre-cleanup attempt ${attempt}/3 failed: ${cleanupErr.message}`);
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+    
+    if (!cleanupSuccess) {
+      console.error(`[BAILEYS] Pre-cleanup failed after 3 attempts for ${instanceBackendId} - aborting creation`);
+      return res.status(503).json({ 
+        error: 'No se pudo limpiar la instancia anterior. El servidor de WhatsApp no responde. Intenta de nuevo en unos segundos.',
+        code: 'WA_BACKEND_UNAVAILABLE'
+      });
+    }
+    
     const waResponse = await axios.post(`${WA_API_URL}/instances`, {
       instanceId: instanceBackendId,
       webhook: internalWebhookUrl
@@ -572,10 +604,25 @@ router.delete('/instances/:instanceId', requireEmailVerified, async (req: AuthRe
     
     // Disconnect from WhatsApp backend but keep data for archive
     if (instance.provider === 'BAILEYS' && instance.instanceBackendId) {
-      try {
-        await axios.delete(`${WA_API_URL}/instances/${instance.instanceBackendId}`);
-      } catch (err) {
-        console.log('Baileys instance cleanup failed (may not exist)');
+      const backendId = instance.instanceBackendId;
+      console.log(`[BAILEYS-DELETE] Attempting to delete instance ${backendId} from WA backend`);
+      
+      // Try multiple times with delay to ensure cleanup
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await axios.delete(`${WA_API_URL}/instances/${backendId}`, { timeout: 10000 });
+          console.log(`[BAILEYS-DELETE] Successfully deleted instance ${backendId} from WA backend on attempt ${attempt}`);
+          break;
+        } catch (err: any) {
+          if (err.response?.status === 404) {
+            console.log(`[BAILEYS-DELETE] Instance ${backendId} not found in WA backend (already deleted)`);
+            break;
+          }
+          console.log(`[BAILEYS-DELETE] Attempt ${attempt}/3 failed for ${backendId}: ${err.message}`);
+          if (attempt < 3) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
       }
     }
     
@@ -1109,6 +1156,38 @@ router.post('/create', requireEmailVerified, async (req: AuthRequest, res: Respo
     const instanceId = `biz_${businessId.substring(0, 8)}`;
     const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
     const webhookUrl = webhook || `${coreApiUrl}/webhook/${businessId}`;
+    
+    // Always try to cleanup any orphaned instance with this ID from WA backend before creating
+    // This handles cases where previous deletion failed or instance was archived without proper cleanup
+    let cleanupSuccess = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[BAILEYS] Pre-cleanup attempt ${attempt}/3: deleting orphaned instance ${instanceId} from WA backend`);
+        await axios.delete(`${WA_API_URL}/instances/${instanceId}`, { timeout: 10000 });
+        console.log(`[BAILEYS] Pre-cleanup: successfully deleted orphaned instance ${instanceId}`);
+        cleanupSuccess = true;
+        break;
+      } catch (cleanupErr: any) {
+        if (cleanupErr.response?.status === 404) {
+          // 404 means instance doesn't exist, which is expected and fine
+          console.log(`[BAILEYS] Pre-cleanup: instance ${instanceId} not found (expected - no orphan)`);
+          cleanupSuccess = true;
+          break;
+        }
+        console.log(`[BAILEYS] Pre-cleanup attempt ${attempt}/3 failed: ${cleanupErr.message}`);
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+    
+    if (!cleanupSuccess) {
+      console.error(`[BAILEYS] Pre-cleanup failed after 3 attempts for ${instanceId} - aborting creation`);
+      return res.status(503).json({ 
+        error: 'No se pudo limpiar la instancia anterior. El servidor de WhatsApp no responde. Intenta de nuevo en unos segundos.',
+        code: 'WA_BACKEND_UNAVAILABLE'
+      });
+    }
     
     const waResponse = await axios.post(`${WA_API_URL}/instances`, {
       instanceId,
@@ -1827,10 +1906,27 @@ router.delete('/:businessId', async (req: AuthRequest, res: Response) => {
       details: 'Instance deleted manually by user'
     });
     
-    try {
-      await axios.delete(`${WA_API_URL}/instances/${instance.instanceBackendId}`);
-    } catch (err) {
-      console.log('WA backend delete failed (maybe already deleted)');
+    // Robust cleanup from WA backend with retries
+    if (instance.instanceBackendId) {
+      const backendId = instance.instanceBackendId;
+      console.log(`[BAILEYS-DELETE] Attempting to delete instance ${backendId} from WA backend`);
+      
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await axios.delete(`${WA_API_URL}/instances/${backendId}`, { timeout: 10000 });
+          console.log(`[BAILEYS-DELETE] Successfully deleted instance ${backendId} from WA backend on attempt ${attempt}`);
+          break;
+        } catch (err: any) {
+          if (err.response?.status === 404) {
+            console.log(`[BAILEYS-DELETE] Instance ${backendId} not found in WA backend (already deleted)`);
+            break;
+          }
+          console.log(`[BAILEYS-DELETE] Attempt ${attempt}/3 failed for ${backendId}: ${err.message}`);
+          if (attempt < 3) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
     }
     
     // Soft delete: archive instead of delete to preserve message history
