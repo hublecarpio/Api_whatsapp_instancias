@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
+import { useAuthStore } from '@/store/auth';
 import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi } from '@/lib/api';
 
 interface Conversation {
@@ -100,6 +101,8 @@ export default function ChatPage() {
   const searchParams = useSearchParams();
   const { currentBusiness } = useBusinessStore();
   const { selectedInstanceId, setSelectedInstanceId, instances, setInstances } = useInstanceStore();
+  const { activeContext } = useAuthStore();
+  const isAdvisorMode = activeContext?.role === 'ADVISOR';
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [selectedConversationInstanceId, setSelectedConversationInstanceId] = useState<string | null>(null);
@@ -1245,13 +1248,15 @@ export default function ChatPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
                   )}
                 </button>
-                <button 
-                  onClick={() => { setShowTeamPanel(true); fetchTeamData(); }} 
-                  className="p-1.5 rounded-lg text-gray-400 hover:bg-dark-hover transition-colors" 
-                  title="Equipo de asesores"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                </button>
+                {!isAdvisorMode && (
+                  <button 
+                    onClick={() => { setShowTeamPanel(true); fetchTeamData(); }} 
+                    className="p-1.5 rounded-lg text-gray-400 hover:bg-dark-hover transition-colors" 
+                    title="Equipo de asesores"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                  </button>
+                )}
               </div>
             </div>
             <div className="relative mb-2">
@@ -1300,7 +1305,7 @@ export default function ChatPage() {
                 <span className="font-medium">{dailyContacts.count}/{dailyContacts.limit}</span>
               </div>
             )}
-            {viewMode === 'kanban' && tags.length > 0 && (
+            {(viewMode === 'kanban' || isAdvisorMode) && tags.length > 0 && (
               <div className="flex gap-1 overflow-x-auto pb-1 hide-scrollbar">
                 <button onClick={() => setSelectedTag(null)} className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${selectedTag === null ? 'bg-white text-dark-bg' : 'bg-dark-hover text-gray-400 hover:bg-dark-border'}`}>Sin etiqueta</button>
                 {tags.map(tag => (
@@ -1432,7 +1437,7 @@ export default function ChatPage() {
                   <option value="">Sin etapa</option>
                   {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
                 </select>
-                {getContactAdvisor(selectedPhone) ? (
+                {!isAdvisorMode && (getContactAdvisor(selectedPhone) ? (
                   <span className="hidden sm:flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -1452,16 +1457,18 @@ export default function ChatPage() {
                     <option value="">Asignar asesor...</option>
                     {advisors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
+                ))}
+                {!isAdvisorMode && (
+                  <button 
+                    onClick={() => setShowContactPanel(!showContactPanel)}
+                    className={`p-2 rounded-full transition-colors ${showContactPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`}
+                    title="Datos del contacto"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
                 )}
-                <button 
-                  onClick={() => setShowContactPanel(!showContactPanel)}
-                  className={`p-2 rounded-full transition-colors ${showContactPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`}
-                  title="Datos del contacto"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </button>
                 <button 
                   onClick={() => setShowDeleteConfirm(true)}
                   className="p-2 rounded-full transition-colors text-gray-400 hover:text-accent-error hover:bg-accent-error/10"
@@ -1529,7 +1536,7 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {showContactPanel && (
+              {showContactPanel && !isAdvisorMode && (
                 <div className="px-4 py-3 border-b border-dark-border bg-dark-surface">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-sm font-medium text-white">Datos del Contacto</h4>
