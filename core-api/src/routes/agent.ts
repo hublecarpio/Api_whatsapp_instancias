@@ -1323,6 +1323,11 @@ async function processWithAgent(
     systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
     systemPrompt += `\n- Para generar pedidos, usa el ID del producto (el valor después de "ID:").`;
+    systemPrompt += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:`;
+    systemPrompt += `\n- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.`;
+    systemPrompt += `\n- NUNCA digas "tu pedido está registrado/agendado/confirmado" sin haber ejecutado la herramienta primero.`;
+    systemPrompt += `\n- Solo confirma el pedido DESPUÉS de recibir "exito: true" de la herramienta.`;
+    systemPrompt += `\n- Si la herramienta falla, informa al cliente del error y NO confirmes el pedido.`;
   } else if (!isAppointmentMode && productCount > 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
     systemPrompt += `\nTienes acceso a un catálogo de ${productCount} productos con BÚSQUEDA INTELIGENTE.`;
@@ -1335,6 +1340,11 @@ async function processWithAgent(
     systemPrompt += `\n- OBLIGATORIO: Si buscar_producto devuelve "imagen_producto", DEBES incluir la URL al final de tu mensaje.`;
     systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
     systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere alternativas.`;
+    systemPrompt += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:`;
+    systemPrompt += `\n- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.`;
+    systemPrompt += `\n- NUNCA digas "tu pedido está registrado/agendado/confirmado" sin haber ejecutado la herramienta primero.`;
+    systemPrompt += `\n- Solo confirma el pedido DESPUÉS de recibir "exito: true" de la herramienta.`;
+    systemPrompt += `\n- Si la herramienta falla, informa al cliente del error y NO confirmes el pedido.`;
   }
   
   // Add appointments context for APPOINTMENTS mode
