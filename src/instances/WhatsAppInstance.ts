@@ -633,7 +633,19 @@ export class WhatsAppInstance {
       }
 
       const mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
-      if (mediaTypes.includes(parsed.type) && MediaStorage.isEnabled() && message.key) {
+      const isMediaMessage = mediaTypes.includes(parsed.type);
+      
+      // Log media detection for debugging
+      if (isMediaMessage) {
+        this.logger.info({ 
+          type: parsed.type, 
+          mimetype: parsed.mimetype,
+          caption: parsed.caption,
+          minioEnabled: MediaStorage.isEnabled()
+        }, 'Media message detected');
+      }
+      
+      if (isMediaMessage && MediaStorage.isEnabled() && message.key) {
         try {
           const mediaBuffer = await downloadMediaMessage(
             message as any,
@@ -661,6 +673,10 @@ export class WhatsAppInstance {
         } catch (error: any) {
           this.logger.warn({ error: error.message }, 'Failed to download/store media');
         }
+      } else if (isMediaMessage && !MediaStorage.isEnabled()) {
+        // MinIO not configured - still send webhook but warn about missing storage
+        this.logger.warn({ type: parsed.type }, 'Media received but MinIO not configured - media URL will be empty');
+        messageContent.mediaWarning = 'MinIO storage not configured - media not stored';
       }
 
       this.logger.info({ 
