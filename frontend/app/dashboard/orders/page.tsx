@@ -57,6 +57,7 @@ interface Order {
   locationCoordinates: string | null;
   notes: string | null;
   totalAmount: number;
+  subtotalAmount: number | null;
   shippingCost: number | null;
   currencyCode: string;
   currencySymbol: string;
@@ -66,6 +67,12 @@ interface Order {
   paidAt: string | null;
   voucherImageUrl: string | null;
   voucherReceivedAt: string | null;
+  promotionId: string | null;
+  promotionName: string | null;
+  discountType: string | null;
+  discountValue: number | null;
+  discountAmount: number | null;
+  giftItems: string | null;
   createdAt: string;
   updatedAt: string;
   items: OrderItem[];
@@ -176,6 +183,28 @@ export default function OrdersPage() {
   const [savingItems, setSavingItems] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [showProductSelector, setShowProductSelector] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const exportCSV = async () => {
+    if (!currentBusiness?.id) return;
+    try {
+      setExporting(true);
+      const response = await ordersApi.exportCSV(currentBusiness.id, statusFilter || undefined, selectedInstanceId || undefined);
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pedidos_${currentBusiness.id.substring(0, 8)}_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const filteredOrders = orders.filter(order => {
     if (!searchQuery) return true;
@@ -629,15 +658,30 @@ export default function OrdersPage() {
           )}
 
           {activeTab !== 'extraction' && (
-            <button
-              onClick={activeTab === 'orders' ? loadOrders : loadPaymentLinks}
-              className="p-2 bg-[#2a2a2a] hover:bg-[#333] text-white rounded-lg transition-colors"
-              title="Actualizar"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              {activeTab === 'orders' && (
+                <button
+                  onClick={exportCSV}
+                  disabled={exporting || orders.length === 0}
+                  className="px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs sm:text-sm rounded-lg transition-colors flex items-center gap-1.5"
+                  title="Exportar a CSV"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  {exporting ? 'Exportando...' : 'CSV'}
+                </button>
+              )}
+              <button
+                onClick={activeTab === 'orders' ? loadOrders : loadPaymentLinks}
+                className="p-2 bg-[#2a2a2a] hover:bg-[#333] text-white rounded-lg transition-colors"
+                title="Actualizar"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -991,6 +1035,22 @@ export default function OrdersPage() {
                               <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-700/50">
                                 <span>Envío:</span>
                                 <span>{order.currencySymbol}{(order.shippingCost || 0).toFixed(2)}</span>
+                              </div>
+                            )}
+                            {order.promotionName && (
+                              <div className="mt-3 p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="text-purple-400 font-medium">🎁 {order.promotionName}</span>
+                                  {order.discountAmount && order.discountAmount > 0 && (
+                                    <span className="text-green-400">
+                                      -{order.currencySymbol}{order.discountAmount.toFixed(2)}
+                                      {order.discountType === 'PERCENTAGE' && order.discountValue && ` (${order.discountValue}%)`}
+                                    </span>
+                                  )}
+                                </div>
+                                {order.giftItems && (
+                                  <p className="text-xs text-gray-400 mt-1">Regalo: {order.giftItems}</p>
+                                )}
                               </div>
                             )}
                           </div>

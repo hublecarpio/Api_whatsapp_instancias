@@ -465,6 +465,123 @@ router.get('/', authMiddleware, async (req: any, res) => {
   }
 });
 
+router.get('/export/csv', authMiddleware, async (req: any, res) => {
+  try {
+    const { businessId, status, instanceId, dateFrom, dateTo } = req.query;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: businessId as string,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este negocio' });
+    }
+
+    const where: any = { businessId };
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+    if (instanceId) {
+      where.instanceId = instanceId;
+    }
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom as string);
+      if (dateTo) where.createdAt.lte = new Date(dateTo as string);
+    }
+
+    const orders = await prisma.order.findMany({
+      where,
+      include: {
+        items: true,
+        instance: { select: { name: true, phoneNumber: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const csvHeaders = [
+      'ID Pedido',
+      'Fecha',
+      'Cliente',
+      'Teléfono',
+      'Estado',
+      'Productos',
+      'Cantidad Items',
+      'Subtotal',
+      'Envío',
+      'Descuento',
+      'Promoción',
+      'Regalos',
+      'Total',
+      'Moneda',
+      'Dirección',
+      'Ciudad',
+      'Instancia',
+      'Pagado',
+      'Notas'
+    ];
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvRows = orders.map(order => {
+      const productsStr = order.items.map(i => `${i.quantity}x ${i.productTitle}`).join('; ');
+      const totalQty = order.items.reduce((sum, i) => sum + i.quantity, 0);
+      const subtotal = order.items.reduce((sum, i) => sum + (i.unitPrice * i.quantity), 0);
+      const promotionName = (order as any).promotionName || '';
+      const discountAmount = (order as any).discountAmount || 0;
+      const giftItems = (order as any).giftItems || '';
+      
+      return [
+        order.id.substring(0, 8).toUpperCase(),
+        new Date(order.createdAt).toLocaleString('es-PE', { timeZone: 'America/Lima' }),
+        order.contactName || 'Cliente',
+        order.contactPhone,
+        order.status,
+        productsStr,
+        totalQty,
+        subtotal.toFixed(2),
+        (order.shippingCost || 0).toFixed(2),
+        discountAmount.toFixed(2),
+        promotionName,
+        giftItems,
+        order.totalAmount.toFixed(2),
+        order.currencySymbol || 'S/.',
+        order.shippingAddress || '',
+        order.shippingCity || '',
+        order.instance?.name || order.instance?.phoneNumber || '',
+        order.paidAt ? new Date(order.paidAt).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : '',
+        order.notes || ''
+      ].map(escapeCSV).join(',');
+    });
+
+    const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
+    const BOM = '\uFEFF';
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="pedidos_${businessId.substring(0, 8)}_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(BOM + csvContent);
+
+    console.log(`[ORDERS] CSV exported: ${orders.length} orders for business ${businessId}`);
+  } catch (error: any) {
+    console.error('[ORDERS] Error exporting CSV:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/sync-payment/:sessionId', authMiddleware, async (req: any, res) => {
   try {
     const { sessionId } = req.params;

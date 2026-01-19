@@ -445,7 +445,9 @@ export const ordersApi = {
     shippingCountry?: string;
   }) => api.post('/orders/create-payment-link', data),
   listPaymentLinks: (businessId: string, status?: string) =>
-    api.get(`/orders/payment-links?businessId=${businessId}${status ? `&status=${status}` : ''}`)
+    api.get(`/orders/payment-links?businessId=${businessId}${status ? `&status=${status}` : ''}`),
+  exportCSV: (businessId: string, status?: string, instanceId?: string) =>
+    api.get(`/orders/export/csv?businessId=${businessId}${status ? `&status=${status}` : ''}${instanceId ? `&instanceId=${instanceId}` : ''}`, { responseType: 'blob' })
 };
 
 export const extractionApi = {

@@ -1015,6 +1015,7 @@ model Order {
   locationCoordinates   String?
   notes                 String?
   totalAmount           Float
+  subtotalAmount        Float?
   shippingCost          Float?      @default(0)
   currencyCode          String      @default("PEN")
   currencySymbol        String      @default("S/.")
@@ -1030,16 +1031,49 @@ model Order {
   deliveredAt           DateTime?
   preparationStartedAt  DateTime?
   shippedAt             DateTime?
+  promotionId           String?
+  promotionName         String?
+  discountType          String?
+  discountValue         Float?
+  discountAmount        Float?      @default(0)
+  giftItems             String?
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
 
-  items    OrderItem[]
-  instance WhatsAppInstance? @relation("OrderInstance", fields: [instanceId], references: [id], onDelete: SetNull)
+  items     OrderItem[]
+  instance  WhatsAppInstance? @relation("OrderInstance", fields: [instanceId], references: [id], onDelete: SetNull)
+  promotion Promotion?        @relation(fields: [promotionId], references: [id], onDelete: SetNull)
 
   @@index([businessId, status])
   @@index([businessId, contactPhone])
   @@index([businessId, instanceId])
   @@index([createdAt])
+  @@index([promotionId])
+}
+
+model Promotion {
+  id             String    @id @default(uuid())
+  businessId     String
+  instanceId     String?
+  name           String
+  description    String?
+  discountType   String    @default("PERCENTAGE")
+  discountValue  Float     @default(0)
+  giftItems      String?
+  minPurchase    Float?
+  maxUses        Int?
+  usedCount      Int       @default(0)
+  validFrom      DateTime?
+  validUntil     DateTime?
+  isActive       Boolean   @default(true)
+  keywords       String[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  orders Order[]
+
+  @@index([businessId, isActive])
+  @@index([businessId, instanceId])
 }
 
 model OrderItem {

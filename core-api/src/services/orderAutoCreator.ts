@@ -2,6 +2,7 @@ import prisma from './prisma.js';
 import { createHash } from 'crypto';
 import { getExtractedDataForContact } from './dataExtractionService.js';
 import { getContactStageStatus } from './funnelStageService.js';
+import { findMatchingPromotion, calculateDiscount } from '../routes/promotions.js';
 
 interface OrderReadyData {
   productId: string;
@@ -224,9 +225,53 @@ export async function createAutoOrder(
       return { created: false, orderId: existingPendingOrder.id, reason: 'Updated existing pending order' };
     }
 
-    const totalAmount = data.unitPrice * data.quantity;
+    const subtotalAmount = data.unitPrice * data.quantity;
+    
+    let promotionId: string | null = null;
+    let promotionName: string | null = null;
+    let discountType: string | null = null;
+    let discountValue: number | null = null;
+    let discountAmount: number = 0;
+    let giftItems: string | null = null;
 
-    const order = await prisma.order.create({
+    const recentMessages = await prisma.messageLog.findMany({
+      where: {
+        businessId,
+        OR: [
+          { sender: { contains: normalizedPhone } },
+          { recipient: { contains: normalizedPhone } }
+        ],
+        createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { message: true }
+    });
+
+    if (recentMessages.length > 0) {
+      const conversationText = recentMessages.map(m => m.message || '').join(' ');
+      const matchedPromo = await findMatchingPromotion(businessId, instanceId || null, conversationText);
+      
+      if (matchedPromo) {
+        promotionId = matchedPromo.id;
+        promotionName = matchedPromo.name;
+        discountType = matchedPromo.discountType;
+        discountValue = matchedPromo.discountValue;
+        discountAmount = calculateDiscount(subtotalAmount, matchedPromo.discountType, matchedPromo.discountValue);
+        giftItems = matchedPromo.giftItems;
+        
+        console.log(`[ORDER-AUTO] Applied promotion "${promotionName}": ${discountType} ${discountValue}${discountType === 'PERCENTAGE' ? '%' : ''} = discount ${discountAmount}`);
+        
+        await (prisma as any).promotion.update({
+          where: { id: promotionId },
+          data: { usedCount: { increment: 1 } }
+        });
+      }
+    }
+
+    const totalAmount = subtotalAmount - discountAmount;
+
+    const order = await (prisma as any).order.create({
       data: {
         businessId,
         instanceId: instanceId || null,
@@ -235,11 +280,18 @@ export async function createAutoOrder(
         shippingAddress: data.shippingAddress,
         shippingCity: data.shippingCity || null,
         shippingCountry: data.shippingCountry || null,
+        subtotalAmount,
         totalAmount,
+        promotionId,
+        promotionName,
+        discountType,
+        discountValue,
+        discountAmount,
+        giftItems,
         currencyCode: business.currencyCode || 'PEN',
         currencySymbol: business.currencySymbol || 'S/.',
         status: 'AWAITING_VOUCHER',
-        notes: `${idempotencyKey} | Auto-created: ${new Date().toISOString()}`,
+        notes: `${idempotencyKey} | Auto-created: ${new Date().toISOString()}${promotionName ? ` | Promo: ${promotionName}` : ''}`,
         items: {
           create: [{
             productId: data.productId,
