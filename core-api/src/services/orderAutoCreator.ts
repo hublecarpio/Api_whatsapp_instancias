@@ -5,14 +5,38 @@ import { getContactStageStatus } from './funnelStageService.js';
 import { findMatchingPromotion, calculateDiscount } from '../routes/promotions.js';
 
 interface OrderReadyData {
-  productId: string;
+  productId: string | null;
   productTitle: string;
   quantity: number;
   unitPrice: number;
   contactName: string;
   shippingAddress: string;
-  shippingCity?: string;
+  shippingCity?: string | null;
   shippingCountry?: string;
+}
+
+async function findProductByMatch(businessId: string, searchTerm: string, instanceId?: string) {
+  const productWhere: any = {
+    businessId,
+    OR: [
+      { title: { contains: searchTerm, mode: 'insensitive' } },
+      { description: { contains: searchTerm, mode: 'insensitive' } }
+    ]
+  };
+  
+  if (instanceId) {
+    productWhere.OR = [
+      { title: { contains: searchTerm, mode: 'insensitive' }, instanceId },
+      { title: { contains: searchTerm, mode: 'insensitive' }, instanceId: null },
+      { description: { contains: searchTerm, mode: 'insensitive' }, instanceId },
+      { description: { contains: searchTerm, mode: 'insensitive' }, instanceId: null }
+    ];
+  }
+
+  return prisma.product.findFirst({
+    where: productWhere,
+    orderBy: { createdAt: 'desc' }
+  });
 }
 
 interface AutoOrderResult {
@@ -27,11 +51,11 @@ const IDEMPOTENCY_PREFIX = 'AUTO:';
 function generateIdempotencyKey(
   businessId: string,
   contactPhone: string,
-  productId: string,
+  productId: string | null,
   quantity: number,
   address: string
 ): string {
-  const data = `${businessId}:${contactPhone}:${productId}:${quantity}:${address}`.toLowerCase();
+  const data = `${businessId}:${contactPhone}:${productId || 'manual'}:${quantity}:${address}`.toLowerCase();
   return IDEMPOTENCY_PREFIX + createHash('sha256').update(data).digest('hex').substring(0, 24);
 }
 
@@ -72,30 +96,40 @@ export async function checkOrderReady(
     return { ready: false, missingFields };
   }
 
-  const productWhere: any = {
-    businessId,
-    OR: [
-      { title: { contains: productField, mode: 'insensitive' } },
-      { description: { contains: productField, mode: 'insensitive' } }
-    ]
-  };
+  // Enhanced product search with multiple strategies
+  console.log(`[ORDER-AUTO] Searching product: "${productField}" for business ${businessId}, instance: ${instanceId || 'any'}`);
   
-  if (instanceId) {
-    productWhere.OR = [
-      { ...productWhere.OR[0], instanceId },
-      { ...productWhere.OR[0], instanceId: null },
-      { ...productWhere.OR[1], instanceId },
-      { ...productWhere.OR[1], instanceId: null }
-    ];
+  // Strategy 1: Direct match on title/description
+  let product = await findProductByMatch(businessId, productField, instanceId);
+  
+  // Strategy 2: Search by individual words if direct match fails
+  if (!product) {
+    const words = productField.split(/\s+/).filter((w: string) => w.length > 2);
+    for (const word of words) {
+      product = await findProductByMatch(businessId, word, instanceId);
+      if (product) {
+        console.log(`[ORDER-AUTO] Found product by word "${word}": ${product.title}`);
+        break;
+      }
+    }
   }
 
-  const product = await prisma.product.findFirst({
-    where: productWhere,
-    orderBy: { createdAt: 'desc' }
-  });
-
   if (!product) {
-    return { ready: false, missingFields: ['producto_no_encontrado'] };
+    console.log(`[ORDER-AUTO] Product not found in catalog: "${productField}". Will create manual order.`);
+    // Return ready with manual product info - order will be created with productName only
+    return {
+      ready: true,
+      data: {
+        productId: null,
+        productTitle: productField, // Use extracted product name
+        quantity: parseInt(extractedData['cantidad'] || extractedData['quantity'] || '1') || 1,
+        unitPrice: 0, // Price unknown, will need manual update
+        contactName: nameField,
+        shippingAddress: addressField,
+        shippingCity: extractedData['ciudad'] || extractedData['city'] || extractedData['distrito'] || null
+      },
+      missingFields: []
+    };
   }
 
   const quantityField = extractedData['cantidad'] || extractedData['quantity'] || '1';
