@@ -13,11 +13,27 @@ async function getUserWithRole(userId: string) {
   });
 }
 
+async function isAdvisorForBusiness(userId: string, businessId: string): Promise<boolean> {
+  const userBusinessRole = await prisma.userBusinessRole.findUnique({
+    where: {
+      userId_businessId: { userId, businessId }
+    }
+  });
+  return userBusinessRole?.role === 'ADVISOR' && userBusinessRole?.isActive === true;
+}
+
 async function checkBusinessAccess(userId: string, businessId: string, role?: string, parentUserId?: string | null) {
   if (role === 'ASESOR' && parentUserId) {
     return prisma.business.findFirst({ where: { id: businessId, userId: parentUserId } });
   }
-  return prisma.business.findFirst({ where: { id: businessId, userId } });
+  const ownBusiness = await prisma.business.findFirst({ where: { id: businessId, userId } });
+  if (ownBusiness) return ownBusiness;
+  
+  const isAdvisor = await isAdvisorForBusiness(userId, businessId);
+  if (isAdvisor) {
+    return prisma.business.findFirst({ where: { id: businessId } });
+  }
+  return null;
 }
 
 async function getAssignedContactPhones(userId: string, businessId: string) {
@@ -48,7 +64,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     
     const where: any = { businessId: business_id as string };
     
-    if (user.role === 'ASESOR') {
+    const isAdvisorRole = user.role === 'ASESOR' || await isAdvisorForBusiness(req.userId!, business_id as string);
+    if (isAdvisorRole) {
       const assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
       if (assignedPhones.length === 0) {
         return res.json([]);
@@ -94,7 +111,8 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     }
     
     let assignedPhones: string[] = [];
-    if (user.role === 'ASESOR') {
+    const isAdvisor = user.role === 'ASESOR' || await isAdvisorForBusiness(req.userId!, business_id as string);
+    if (isAdvisor) {
       assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
       if (assignedPhones.length === 0) {
         return res.json([]);
@@ -126,7 +144,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       ];
     }
     
-    if (user.role === 'ASESOR' && assignedPhones.length > 0) {
+    if (isAdvisor && assignedPhones.length > 0) {
       // Need to combine with assigned phones filter
       const phoneFilter = assignedPhones.flatMap(p => [{ sender: p }, { recipient: p }]);
       if (whereClause.OR) {
@@ -238,7 +256,8 @@ router.get('/conversation/:phone', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    if (user.role === 'ASESOR') {
+    const isAdvisorRole = user.role === 'ASESOR' || await isAdvisorForBusiness(req.userId!, business_id as string);
+    if (isAdvisorRole) {
       const assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
       if (!assignedPhones.includes(phone)) {
         return res.status(403).json({ error: 'Access denied to this conversation' });
@@ -298,7 +317,8 @@ router.get('/conversation/:phone/window-status', async (req: AuthRequest, res: R
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    if (user.role === 'ASESOR') {
+    const isAdvisorRole = user.role === 'ASESOR' || await isAdvisorForBusiness(req.userId!, business_id as string);
+    if (isAdvisorRole) {
       const assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
       if (!assignedPhones.includes(phone)) {
         return res.status(403).json({ error: 'Access denied to this conversation' });
