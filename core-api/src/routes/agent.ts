@@ -2579,38 +2579,48 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       const timeout = setTimeout(async () => {
         console.log(`[Agent Buffer] Processing buffer for ${contactPhone} after ${bufferSeconds}s delay`);
         try {
-          const buffer = await prisma.messageBuffer.findUnique({
-            where: { businessId_contactPhone: { businessId: business_id, contactPhone } }
+          // Use atomic delete to claim the buffer - prevents race condition with legacyBufferProcessor
+          // Only process if WE successfully deleted the buffer (no one else claimed it)
+          const deletedBuffers = await prisma.messageBuffer.deleteMany({
+            where: { 
+              businessId: business_id, 
+              contactPhone,
+              // Only delete if not being processed by legacy worker
+              OR: [
+                { processingUntil: null },
+                { processingUntil: { lt: new Date() } }
+              ]
+            }
           });
           
-          if (buffer) {
-            const bufferData = buffer.messages as any;
-            const messages = bufferData?.texts || (Array.isArray(bufferData) ? bufferData : []);
-            const messageIds = bufferData?.providerMessageIds || [];
-            
-            console.log(`[Agent Buffer] Found ${messages.length} messages to process for ${contactPhone}`);
-            
-            await prisma.messageBuffer.delete({
-              where: { id: buffer.id }
-            });
-            
+          if (deletedBuffers.count === 0) {
+            console.log(`[Agent Buffer] Buffer for ${contactPhone} already processed by another worker, skipping`);
             activeBuffers.delete(bufferKey);
-            
-            console.log(`[Agent Buffer] Calling processWithAgentQueuedWithIds for ${contactPhone}`);
-            await processWithAgentQueuedWithIds(
-              business_id,
-              messages,
-              phone,
-              contactPhone,
-              contactName,
-              instanceId,
-              instanceBackendId,
-              messageIds,
-              capturedProvider
-            );
+            return;
           }
+          
+          // We successfully claimed the buffer, now get the data from our captured state
+          const messages = currentMessages;
+          const messageIds = capturedProviderMessageIds;
+          
+          console.log(`[Agent Buffer] Claimed buffer with ${messages.length} messages to process for ${contactPhone}`);
+          activeBuffers.delete(bufferKey);
+          
+          console.log(`[Agent Buffer] Calling processWithAgentQueuedWithIds for ${contactPhone}`);
+          await processWithAgentQueuedWithIds(
+            business_id,
+            messages,
+            phone,
+            contactPhone,
+            contactName,
+            instanceId,
+            instanceBackendId,
+            messageIds,
+            capturedProvider
+          );
         } catch (error) {
           console.error('Buffer processing error:', error);
+          activeBuffers.delete(bufferKey);
         }
       }, bufferSeconds * 1000);
       
