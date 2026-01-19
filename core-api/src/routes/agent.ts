@@ -3363,10 +3363,16 @@ router.get('/delivery-zones/:businessId', authMiddleware, async (req: AuthReques
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    // If instanceId provided, filter by instance; otherwise return all for business
+    // If instanceId provided, show instance-specific + shared zones; otherwise return all for business
     const whereClause: any = { businessId };
-    if (instanceId) {
-      whereClause.instanceId = String(instanceId);
+    if (instanceId && String(instanceId).trim() !== '') {
+      // Show zones for this instance + shared zones (null instanceId)
+      whereClause.OR = [
+        { instanceId: String(instanceId) },
+        { instanceId: null }
+      ];
+      delete whereClause.businessId;
+      whereClause.AND = [{ businessId }];
     }
     
     const zones = await prisma.deliveryZone.findMany({
