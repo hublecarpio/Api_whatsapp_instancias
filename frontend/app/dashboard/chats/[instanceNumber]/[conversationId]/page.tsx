@@ -58,11 +58,16 @@ export default function ChatPage() {
   const [windowStatus, setWindowStatus] = useState<WindowStatus | null>(null);
   const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialLoadRef = useRef(true);
+  const userScrolledUpRef = useRef(false);
 
   useEffect(() => {
     if (currentBusiness?.id && instanceNumber && conversationId) {
+      isInitialLoadRef.current = true;
+      userScrolledUpRef.current = false;
       loadInstanceAndMessages();
       startPolling();
     }
@@ -75,11 +80,23 @@ export default function ChatPage() {
   }, [currentBusiness?.id, instanceNumber, conversationId]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (isInitialLoadRef.current && messages.length > 0 && !loading) {
+      scrollToBottom();
+      isInitialLoadRef.current = false;
+    }
+  }, [messages, loading]);
+
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    userScrolledUpRef.current = !isNearBottom;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    userScrolledUpRef.current = false;
   };
 
   const loadInstanceAndMessages = async () => {
@@ -154,6 +171,7 @@ export default function ChatPage() {
       
       setMessages(prev => [...prev, tempMessage]);
       setNewMessage('');
+      scrollToBottom();
       
       await messageApi.send(currentBusiness.id, conversationId, newMessage);
       
@@ -279,7 +297,11 @@ export default function ChatPage() {
         )}
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-auto p-4 space-y-4"
+      >
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
