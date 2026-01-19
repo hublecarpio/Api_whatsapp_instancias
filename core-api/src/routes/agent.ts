@@ -2406,7 +2406,8 @@ async function processWithAgent(
                                  !orderToolExecuted && 
                                  (mentionsStrongOrderConfirmation || hasPurchaseContext);
   
-  if (shouldTriggerFallback) {
+  if (shouldTriggerFallback && !orderToolExecuted) {
+    // Double-check: only trigger fallback if tool was definitely NOT executed in this turn
     console.warn(`[Agent V1] FALLBACK TRIGGERED: Agent confirmed order without using tool!`);
     console.warn(`[Agent V1] Trigger reason: strongPattern=${mentionsStrongOrderConfirmation}, purchaseContext=${hasPurchaseContext}`);
     console.log(`[Agent V1] Response snippet: "${aiResponse.substring(0, 200)}..."`);
@@ -2416,6 +2417,8 @@ async function processWithAgent(
       
       if (autoOrderResult.created) {
         console.log(`[Agent V1] FALLBACK SUCCESS: Auto-created order ${autoOrderResult.orderId}`);
+        // Mark as executed to prevent any further creation attempts
+        orderToolExecuted = true;
       } else if (autoOrderResult.orderId) {
         console.log(`[Agent V1] FALLBACK: Order already exists or updated: ${autoOrderResult.orderId} - ${autoOrderResult.reason}`);
       } else {
@@ -2423,6 +2426,10 @@ async function processWithAgent(
         // Log missing fields for diagnostics
         if (autoOrderResult.reason.includes('Missing fields')) {
           console.warn(`[Agent V1] Contact ${contactPhone} missing data for auto-order. Manual intervention may be needed.`);
+        }
+        // If product not found, try to create manual order with extracted data
+        if (autoOrderResult.reason.includes('producto_no_encontrado')) {
+          console.warn(`[Agent V1] Product not found in catalog. Consider creating manual order with product name from conversation.`);
         }
       }
     } catch (fallbackError: any) {
