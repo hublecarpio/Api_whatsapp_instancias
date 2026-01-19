@@ -1031,17 +1031,32 @@ export default function ChatPage() {
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+    const today = new Date();
+    const time = date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+    
+    if (date.toDateString() === today.toDateString()) {
+      return time;
+    }
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Ayer ${time}`;
+    }
+    
+    const dateFormatted = date.toLocaleDateString('es', { day: '2-digit', month: '2-digit' });
+    return `${dateFormatted} ${time}`;
   };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const today = new Date();
-    if (date.toDateString() === today.toDateString()) return formatTime(dateStr);
+    const time = date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+    if (date.toDateString() === today.toDateString()) return time;
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    if (date.toDateString() === yesterday.toDateString()) return 'Ayer';
-    return date.toLocaleDateString('es', { day: '2-digit', month: '2-digit' });
+    if (date.toDateString() === yesterday.toDateString()) return `Ayer ${time}`;
+    return date.toLocaleDateString('es', { day: '2-digit', month: '2-digit' }) + ` ${time}`;
   };
 
   const isImageUrl = (url: string) => /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url);
@@ -1458,26 +1473,26 @@ export default function ChatPage() {
                     {advisors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 ))}
+                <button 
+                  onClick={() => setShowContactPanel(!showContactPanel)}
+                  className={`p-2 rounded-full transition-colors ${showContactPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`}
+                  title="Datos del contacto"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
                 {!isAdvisorMode && (
                   <button 
-                    onClick={() => setShowContactPanel(!showContactPanel)}
-                    className={`p-2 rounded-full transition-colors ${showContactPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`}
-                    title="Datos del contacto"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="p-2 rounded-full transition-colors text-gray-400 hover:text-accent-error hover:bg-accent-error/10"
+                    title="Eliminar conversacion y memoria del agente"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>
                 )}
-                <button 
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="p-2 rounded-full transition-colors text-gray-400 hover:text-accent-error hover:bg-accent-error/10"
-                  title="Eliminar conversacion y memoria del agente"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
               </div>
 
               {showDeleteConfirm && (
@@ -1536,7 +1551,7 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {showContactPanel && !isAdvisorMode && (
+              {showContactPanel && (
                 <div className="px-4 py-3 border-b border-dark-border bg-dark-surface">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-sm font-medium text-white">Datos del Contacto</h4>
@@ -1612,7 +1627,7 @@ export default function ChatPage() {
                 className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 scroll-smooth-ios scrollbar-thin bg-dark-bg"
                 onScroll={(e) => {
                   const el = e.currentTarget;
-                  const threshold = 150;
+                  const threshold = 50;
                   isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
                 }}
               >
