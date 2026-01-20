@@ -3,6 +3,7 @@ import axios from 'axios';
 import { geminiService } from './gemini.js';
 import { assignNextRoundRobinAdvisor } from '../routes/advisor.js';
 import { cancelPendingFollowUps } from './followUpService.js';
+import { logTokenUsage } from './tokenLogger.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
@@ -116,6 +117,80 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     }
   }
 
+  let voucherContext = '';
+  let voucherValidationData: any = null;
+  if (type === 'image' && mediaUrl && geminiService.isConfigured()) {
+    const normalizedOrderPhone = from.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
+    
+    const pendingVoucherOrder = await prisma.order.findFirst({
+      where: {
+        businessId,
+        contactPhone: normalizedOrderPhone,
+        status: 'AWAITING_VOUCHER',
+        voucherImageUrl: null
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true }
+    });
+    
+    if (pendingVoucherOrder) {
+      console.log(`[VOUCHER] Validating potential voucher for order ${pendingVoucherOrder.id}, phone: ${normalizedOrderPhone}`);
+      
+      try {
+        const voucherValidation = await geminiService.validatePaymentVoucher(
+          mediaUrl,
+          {
+            amount: Number(pendingVoucherOrder.totalAmount),
+            currency: pendingVoucherOrder.currencyCode || 'PEN'
+          }
+        );
+        
+        if (voucherValidation.isPaymentProof && voucherValidation.isValid) {
+          voucherValidationData = {
+            orderId: pendingVoucherOrder.id,
+            brand: voucherValidation.brand,
+            detectedAmount: voucherValidation.amount,
+            currency: voucherValidation.currency,
+            operationCode: voucherValidation.operationCode,
+            confidence: voucherValidation.confidence,
+            reason: voucherValidation.reason,
+            validatedAt: new Date().toISOString(),
+            provider
+          };
+          
+          await prisma.order.update({
+            where: { id: pendingVoucherOrder.id },
+            data: {
+              voucherImageUrl: mediaUrl,
+              voucherReceivedAt: new Date(),
+              notes: JSON.stringify({ voucherValidation: voucherValidationData })
+            }
+          });
+          console.log(`[VOUCHER] Valid voucher attached to order ${pendingVoucherOrder.id}: brand=${voucherValidation.brand}, amount=${voucherValidation.amount}, code=${voucherValidation.operationCode}`);
+          
+          voucherContext = `\n\n[COMPROBANTE DE PAGO RECIBIDO Y VALIDADO] Se ha recibido un comprobante de pago válido para el pedido #${pendingVoucherOrder.id.slice(-6).toUpperCase()}. Banco/App: ${voucherValidation.brand || 'detectado'}, Monto: ${voucherValidation.currency || ''}${voucherValidation.amount || 'detectado'}. El equipo verificará el pago y procesará el pedido. Agradece al cliente por enviar su comprobante y confirma que su pedido será procesado.`;
+          
+          mediaAnalysis = voucherContext;
+          mediaAnalysisRaw = `[VOUCHER VALIDADO] ${voucherValidation.brand || 'Comprobante'} - ${voucherValidation.currency || ''}${voucherValidation.amount || '?'} - Código: ${voucherValidation.operationCode || 'N/A'}`;
+          
+          await logTokenUsage({
+            userId: business.userId,
+            businessId,
+            feature: 'voucher_validation',
+            model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+            promptTokens: 258,
+            completionTokens: 128,
+            provider: 'gemini'
+          });
+        } else {
+          console.log(`[VOUCHER] Image not validated as voucher: isPaymentProof=${voucherValidation.isPaymentProof}, isValid=${voucherValidation.isValid}, reason=${voucherValidation.reason}`);
+        }
+      } catch (voucherError: any) {
+        console.error(`[VOUCHER] Error validating voucher:`, voucherError.message);
+      }
+    }
+  }
+
   const fullMessageForAgent = messageText + mediaAnalysis;
 
   await prisma.messageLog.create({
@@ -136,7 +211,9 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
         timestamp: message.timestamp,
         mediaAnalysis: mediaAnalysisRaw || undefined,
         mediaType: mediaUrl ? type : undefined,
-        order: message.order || undefined
+        order: message.order || undefined,
+        voucherValidation: voucherValidationData || undefined,
+        voucherContext: voucherContext || undefined
       }
     }
   });
