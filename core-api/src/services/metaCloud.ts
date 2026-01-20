@@ -6,18 +6,25 @@ const META_API_URL = 'https://graph.facebook.com/v21.0';
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  keepAliveMsecs: 3000,
-  timeout: 60000,
-  maxSockets: 50,
-  maxFreeSockets: 10
+  keepAliveMsecs: 5000,
+  timeout: 90000,
+  maxSockets: 100,
+  maxFreeSockets: 20,
+  scheduling: 'fifo'
 });
 
 const metaAxios: AxiosInstance = axios.create({
   httpsAgent,
-  timeout: 30000,
+  timeout: 45000,
   headers: {
     'Connection': 'keep-alive'
   }
+});
+
+// Fresh agent for retries (no connection reuse)
+const freshAgent = new https.Agent({
+  keepAlive: false,
+  timeout: 60000
 });
 
 export interface MetaCredentials {
@@ -160,10 +167,15 @@ export class MetaCloudService {
 
   async sendTextMessage(to: string, text: string, retryCount = 0): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
-    console.log(`[META] sendTextMessage: to=${cleanPhone}, phoneNumberId=${this.credentials.phoneNumberId}, textLen=${text?.length}, retry=${retryCount}`);
+    const maxRetries = 3;
+    console.log(`[META] sendTextMessage: to=${cleanPhone}, phoneNumberId=${this.credentials.phoneNumberId}, textLen=${text?.length}, retry=${retryCount}/${maxRetries}`);
     
     try {
-      const response = await metaAxios.post(
+      // Use fresh agent on retries to avoid stale connections
+      const agent = retryCount > 0 ? freshAgent : httpsAgent;
+      const timeout = retryCount > 0 ? 60000 : 45000;
+      
+      const response = await axios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -172,15 +184,24 @@ export class MetaCloudService {
           type: 'text',
           text: { body: text }
         },
-        { headers: this.headers }
+        { 
+          headers: this.headers,
+          httpsAgent: agent,
+          timeout
+        }
       );
 
       const messageId = response.data?.messages?.[0]?.id;
-      console.log(`[META] sendTextMessage SUCCESS: messageId=${messageId}`);
+      console.log(`[META] sendTextMessage SUCCESS: messageId=${messageId}, attempt=${retryCount + 1}`);
       return response.data;
     } catch (error: any) {
-      const isTimeout = error?.code === 'ETIMEDOUT' || error?.code === 'ECONNRESET' || error?.code === 'ENOTFOUND';
-      console.error(`[META] sendTextMessage FAILED:`, {
+      const isRetryable = error?.code === 'ETIMEDOUT' || 
+                          error?.code === 'ECONNRESET' || 
+                          error?.code === 'ENOTFOUND' ||
+                          error?.code === 'ECONNABORTED' ||
+                          error?.code === 'ESOCKETTIMEDOUT';
+      
+      console.error(`[META] sendTextMessage FAILED (attempt ${retryCount + 1}/${maxRetries + 1}):`, {
         status: error?.response?.status,
         data: error?.response?.data,
         message: error?.message,
@@ -188,9 +209,10 @@ export class MetaCloudService {
         to: cleanPhone
       });
       
-      if (isTimeout && retryCount < 2) {
-        console.log(`[META] Retrying sendTextMessage (attempt ${retryCount + 1})...`);
-        await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+      if (isRetryable && retryCount < maxRetries) {
+        const delay = Math.min(2000 * Math.pow(2, retryCount), 10000); // Exponential backoff: 2s, 4s, 8s (max 10s)
+        console.log(`[META] Retrying sendTextMessage in ${delay}ms (attempt ${retryCount + 2}/${maxRetries + 1})...`);
+        await new Promise(r => setTimeout(r, delay));
         return this.sendTextMessage(to, text, retryCount + 1);
       }
       throw error;

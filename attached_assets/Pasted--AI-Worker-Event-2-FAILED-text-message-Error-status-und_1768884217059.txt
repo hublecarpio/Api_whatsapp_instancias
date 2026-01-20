@@ -1,0 +1,94 @@
+[AI Worker] Event 2 FAILED (text): {
+  message: 'Error',
+  status: undefined,
+  metaError: undefined,
+  code: 'ETIMEDOUT'
+}
+[AI Worker] Meta Cloud COMPLETE: 0/2 sent OK, 2 failed, to=51992544801
+[FOLLOW-UP] scheduleFollowUp called - business: abeb9f70-3ecb-4b80-9285-1f8a43452633, phone: 51992544801, source: ai, instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[FOLLOW-UP] No config found for business abeb9f70-3ecb-4b80-9285-1f8a43452633
+[AI Worker] Response sent and logged to 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: agent_message, instance: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[AI Worker] Updating lead stage after agent response for 51992544801
+[AI Worker] Extracting custom data for 51992544801
+[AI Worker] Job ai-abeb9f70-3ecb-4b80-9285-1f8a43452633-51992544801-1768884170324 completed, response length: 332
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[AI] callOpenAI rawModel="gpt-4.1-nano" model="gpt-4.1-nano" useOpenRouter=false
+[DataExtraction] Skipping lima_provincia - value unchanged
+[DataExtraction] Skipping lima_provincia - value unchanged
+[DataExtraction] Saved perfume_solicitado=Inspiración Bleu de Chanel for 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: state_change
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnDataUpdate CALLED <<<
+[ORDER-AUTO-DEBUG] Updated field: "perfume_solicitado", Phone: 51992544801
+[ORDER-AUTO-DEBUG] Trigger fields: direccion, address, ubicacion, producto, fragancia, tamano, tamaño
+[ORDER-AUTO-DEBUG] Should trigger: false
+[ORDER-AUTO-DEBUG] Field "perfume_solicitado" is NOT a trigger field - skipping
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[DataExtraction] Saved tamaño=100 ml for 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: state_change
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnDataUpdate CALLED <<<
+[ORDER-AUTO-DEBUG] Updated field: "tamaño", Phone: 51992544801
+[ORDER-AUTO-DEBUG] Trigger fields: direccion, address, ubicacion, producto, fragancia, tamano, tamaño
+[ORDER-AUTO-DEBUG] Should trigger: true
+[ORDER-AUTO] Field "tamaño" triggered auto-order check
+[ORDER-AUTO-DEBUG] ╔══════════════════════════════════════════════════════╗
+[ORDER-AUTO-DEBUG] ║         createAutoOrder EXECUTION START              ║
+[ORDER-AUTO-DEBUG] ╚══════════════════════════════════════════════════════╝
+[ORDER-AUTO-DEBUG] Parameters:
+[ORDER-AUTO-DEBUG]   - businessId: abeb9f70-3ecb-4b80-9285-1f8a43452633
+[ORDER-AUTO-DEBUG]   - contactPhone: 51992544801
+[ORDER-AUTO-DEBUG]   - instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[ORDER-AUTO-DEBUG]   - skipStageCheck: false
+[ORDER-AUTO] Checking order readiness for 51992544801, instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[ORDER-AUTO-DEBUG] Business found: "duvon pruebas" (ID: abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[ORDER-AUTO-DEBUG] Business objective: SALES
+[ORDER-AUTO-DEBUG] ✓ Business objective is SALES
+[ORDER-AUTO-DEBUG] Checking funnel stage (skipStageCheck=false)...
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[DataExtraction] Saved agencia_shalom=Shalom for 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: state_change
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnDataUpdate CALLED <<<
+[ORDER-AUTO-DEBUG] Updated field: "agencia_shalom", Phone: 51992544801
+[ORDER-AUTO-DEBUG] Trigger fields: direccion, address, ubicacion, producto, fragancia, tamano, tamaño
+[ORDER-AUTO-DEBUG] Should trigger: false
+[ORDER-AUTO-DEBUG] Field "agencia_shalom" is NOT a trigger field - skipping
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[DataExtraction] Saved cantidad_perfum_es=1 for 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: state_change
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnDataUpdate CALLED <<<
+[ORDER-AUTO-DEBUG] Updated field: "cantidad_perfum_es", Phone: 51992544801
+[ORDER-AUTO-DEBUG] Trigger fields: direccion, address, ubicacion, producto, fragancia, tamano, tamaño
+[ORDER-AUTO-DEBUG] Should trigger: false
+[ORDER-AUTO-DEBUG] Field "cantidad_perfum_es" is NOT a trigger field - skipping
+[DataExtraction] Extracted 6 fields for 51992544801
+[ORDER-AUTO-DEBUG] Stage status: {
+  "currentStage": "Upsell/Promos",
+  "nextStage": "Ubicación",
+  "canAdvance": true,
+  "missingFields": []
+}
+[ORDER-AUTO-DEBUG] isInFinalStage("Upsell/Promos"): false
+[ORDER-AUTO-DEBUG] Checking against keywords: confirmar orden, confirmar pedido, cotización final, cotizacion final, pago, cierre, finalizar
+[ORDER-AUTO-DEBUG] ❌ FAIL: Contact is NOT in a final stage
+[ORDER-AUTO-DEBUG] Current stage: "Upsell/Promos"
+[ORDER-AUTO-DEBUG] Required keywords in stage name: confirmar orden, confirmar pedido, cotización final, cotizacion final, pago, cierre, finalizar
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[FunnelStage] Contact 51992544801 advanced to stage: Ubicación
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnStageAdvance CALLED <<<
+[ORDER-AUTO-DEBUG] Stage: "Ubicación", Phone: 51992544801
+[ORDER-AUTO-DEBUG] isInFinalStage("Ubicación"): false
+[ORDER-AUTO-DEBUG] Checking against keywords: confirmar orden, confirmar pedido, cotización final, cotizacion final, pago, cierre, finalizar
+[ORDER-AUTO-DEBUG] Stage "Ubicación" is NOT a final stage - skipping
+[GEMINI] Lead stage analysis: {
+  stageName: 'Pendiente',
+  confidence: 0.9,
+  reasoning: 'El agente ha enviado el resumen de la compra y los datos para el pago, esperando la confirmación y el pago del cliente. El cliente aún no ha respondido.',
+  shouldChange: true,
+  currentStage: 'Negociando'
+}
+[LEAD STAGE] Updated 51992544801 to "Pendiente" (confidence: 0.9)
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: stage_change
+[AI Worker] Lead stage updated to "Pendiente" (confidence: 0.9)
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[ExpiredBuffer] Checking for expired buffers...
+[ExpiredBuffer] Checking for expired buffers...
