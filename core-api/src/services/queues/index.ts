@@ -8,7 +8,8 @@ export const QUEUE_NAMES = {
   INACTIVITY_CHECK: 'efficore-inactivity-check',
   AI_RESPONSE: 'efficore-ai-response',
   EXPIRED_BUFFER: 'efficore-expired-buffer',
-  OUTBOUND_MESSAGE: 'efficore-outbound-message'
+  OUTBOUND_MESSAGE: 'efficore-outbound-message',
+  MEDIA_DOWNLOAD: 'efficore-media-download'
 } as const;
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6389';
@@ -114,12 +115,27 @@ export interface OutboundMessageJobData {
   realFailures?: number;
 }
 
+export interface MediaDownloadJobData {
+  messageLogId: string;
+  businessId: string;
+  instanceId: string;
+  mediaId: string;
+  mediaType: string;
+  mimetype: string;
+  provider: 'META_CLOUD' | 'META_COEXIST';
+  accessToken: string;
+  phoneNumberId: string;
+  contactPhone: string;
+  attemptNumber: number;
+}
+
 let reminderQueue: Queue<ReminderJobData> | null = null;
 let messageBufferQueue: Queue<MessageBufferJobData> | null = null;
 let whatsappIncomingQueue: Queue<WhatsAppIncomingJobData> | null = null;
 let inactivityCheckQueue: Queue<InactivityCheckJobData> | null = null;
 let aiResponseQueue: Queue<AIResponseJobData> | null = null;
 let outboundMessageQueue: Queue<OutboundMessageJobData> | null = null;
+let mediaDownloadQueue: Queue<MediaDownloadJobData> | null = null;
 
 export function initializeQueues(): void {
   const conn = getConnection();
@@ -227,8 +243,26 @@ export function initializeQueues(): void {
       }
     }
   });
+
+  mediaDownloadQueue = new Queue<MediaDownloadJobData>(QUEUE_NAMES.MEDIA_DOWNLOAD, {
+    connection: conn,
+    defaultJobOptions: {
+      attempts: 5,
+      backoff: {
+        type: 'exponential',
+        delay: 3000
+      },
+      removeOnComplete: {
+        age: 3600,
+        count: 1000
+      },
+      removeOnFail: {
+        age: 24 * 3600
+      }
+    }
+  });
   
-  console.log('BullMQ queues initialized (including Outbound Message queue)');
+  console.log('BullMQ queues initialized (including Outbound Message and Media Download queues)');
 }
 
 export function areQueuesInitialized(): boolean {
@@ -253,6 +287,10 @@ export function getAIResponseQueue(): Queue<AIResponseJobData> | null {
 
 export function getOutboundMessageQueue(): Queue<OutboundMessageJobData> | null {
   return outboundMessageQueue;
+}
+
+export function getMediaDownloadQueue(): Queue<MediaDownloadJobData> | null {
+  return mediaDownloadQueue;
 }
 
 export function getQueueConnection(): Redis {
@@ -296,6 +334,7 @@ export async function closeQueues(): Promise<void> {
   if (inactivityCheckQueue) closeTasks.push(inactivityCheckQueue.close());
   if (aiResponseQueue) closeTasks.push(aiResponseQueue.close());
   if (outboundMessageQueue) closeTasks.push(outboundMessageQueue.close());
+  if (mediaDownloadQueue) closeTasks.push(mediaDownloadQueue.close());
   
   await Promise.all(closeTasks);
   
@@ -313,6 +352,7 @@ export async function closeQueues(): Promise<void> {
   inactivityCheckQueue = null;
   aiResponseQueue = null;
   outboundMessageQueue = null;
+  mediaDownloadQueue = null;
   
   console.log('All queues closed');
 }

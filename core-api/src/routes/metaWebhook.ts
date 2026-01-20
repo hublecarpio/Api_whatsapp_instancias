@@ -6,6 +6,7 @@ import { uploadBuffer, isS3Configured } from '../services/storage.js';
 import { dispatchUserMessage } from '../services/webhookService.js';
 import { webhookLogger, logWebhookEvent } from '../services/logger.js';
 import { getRedisConnection, isRedisAvailable } from '../services/redis.js';
+import { getMediaDownloadQueue, MediaDownloadJobData } from '../services/queues/index.js';
 
 const router = Router();
 
@@ -246,6 +247,8 @@ async function processMessage(
   });
 
   let mediaUrl: string | undefined;
+  let mediaPendingData: { mediaId: string; mimetype: string; mediaType: string } | null = null;
+  
   if (msg.mediaId) {
     console.log(`[META WEBHOOK MEDIA] Processing ${msg.type} media: mediaId=${msg.mediaId}, mimetype=${msg.mimetype}, from=${msg.from}`);
     const mediaStartTime = Date.now();
@@ -283,11 +286,27 @@ async function processMessage(
         mediaUrl = metaMediaUrl;
       }
     } catch (error: any) {
-      console.error(`[META WEBHOOK MEDIA] FAILED to process ${msg.type} mediaId=${msg.mediaId}: ${error.message}`, {
+      const errorMessage = error.message || 'Unknown error';
+      const isCircuitBreakerOpen = errorMessage === 'META_CIRCUIT_BREAKER_OPEN';
+      const isNetworkError = ['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN'].some(
+        code => errorMessage.includes(code) || error.code === code
+      );
+      
+      console.error(`[META WEBHOOK MEDIA] FAILED to process ${msg.type} mediaId=${msg.mediaId}: ${errorMessage}`, {
         status: error?.response?.status,
         data: error?.response?.data,
-        code: error?.code
+        code: error?.code,
+        isCircuitBreakerOpen,
+        isNetworkError,
+        willRetryAsync: true
       });
+      
+      mediaPendingData = {
+        mediaId: msg.mediaId,
+        mimetype: msg.mimetype || 'application/octet-stream',
+        mediaType: msg.type
+      };
+      
       logWebhookEvent({
         eventType: 'error',
         phoneNumberId: metaService['credentials'].phoneNumberId,
@@ -295,8 +314,9 @@ async function processMessage(
         businessId: instance.businessId,
         provider: providerType,
         mediaId: msg.mediaId,
-        error: error.message,
-        duration: Date.now() - mediaStartTime
+        error: errorMessage,
+        duration: Date.now() - mediaStartTime,
+        metadata: { willRetryAsync: true }
       });
     }
   } else if (['image', 'video', 'audio', 'sticker', 'document'].includes(msg.type)) {
@@ -336,6 +356,55 @@ async function processMessage(
       },
       select: { id: true }
     });
+    
+    // If media download failed, enqueue async retry
+    if (mediaPendingData && messageLog?.id) {
+      const mediaQueue = getMediaDownloadQueue();
+      if (mediaQueue) {
+        const jobData: MediaDownloadJobData = {
+          messageLogId: messageLog.id,
+          businessId: instance.businessId,
+          instanceId: instance.id,
+          mediaId: mediaPendingData.mediaId,
+          mediaType: mediaPendingData.mediaType,
+          mimetype: mediaPendingData.mimetype,
+          provider: providerType,
+          accessToken: metaService['credentials'].accessToken,
+          phoneNumberId: metaService['credentials'].phoneNumberId,
+          contactPhone: msg.from,
+          attemptNumber: 1
+        };
+        
+        await mediaQueue.add(`media-${mediaPendingData.mediaId}`, jobData, {
+          delay: 2000, // Wait 2 seconds before first retry
+          priority: 1
+        });
+        
+        // Update messageLog to mark media as pending (merge with existing metadata)
+        const existingLog = await prisma.messageLog.findUnique({
+          where: { id: messageLog.id },
+          select: { metadata: true }
+        });
+        const existingMetadata = (existingLog?.metadata as Record<string, any>) || {};
+        
+        await prisma.messageLog.update({
+          where: { id: messageLog.id },
+          data: {
+            metadata: {
+              ...existingMetadata,
+              mediaPending: true,
+              mediaId: mediaPendingData.mediaId,
+              mediaType: mediaPendingData.mediaType,
+              mimetype: mediaPendingData.mimetype
+            }
+          }
+        });
+        
+        console.log(`[META WEBHOOK MEDIA] Enqueued async download for mediaId=${mediaPendingData.mediaId}, messageLogId=${messageLog.id}`);
+      } else {
+        console.error(`[META WEBHOOK MEDIA] Cannot enqueue media download - queue not initialized`);
+      }
+    }
     
     // Build message text for webhook - handle special types like order
     let webhookMessage = msg.caption || msg.text || '';

@@ -59,6 +59,8 @@ let bullmqModules: {
   scheduleExpiredBufferCheck: () => Promise<void>;
   startOutboundMessageWorker: () => any;
   stopOutboundMessageWorker: () => Promise<void>;
+  startMediaDownloadWorker: () => any;
+  stopMediaDownloadWorker: () => void;
 } | null = null;
 
 const app = express();
@@ -155,14 +157,15 @@ async function initializeWorkers(): Promise<void> {
     try {
       console.log('Redis available - initializing BullMQ workers...');
       
-      const [queuesIndex, reminderProc, inactivityProc, bufferProc, aiResponseProc, expiredBufferProc, outboundProc] = await Promise.all([
+      const [queuesIndex, reminderProc, inactivityProc, bufferProc, aiResponseProc, expiredBufferProc, outboundProc, mediaDownloadProc] = await Promise.all([
         import('./services/queues/index.js'),
         import('./services/queues/reminderProcessor.js'),
         import('./services/queues/inactivityProcessor.js'),
         import('./services/queues/messageBufferProcessor.js'),
         import('./services/queues/aiResponseProcessor.js'),
         import('./services/queues/expiredBufferProcessor.js'),
-        import('./services/queues/outboundMessageProcessor.js')
+        import('./services/queues/outboundMessageProcessor.js'),
+        import('./services/queues/mediaDownloadProcessor.js')
       ]);
       
       queuesIndex.initializeQueues();
@@ -183,7 +186,9 @@ async function initializeWorkers(): Promise<void> {
         stopExpiredBufferWorker: expiredBufferProc.stopExpiredBufferWorker,
         scheduleExpiredBufferCheck: expiredBufferProc.scheduleExpiredBufferCheck,
         startOutboundMessageWorker: outboundProc.startOutboundMessageWorker,
-        stopOutboundMessageWorker: outboundProc.stopOutboundMessageWorker
+        stopOutboundMessageWorker: outboundProc.stopOutboundMessageWorker,
+        startMediaDownloadWorker: mediaDownloadProc.startMediaDownloadProcessor,
+        stopMediaDownloadWorker: mediaDownloadProc.stopMediaDownloadProcessor
       };
       
       bullmqModules.startReminderWorker();
@@ -192,6 +197,7 @@ async function initializeWorkers(): Promise<void> {
       bullmqModules.startAIResponseWorker();
       bullmqModules.startExpiredBufferWorker();
       bullmqModules.startOutboundMessageWorker();
+      bullmqModules.startMediaDownloadWorker();
       
       await bullmqModules.scheduleInactivityChecks();
       await bullmqModules.schedulePendingReminders();
@@ -226,6 +232,7 @@ async function gracefulShutdown(): Promise<void> {
       await bullmqModules.stopAIResponseWorker();
       await bullmqModules.stopExpiredBufferWorker();
       await bullmqModules.stopOutboundMessageWorker();
+      bullmqModules.stopMediaDownloadWorker();
       await bullmqModules.closeQueues();
     } else {
       const { stopLegacyBufferProcessor } = await import('./routes/agent.js');
