@@ -1376,6 +1376,9 @@ async function sendWhatsAppResponse(
         businessId: metaCredential.businessId
       });
       
+      let successCount = 0;
+      let failCount = 0;
+      
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
         
@@ -1385,32 +1388,40 @@ async function sendWhatsAppResponse(
         }
         
         try {
+          console.log(`[AI Worker] Sending event ${i+1}/${events.length}: type=${event.type}, to=${cleanPhone}`);
           if (event.type === 'text' && event.text) {
-            await metaService.sendTextMessage(cleanPhone, event.text);
+            const result = await metaService.sendTextMessage(cleanPhone, event.text);
+            console.log(`[AI Worker] Event ${i+1} SUCCESS: messageId=${result?.messages?.[0]?.id}`);
+            successCount++;
           } else if (event.type === 'image' && event.url) {
             await metaService.sendImageMessage(cleanPhone, event.url, event.caption);
             sentMedia.push({ type: 'image', url: event.url });
+            successCount++;
           } else if (event.type === 'video' && event.url) {
             await metaService.sendVideoMessage(cleanPhone, event.url, event.caption);
             sentMedia.push({ type: 'video', url: event.url });
+            successCount++;
           } else if (event.type === 'audio' && event.url) {
             await metaService.sendAudioMessage(cleanPhone, event.url);
             sentMedia.push({ type: 'audio', url: event.url });
+            successCount++;
           } else if (event.type === 'document' && event.url) {
             await metaService.sendDocumentMessage(cleanPhone, event.url, event.filename, event.caption);
             sentMedia.push({ type: 'document', url: event.url });
+            successCount++;
           }
         } catch (eventError: any) {
-          console.error(`[AI Worker] Failed to send ${event.type} event:`, {
+          failCount++;
+          console.error(`[AI Worker] Event ${i+1} FAILED (${event.type}):`, {
             message: eventError.message,
             status: eventError?.response?.status,
-            data: eventError?.response?.data,
+            metaError: eventError?.response?.data?.error,
             code: eventError?.code
           });
         }
       }
       
-      console.log(`[AI Worker] Meta Cloud: sent ${events.length} events to ${cleanPhone}`);
+      console.log(`[AI Worker] Meta Cloud COMPLETE: ${successCount}/${events.length} sent OK, ${failCount} failed, to=${cleanPhone}`);
     } else if (instance.instanceBackendId) {
       const backendId = instance.instanceBackendId;
       
