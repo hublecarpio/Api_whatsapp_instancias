@@ -1,0 +1,44 @@
+Ya tengo el panorama completo. Aquí está el análisis:
+
+Arquitectura Actual (Problema)
+┌──────────────────────────────────────────────────────────────┐
+│                      agent.ts (MEZCLADO)                      │
+│                                                               │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
+│  │ Generar IA  │→ │ Enviar WA   │→ │ Guardar en BD       │   │
+│  │ response    │  │ directo     │  │ (antes de confirm)  │   │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘   │
+│                          ↓                                    │
+│                   (a veces usa cola)                          │
+│                          ↓                                    │
+│              outboundMessageProcessor.ts                      │
+└──────────────────────────────────────────────────────────────┘
+Problemas identificados:
+
+agent.ts tiene ~1000+ líneas mezclando lógica de IA con envío de WhatsApp
+Algunos mensajes se envían directamente, otros por cola - inconsistente
+Se guarda en BD antes de confirmar envío (puede quedar "sent" aunque falló)
+Credenciales de WhatsApp mezcladas con lógica del agente
+Arquitectura Propuesta (Limpia)
+┌─────────────────────┐         ┌────────────────────────┐
+│   Módulo Agente     │         │   Módulo WhatsApp      │
+│   (agent.ts)        │         │   (whatsappSender.ts)  │
+│                     │         │                        │
+│ • Recibe mensaje    │ ─────►  │ • Recibe: instanceId,  │
+│ • Genera respuesta  │ acción  │   to, message, media   │
+│ • Devuelve texto    │         │ • Obtiene credenciales │
+│ • NO sabe de WA     │         │ • Envía por proveedor  │
+│                     │         │ • Confirma éxito       │
+│                     │         │ • Solo entonces: BD    │
+└─────────────────────┘         └────────────────────────┘
+         │                                  │
+         └──────► outboundQueue ◄───────────┘
+                       ↓
+              (unified processor)
+Beneficios:
+
+Agente solo se preocupa de IA, no de WhatsApp
+Todo pasa por la cola de mensajes salientes
+Solo se guarda "sent" después de confirmación real
+Fácil de escalar y debuggear
+Cada instancia tiene sus credenciales aisladas
