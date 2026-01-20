@@ -1,10 +1,108 @@
 import { Worker, Job } from 'bullmq';
 import prisma from '../prisma.js';
-import { QUEUE_NAMES, MediaDownloadJobData, getQueueConnection } from './index.js';
-import { MetaCloudService } from '../metaCloud.js';
+import { QUEUE_NAMES, MediaDownloadJobData, getQueueConnection, getMediaDownloadQueue } from './index.js';
+import { MetaCloudService, getCircuitBreakerState } from '../metaCloud.js';
 import { uploadBuffer, isS3Configured } from '../storage.js';
 
+const MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
+const CIRCUIT_BREAKER_RETRY_DELAY = 35000; // 35 seconds - wait for CB to enter half-open
+
 let mediaDownloadWorker: Worker | null = null;
+
+async function scheduleMediaRetry(
+  jobData: MediaDownloadJobData,
+  delay: number,
+  logPrefix: string
+): Promise<boolean> {
+  const { messageLogId, mediaId, attemptNumber } = jobData;
+  
+  const mediaQueue = getMediaDownloadQueue();
+  if (!mediaQueue) {
+    console.error(`${logPrefix} Cannot schedule retry - queue not initialized`);
+    return false;
+  }
+  
+  // Check current attempt count in DB to prevent duplicate re-queues
+  const existingLog = await prisma.messageLog.findUnique({
+    where: { id: messageLogId },
+    select: { metadata: true }
+  });
+  const scheduledAttempt = ((existingLog?.metadata as any)?.mediaDownloadScheduledAttempt) || 0;
+  const currentAttempt = Math.max(attemptNumber, scheduledAttempt);
+  
+  if (currentAttempt >= MAX_MEDIA_DOWNLOAD_ATTEMPTS) {
+    console.log(`${logPrefix} Max attempts (${MAX_MEDIA_DOWNLOAD_ATTEMPTS}) reached, not re-queueing`);
+    return false;
+  }
+  
+  const nextAttempt = currentAttempt + 1;
+  
+  // Use deterministic jobId to prevent duplicates
+  const jobId = `media-${messageLogId}-attempt-${nextAttempt}`;
+  
+  // Check if job already exists and is active
+  const existingJob = await mediaQueue.getJob(jobId);
+  if (existingJob) {
+    const state = await existingJob.getState();
+    // Only skip if job is waiting, delayed, or active
+    if (state === 'waiting' || state === 'delayed' || state === 'active') {
+      console.log(`${logPrefix} Job ${jobId} already ${state}, skipping duplicate`);
+      return true;
+    }
+    // Remove failed/completed stale jobs to allow re-queue
+    console.log(`${logPrefix} Removing stale job ${jobId} (state: ${state})`);
+    try {
+      await existingJob.remove();
+    } catch (e) {
+      console.warn(`${logPrefix} Failed to remove stale job: ${(e as Error).message}`);
+    }
+  }
+  
+  // Add job to queue FIRST - this is the source of truth
+  try {
+    await mediaQueue.add(jobId, {
+      ...jobData,
+      attemptNumber: nextAttempt
+    }, {
+      jobId, // Deterministic ID prevents duplicates
+      delay,
+      priority: 2,
+      removeOnComplete: true,
+      removeOnFail: true
+    });
+  } catch (addError: any) {
+    // If job already exists (race condition), consider it a success
+    if (addError.message?.includes('already exists')) {
+      console.log(`${logPrefix} Job ${jobId} added by concurrent worker, OK`);
+      return true;
+    }
+    console.error(`${logPrefix} Failed to add job: ${addError.message}`);
+    return false;
+  }
+  
+  // Update metadata AFTER successful enqueue (queue is source of truth)
+  try {
+    const existingMetadata = (existingLog?.metadata as Record<string, any>) || {};
+    await prisma.messageLog.update({
+      where: { id: messageLogId },
+      data: {
+        metadata: {
+          ...existingMetadata,
+          mediaPending: true,
+          mediaDownloadAttempt: attemptNumber,
+          mediaDownloadNextRetry: new Date(Date.now() + delay).toISOString(),
+          mediaDownloadScheduledAttempt: nextAttempt
+        }
+      }
+    });
+  } catch (dbError) {
+    // Job is already queued, DB update failure is not critical
+    console.warn(`${logPrefix} Failed to update metadata (job is queued): ${(dbError as Error).message}`);
+  }
+  
+  console.log(`${logPrefix} Scheduled retry ${nextAttempt}/${MAX_MEDIA_DOWNLOAD_ATTEMPTS} in ${delay/1000}s (jobId: ${jobId})`);
+  return true;
+}
 
 async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<void> {
   const { 
@@ -21,8 +119,21 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
     attemptNumber 
   } = job.data;
 
-  const logPrefix = `[MEDIA_DL] job=${job.id} messageLog=${messageLogId} mediaId=${mediaId} attempt=${attemptNumber}`;
+  const logPrefix = `[MEDIA_DL] job=${job.id} messageLog=${messageLogId} mediaId=${mediaId} attempt=${attemptNumber}/${MAX_MEDIA_DOWNLOAD_ATTEMPTS}`;
   console.log(`${logPrefix} Starting media download...`);
+
+  // Check circuit breaker state BEFORE attempting
+  const cbState = getCircuitBreakerState(phoneNumberId);
+  if (cbState.isOpen) {
+    const timeToWait = Math.max(CIRCUIT_BREAKER_RETRY_DELAY - cbState.timeSinceLastFailure, 5000);
+    console.log(`${logPrefix} Circuit breaker OPEN, scheduling retry with ${Math.round(timeToWait/1000)}s delay`);
+    
+    const scheduled = await scheduleMediaRetry(job.data, timeToWait, logPrefix);
+    if (scheduled) {
+      return; // Exit without error - retry is scheduled
+    }
+    throw new Error('META_CIRCUIT_BREAKER_OPEN');
+  }
 
   try {
     const metaService = new MetaCloudService({
@@ -81,18 +192,29 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
   } catch (error: any) {
     const errorMessage = error.message || 'Unknown error';
     const isCircuitBreakerOpen = errorMessage === 'META_CIRCUIT_BREAKER_OPEN';
-    const isNetworkError = ['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN'].some(
-      code => errorMessage.includes(code) || error.code === code
+    const isNetworkError = ['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR'].some(
+      code => errorMessage.includes(code) || error.code?.includes?.(code) || error.code === code
     );
+    const isRetryable = isCircuitBreakerOpen || isNetworkError || error?.response?.status >= 500;
 
     console.error(`${logPrefix} FAILED: ${errorMessage}`, {
       isCircuitBreakerOpen,
       isNetworkError,
+      isRetryable,
       code: error.code,
       status: error?.response?.status
     });
 
-    // Merge with existing metadata on failure
+    // If retryable, use centralized retry scheduler
+    if (isRetryable) {
+      const backoffDelay = Math.min(5000 * Math.pow(2, attemptNumber - 1), 60000); // 5s, 10s, 20s, 40s, 60s
+      const scheduled = await scheduleMediaRetry(job.data, backoffDelay, logPrefix);
+      if (scheduled) {
+        return; // Exit without error - retry is scheduled
+      }
+    }
+
+    // Mark as permanently failed
     const existingLogOnFail = await prisma.messageLog.findUnique({
       where: { id: messageLogId },
       select: { metadata: true }
@@ -104,11 +226,12 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
       data: {
         metadata: {
           ...existingMetadataOnFail,
-          mediaPending: true,
+          mediaPending: false,
           mediaDownloadFailed: true,
           mediaDownloadError: errorMessage,
           mediaDownloadAttempt: attemptNumber,
-          mediaDownloadLastAttemptAt: new Date().toISOString()
+          mediaDownloadLastAttemptAt: new Date().toISOString(),
+          mediaDownloadPermanentlyFailed: true
         }
       }
     });

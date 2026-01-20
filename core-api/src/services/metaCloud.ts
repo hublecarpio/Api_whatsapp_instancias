@@ -15,8 +15,9 @@ interface CircuitBreakerState {
 
 const circuitBreakers = new Map<string, CircuitBreakerState>();
 
-const CIRCUIT_BREAKER_THRESHOLD = 8; // Higher threshold per instance
-const CIRCUIT_BREAKER_RESET_TIME = 20000; // 20 seconds
+const CIRCUIT_BREAKER_THRESHOLD = 10; // Higher threshold per instance
+const CIRCUIT_BREAKER_RESET_TIME = 30000; // 30 seconds (half-open)
+const CIRCUIT_BREAKER_FULL_RESET_TIME = 120000; // 2 minutes (full reset)
 
 function getCircuitBreaker(phoneNumberId: string): CircuitBreakerState {
   if (!circuitBreakers.has(phoneNumberId)) {
@@ -34,16 +35,36 @@ function checkCircuitBreaker(phoneNumberId: string): boolean {
   const cb = getCircuitBreaker(phoneNumberId);
   if (!cb.isOpen) return true;
   
-  // Check if we should try to close (half-open state)
-  if (Date.now() - cb.lastFailure > CIRCUIT_BREAKER_RESET_TIME) {
-    console.log(`[META-CB] Circuit breaker for ${phoneNumberId} entering half-open state...`);
+  const timeSinceLastFailure = Date.now() - cb.lastFailure;
+  
+  // Full reset after 2 minutes - completely clear failures
+  if (timeSinceLastFailure > CIRCUIT_BREAKER_FULL_RESET_TIME) {
+    console.log(`[META-CB] Circuit breaker for ${phoneNumberId} FULLY RESET after ${Math.round(timeSinceLastFailure/1000)}s`);
+    cb.isOpen = false;
+    cb.failures = 0;
+    cb.successCount = 0;
+    return true;
+  }
+  
+  // Half-open state after 30 seconds
+  if (timeSinceLastFailure > CIRCUIT_BREAKER_RESET_TIME) {
+    console.log(`[META-CB] Circuit breaker for ${phoneNumberId} entering half-open state (failures: ${cb.failures})...`);
     cb.isOpen = false;
     cb.failures = Math.floor(cb.failures / 2); // Reduce but don't reset completely
     return true;
   }
   
-  console.log(`[META-CB] Circuit breaker OPEN for ${phoneNumberId} (failures: ${cb.failures})`);
+  console.log(`[META-CB] Circuit breaker OPEN for ${phoneNumberId} (failures: ${cb.failures}, retry in ${Math.round((CIRCUIT_BREAKER_RESET_TIME - timeSinceLastFailure)/1000)}s)`);
   return false;
+}
+
+export function getCircuitBreakerState(phoneNumberId: string): { isOpen: boolean; failures: number; timeSinceLastFailure: number } {
+  const cb = getCircuitBreaker(phoneNumberId);
+  return {
+    isOpen: cb.isOpen,
+    failures: cb.failures,
+    timeSinceLastFailure: cb.lastFailure ? Date.now() - cb.lastFailure : 0
+  };
 }
 
 function recordSuccess(phoneNumberId: string): void {
