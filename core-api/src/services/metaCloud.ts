@@ -1,9 +1,186 @@
 import axios, { AxiosInstance } from 'axios';
 import FormData from 'form-data';
 import https from 'https';
+import { Agent, fetch as undiciFetch, setGlobalDispatcher, Dispatcher } from 'undici';
 
 const META_API_URL = 'https://graph.facebook.com/v21.0';
 
+// Per-instance circuit breaker state (keyed by phoneNumberId)
+interface CircuitBreakerState {
+  failures: number;
+  lastFailure: number;
+  isOpen: boolean;
+  successCount: number;
+}
+
+const circuitBreakers = new Map<string, CircuitBreakerState>();
+
+const CIRCUIT_BREAKER_THRESHOLD = 8; // Higher threshold per instance
+const CIRCUIT_BREAKER_RESET_TIME = 20000; // 20 seconds
+
+function getCircuitBreaker(phoneNumberId: string): CircuitBreakerState {
+  if (!circuitBreakers.has(phoneNumberId)) {
+    circuitBreakers.set(phoneNumberId, {
+      failures: 0,
+      lastFailure: 0,
+      isOpen: false,
+      successCount: 0
+    });
+  }
+  return circuitBreakers.get(phoneNumberId)!;
+}
+
+function checkCircuitBreaker(phoneNumberId: string): boolean {
+  const cb = getCircuitBreaker(phoneNumberId);
+  if (!cb.isOpen) return true;
+  
+  // Check if we should try to close (half-open state)
+  if (Date.now() - cb.lastFailure > CIRCUIT_BREAKER_RESET_TIME) {
+    console.log(`[META-CB] Circuit breaker for ${phoneNumberId} entering half-open state...`);
+    cb.isOpen = false;
+    cb.failures = Math.floor(cb.failures / 2); // Reduce but don't reset completely
+    return true;
+  }
+  
+  console.log(`[META-CB] Circuit breaker OPEN for ${phoneNumberId} (failures: ${cb.failures})`);
+  return false;
+}
+
+function recordSuccess(phoneNumberId: string): void {
+  const cb = getCircuitBreaker(phoneNumberId);
+  cb.successCount++;
+  // Reset failures faster on success
+  if (cb.successCount >= 3) {
+    cb.failures = 0;
+    cb.successCount = 0;
+  } else if (cb.failures > 0) {
+    cb.failures--;
+  }
+}
+
+function recordNetworkFailure(phoneNumberId: string): void {
+  const cb = getCircuitBreaker(phoneNumberId);
+  cb.failures++;
+  cb.lastFailure = Date.now();
+  cb.successCount = 0;
+  
+  if (cb.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+    cb.isOpen = true;
+    console.log(`[META-CB] Circuit breaker OPENED for ${phoneNumberId} after ${cb.failures} network failures`);
+  }
+}
+
+// Helper to check if an error is a network timeout (not an API error)
+function isNetworkTimeoutError(error: any): boolean {
+  const errorCode = error?.code || error?.cause?.code || '';
+  return errorCode === 'ETIMEDOUT' || 
+         errorCode === 'ECONNRESET' || 
+         errorCode === 'ENOTFOUND' ||
+         errorCode === 'ECONNABORTED' ||
+         errorCode === 'ESOCKETTIMEDOUT' ||
+         errorCode === 'UND_ERR_CONNECT_TIMEOUT' ||
+         error?.name === 'AbortError' ||
+         error?.cause?.name === 'ConnectTimeoutError';
+}
+
+// Centralized Meta API request wrapper with unified retry logic
+async function metaApiRequest(
+  phoneNumberId: string,
+  url: string,
+  options: {
+    method: 'GET' | 'POST';
+    headers: Record<string, string>;
+    body?: any;
+    timeout?: number;
+  },
+  retryCount = 0
+): Promise<any> {
+  const maxRetries = 3;
+  const useUndici = retryCount >= 1; // Use undici after first failure
+  const timeout = options.timeout || (retryCount > 0 ? 60000 : 45000);
+  
+  // Check circuit breaker
+  if (!checkCircuitBreaker(phoneNumberId)) {
+    throw new Error('META_CIRCUIT_BREAKER_OPEN');
+  }
+  
+  try {
+    let responseData: any;
+    
+    if (useUndici) {
+      const fetchOptions: any = {
+        method: options.method,
+        headers: options.headers
+      };
+      
+      if (options.body) {
+        fetchOptions.body = typeof options.body === 'string' 
+          ? options.body 
+          : JSON.stringify(options.body);
+      }
+      
+      const response = await fetchWithTimeout(url, fetchOptions, timeout);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw { 
+          response: { status: response.status, data: errorData }, 
+          message: `HTTP ${response.status}`,
+          isApiError: true
+        };
+      }
+      
+      responseData = await response.json();
+    } else {
+      const axiosConfig: any = {
+        method: options.method,
+        url,
+        headers: options.headers,
+        httpsAgent: retryCount > 0 ? freshAgent : httpsAgent,
+        timeout
+      };
+      
+      if (options.body) {
+        axiosConfig.data = options.body;
+      }
+      
+      const response = await axios(axiosConfig);
+      responseData = response.data;
+    }
+    
+    recordSuccess(phoneNumberId);
+    return responseData;
+  } catch (error: any) {
+    const isNetworkError = isNetworkTimeoutError(error);
+    
+    // Only record network failures to circuit breaker
+    if (isNetworkError) {
+      recordNetworkFailure(phoneNumberId);
+    }
+    
+    if (isNetworkError && retryCount < maxRetries) {
+      const delay = Math.min(1500 * Math.pow(1.5, retryCount), 8000);
+      console.log(`[META] Retrying request in ${delay}ms (attempt ${retryCount + 2}/${maxRetries + 1})...`);
+      await new Promise(r => setTimeout(r, delay));
+      return metaApiRequest(phoneNumberId, url, options, retryCount + 1);
+    }
+    
+    throw error;
+  }
+}
+
+// Undici agent with better connection handling
+const undiciAgent = new Agent({
+  keepAliveTimeout: 30000,
+  keepAliveMaxTimeout: 60000,
+  connections: 50,
+  pipelining: 1,
+  connect: {
+    timeout: 30000,
+  }
+});
+
+// Legacy axios agent for backward compatibility
 const httpsAgent = new https.Agent({
   keepAlive: true,
   keepAliveMsecs: 5000,
@@ -26,6 +203,29 @@ const freshAgent = new https.Agent({
   keepAlive: false,
   timeout: 60000
 });
+
+// Helper function for undici fetch with timeout
+async function fetchWithTimeout(url: string, options: any, timeout: number): Promise<{ ok: boolean; status: number; json: () => Promise<any> }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await undiciFetch(url, {
+      ...options,
+      signal: controller.signal,
+      dispatcher: undiciAgent
+    });
+    clearTimeout(timeoutId);
+    return {
+      ok: response.ok,
+      status: response.status,
+      json: () => response.json() as Promise<any>
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
 
 export interface MetaCredentials {
   accessToken: string;
@@ -165,194 +365,233 @@ export class MetaCloudService {
     };
   }
 
-  async sendTextMessage(to: string, text: string, retryCount = 0): Promise<any> {
+  async sendTextMessage(to: string, text: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
-    const maxRetries = 3;
-    console.log(`[META] sendTextMessage: to=${cleanPhone}, phoneNumberId=${this.credentials.phoneNumberId}, textLen=${text?.length}, retry=${retryCount}/${maxRetries}`);
+    console.log(`[META] sendTextMessage: to=${cleanPhone}, phoneNumberId=${this.credentials.phoneNumberId}, textLen=${text?.length}`);
     
-    try {
-      // Use fresh agent on retries to avoid stale connections
-      const agent = retryCount > 0 ? freshAgent : httpsAgent;
-      const timeout = retryCount > 0 ? 60000 : 45000;
-      
-      const response = await axios.post(
-        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'text',
-          text: { body: text }
-        },
-        { 
-          headers: this.headers,
-          httpsAgent: agent,
-          timeout
-        }
-      );
-
-      const messageId = response.data?.messages?.[0]?.id;
-      console.log(`[META] sendTextMessage SUCCESS: messageId=${messageId}, attempt=${retryCount + 1}`);
-      return response.data;
-    } catch (error: any) {
-      const isRetryable = error?.code === 'ETIMEDOUT' || 
-                          error?.code === 'ECONNRESET' || 
-                          error?.code === 'ENOTFOUND' ||
-                          error?.code === 'ECONNABORTED' ||
-                          error?.code === 'ESOCKETTIMEDOUT';
-      
-      console.error(`[META] sendTextMessage FAILED (attempt ${retryCount + 1}/${maxRetries + 1}):`, {
-        status: error?.response?.status,
-        data: error?.response?.data,
-        message: error?.message,
-        code: error?.code,
-        to: cleanPhone
-      });
-      
-      if (isRetryable && retryCount < maxRetries) {
-        const delay = Math.min(2000 * Math.pow(2, retryCount), 10000); // Exponential backoff: 2s, 4s, 8s (max 10s)
-        console.log(`[META] Retrying sendTextMessage in ${delay}ms (attempt ${retryCount + 2}/${maxRetries + 1})...`);
-        await new Promise(r => setTimeout(r, delay));
-        return this.sendTextMessage(to, text, retryCount + 1);
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: cleanPhone,
+      type: 'text',
+      text: { body: text }
+    };
+    
+    const responseData = await metaApiRequest(
+      this.credentials.phoneNumberId,
+      `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: this.headers,
+        body: payload
       }
-      throw error;
-    }
+    );
+
+    const messageId = responseData?.messages?.[0]?.id;
+    console.log(`[META] sendTextMessage SUCCESS: messageId=${messageId}`);
+    return responseData;
   }
 
   async sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
+    console.log(`[META] sendImageMessage: to=${cleanPhone}`);
 
     try {
       const { buffer, mimeType } = await this.downloadFromUrl(imageUrl);
       const mediaId = await this.uploadMedia(buffer, mimeType, 'image.jpg');
       
-      const response = await metaAxios.post(
+      return await metaApiRequest(
+        this.credentials.phoneNumberId,
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'image',
-          image: {
-            id: mediaId,
-            caption: caption || ''
+          method: 'POST',
+          headers: this.headers,
+          body: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'image',
+            image: { id: mediaId, caption: caption || '' }
           }
-        },
-        { headers: this.headers }
+        }
       );
-
-      return response.data;
     } catch (uploadError: any) {
-      console.error('Image upload failed, trying direct URL:', uploadError.message);
-      const response = await metaAxios.post(
+      console.error('[META] Image upload failed, trying direct URL:', uploadError.message);
+      return await metaApiRequest(
+        this.credentials.phoneNumberId,
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'image',
-          image: {
-            link: imageUrl,
-            caption: caption || ''
+          method: 'POST',
+          headers: this.headers,
+          body: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'image',
+            image: { link: imageUrl, caption: caption || '' }
           }
-        },
-        { headers: this.headers }
+        }
       );
-
-      return response.data;
     }
   }
 
   async sendVideoMessage(to: string, videoUrl: string, caption?: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
+    console.log(`[META] sendVideoMessage: to=${cleanPhone}`);
 
     try {
       const { buffer, mimeType } = await this.downloadFromUrl(videoUrl);
       const mediaId = await this.uploadMedia(buffer, mimeType, 'video.mp4');
       
-      const response = await metaAxios.post(
+      return await metaApiRequest(
+        this.credentials.phoneNumberId,
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'video',
-          video: {
-            id: mediaId,
-            caption: caption || ''
+          method: 'POST',
+          headers: this.headers,
+          body: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'video',
+            video: { id: mediaId, caption: caption || '' }
           }
-        },
-        { headers: this.headers }
+        }
       );
-
-      return response.data;
     } catch (uploadError: any) {
-      console.error('Video upload failed, trying direct URL:', uploadError.message);
-      const response = await metaAxios.post(
+      console.error('[META] Video upload failed, trying direct URL:', uploadError.message);
+      return await metaApiRequest(
+        this.credentials.phoneNumberId,
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'video',
-          video: {
-            link: videoUrl,
-            caption: caption || ''
+          method: 'POST',
+          headers: this.headers,
+          body: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'video',
+            video: { link: videoUrl, caption: caption || '' }
           }
-        },
-        { headers: this.headers }
+        }
       );
-
-      return response.data;
     }
   }
 
-  async uploadMedia(buffer: Buffer, mimeType: string, filename: string): Promise<string> {
+  async uploadMedia(buffer: Buffer, mimeType: string, filename: string, retryCount = 0): Promise<string> {
+    const maxRetries = 2;
+    
+    // Check circuit breaker
+    if (!checkCircuitBreaker(this.credentials.phoneNumberId)) {
+      throw new Error('META_CIRCUIT_BREAKER_OPEN');
+    }
+    
     const formData = new FormData();
     formData.append('messaging_product', 'whatsapp');
-    formData.append('file', buffer, {
-      filename,
-      contentType: mimeType
-    });
+    formData.append('file', buffer, { filename, contentType: mimeType });
     formData.append('type', mimeType);
 
-    const response = await metaAxios.post(
-      `${META_API_URL}/${this.credentials.phoneNumberId}/media`,
-      formData,
-      {
-        headers: {
-          'Authorization': `Bearer ${this.credentials.accessToken}`,
-          ...formData.getHeaders()
+    try {
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/media`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.credentials.accessToken}`,
+            ...formData.getHeaders()
+          },
+          httpsAgent: retryCount > 0 ? freshAgent : httpsAgent,
+          timeout: retryCount > 0 ? 90000 : 60000
+        }
+      );
+      
+      recordSuccess(this.credentials.phoneNumberId);
+      return response.data.id;
+    } catch (error: any) {
+      const isNetworkError = isNetworkTimeoutError(error);
+      
+      if (isNetworkError) {
+        recordNetworkFailure(this.credentials.phoneNumberId);
+        
+        if (retryCount < maxRetries) {
+          const delay = 2000 * Math.pow(1.5, retryCount);
+          console.log(`[META] Retrying uploadMedia in ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          return this.uploadMedia(buffer, mimeType, filename, retryCount + 1);
         }
       }
-    );
-
-    return response.data.id;
+      throw error;
+    }
   }
 
-  private async downloadFromUrl(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
-    const response = await metaAxios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 30000
-    });
-    const mimeType = response.headers['content-type'] || 'application/octet-stream';
-    return { buffer: Buffer.from(response.data), mimeType };
+  private async downloadFromUrl(url: string, retryCount = 0): Promise<{ buffer: Buffer; mimeType: string }> {
+    const maxRetries = 2;
+    
+    // Check circuit breaker (uses phoneNumberId for consistency)
+    if (!checkCircuitBreaker(this.credentials.phoneNumberId)) {
+      throw new Error('META_CIRCUIT_BREAKER_OPEN');
+    }
+    
+    try {
+      // Use undici on retries for better reliability
+      if (retryCount > 0) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+        
+        try {
+          const response = await undiciFetch(url, {
+            signal: controller.signal,
+            dispatcher: undiciAgent
+          });
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw { message: `HTTP ${response.status}` };
+          }
+          
+          const arrayBuffer = await response.arrayBuffer();
+          const mimeType = response.headers.get('content-type') || 'application/octet-stream';
+          recordSuccess(this.credentials.phoneNumberId);
+          return { buffer: Buffer.from(arrayBuffer), mimeType };
+        } catch (error) {
+          clearTimeout(timeoutId);
+          throw error;
+        }
+      }
+      
+      const response = await metaAxios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 30000
+      });
+      const mimeType = response.headers['content-type'] || 'application/octet-stream';
+      recordSuccess(this.credentials.phoneNumberId);
+      return { buffer: Buffer.from(response.data), mimeType };
+    } catch (error: any) {
+      const isNetworkError = isNetworkTimeoutError(error);
+      
+      if (isNetworkError) {
+        recordNetworkFailure(this.credentials.phoneNumberId);
+      }
+      
+      if (isNetworkError && retryCount < maxRetries) {
+        const delay = 1500 * Math.pow(1.5, retryCount);
+        console.log(`[META] Retrying downloadFromUrl in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        return this.downloadFromUrl(url, retryCount + 1);
+      }
+      throw error;
+    }
   }
 
   async sendAudioMessage(to: string, audioUrl: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
+    console.log(`[META] sendAudioMessage: to=${cleanPhone}`);
 
     try {
-      console.log('[META] sendAudioMessage called');
-      console.log('[META] Target phone:', cleanPhone);
-      console.log('[META] Downloading audio from:', audioUrl);
-      
       const { buffer, mimeType } = await this.downloadFromUrl(audioUrl);
       console.log(`[META] Audio downloaded: ${buffer.length} bytes, Content-Type: ${mimeType}`);
       
-      // Meta Cloud soporta: audio/aac, audio/amr, audio/mpeg, audio/mp4, audio/ogg (OPUS)
-      // Para notas de voz nativas, OGG con OPUS es ideal
-      let actualMimeType = 'audio/mpeg'; // default a MP3
+      let actualMimeType = 'audio/mpeg';
       let extension = 'mp3';
       
       if (mimeType.includes('ogg') || mimeType.includes('opus')) {
@@ -372,74 +611,70 @@ export class MetaCloudService {
         extension = 'amr';
       }
       
-      console.log(`[META] Uploading audio to Meta as ${actualMimeType} (voice.${extension})`);
       const mediaId = await this.uploadMedia(buffer, actualMimeType, `voice.${extension}`);
-      console.log('[META] Audio uploaded to Meta, media_id:', mediaId);
-      console.log('[META] Sending audio message to', cleanPhone);
+      console.log('[META] Audio uploaded, media_id:', mediaId);
       
-      const response = await metaAxios.post(
+      return await metaApiRequest(
+        this.credentials.phoneNumberId,
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'audio',
-          audio: { id: mediaId }
-        },
-        { headers: this.headers }
+          method: 'POST',
+          headers: this.headers,
+          body: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'audio',
+            audio: { id: mediaId }
+          }
+        }
       );
-
-      console.log('[META] Audio message sent successfully as voice note');
-      return response.data;
     } catch (uploadError: any) {
-      console.error('[META] Audio upload/send failed:', uploadError.response?.data || uploadError.message);
+      console.error('[META] Audio send failed:', uploadError.response?.data || uploadError.message);
       throw uploadError;
     }
   }
 
   async sendDocumentMessage(to: string, documentUrl: string, filename?: string, caption?: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
+    console.log(`[META] sendDocumentMessage: to=${cleanPhone}`);
 
     try {
       const { buffer, mimeType } = await this.downloadFromUrl(documentUrl);
       const mediaId = await this.uploadMedia(buffer, mimeType, filename || 'document');
       
-      const response = await metaAxios.post(
+      return await metaApiRequest(
+        this.credentials.phoneNumberId,
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'document',
-          document: {
-            id: mediaId,
-            filename: filename || 'document',
-            caption: caption || ''
+          method: 'POST',
+          headers: this.headers,
+          body: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'document',
+            document: { id: mediaId, filename: filename || 'document', caption: caption || '' }
           }
-        },
-        { headers: this.headers }
+        }
       );
-
-      return response.data;
     } catch (uploadError: any) {
-      console.error('Document upload failed, trying direct URL:', uploadError.message);
-      const response = await metaAxios.post(
+      console.error('[META] Document upload failed, trying direct URL:', uploadError.message);
+      return await metaApiRequest(
+        this.credentials.phoneNumberId,
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'document',
-          document: {
-            link: documentUrl,
-            filename: filename || 'document',
-            caption: caption || ''
+          method: 'POST',
+          headers: this.headers,
+          body: {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'document',
+            document: { link: documentUrl, filename: filename || 'document', caption: caption || '' }
           }
-        },
-        { headers: this.headers }
+        }
       );
-
-      return response.data;
     }
   }
 
@@ -464,66 +699,167 @@ export class MetaCloudService {
     throw new Error('Invalid message payload: must include text or media');
   }
 
-  async getMediaUrl(mediaId: string): Promise<string> {
-    console.log(`[META] getMediaUrl: fetching URL for mediaId=${mediaId}, phoneNumberId=${this.credentials.phoneNumberId}`);
+  async getMediaUrl(mediaId: string, retryCount = 0): Promise<string> {
+    const maxRetries = 3;
+    console.log(`[META] getMediaUrl: fetching URL for mediaId=${mediaId}, phoneNumberId=${this.credentials.phoneNumberId}, retry=${retryCount}/${maxRetries}`);
+    
+    // Check circuit breaker
+    if (!checkCircuitBreaker(this.credentials.phoneNumberId)) {
+      throw new Error('META_CIRCUIT_BREAKER_OPEN');
+    }
+    
     try {
+      // Use undici on retries for better connection handling
+      if (retryCount >= 1) {
+        const response = await fetchWithTimeout(
+          `${META_API_URL}/${mediaId}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${this.credentials.accessToken}`
+            }
+          },
+          45000
+        );
+        
+        if (!response.ok) {
+          throw { response: { status: response.status }, message: `HTTP ${response.status}` };
+        }
+        
+        const data = await response.json();
+        recordSuccess(this.credentials.phoneNumberId);
+        console.log(`[META] getMediaUrl: success for ${mediaId} (undici)`);
+        return data.url;
+      }
+      
       const response = await metaAxios.get(
         `${META_API_URL}/${mediaId}`,
         { headers: this.headers, timeout: 30000 }
       );
-      console.log(`[META] getMediaUrl: success for ${mediaId}`);
+      recordSuccess(this.credentials.phoneNumberId);
+      console.log(`[META] getMediaUrl: success for ${mediaId} (axios)`);
       return response.data.url;
     } catch (error: any) {
-      console.error(`[META] getMediaUrl FAILED for ${mediaId}:`, {
+      const isNetworkError = isNetworkTimeoutError(error);
+      
+      console.error(`[META] getMediaUrl FAILED for ${mediaId} (attempt ${retryCount + 1}/${maxRetries + 1}):`, {
         status: error?.response?.status,
         data: error?.response?.data,
-        message: error?.message
+        message: error?.message,
+        code: error?.code || error?.cause?.code
       });
+      
+      // Record network failures to circuit breaker
+      if (isNetworkError) {
+        recordNetworkFailure(this.credentials.phoneNumberId);
+      }
+      
+      if (isNetworkError && retryCount < maxRetries) {
+        const delay = 1500 * Math.pow(1.5, retryCount);
+        console.log(`[META] Retrying getMediaUrl in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        return this.getMediaUrl(mediaId, retryCount + 1);
+      }
       throw error;
     }
   }
 
-  async downloadMedia(mediaUrl: string): Promise<Buffer> {
-    console.log(`[META] downloadMedia: downloading from ${mediaUrl?.substring(0, 80)}...`);
+  async downloadMedia(mediaUrl: string, retryCount = 0): Promise<Buffer> {
+    const maxRetries = 3;
+    console.log(`[META] downloadMedia: downloading from ${mediaUrl?.substring(0, 80)}..., retry=${retryCount}/${maxRetries}`);
+    
+    // Check circuit breaker
+    if (!checkCircuitBreaker(this.credentials.phoneNumberId)) {
+      throw new Error('META_CIRCUIT_BREAKER_OPEN');
+    }
+    
     try {
+      // Use undici on retries for better reliability
+      if (retryCount >= 1) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 90000);
+        
+        try {
+          const response = await undiciFetch(mediaUrl, {
+            headers: { 'Authorization': `Bearer ${this.credentials.accessToken}` },
+            signal: controller.signal,
+            dispatcher: undiciAgent
+          });
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw { response: { status: response.status }, message: `HTTP ${response.status}` };
+          }
+          
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          recordSuccess(this.credentials.phoneNumberId);
+          console.log(`[META] downloadMedia: success, size=${buffer.byteLength} bytes (undici)`);
+          return buffer;
+        } catch (error) {
+          clearTimeout(timeoutId);
+          throw error;
+        }
+      }
+      
       const response = await metaAxios.get(mediaUrl, {
         headers: { 'Authorization': `Bearer ${this.credentials.accessToken}` },
         responseType: 'arraybuffer',
         timeout: 60000
       });
-      console.log(`[META] downloadMedia: success, size=${response.data.byteLength} bytes`);
+      recordSuccess(this.credentials.phoneNumberId);
+      console.log(`[META] downloadMedia: success, size=${response.data.byteLength} bytes (axios)`);
       return Buffer.from(response.data);
     } catch (error: any) {
-      console.error(`[META] downloadMedia FAILED:`, {
+      const isNetworkError = isNetworkTimeoutError(error);
+      
+      console.error(`[META] downloadMedia FAILED (attempt ${retryCount + 1}/${maxRetries + 1}):`, {
         status: error?.response?.status,
         message: error?.message,
-        code: error?.code
+        code: error?.code || error?.cause?.code
       });
+      
+      // Record network failures to circuit breaker
+      if (isNetworkError) {
+        recordNetworkFailure(this.credentials.phoneNumberId);
+      }
+      
+      if (isNetworkError && retryCount < maxRetries) {
+        const delay = 2000 * Math.pow(1.5, retryCount);
+        console.log(`[META] Retrying downloadMedia in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        return this.downloadMedia(mediaUrl, retryCount + 1);
+      }
       throw error;
     }
   }
 
   async getPhoneNumberInfo(): Promise<any> {
-    const response = await metaAxios.get(
+    return await metaApiRequest(
+      this.credentials.phoneNumberId,
       `${META_API_URL}/${this.credentials.phoneNumberId}`,
-      { headers: this.headers, timeout: 5000 }
+      {
+        method: 'GET',
+        headers: this.headers,
+        timeout: 10000
+      }
     );
-
-    return response.data;
   }
 
   async markMessageAsRead(messageId: string): Promise<any> {
-    const response = await metaAxios.post(
+    return await metaApiRequest(
+      this.credentials.phoneNumberId,
       `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
       {
-        messaging_product: 'whatsapp',
-        status: 'read',
-        message_id: messageId
-      },
-      { headers: this.headers }
+        method: 'POST',
+        headers: this.headers,
+        body: {
+          messaging_product: 'whatsapp',
+          status: 'read',
+          message_id: messageId
+        }
+      }
     );
-
-    return response.data;
   }
 
   async sendTemplate(options: {
@@ -536,6 +872,7 @@ export class MetaCloudService {
     }>;
   }): Promise<any> {
     const cleanPhone = options.to.replace(/\D/g, '');
+    console.log(`[META] sendTemplate: to=${cleanPhone}, template=${options.templateName}`);
 
     const payload: any = {
       messaging_product: 'whatsapp',
@@ -552,22 +889,28 @@ export class MetaCloudService {
       payload.template.components = options.components;
     }
 
-    const response = await metaAxios.post(
+    return await metaApiRequest(
+      this.credentials.phoneNumberId,
       `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
-      payload,
-      { headers: this.headers }
+      {
+        method: 'POST',
+        headers: this.headers,
+        body: payload
+      }
     );
-
-    return response.data;
   }
 
   async getTemplates(): Promise<any[]> {
-    const response = await metaAxios.get(
+    const response = await metaApiRequest(
+      this.credentials.phoneNumberId,
       `${META_API_URL}/${this.credentials.businessId}/message_templates`,
-      { headers: this.headers }
+      {
+        method: 'GET',
+        headers: this.headers
+      }
     );
 
-    return response.data.data || [];
+    return response.data || [];
   }
 
   static parseWebhookMessage(payload: MetaWebhookPayload): ParsedWebhookResult | null {
