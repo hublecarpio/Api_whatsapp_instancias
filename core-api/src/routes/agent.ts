@@ -5289,7 +5289,9 @@ router.get('/config/export/:businessId', authMiddleware, async (req: AuthRequest
         fieldType: true,
         description: true,
         required: true,
+        useForAppointment: true,
         order: true,
+        enabled: true,
         instanceId: true
       }
     });
@@ -5476,7 +5478,11 @@ router.post('/config/import/:businessId', authMiddleware, async (req: AuthReques
         try {
           const fieldKey = field.fieldKey || field.fieldName;
           const existing = await prisma.extractionField.findFirst({
-            where: { businessId, fieldKey }
+            where: { 
+              businessId, 
+              fieldKey,
+              ...(instanceId ? { instanceId } : { instanceId: null })
+            }
           });
 
           if (existing && mode === 'merge') {
@@ -5491,12 +5497,15 @@ router.post('/config/import/:businessId', authMiddleware, async (req: AuthReques
           await prisma.extractionField.create({
             data: {
               businessId,
+              instanceId: instanceId || null,
               fieldKey,
               fieldLabel: field.fieldLabel || fieldKey,
               fieldType: field.fieldType || 'text',
               description: field.description || field.aiInstruction,
               required: field.required || false,
-              order: field.order || 0
+              useForAppointment: field.useForAppointment || false,
+              order: field.order || 0,
+              enabled: field.enabled ?? true
             }
           });
           results.extractionFields.imported++;
