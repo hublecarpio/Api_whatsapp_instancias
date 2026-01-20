@@ -143,20 +143,33 @@ export class MetaCloudService {
 
   async sendTextMessage(to: string, text: string): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
+    console.log(`[META] sendTextMessage: to=${cleanPhone}, phoneNumberId=${this.credentials.phoneNumberId}, textLen=${text?.length}`);
     
-    const response = await axios.post(
-      `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
-      {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanPhone,
-        type: 'text',
-        text: { body: text }
-      },
-      { headers: this.headers }
-    );
+    try {
+      const response = await axios.post(
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'text',
+          text: { body: text }
+        },
+        { headers: this.headers, timeout: 30000 }
+      );
 
-    return response.data;
+      const messageId = response.data?.messages?.[0]?.id;
+      console.log(`[META] sendTextMessage SUCCESS: messageId=${messageId}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`[META] sendTextMessage FAILED:`, {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: error?.message,
+        to: cleanPhone
+      });
+      throw error;
+    }
   }
 
   async sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<any> {
