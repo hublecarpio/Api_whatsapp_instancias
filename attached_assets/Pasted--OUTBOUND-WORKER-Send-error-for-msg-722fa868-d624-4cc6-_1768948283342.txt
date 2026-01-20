@@ -1,0 +1,100 @@
+[OUTBOUND_WORKER] Send error for msg_722fa868-d624-4cc6-8e12-6d3b347c32d3: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_722fa868-d624-4cc6-8e12-6d3b347c32d3 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_1dbaf44d-17f3-450f-9bdf-f4a068c4c47b for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[ExpiredBuffer] Checking for expired buffers...
+Reminder job repeat:f1c1683265942110b28a507504282576:1768948260000 completed
+[OUTBOUND_WORKER] Send error for msg_1dbaf44d-17f3-450f-9bdf-f4a068c4c47b: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_1dbaf44d-17f3-450f-9bdf-f4a068c4c47b failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Processing job msg_281e9181-286e-49aa-bffd-40bc40071f6b for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 2000ms (attempt 1)
+[OUTBOUND_WORKER] Job msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c failed: Permanent failure: Error
+[OUTBOUND_WORKER] Send error for msg_281e9181-286e-49aa-bffd-40bc40071f6b: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_281e9181-286e-49aa-bffd-40bc40071f6b failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Processing job msg_6f6b396b-a12b-480f-a732-4c5c0795a72f for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 2000ms (attempt 1)
+[OUTBOUND_WORKER] Send error for msg_6f6b396b-a12b-480f-a732-4c5c0795a72f: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Job msg_6f6b396b-a12b-480f-a732-4c5c0795a72f failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Processing job msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 2000ms (attempt 1)
+[OUTBOUND_WORKER] Job msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Send error for msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 4000ms (attempt 2)
+[OUTBOUND_WORKER] Job msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_35d0f78b-b237-4013-b32a-f1f5875be82c for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Processing job msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_35d0f78b-b237-4013-b32a-f1f5875be82c: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 2000ms (attempt 1)
+[OUTBOUND_WORKER] Job msg_35d0f78b-b237-4013-b32a-f1f5875be82c failed: Permanent failure: Error
+[OUTBOUND_WORKER] Send error for msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 4000ms (attempt 2)
+[OUTBOUND_WORKER] Job msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970 failed: Permanent failure: Error
+[ExpiredBuffer] Checking for expired buffers...
+[OUTBOUND_WORKER] Processing job msg_980a298b-d564-481d-b24c-241768efc848 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Processing job msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_980a298b-d564-481d-b24c-241768efc848: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 2000ms (attempt 1)
+[OUTBOUND_WORKER] Job msg_980a298b-d564-481d-b24c-241768efc848 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Send error for msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 4000ms (attempt 2)
+[OUTBOUND_WORKER] Job msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_35d0f78b-b237-4013-b32a-f1f5875be82c for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_35d0f78b-b237-4013-b32a-f1f5875be82c: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 4000ms (attempt 2)
+[OUTBOUND_WORKER] Job msg_35d0f78b-b237-4013-b32a-f1f5875be82c failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_980a298b-d564-481d-b24c-241768efc848 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Processing job msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_980a298b-d564-481d-b24c-241768efc848: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 4000ms (attempt 2)
+[OUTBOUND_WORKER] Job msg_980a298b-d564-481d-b24c-241768efc848 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Send error for msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 8000ms (attempt 3)
+[OUTBOUND_WORKER] Job msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 8000ms (attempt 3)
+[OUTBOUND_WORKER] Job msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_c08d4ac2-cfab-4f86-9187-d2f6977cd70e for 51975388899 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Processing job msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_c08d4ac2-cfab-4f86-9187-d2f6977cd70e: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_c08d4ac2-cfab-4f86-9187-d2f6977cd70e failed: Permanent failure: Error
+[OUTBOUND_WORKER] Send error for msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 8000ms (attempt 3)
+[OUTBOUND_WORKER] Job msg_1e5e8155-e6b9-4c03-83ad-a0f90141e047 failed: Permanent failure: Error
+[ExpiredBuffer] Checking for expired buffers...
+[OUTBOUND_WORKER] Processing job msg_a1ea8f04-627d-4313-b9a1-6705975974e6 for 51975388899 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_a1ea8f04-627d-4313-b9a1-6705975974e6: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_a1ea8f04-627d-4313-b9a1-6705975974e6 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_35d0f78b-b237-4013-b32a-f1f5875be82c for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_35d0f78b-b237-4013-b32a-f1f5875be82c: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 8000ms (attempt 3)
+[OUTBOUND_WORKER] Job msg_35d0f78b-b237-4013-b32a-f1f5875be82c failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_d80ccfef-adc2-4af8-9ad6-327bd5305e85 for 51975388899 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_d80ccfef-adc2-4af8-9ad6-327bd5305e85: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_d80ccfef-adc2-4af8-9ad6-327bd5305e85 failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_980a298b-d564-481d-b24c-241768efc848 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_980a298b-d564-481d-b24c-241768efc848: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 8000ms (attempt 3)
+[OUTBOUND_WORKER] Job msg_980a298b-d564-481d-b24c-241768efc848 failed: Permanent failure: Error
+[ExpiredBuffer] Checking for expired buffers...
+[OUTBOUND_WORKER] Processing job msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 16000ms (attempt 4)
+[OUTBOUND_WORKER] Job msg_40fd2ddf-a8d3-4a68-9fc0-bab3b814eb2c failed: Permanent failure: Error
+[OUTBOUND_WORKER] Processing job msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970 for 51910748560 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 16000ms (attempt 4)
+[OUTBOUND_WORKER] Job msg_c1a6383a-5e75-45be-a6b0-fe52d2b3d970 failed: Permanent failure: Error
