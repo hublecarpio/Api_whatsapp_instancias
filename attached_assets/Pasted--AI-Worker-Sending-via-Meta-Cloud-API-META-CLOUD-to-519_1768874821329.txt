@@ -1,0 +1,96 @@
+[AI Worker] Sending via Meta Cloud API (META_CLOUD) to 51992544801, phoneNumberId=909444395587574
+[AI Worker] Meta Cloud: sent 1 events to 51992544801
+[AI Worker] Failed to send text event: Error
+[FOLLOW-UP] scheduleFollowUp called - business: abeb9f70-3ecb-4b80-9285-1f8a43452633, phone: 51992544801, source: ai, instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[FOLLOW-UP] No config found for business abeb9f70-3ecb-4b80-9285-1f8a43452633
+[AI Worker] Response sent and logged to 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: agent_message, instance: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[AI Worker] Updating lead stage after agent response for 51992544801
+[AI Worker] Extracting custom data for 51992544801
+[AI Worker] Job ai-abeb9f70-3ecb-4b80-9285-1f8a43452633-51992544801-1768874799441 completed, response length: 83
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[AI] callOpenAI rawModel="gpt-4.1-nano" model="gpt-4.1-nano" useOpenRouter=false
+[GEMINI] Lead stage analysis: {
+  stageName: 'Interesado',
+  confidence: 0.85,
+  reasoning: 'El cliente ha interactuado con el agente, ha visto el catálogo y está respondiendo preguntas sobre sus preferencias (perfume para dama o caballero, tamaño). Esto indica un interés activo en los productos.',
+  shouldChange: false,
+  currentStage: 'Interesado'
+}
+[AI Worker] Lead stage updated to "Interesado" (confidence: 0.85)
+[DataExtraction] Saved tamaño=50 ml o 100 ml for 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: state_change
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnDataUpdate CALLED <<<
+[ORDER-AUTO-DEBUG] Updated field: "tamaño", Phone: 51992544801
+[ORDER-AUTO-DEBUG] Trigger fields: direccion, address, ubicacion, producto, fragancia, tamano, tamaño
+[ORDER-AUTO-DEBUG] Should trigger: true
+[ORDER-AUTO] Field "tamaño" triggered auto-order check
+[ORDER-AUTO-DEBUG] ╔══════════════════════════════════════════════════════╗
+[ORDER-AUTO-DEBUG] ║         createAutoOrder EXECUTION START              ║
+[ORDER-AUTO-DEBUG] ╚══════════════════════════════════════════════════════╝
+[ORDER-AUTO-DEBUG] Parameters:
+[ORDER-AUTO-DEBUG]   - businessId: abeb9f70-3ecb-4b80-9285-1f8a43452633
+[ORDER-AUTO-DEBUG]   - contactPhone: 51992544801
+[ORDER-AUTO-DEBUG]   - instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[ORDER-AUTO-DEBUG]   - skipStageCheck: false
+[ORDER-AUTO] Checking order readiness for 51992544801, instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[DataExtraction] Extracted 1 fields for 51992544801
+[ORDER-AUTO-DEBUG] Business found: "duvon pruebas" (ID: abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[ORDER-AUTO-DEBUG] Business objective: SALES
+[ORDER-AUTO-DEBUG] ✓ Business objective is SALES
+[ORDER-AUTO-DEBUG] Checking funnel stage (skipStageCheck=false)...
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[ORDER-AUTO-DEBUG] Stage status: {
+  "currentStage": "Confirmar Datos de Envío",
+  "nextStage": "Pago",
+  "canAdvance": true,
+  "missingFields": []
+}
+[ORDER-AUTO-DEBUG] isInFinalStage("Confirmar Datos de Envío"): false
+[ORDER-AUTO-DEBUG] Checking against keywords: confirmar orden, confirmar pedido, cotización final, cotizacion final, pago, cierre, finalizar
+[ORDER-AUTO-DEBUG] ❌ FAIL: Contact is NOT in a final stage
+[ORDER-AUTO-DEBUG] Current stage: "Confirmar Datos de Envío"
+[ORDER-AUTO-DEBUG] Required keywords in stage name: confirmar orden, confirmar pedido, cotización final, cotizacion final, pago, cierre, finalizar
+[FunnelStage] Contact 51992544801 advanced to stage: Pago
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnStageAdvance CALLED <<<
+[ORDER-AUTO-DEBUG] Stage: "Pago", Phone: 51992544801
+[ORDER-AUTO-DEBUG] isInFinalStage("Pago"): true
+[ORDER-AUTO-DEBUG] Checking against keywords: confirmar orden, confirmar pedido, cotización final, cotizacion final, pago, cierre, finalizar
+[ORDER-AUTO] Stage "Pago" triggered auto-order check
+[ORDER-AUTO-DEBUG] ╔══════════════════════════════════════════════════════╗
+[ORDER-AUTO-DEBUG] ║         createAutoOrder EXECUTION START              ║
+[ORDER-AUTO-DEBUG] ╚══════════════════════════════════════════════════════╝
+[ORDER-AUTO-DEBUG] Parameters:
+[ORDER-AUTO-DEBUG]   - businessId: abeb9f70-3ecb-4b80-9285-1f8a43452633
+[ORDER-AUTO-DEBUG]   - contactPhone: 51992544801
+[ORDER-AUTO-DEBUG]   - instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[ORDER-AUTO-DEBUG]   - skipStageCheck: true
+[ORDER-AUTO] Checking order readiness for 51992544801, instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[ORDER-AUTO-DEBUG] Business found: "duvon pruebas" (ID: abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[ORDER-AUTO-DEBUG] Business objective: SALES
+[ORDER-AUTO-DEBUG] ✓ Business objective is SALES
+[ORDER-AUTO-DEBUG] Skipping stage check (skipStageCheck=true)
+[ORDER-AUTO-DEBUG] ========== checkOrderReady START ==========
+[ORDER-AUTO-DEBUG] businessId: abeb9f70-3ecb-4b80-9285-1f8a43452633
+[ORDER-AUTO-DEBUG] contactPhone: 51992544801
+[ORDER-AUTO-DEBUG] instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[ORDER-AUTO-DEBUG] Extracted data keys: perfume, distrito, lima_provincia, telefono, tamaño
+[ORDER-AUTO-DEBUG] Extracted data values: {
+  "perfume": "Bleu DUVON",
+  "distrito": "Lima",
+  "lima_provincia": "Lima",
+  "telefono": "918972612",
+  "tamaño": "50 ml o 100 ml"
+}
+[ORDER-AUTO-DEBUG] Product field found: "Bleu DUVON"
+[ORDER-AUTO-DEBUG] Checked keys for product: producto, product, fragancia, perfume, tamaño, tamano
+[ORDER-AUTO-DEBUG] Address field found: "NOT FOUND"
+[ORDER-AUTO-DEBUG] Checked keys for address: direccion, address, direccion_envio, ubicacion
+[ORDER-AUTO-DEBUG] Name field found: "NOT FOUND"
+[ORDER-AUTO-DEBUG] Checked keys for name: nombre, name, nombre_completo, cliente
+[ORDER-AUTO-DEBUG] ❌ MISSING FIELDS: direccion, nombre
+[ORDER-AUTO-DEBUG] ========== checkOrderReady END (NOT READY) ==========
+[ORDER-AUTO-DEBUG] ❌ FAIL: Order not ready
+[ORDER-AUTO] Not ready for 51992544801: missing direccion, nombre
+[ExpiredBuffer] Checking for expired buffers...
+[ExpiredBuffer] Checking for expired buffers...

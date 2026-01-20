@@ -1401,7 +1401,12 @@ async function sendWhatsAppResponse(
             sentMedia.push({ type: 'document', url: event.url });
           }
         } catch (eventError: any) {
-          console.error(`[AI Worker] Failed to send ${event.type} event:`, eventError.message);
+          console.error(`[AI Worker] Failed to send ${event.type} event:`, {
+            message: eventError.message,
+            status: eventError?.response?.status,
+            data: eventError?.response?.data,
+            code: eventError?.code
+          });
         }
       }
       
