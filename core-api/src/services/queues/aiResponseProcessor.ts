@@ -1397,16 +1397,36 @@ async function sendWhatsAppResponse(
     
     const sentMedia: Array<{ type: string; url?: string }> = [];
     
-    const metaCredential = instance.metaCredential || instance.metaCoexistCredential;
-    console.log(`[AI Worker] Instance ${instanceId}: provider=${instance.provider}, hasMetaCred=${!!instance.metaCredential}, hasCoexistCred=${!!instance.metaCoexistCredential}`);
+    const metaCredential = instance.metaCredential;
+    const coexistCredential = instance.metaCoexistCredential;
+    console.log(`[AI Worker] Instance ${instanceId}: provider=${instance.provider}, hasMetaCred=${!!metaCredential}, hasCoexistCred=${!!coexistCredential}`);
     
-    if ((instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') && metaCredential) {
-      console.log(`[AI Worker] Sending via Meta Cloud API (${instance.provider}) to ${cleanPhone}, phoneNumberId=${metaCredential.phoneNumberId}`);
+    if ((instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') && (metaCredential || coexistCredential)) {
+      // Map credential fields correctly - MetaCoexistCredential uses different field names
+      let accessToken: string;
+      let phoneNumberId: string;
+      let businessId: string;
+      
+      if (metaCredential) {
+        accessToken = metaCredential.accessToken;
+        phoneNumberId = metaCredential.phoneNumberId;
+        businessId = metaCredential.businessId;
+      } else if (coexistCredential) {
+        // MetaCoexistCredential uses systemAccessToken (preferred) or userAccessToken
+        accessToken = coexistCredential.systemAccessToken || coexistCredential.userAccessToken;
+        phoneNumberId = coexistCredential.phoneNumberId;
+        businessId = coexistCredential.metaBusinessId;
+      } else {
+        console.error(`[AI Worker] No valid credential found for instance ${instanceId}`);
+        return;
+      }
+      
+      console.log(`[AI Worker] Sending via Meta Cloud API (${instance.provider}) to ${cleanPhone}, phoneNumberId=${phoneNumberId}`);
       const { MetaCloudService } = await import('../metaCloud.js');
       const metaService = new MetaCloudService({
-        accessToken: metaCredential.accessToken,
-        phoneNumberId: metaCredential.phoneNumberId,
-        businessId: metaCredential.businessId
+        accessToken,
+        phoneNumberId,
+        businessId
       });
       
       let successCount = 0;
@@ -1571,7 +1591,7 @@ async function sendWhatsAppResponse(
       
       console.log(`[AI Worker] Baileys: sent ${events.length} events to ${cleanPhone}`);
     } else {
-      console.error(`[AI Worker] No valid send method for instance ${instanceId}, provider=${instance.provider}, hasBackendId=${!!instance.instanceBackendId}, hasMetaCred=${!!metaCredential}`);
+      console.error(`[AI Worker] No valid send method for instance ${instanceId}, provider=${instance.provider}, hasBackendId=${!!instance.instanceBackendId}, hasMetaCred=${!!metaCredential}, hasCoexistCred=${!!coexistCredential}`);
       return;
     }
     
