@@ -239,6 +239,15 @@ async function processOutboundMessage(job: Job<OutboundMessageJobData>, token?: 
       result = await sendViaMeta(data);
     }
   } catch (sendError: any) {
+    const errorDetails = {
+      message: sendError?.message,
+      status: sendError?.response?.status,
+      data: sendError?.response?.data,
+      code: sendError?.code,
+      stack: sendError?.stack?.split('\n').slice(0, 3).join(' → ')
+    };
+    console.log(`[OUTBOUND_WORKER] Send error for ${data.jobId}:`, JSON.stringify(errorDetails));
+    
     const { classification, retryDelay } = classifySendOutcome(sendError);
     
     if (classification === 'RATE_LIMIT') {
@@ -259,7 +268,8 @@ async function processOutboundMessage(job: Job<OutboundMessageJobData>, token?: 
       throw error;
     }
     
-    throw new Error(`Permanent failure: ${sendError.message}`);
+    const fullErrorMsg = sendError?.response?.data?.error?.message || sendError?.message || 'Unknown error';
+    throw new Error(`Permanent failure: ${fullErrorMsg}`);
   }
   
   if (!result.success) {

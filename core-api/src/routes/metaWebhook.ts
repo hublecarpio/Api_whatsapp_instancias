@@ -247,9 +247,11 @@ async function processMessage(
 
   let mediaUrl: string | undefined;
   if (msg.mediaId) {
+    console.log(`[META WEBHOOK MEDIA] Processing ${msg.type} media: mediaId=${msg.mediaId}, mimetype=${msg.mimetype}, from=${msg.from}`);
     const mediaStartTime = Date.now();
     try {
       const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
+      console.log(`[META WEBHOOK MEDIA] Got Meta URL for ${msg.mediaId}: ${metaMediaUrl?.substring(0, 80)}...`);
       
       if (isS3Configured()) {
         webhookLogger.debug({ mediaId: msg.mediaId, type: msg.type }, 'Downloading media from Meta');
@@ -281,6 +283,11 @@ async function processMessage(
         mediaUrl = metaMediaUrl;
       }
     } catch (error: any) {
+      console.error(`[META WEBHOOK MEDIA] FAILED to process ${msg.type} mediaId=${msg.mediaId}: ${error.message}`, {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        code: error?.code
+      });
       logWebhookEvent({
         eventType: 'error',
         phoneNumberId: metaService['credentials'].phoneNumberId,
@@ -292,6 +299,8 @@ async function processMessage(
         duration: Date.now() - mediaStartTime
       });
     }
+  } else if (['image', 'video', 'audio', 'sticker', 'document'].includes(msg.type)) {
+    console.warn(`[META WEBHOOK MEDIA] Received ${msg.type} message but NO mediaId present! from=${msg.from}, messageId=${msg.messageId}`);
   }
 
   const processed = await processIncomingMessage({

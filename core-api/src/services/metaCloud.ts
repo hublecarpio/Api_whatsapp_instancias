@@ -405,21 +405,42 @@ export class MetaCloudService {
   }
 
   async getMediaUrl(mediaId: string): Promise<string> {
-    const response = await axios.get(
-      `${META_API_URL}/${mediaId}`,
-      { headers: this.headers }
-    );
-
-    return response.data.url;
+    console.log(`[META] getMediaUrl: fetching URL for mediaId=${mediaId}, phoneNumberId=${this.credentials.phoneNumberId}`);
+    try {
+      const response = await axios.get(
+        `${META_API_URL}/${mediaId}`,
+        { headers: this.headers, timeout: 30000 }
+      );
+      console.log(`[META] getMediaUrl: success for ${mediaId}`);
+      return response.data.url;
+    } catch (error: any) {
+      console.error(`[META] getMediaUrl FAILED for ${mediaId}:`, {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: error?.message
+      });
+      throw error;
+    }
   }
 
   async downloadMedia(mediaUrl: string): Promise<Buffer> {
-    const response = await axios.get(mediaUrl, {
-      headers: { 'Authorization': `Bearer ${this.credentials.accessToken}` },
-      responseType: 'arraybuffer'
-    });
-
-    return Buffer.from(response.data);
+    console.log(`[META] downloadMedia: downloading from ${mediaUrl?.substring(0, 80)}...`);
+    try {
+      const response = await axios.get(mediaUrl, {
+        headers: { 'Authorization': `Bearer ${this.credentials.accessToken}` },
+        responseType: 'arraybuffer',
+        timeout: 60000
+      });
+      console.log(`[META] downloadMedia: success, size=${response.data.byteLength} bytes`);
+      return Buffer.from(response.data);
+    } catch (error: any) {
+      console.error(`[META] downloadMedia FAILED:`, {
+        status: error?.response?.status,
+        message: error?.message,
+        code: error?.code
+      });
+      throw error;
+    }
   }
 
   async getPhoneNumberInfo(): Promise<any> {
