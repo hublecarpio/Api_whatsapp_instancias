@@ -1144,6 +1144,45 @@ export default function PromptPage() {
     }
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    if (!file.name.endsWith('.json')) {
+      setError('Por favor selecciona un archivo JSON');
+      setImportConfigText('');
+      setImportPreview(null);
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const config = JSON.parse(content);
+        if (!config.version) {
+          setError('Formato de configuracion invalido: falta version');
+          setImportConfigText('');
+          setImportPreview(null);
+          return;
+        }
+        setImportConfigText(content);
+        setImportPreview(config);
+        setError('');
+      } catch (err) {
+        setError('Error al leer el archivo JSON');
+        setImportConfigText('');
+        setImportPreview(null);
+      }
+    };
+    reader.onerror = () => {
+      setError('Error al leer el archivo');
+      setImportConfigText('');
+      setImportPreview(null);
+    };
+    reader.readAsText(file);
+  };
+
   const handleImportConfig = async () => {
     if (!currentBusiness || !importPreview) return;
     
@@ -3043,21 +3082,28 @@ export default function PromptPage() {
                 {!importPreview && !importResults && (
                   <>
                     <p className="text-sm text-gray-400">
-                      Pega el JSON de configuracion exportado previamente:
+                      Sube el archivo JSON de configuracion exportado previamente:
                     </p>
-                    <textarea
-                      value={importConfigText}
-                      onChange={(e) => setImportConfigText(e.target.value)}
-                      placeholder='{"version": "1.0", ...}'
-                      className="w-full h-48 bg-dark-surface border border-dark-border rounded-lg p-3 text-sm font-mono text-gray-300"
-                    />
-                    <button
-                      onClick={handleParseImportConfig}
-                      disabled={!importConfigText.trim()}
-                      className="btn btn-primary w-full"
-                    >
-                      Validar JSON
-                    </button>
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-dark-border rounded-lg cursor-pointer bg-dark-surface hover:bg-dark-hover transition-colors">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <svg className="w-8 h-8 mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <p className="text-sm text-gray-400">
+                          <span className="font-semibold text-neon-blue">Haz clic para seleccionar</span> o arrastra el archivo
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">Archivo JSON (.json)</p>
+                      </div>
+                      <input 
+                        type="file" 
+                        accept=".json,application/json"
+                        onChange={handleFileUpload}
+                        className="hidden" 
+                      />
+                    </label>
+                    <div className="text-center text-xs text-gray-500">
+                      El archivo sera validado automaticamente
+                    </div>
                   </>
                 )}
 

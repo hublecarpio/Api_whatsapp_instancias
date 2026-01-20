@@ -5301,9 +5301,11 @@ router.get('/config/export/:businessId', authMiddleware, async (req: AuthRequest
       select: {
         name: true,
         order: true,
+        description: true,
+        promptContext: true,
+        toolsAllowed: true,
         requiredFieldKeys: true,
         blockedTopics: true,
-        promptContext: true,
         autoTransition: true,
         instanceId: true
       }
@@ -5509,7 +5511,11 @@ router.post('/config/import/:businessId', authMiddleware, async (req: AuthReques
       for (const stage of config.funnelStages) {
         try {
           const existing = await prisma.funnelStage.findFirst({
-            where: { businessId, name: stage.name }
+            where: { 
+              businessId, 
+              name: stage.name,
+              ...(instanceId ? { instanceId } : { instanceId: null })
+            }
           });
 
           if (existing && mode === 'merge') {
@@ -5524,11 +5530,14 @@ router.post('/config/import/:businessId', authMiddleware, async (req: AuthReques
           await prisma.funnelStage.create({
             data: {
               businessId,
+              instanceId: instanceId || null,
               name: stage.name,
               order: stage.order || 0,
+              description: stage.description,
+              promptContext: stage.promptContext,
+              toolsAllowed: stage.toolsAllowed || [],
               requiredFieldKeys: stage.requiredFieldKeys || stage.requiredFields || [],
               blockedTopics: stage.blockedTopics || [],
-              promptContext: stage.promptContext,
               autoTransition: stage.autoTransition || (stage.autoAdvance ? { enabled: true } : undefined)
             }
           });

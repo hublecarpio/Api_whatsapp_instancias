@@ -2714,6 +2714,12 @@ body.glass-mode .mobile-drawer {
 .pt-\[calc\(56px\+1rem\)\] {
   padding-top: calc(56px + 1rem);
 }
+.pb-6 {
+  padding-bottom: 1.5rem;
+}
+.pt-5 {
+  padding-top: 1.25rem;
+}
 .text-left {
   text-align: left;
 }
