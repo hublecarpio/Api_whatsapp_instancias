@@ -822,6 +822,9 @@ model MessageLog {
   message           String?
   mediaUrl          String?
   metadata          Json?
+  deliveryStatus    String?  @default("sent")
+  deliveryError     String?
+  deliveryAttempts  Int      @default(0)
   createdAt         DateTime @default(now())
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)

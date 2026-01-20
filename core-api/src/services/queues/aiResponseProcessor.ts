@@ -1342,6 +1342,41 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
 // Product images are now sent explicitly when the agent includes the URL from buscar_producto results
 // (following the same pattern as enviar_archivo)
 
+async function sendWithRetry(
+  sendFn: () => Promise<any>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<{ success: boolean; result?: any; error?: string; attempts: number }> {
+  let lastError: string = '';
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await sendFn();
+      return { success: true, result, attempts: attempt };
+    } catch (error: any) {
+      lastError = error.message || 'Unknown error';
+      const errorCode = error.code || '';
+      const httpStatus = error?.response?.status;
+      
+      const isRetryableCode = ['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'EPIPE']
+        .includes(errorCode);
+      const isRetryableMessage = lastError.includes('META_CIRCUIT_BREAKER_OPEN') || 
+        lastError.includes('timeout') || lastError.includes('ETIMEDOUT');
+      const isRetryableStatus = httpStatus && (httpStatus >= 500 || httpStatus === 429);
+      const isRetryable = isRetryableCode || isRetryableMessage || isRetryableStatus;
+      
+      if (!isRetryable || attempt === maxRetries) {
+        console.error(`[AI Worker] Send FAILED after ${attempt} attempts: ${lastError} (code=${errorCode}, status=${httpStatus})`);
+        return { success: false, error: lastError, attempts: attempt };
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.log(`[AI Worker] Retry ${attempt}/${maxRetries} in ${delay}ms: ${lastError}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  return { success: false, error: lastError, attempts: maxRetries };
+}
+
 async function sendWhatsAppResponse(
   instanceId: string,
   phone: string,
@@ -1357,13 +1392,11 @@ async function sendWhatsAppResponse(
       return;
     }
     
-    // Parse message to detect text and media URLs (no auto-matching by product names)
     const events = parseAgentOutputToWhatsAppEvents(message);
     console.log(`[AI Worker] Parsed ${events.length} events for ${cleanPhone}:`, events.map(e => e.type));
     
     const sentMedia: Array<{ type: string; url?: string }> = [];
     
-    // Handle Meta Cloud API (both META_CLOUD and META_COEXIST use Meta Graph API)
     const metaCredential = instance.metaCredential || instance.metaCoexistCredential;
     console.log(`[AI Worker] Instance ${instanceId}: provider=${instance.provider}, hasMetaCred=${!!instance.metaCredential}, hasCoexistCred=${!!instance.metaCoexistCredential}`);
     
@@ -1387,37 +1420,66 @@ async function sendWhatsAppResponse(
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        try {
-          console.log(`[AI Worker] Sending event ${i+1}/${events.length}: type=${event.type}, to=${cleanPhone}`);
-          if (event.type === 'text' && event.text) {
-            const result = await metaService.sendTextMessage(cleanPhone, event.text);
-            console.log(`[AI Worker] Event ${i+1} SUCCESS: messageId=${result?.messages?.[0]?.id}`);
-            successCount++;
-          } else if (event.type === 'image' && event.url) {
-            await metaService.sendImageMessage(cleanPhone, event.url, event.caption);
-            sentMedia.push({ type: 'image', url: event.url });
-            successCount++;
-          } else if (event.type === 'video' && event.url) {
-            await metaService.sendVideoMessage(cleanPhone, event.url, event.caption);
-            sentMedia.push({ type: 'video', url: event.url });
-            successCount++;
-          } else if (event.type === 'audio' && event.url) {
-            await metaService.sendAudioMessage(cleanPhone, event.url);
-            sentMedia.push({ type: 'audio', url: event.url });
-            successCount++;
-          } else if (event.type === 'document' && event.url) {
-            await metaService.sendDocumentMessage(cleanPhone, event.url, event.filename, event.caption);
-            sentMedia.push({ type: 'document', url: event.url });
-            successCount++;
+        const messageLog = await prisma.messageLog.create({
+          data: {
+            businessId: business.id,
+            instanceId: instance.id,
+            direction: 'outbound',
+            sender: instance.phoneNumber || 'bot',
+            recipient: cleanPhone,
+            message: event.type === 'text' ? event.text : (event.caption || null),
+            mediaUrl: event.url || null,
+            deliveryStatus: 'pending',
+            deliveryAttempts: 0,
+            metadata: { 
+              source: 'ai_worker',
+              provider: instance.provider || 'BAILEYS',
+              agentVersion: business.agentVersion || 'v1',
+              type: event.type,
+              ...(event.type !== 'text' && { mediaType: event.type, filename: event.filename })
+            }
           }
-        } catch (eventError: any) {
+        });
+        
+        console.log(`[AI Worker] Sending event ${i+1}/${events.length}: type=${event.type}, to=${cleanPhone}, logId=${messageLog.id}`);
+        
+        let sendResult: { success: boolean; result?: any; error?: string; attempts: number };
+        
+        if (event.type === 'text' && event.text) {
+          sendResult = await sendWithRetry(() => metaService.sendTextMessage(cleanPhone, event.text!), 3, 1000);
+        } else if (event.type === 'image' && event.url) {
+          sendResult = await sendWithRetry(() => metaService.sendImageMessage(cleanPhone, event.url!, event.caption), 3, 1000);
+          if (sendResult.success) sentMedia.push({ type: 'image', url: event.url });
+        } else if (event.type === 'video' && event.url) {
+          sendResult = await sendWithRetry(() => metaService.sendVideoMessage(cleanPhone, event.url!, event.caption), 3, 1000);
+          if (sendResult.success) sentMedia.push({ type: 'video', url: event.url });
+        } else if (event.type === 'audio' && event.url) {
+          sendResult = await sendWithRetry(() => metaService.sendAudioMessage(cleanPhone, event.url!), 3, 1000);
+          if (sendResult.success) sentMedia.push({ type: 'audio', url: event.url });
+        } else if (event.type === 'document' && event.url) {
+          sendResult = await sendWithRetry(() => metaService.sendDocumentMessage(cleanPhone, event.url!, event.filename, event.caption), 3, 1000);
+          if (sendResult.success) sentMedia.push({ type: 'document', url: event.url });
+        } else {
+          sendResult = { success: false, error: 'Unknown event type', attempts: 0 };
+        }
+        
+        const providerMessageId = sendResult.result?.messages?.[0]?.id;
+        await prisma.messageLog.update({
+          where: { id: messageLog.id },
+          data: {
+            deliveryStatus: sendResult.success ? 'sent' : 'failed',
+            deliveryError: sendResult.error || null,
+            deliveryAttempts: sendResult.attempts,
+            providerMessageId: providerMessageId || null
+          }
+        });
+        
+        if (sendResult.success) {
+          console.log(`[AI Worker] Event ${i+1} SUCCESS: messageId=${providerMessageId}, attempts=${sendResult.attempts}`);
+          successCount++;
+        } else {
+          console.error(`[AI Worker] Event ${i+1} FAILED (${event.type}): ${sendResult.error}, attempts=${sendResult.attempts}`);
           failCount++;
-          console.error(`[AI Worker] Event ${i+1} FAILED (${event.type}):`, {
-            message: eventError.message,
-            status: eventError?.response?.status,
-            metaError: eventError?.response?.data?.error,
-            code: eventError?.code
-          });
         }
       }
       
@@ -1433,43 +1495,77 @@ async function sendWhatsAppResponse(
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        try {
-          if (event.type === 'text' && event.text) {
-            await axios.post(`${WA_API_URL}/instances/${backendId}/sendMessage`, {
-              to: phone,
-              message: event.text
-            }, { timeout: 30000 });
-          } else if (event.type === 'image' && event.url) {
-            await axios.post(`${WA_API_URL}/instances/${backendId}/sendImage`, {
-              to: phone,
-              url: event.url,
-              caption: event.caption
-            }, { timeout: 30000 });
-            sentMedia.push({ type: 'image', url: event.url });
-          } else if (event.type === 'video' && event.url) {
-            await axios.post(`${WA_API_URL}/instances/${backendId}/sendVideo`, {
-              to: phone,
-              url: event.url,
-              caption: event.caption
-            }, { timeout: 30000 });
-            sentMedia.push({ type: 'video', url: event.url });
-          } else if (event.type === 'audio' && event.url) {
-            await axios.post(`${WA_API_URL}/instances/${backendId}/sendAudio`, {
-              to: phone,
-              url: event.url
-            }, { timeout: 30000 });
-            sentMedia.push({ type: 'audio', url: event.url });
-          } else if (event.type === 'document' && event.url) {
-            await axios.post(`${WA_API_URL}/instances/${backendId}/sendFile`, {
-              to: phone,
-              url: event.url,
-              caption: event.caption,
-              filename: event.filename
-            }, { timeout: 30000 });
-            sentMedia.push({ type: 'document', url: event.url });
+        const messageLog = await prisma.messageLog.create({
+          data: {
+            businessId: business.id,
+            instanceId: instance.id,
+            direction: 'outbound',
+            sender: instance.phoneNumber || 'bot',
+            recipient: cleanPhone,
+            message: event.type === 'text' ? event.text : (event.caption || null),
+            mediaUrl: event.url || null,
+            deliveryStatus: 'pending',
+            deliveryAttempts: 0,
+            metadata: { 
+              source: 'ai_worker',
+              provider: 'BAILEYS',
+              agentVersion: business.agentVersion || 'v1',
+              type: event.type,
+              ...(event.type !== 'text' && { mediaType: event.type, filename: event.filename })
+            }
           }
-        } catch (eventError: any) {
-          console.error(`[AI Worker] Failed to send ${event.type} event via Baileys:`, eventError.message);
+        });
+        
+        let sendResult: { success: boolean; result?: any; error?: string; attempts: number };
+        
+        if (event.type === 'text' && event.text) {
+          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendMessage`, {
+            to: phone,
+            message: event.text
+          }, { timeout: 30000 }), 3, 1000);
+        } else if (event.type === 'image' && event.url) {
+          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendImage`, {
+            to: phone,
+            url: event.url,
+            caption: event.caption
+          }, { timeout: 30000 }), 3, 1000);
+          if (sendResult.success) sentMedia.push({ type: 'image', url: event.url });
+        } else if (event.type === 'video' && event.url) {
+          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendVideo`, {
+            to: phone,
+            url: event.url,
+            caption: event.caption
+          }, { timeout: 30000 }), 3, 1000);
+          if (sendResult.success) sentMedia.push({ type: 'video', url: event.url });
+        } else if (event.type === 'audio' && event.url) {
+          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendAudio`, {
+            to: phone,
+            url: event.url
+          }, { timeout: 30000 }), 3, 1000);
+          if (sendResult.success) sentMedia.push({ type: 'audio', url: event.url });
+        } else if (event.type === 'document' && event.url) {
+          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendFile`, {
+            to: phone,
+            url: event.url,
+            caption: event.caption,
+            filename: event.filename
+          }, { timeout: 30000 }), 3, 1000);
+          if (sendResult.success) sentMedia.push({ type: 'document', url: event.url });
+        } else {
+          sendResult = { success: false, error: 'Unknown event type', attempts: 0 };
+        }
+        
+        await prisma.messageLog.update({
+          where: { id: messageLog.id },
+          data: {
+            deliveryStatus: sendResult.success ? 'sent' : 'failed',
+            deliveryError: sendResult.error || null,
+            deliveryAttempts: sendResult.attempts
+          }
+        });
+        
+        if (!sendResult.success) {
+          console.error(`[AI Worker] Baileys event FAILED (${event.type}): ${sendResult.error}`);
         }
       }
       
@@ -1477,50 +1573,6 @@ async function sendWhatsAppResponse(
     } else {
       console.error(`[AI Worker] No valid send method for instance ${instanceId}, provider=${instance.provider}, hasBackendId=${!!instance.instanceBackendId}, hasMetaCred=${!!metaCredential}`);
       return;
-    }
-    
-    // Save each parsed event as a separate message in the database
-    // This ensures the UI displays messages in the same format as WhatsApp
-    for (const event of events) {
-      if (event.type === 'text' && event.text) {
-        await prisma.messageLog.create({
-          data: {
-            businessId: business.id,
-            instanceId: instance.id,
-            direction: 'outbound',
-            sender: instance.phoneNumber || 'bot',
-            recipient: cleanPhone,
-            message: event.text,
-            metadata: { 
-              source: 'ai_worker',
-              provider: instance.provider || 'BAILEYS',
-              agentVersion: business.agentVersion || 'v1',
-              type: 'text'
-            }
-          }
-        });
-      } else if (event.url) {
-        // For media events (image, video, audio, document)
-        await prisma.messageLog.create({
-          data: {
-            businessId: business.id,
-            instanceId: instance.id,
-            direction: 'outbound',
-            sender: instance.phoneNumber || 'bot',
-            recipient: cleanPhone,
-            message: event.caption || null,
-            mediaUrl: event.url,
-            metadata: { 
-              source: 'ai_worker',
-              provider: instance.provider || 'BAILEYS',
-              agentVersion: business.agentVersion || 'v1',
-              type: event.type,
-              mediaType: event.type,
-              filename: event.filename
-            }
-          }
-        });
-      }
     }
     
     // Schedule follow-up after sending response
