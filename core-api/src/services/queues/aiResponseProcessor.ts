@@ -159,20 +159,23 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     throw new Error(`Business ${businessId} not found`);
   }
   
+  // Normalize phone for database lookup (remove non-digits and WhatsApp suffixes)
+  const normalizedPhone = contactPhone.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
+  
   // Check if bot is globally disabled but contact has test mode enabled
   if (!business.botEnabled) {
     const contact = await prisma.contact.findUnique({
-      where: { businessId_phone: { businessId, phone: contactPhone } }
+      where: { businessId_phone: { businessId, phone: normalizedPhone } }
     });
     
     if (!contact?.botTestEnabled) {
-      console.log(`[AI Worker] Bot globally disabled for business ${businessId}, skipping`);
+      console.log(`[AI Worker] Bot globally disabled for business ${businessId}, contact ${normalizedPhone} has no test mode, skipping`);
       if (bufferId) {
         await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
       }
       return { response: '' };
     }
-    console.log(`[AI Worker] Bot test mode enabled for contact ${contactPhone}, processing despite global disable`);
+    console.log(`[AI Worker] Bot test mode enabled for contact ${normalizedPhone}, processing despite global disable`);
   }
   
   const tokenCheck = await checkUserTokenLimit(business.userId);
@@ -1654,17 +1657,20 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
     throw new Error(`Business ${businessId} not found`);
   }
   
+  // Normalize phone for database lookup (remove non-digits and WhatsApp suffixes)
+  const normalizedPhone = contactPhone.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
+  
   // Check if bot is globally disabled but contact has test mode enabled
   if (!business.botEnabled) {
     const contact = await prisma.contact.findUnique({
-      where: { businessId_phone: { businessId, phone: contactPhone } }
+      where: { businessId_phone: { businessId, phone: normalizedPhone } }
     });
     
     if (!contact?.botTestEnabled) {
-      console.log(`[AI Direct] Bot globally disabled for business ${businessId}, skipping`);
+      console.log(`[AI Direct] Bot globally disabled for business ${businessId}, contact ${normalizedPhone} has no test mode, skipping`);
       return { response: '' };
     }
-    console.log(`[AI Direct] Bot test mode enabled for contact ${contactPhone}, processing despite global disable`);
+    console.log(`[AI Direct] Bot test mode enabled for contact ${normalizedPhone}, processing despite global disable`);
   }
   
   const tokenCheck = await checkUserTokenLimit(business.userId);
