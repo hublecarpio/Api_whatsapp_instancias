@@ -123,20 +123,27 @@ async function sendViaMeta(data: OutboundMessageJobData): Promise<{ success: boo
     };
   }
   
-  const response = await axios.post(
-    `https://graph.facebook.com/v18.0/${credential.phoneNumberId}/messages`,
-    payload,
-    {
+  const metaUrl = `https://graph.facebook.com/v18.0/${credential.phoneNumberId}/messages`;
+  const startTime = Date.now();
+  
+  try {
+    const response = await axios.post(metaUrl, payload, {
       headers: {
         Authorization: `Bearer ${credential.accessToken}`,
         'Content-Type': 'application/json'
       },
-      timeout: 30000
-    }
-  );
-  
-  const messageId = response.data.messages?.[0]?.id;
-  return { success: true, messageId };
+      timeout: 60000
+    });
+    
+    const elapsed = Date.now() - startTime;
+    const messageId = response.data.messages?.[0]?.id;
+    console.log(`[META_SEND] Success: to=${to}, messageId=${messageId}, elapsed=${elapsed}ms`);
+    return { success: true, messageId };
+  } catch (error: any) {
+    const elapsed = Date.now() - startTime;
+    console.error(`[META_SEND] Failed: to=${to}, elapsed=${elapsed}ms, code=${error.code}, status=${error.response?.status}`);
+    throw error;
+  }
 }
 
 const MAX_REAL_FAILURES = 5;
@@ -163,6 +170,7 @@ function parseRetryAfter(retryAfterHeader: string | undefined): number {
 function classifySendOutcome(error: any): { classification: ErrorClassification; retryDelay: number } {
   const status = error?.response?.status;
   const message = error?.message?.toLowerCase() || '';
+  const errorCode = error?.code?.toLowerCase() || '';
   const responseData = error?.response?.data;
   
   if (status === 429 || status === 420 || status === 503) {
@@ -180,15 +188,17 @@ function classifySendOutcome(error: any): { classification: ErrorClassification;
     return { classification: 'RATE_LIMIT', retryDelay: 60000 };
   }
   
+  const transientCodes = ['etimedout', 'econnreset', 'econnrefused', 'enotfound', 'enetunreach', 'ehostunreach', 'epipe'];
+  const transientMessages = ['timeout', 'econnreset', 'econnrefused', 'network', 'socket', 'connection refused', 'dns'];
+  
   if (status === 500 || status === 502 || status === 504 ||
-      message.includes('timeout') || 
-      message.includes('econnreset') ||
-      message.includes('econnrefused') ||
-      message.includes('network') ||
-      message.includes('socket')) {
-    return { classification: 'TRANSIENT', retryDelay: 5000 };
+      transientCodes.some(code => errorCode.includes(code)) ||
+      transientMessages.some(msg => message.includes(msg))) {
+    console.log(`[OUTBOUND_WORKER] Classified as TRANSIENT: code=${errorCode}, status=${status}, message=${message.slice(0, 100)}`);
+    return { classification: 'TRANSIENT', retryDelay: 10000 };
   }
   
+  console.log(`[OUTBOUND_WORKER] Classified as PERMANENT: code=${errorCode}, status=${status}, message=${message.slice(0, 100)}`);
   return { classification: 'PERMANENT', retryDelay: 0 };
 }
 
