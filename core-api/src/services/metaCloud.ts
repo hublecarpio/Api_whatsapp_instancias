@@ -1,7 +1,24 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import FormData from 'form-data';
+import https from 'https';
 
 const META_API_URL = 'https://graph.facebook.com/v21.0';
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 3000,
+  timeout: 60000,
+  maxSockets: 50,
+  maxFreeSockets: 10
+});
+
+const metaAxios: AxiosInstance = axios.create({
+  httpsAgent,
+  timeout: 30000,
+  headers: {
+    'Connection': 'keep-alive'
+  }
+});
 
 export interface MetaCredentials {
   accessToken: string;
@@ -141,12 +158,12 @@ export class MetaCloudService {
     };
   }
 
-  async sendTextMessage(to: string, text: string): Promise<any> {
+  async sendTextMessage(to: string, text: string, retryCount = 0): Promise<any> {
     const cleanPhone = to.replace(/\D/g, '');
-    console.log(`[META] sendTextMessage: to=${cleanPhone}, phoneNumberId=${this.credentials.phoneNumberId}, textLen=${text?.length}`);
+    console.log(`[META] sendTextMessage: to=${cleanPhone}, phoneNumberId=${this.credentials.phoneNumberId}, textLen=${text?.length}, retry=${retryCount}`);
     
     try {
-      const response = await axios.post(
+      const response = await metaAxios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -155,19 +172,27 @@ export class MetaCloudService {
           type: 'text',
           text: { body: text }
         },
-        { headers: this.headers, timeout: 30000 }
+        { headers: this.headers }
       );
 
       const messageId = response.data?.messages?.[0]?.id;
       console.log(`[META] sendTextMessage SUCCESS: messageId=${messageId}`);
       return response.data;
     } catch (error: any) {
+      const isTimeout = error?.code === 'ETIMEDOUT' || error?.code === 'ECONNRESET' || error?.code === 'ENOTFOUND';
       console.error(`[META] sendTextMessage FAILED:`, {
         status: error?.response?.status,
         data: error?.response?.data,
         message: error?.message,
+        code: error?.code,
         to: cleanPhone
       });
+      
+      if (isTimeout && retryCount < 2) {
+        console.log(`[META] Retrying sendTextMessage (attempt ${retryCount + 1})...`);
+        await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+        return this.sendTextMessage(to, text, retryCount + 1);
+      }
       throw error;
     }
   }
@@ -179,7 +204,7 @@ export class MetaCloudService {
       const { buffer, mimeType } = await this.downloadFromUrl(imageUrl);
       const mediaId = await this.uploadMedia(buffer, mimeType, 'image.jpg');
       
-      const response = await axios.post(
+      const response = await metaAxios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -197,7 +222,7 @@ export class MetaCloudService {
       return response.data;
     } catch (uploadError: any) {
       console.error('Image upload failed, trying direct URL:', uploadError.message);
-      const response = await axios.post(
+      const response = await metaAxios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -223,7 +248,7 @@ export class MetaCloudService {
       const { buffer, mimeType } = await this.downloadFromUrl(videoUrl);
       const mediaId = await this.uploadMedia(buffer, mimeType, 'video.mp4');
       
-      const response = await axios.post(
+      const response = await metaAxios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -241,7 +266,7 @@ export class MetaCloudService {
       return response.data;
     } catch (uploadError: any) {
       console.error('Video upload failed, trying direct URL:', uploadError.message);
-      const response = await axios.post(
+      const response = await metaAxios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -269,7 +294,7 @@ export class MetaCloudService {
     });
     formData.append('type', mimeType);
 
-    const response = await axios.post(
+    const response = await metaAxios.post(
       `${META_API_URL}/${this.credentials.phoneNumberId}/media`,
       formData,
       {
@@ -284,7 +309,7 @@ export class MetaCloudService {
   }
 
   private async downloadFromUrl(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
-    const response = await axios.get(url, {
+    const response = await metaAxios.get(url, {
       responseType: 'arraybuffer',
       timeout: 30000
     });
@@ -330,7 +355,7 @@ export class MetaCloudService {
       console.log('[META] Audio uploaded to Meta, media_id:', mediaId);
       console.log('[META] Sending audio message to', cleanPhone);
       
-      const response = await axios.post(
+      const response = await metaAxios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -357,7 +382,7 @@ export class MetaCloudService {
       const { buffer, mimeType } = await this.downloadFromUrl(documentUrl);
       const mediaId = await this.uploadMedia(buffer, mimeType, filename || 'document');
       
-      const response = await axios.post(
+      const response = await metaAxios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -376,7 +401,7 @@ export class MetaCloudService {
       return response.data;
     } catch (uploadError: any) {
       console.error('Document upload failed, trying direct URL:', uploadError.message);
-      const response = await axios.post(
+      const response = await metaAxios.post(
         `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
@@ -420,7 +445,7 @@ export class MetaCloudService {
   async getMediaUrl(mediaId: string): Promise<string> {
     console.log(`[META] getMediaUrl: fetching URL for mediaId=${mediaId}, phoneNumberId=${this.credentials.phoneNumberId}`);
     try {
-      const response = await axios.get(
+      const response = await metaAxios.get(
         `${META_API_URL}/${mediaId}`,
         { headers: this.headers, timeout: 30000 }
       );
@@ -439,7 +464,7 @@ export class MetaCloudService {
   async downloadMedia(mediaUrl: string): Promise<Buffer> {
     console.log(`[META] downloadMedia: downloading from ${mediaUrl?.substring(0, 80)}...`);
     try {
-      const response = await axios.get(mediaUrl, {
+      const response = await metaAxios.get(mediaUrl, {
         headers: { 'Authorization': `Bearer ${this.credentials.accessToken}` },
         responseType: 'arraybuffer',
         timeout: 60000
@@ -457,7 +482,7 @@ export class MetaCloudService {
   }
 
   async getPhoneNumberInfo(): Promise<any> {
-    const response = await axios.get(
+    const response = await metaAxios.get(
       `${META_API_URL}/${this.credentials.phoneNumberId}`,
       { headers: this.headers, timeout: 5000 }
     );
@@ -466,7 +491,7 @@ export class MetaCloudService {
   }
 
   async markMessageAsRead(messageId: string): Promise<any> {
-    const response = await axios.post(
+    const response = await metaAxios.post(
       `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
       {
         messaging_product: 'whatsapp',
@@ -505,7 +530,7 @@ export class MetaCloudService {
       payload.template.components = options.components;
     }
 
-    const response = await axios.post(
+    const response = await metaAxios.post(
       `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
       payload,
       { headers: this.headers }
@@ -515,7 +540,7 @@ export class MetaCloudService {
   }
 
   async getTemplates(): Promise<any[]> {
-    const response = await axios.get(
+    const response = await metaAxios.get(
       `${META_API_URL}/${this.credentials.businessId}/message_templates`,
       { headers: this.headers }
     );

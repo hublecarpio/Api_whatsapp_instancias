@@ -1,0 +1,98 @@
+  status: undefined,
+  data: undefined,
+  message: 'Error',
+  to: '51992544801'
+}
+[AI Worker] Event 1 FAILED (text): {
+  message: 'Error',
+  status: undefined,
+  metaError: undefined,
+  code: 'ETIMEDOUT'
+}
+[AI Worker] Sending event 2/4: type=text, to=51992544801
+[META] sendTextMessage: to=51992544801, phoneNumberId=909444395587574, textLen=17
+[META] sendTextMessage FAILED: {
+  status: undefined,
+  data: undefined,
+  message: 'Error',
+  to: '51992544801'
+}
+[AI Worker] Event 2 FAILED (text): {
+  message: 'Error',
+  status: undefined,
+  metaError: undefined,
+  code: 'ETIMEDOUT'
+}
+[AI Worker] Sending event 3/4: type=text, to=51992544801
+[META] sendTextMessage: to=51992544801, phoneNumberId=909444395587574, textLen=27
+[META] sendTextMessage FAILED: {
+  status: undefined,
+  data: undefined,
+  message: 'Error',
+  to: '51992544801'
+}
+[AI Worker] Event 3 FAILED (text): {
+  message: 'Error',
+  status: undefined,
+  metaError: undefined,
+  code: 'ETIMEDOUT'
+}
+[OUTBOUND_WORKER] Processing job msg_759ec24f-6eac-4243-be0d-2f7ac4906743 for 51975225308 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[AI Worker] Sending event 4/4: type=text, to=51992544801
+[META] sendTextMessage: to=51992544801, phoneNumberId=909444395587574, textLen=50
+[OUTBOUND_WORKER] Send error for msg_759ec24f-6eac-4243-be0d-2f7ac4906743: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 60000ms (attempt 6)
+[OUTBOUND_WORKER] Job msg_759ec24f-6eac-4243-be0d-2f7ac4906743 failed: Permanent failure: Error
+[AI Worker] Meta Cloud COMPLETE: 0/4 sent OK, 4 failed, to=51992544801
+[META] sendTextMessage FAILED: {
+  status: undefined,
+  data: undefined,
+  message: 'Error',
+  to: '51992544801'
+}
+[AI Worker] Event 4 FAILED (text): {
+  message: 'Error',
+  status: undefined,
+  metaError: undefined,
+  code: 'ETIMEDOUT'
+}
+[FOLLOW-UP] scheduleFollowUp called - business: abeb9f70-3ecb-4b80-9285-1f8a43452633, phone: 51992544801, source: ai, instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[FOLLOW-UP] No config found for business abeb9f70-3ecb-4b80-9285-1f8a43452633
+[AI Worker] Response sent and logged to 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: agent_message, instance: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[AI Worker] Updating lead stage after agent response for 51992544801
+[AI Worker] Extracting custom data for 51992544801
+[AI Worker] Job ai-abeb9f70-3ecb-4b80-9285-1f8a43452633-51992544801-1768879039707 completed, response length: 162
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[AI] callOpenAI rawModel="gpt-4.1-nano" model="gpt-4.1-nano" useOpenRouter=false
+[ExpiredBuffer] Checking for expired buffers...
+[OUTBOUND_WORKER] Processing job msg_1bc54caa-db8e-442e-b4ea-4f9f80202f52 for 51975225308 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_1bc54caa-db8e-442e-b4ea-4f9f80202f52: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[BACKOFF] Using exponential delay: 60000ms (attempt 6)
+[OUTBOUND_WORKER] Job msg_1bc54caa-db8e-442e-b4ea-4f9f80202f52 failed: Permanent failure: Error
+[DataExtraction] Saved telefono=51918972612 for 51992544801
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: state_change
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnDataUpdate CALLED <<<
+[ORDER-AUTO-DEBUG] Updated field: "telefono", Phone: 51992544801
+[ORDER-AUTO-DEBUG] Trigger fields: direccion, address, ubicacion, producto, fragancia, tamano, tamaño
+[ORDER-AUTO-DEBUG] Should trigger: false
+[ORDER-AUTO-DEBUG] Field "telefono" is NOT a trigger field - skipping
+[DataExtraction] Extracted 1 fields for 51992544801
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
+[FunnelStage] Contact 51992544801 advanced to stage: Tamaño
+[ORDER-AUTO-DEBUG] >>> tryAutoCreateOrderOnStageAdvance CALLED <<<
+[ORDER-AUTO-DEBUG] Stage: "Tamaño", Phone: 51992544801
+[ORDER-AUTO-DEBUG] isInFinalStage("Tamaño"): false
+[ORDER-AUTO-DEBUG] Checking against keywords: confirmar orden, confirmar pedido, cotización final, cotizacion final, pago, cierre, finalizar
+[ORDER-AUTO-DEBUG] Stage "Tamaño" is NOT a final stage - skipping
+[GEMINI] Lead stage analysis: {
+  stageName: 'Interesado',
+  confidence: 0.85,
+  reasoning: 'El agente da la bienvenida y pregunta qué fragancia le llamó la atención al cliente, lo que indica que el cliente ha mostrado algún interés previo al contacto.',
+  shouldChange: true,
+  currentStage: undefined
+}
+[LEAD STAGE] Updated 51992544801 to "Interesado" (confidence: 0.85)
+[Webhook] Attempting dispatch for business abeb9f70-3ecb-4b80-9285-1f8a43452633, event: stage_change
+[AI Worker] Lead stage updated to "Interesado" (confidence: 0.85)
+[Webhook] No webhookUrl configured for business duvon pruebas (abeb9f70-3ecb-4b80-9285-1f8a43452633)
