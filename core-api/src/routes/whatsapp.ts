@@ -832,6 +832,11 @@ router.get('/instances/:instanceId/status', async (req: AuthRequest, res: Respon
         
         const phoneInfo = await metaService.getPhoneNumberInfo();
         
+        await prisma.whatsAppInstance.update({
+          where: { id: instance.id },
+          data: { status: 'connected', lastConnection: new Date() }
+        });
+        
         return res.json({
           id: instance.id,
           name: instance.name,
@@ -839,7 +844,7 @@ router.get('/instances/:instanceId/status', async (req: AuthRequest, res: Respon
           phoneNumber: phoneInfo.display_phone_number || instance.phoneNumber,
           status: 'connected',
           isActive: instance.isActive,
-          lastConnection: instance.lastConnection,
+          lastConnection: new Date(),
           webhookUrl: getPublicWebhookUrl(`/webhook/meta/${instance.id}`),
           webhookVerifyToken: instance.metaCredential.webhookVerifyToken,
           metaInfo: {
@@ -849,13 +854,41 @@ router.get('/instances/:instanceId/status', async (req: AuthRequest, res: Respon
           }
         });
       } catch (err: any) {
+        const httpStatus = err.response?.status;
+        const metaErrorCode = err.response?.data?.error?.code;
+        const isCredentialError = httpStatus === 401 || httpStatus === 403;
+        const isTokenExpired = metaErrorCode === 190;
+        
+        if (isCredentialError || isTokenExpired) {
+          await prisma.whatsAppInstance.update({
+            where: { id: instance.id },
+            data: { status: 'error' }
+          });
+          
+          return res.json({
+            id: instance.id,
+            name: instance.name,
+            provider: instance.provider,
+            phoneNumber: instance.phoneNumber,
+            status: 'error',
+            error: 'Invalid or expired Meta credentials'
+          });
+        }
+        
+        const cachedStatus = instance.status || 'unknown';
+        console.log(`[META-STATUS] Temporary error for instance ${instance.id}, using cached status: ${cachedStatus}`);
+        
         return res.json({
           id: instance.id,
           name: instance.name,
           provider: instance.provider,
           phoneNumber: instance.phoneNumber,
-          status: 'error',
-          error: 'Could not verify Meta connection'
+          status: cachedStatus,
+          isActive: instance.isActive,
+          lastConnection: instance.lastConnection,
+          webhookUrl: getPublicWebhookUrl(`/webhook/meta/${instance.id}`),
+          webhookVerifyToken: instance.metaCredential.webhookVerifyToken,
+          _temporaryError: true
         });
       }
     }
@@ -1461,16 +1494,45 @@ router.get('/:businessId/status', async (req: AuthRequest, res: Response) => {
         });
       } catch (error: any) {
         console.error('Meta API check failed:', error.response?.data || error.message);
-        res.json({
-          id: instance.id,
-          name: instance.name,
-          provider: instance.provider,
-          phoneNumber: instance.phoneNumber,
-          status: 'error',
-          error: 'Failed to verify Meta connection',
-          webhookUrl: getPublicWebhookUrl(`/webhook/meta/${instance.id}`),
-          webhookVerifyToken: instance.metaCredential.webhookVerifyToken
-        });
+        
+        const httpStatus = error.response?.status;
+        const metaErrorCode = error.response?.data?.error?.code;
+        const isCredentialError = httpStatus === 401 || httpStatus === 403;
+        const isTokenExpired = metaErrorCode === 190;
+        
+        if (isCredentialError || isTokenExpired) {
+          await prisma.whatsAppInstance.update({
+            where: { id: instance.id },
+            data: { status: 'error' }
+          });
+          
+          res.json({
+            id: instance.id,
+            name: instance.name,
+            provider: instance.provider,
+            phoneNumber: instance.phoneNumber,
+            status: 'error',
+            error: 'Invalid or expired Meta credentials',
+            webhookUrl: getPublicWebhookUrl(`/webhook/meta/${instance.id}`),
+            webhookVerifyToken: instance.metaCredential.webhookVerifyToken
+          });
+        } else {
+          const cachedStatus = instance.status || 'unknown';
+          console.log(`[META-STATUS] Temporary error for instance ${instance.id}, using cached status: ${cachedStatus}`);
+          
+          res.json({
+            id: instance.id,
+            name: instance.name,
+            provider: instance.provider,
+            phoneNumber: instance.phoneNumber,
+            status: cachedStatus,
+            isActive: instance.isActive,
+            lastConnection: instance.lastConnection,
+            webhookUrl: getPublicWebhookUrl(`/webhook/meta/${instance.id}`),
+            webhookVerifyToken: instance.metaCredential.webhookVerifyToken,
+            _temporaryError: true
+          });
+        }
       }
       return;
     }

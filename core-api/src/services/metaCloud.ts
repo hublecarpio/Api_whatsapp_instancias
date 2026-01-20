@@ -425,7 +425,7 @@ export class MetaCloudService {
   async getPhoneNumberInfo(): Promise<any> {
     const response = await axios.get(
       `${META_API_URL}/${this.credentials.phoneNumberId}`,
-      { headers: this.headers }
+      { headers: this.headers, timeout: 5000 }
     );
 
     return response.data;
