@@ -445,7 +445,11 @@ export default function ChatPage() {
       try {
         setAssigningTag(true);
         await tagsApi.unassign({ business_id: currentBusiness.id, contact_phone: phone });
-        fetchTags();
+        await fetchTags();
+        if (phone === selectedPhone) {
+          setCurrentStage(null);
+          fetchContactExtractedData(phone);
+        }
       } catch (err) {
         console.error('Failed to unassign tag:', err);
       } finally {
@@ -456,7 +460,14 @@ export default function ChatPage() {
     setAssigningTag(true);
     try {
       await tagsApi.assign({ business_id: currentBusiness.id, contact_phone: phone, tag_id: tagId });
-      fetchTags();
+      const [tagsResult] = await Promise.all([fetchTags()]);
+      if (phone === selectedPhone) {
+        const assignedTag = tags.find(t => t.id === tagId);
+        if (assignedTag) {
+          setCurrentStage({ id: assignedTag.id, name: assignedTag.name, color: assignedTag.color });
+        }
+        fetchContactExtractedData(phone);
+      }
     } catch (err) {
       console.error('Failed to assign tag:', err);
     } finally {
@@ -1543,8 +1554,8 @@ export default function ChatPage() {
               )}
 
               {showContactPanel && (
-                <div className="px-4 py-3 border-b border-dark-border bg-dark-surface">
-                  <div className="flex items-center justify-between mb-3">
+                <div className="px-4 py-3 border-b border-dark-border bg-dark-surface max-h-[50vh] flex flex-col">
+                  <div className="flex items-center justify-between mb-3 flex-shrink-0">
                     <h4 className="text-sm font-medium text-white">Datos del Contacto</h4>
                     <div className="flex items-center gap-2">
                       {funnelStage && (
@@ -1560,53 +1571,55 @@ export default function ChatPage() {
                     </div>
                   </div>
                   {extractedFields.length > 0 ? (
-                    <div className="space-y-2">
-                      {extractedFields.map((field) => (
-                        <div key={field.fieldKey} className="flex items-center gap-2 text-xs">
-                          <span className="text-gray-500 min-w-[80px]">{field.fieldLabel}:</span>
-                          {editingField === field.fieldKey ? (
-                            <div className="flex-1 flex items-center gap-1">
-                              <input
-                                type="text"
-                                value={editingValue}
-                                onChange={(e) => setEditingValue(e.target.value)}
-                                className="flex-1 px-2 py-1 bg-dark-card border border-dark-border rounded text-white text-xs focus:outline-none focus:border-neon-blue"
-                                autoFocus
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleSaveExtractedField(field.fieldKey, editingValue);
-                                  if (e.key === 'Escape') { setEditingField(null); setEditingValue(''); }
-                                }}
-                              />
-                              <button
-                                onClick={() => handleSaveExtractedField(field.fieldKey, editingValue)}
-                                disabled={savingField}
-                                className="p-1 text-accent-success hover:bg-accent-success/20 rounded"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                              </button>
-                              <button
-                                onClick={() => { setEditingField(null); setEditingValue(''); }}
-                                className="p-1 text-gray-400 hover:bg-dark-hover rounded"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex-1 flex items-center gap-1 group">
-                              <span className={field.value ? 'text-white' : 'text-gray-600 italic'}>{field.value || 'Sin datos'}</span>
-                              {field.source === 'manual' && <span className="text-[9px] text-accent-success">manual</span>}
-                              {field.source === 'tool' && <span className="text-[9px] text-purple-400">tool</span>}
-                              <button
-                                onClick={() => { setEditingField(field.fieldKey); setEditingValue(field.value || ''); }}
-                                className="ml-auto p-1 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-neon-blue transition-all"
-                                title="Editar"
-                              >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                    <div className="overflow-y-auto flex-1 pr-1 scrollbar-thin scrollbar-track-dark-bg scrollbar-thumb-dark-border">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                        {extractedFields.map((field) => (
+                          <div key={field.fieldKey} className="flex items-start gap-2 text-xs py-1 border-b border-dark-border/30 last:border-0">
+                            <span className="text-gray-500 min-w-[90px] flex-shrink-0 truncate" title={field.fieldLabel}>{field.fieldLabel}:</span>
+                            {editingField === field.fieldKey ? (
+                              <div className="flex-1 flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={editingValue}
+                                  onChange={(e) => setEditingValue(e.target.value)}
+                                  className="flex-1 px-2 py-1 bg-dark-card border border-dark-border rounded text-white text-xs focus:outline-none focus:border-neon-blue"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveExtractedField(field.fieldKey, editingValue);
+                                    if (e.key === 'Escape') { setEditingField(null); setEditingValue(''); }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => handleSaveExtractedField(field.fieldKey, editingValue)}
+                                  disabled={savingField}
+                                  className="p-1 text-accent-success hover:bg-accent-success/20 rounded"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                </button>
+                                <button
+                                  onClick={() => { setEditingField(null); setEditingValue(''); }}
+                                  className="p-1 text-gray-400 hover:bg-dark-hover rounded"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex-1 flex items-center gap-1 group min-w-0">
+                                <span className={`truncate ${field.value ? 'text-white' : 'text-gray-600 italic'}`} title={field.value || 'Sin datos'}>{field.value || 'Sin datos'}</span>
+                                {field.source === 'manual' && <span className="text-[9px] text-accent-success flex-shrink-0">manual</span>}
+                                {field.source === 'tool' && <span className="text-[9px] text-purple-400 flex-shrink-0">tool</span>}
+                                <button
+                                  onClick={() => { setEditingField(field.fieldKey); setEditingValue(field.value || ''); }}
+                                  className="ml-auto p-1 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-neon-blue transition-all flex-shrink-0"
+                                  title="Editar"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : (
                     <p className="text-xs text-gray-500">Sin campos configurados. Configura campos en Datos Personalizados.</p>
