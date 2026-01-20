@@ -478,6 +478,12 @@ export class MetaCloudService {
     }
   }
 
+  /**
+   * Upload media to Meta Cloud API.
+   * NOTE: Uses axios with fresh agent on retries (not undici) because FormData 
+   * multipart encoding with undici requires additional complexity that could 
+   * introduce bugs. Axios with fresh agent still provides improved reliability.
+   */
   async uploadMedia(buffer: Buffer, mimeType: string, filename: string, retryCount = 0): Promise<string> {
     const maxRetries = 2;
     
