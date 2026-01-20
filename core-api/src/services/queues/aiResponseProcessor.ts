@@ -146,7 +146,7 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       policy: true,
       agentPrompts: { include: { tools: { where: { enabled: true } } } },
       products: true,
-      instances: { include: { metaCredential: true } },
+      instances: { include: { metaCredential: true, metaCoexistCredential: true } },
       user: { select: { isPro: true, id: true, subscriptionStatus: true } },
       deliveryZones: { where: { isActive: true }, orderBy: { order: 'asc' } }
     }
@@ -1362,8 +1362,10 @@ async function sendWhatsAppResponse(
     
     // Handle Meta Cloud API (both META_CLOUD and META_COEXIST use Meta Graph API)
     const metaCredential = instance.metaCredential || instance.metaCoexistCredential;
+    console.log(`[AI Worker] Instance ${instanceId}: provider=${instance.provider}, hasMetaCred=${!!instance.metaCredential}, hasCoexistCred=${!!instance.metaCoexistCredential}`);
+    
     if ((instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') && metaCredential) {
-      console.log(`[AI Worker] Sending via Meta Cloud API (${instance.provider}) to ${cleanPhone}`);
+      console.log(`[AI Worker] Sending via Meta Cloud API (${instance.provider}) to ${cleanPhone}, phoneNumberId=${metaCredential.phoneNumberId}`);
       const { MetaCloudService } = await import('../metaCloud.js');
       const metaService = new MetaCloudService({
         accessToken: metaCredential.accessToken,
@@ -1454,7 +1456,7 @@ async function sendWhatsAppResponse(
       
       console.log(`[AI Worker] Baileys: sent ${events.length} events to ${cleanPhone}`);
     } else {
-      console.error(`[AI Worker] No valid send method for instance ${instanceId}`);
+      console.error(`[AI Worker] No valid send method for instance ${instanceId}, provider=${instance.provider}, hasBackendId=${!!instance.instanceBackendId}, hasMetaCred=${!!metaCredential}`);
       return;
     }
     
@@ -1642,7 +1644,7 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
       policy: true,
       agentPrompts: { include: { tools: { where: { enabled: true } } } },
       products: true,
-      instances: { include: { metaCredential: true } },
+      instances: { include: { metaCredential: true, metaCoexistCredential: true } },
       user: { select: { isPro: true, id: true, subscriptionStatus: true } },
       deliveryZones: { where: { isActive: true }, orderBy: { order: 'asc' } }
     }
