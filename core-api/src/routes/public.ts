@@ -137,6 +137,25 @@ router.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Queue diagnostics endpoint for debugging Redis/BullMQ issues
+router.get('/queues/status', async (req: Request, res: Response) => {
+  try {
+    const { getQueuesStatus } = await import('../services/queues/index.js');
+    const status = await getQueuesStatus();
+    
+    res.json({
+      timestamp: new Date().toISOString(),
+      ...status
+    });
+  } catch (error: any) {
+    res.json({
+      timestamp: new Date().toISOString(),
+      redis: { connected: false, error: error.message },
+      queues: {}
+    });
+  }
+});
+
 router.get('/ui-settings', async (req: Request, res: Response) => {
   try {
     const settings = await prisma.platformSettings.findUnique({

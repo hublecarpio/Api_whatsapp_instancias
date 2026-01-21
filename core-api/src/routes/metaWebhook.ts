@@ -393,12 +393,22 @@ async function processMessage(
             attemptNumber: 1
           };
           
+          console.log(`[META WEBHOOK MEDIA] 📤 Enqueueing media job:`, {
+            jobId: `media-${mediaPendingData.mediaId}`,
+            mediaType: mediaPendingData.mediaType,
+            mimetype: mediaPendingData.mimetype,
+            contactPhone: msg.from,
+            businessId: instance.businessId,
+            instanceId: instance.id
+          });
+          
           await mediaQueue.add(`media-${mediaPendingData.mediaId}`, jobData, {
             delay: 500,
             priority: 1
           });
           
           enqueueSuccess = true;
+          console.log(`[META WEBHOOK MEDIA] ✅ Job enqueued successfully: media-${mediaPendingData.mediaId}`);
           
           // Update messageLog to mark media as pending
           const existingLog = await prisma.messageLog.findUnique({

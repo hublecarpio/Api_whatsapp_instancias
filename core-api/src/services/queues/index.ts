@@ -325,6 +325,77 @@ export async function scheduleInactivityChecks(): Promise<void> {
   console.log('Scheduled global inactivity check every 60 seconds');
 }
 
+// Diagnostic function to get queue statistics
+export async function getQueuesStatus(): Promise<{
+  redis: { connected: boolean; url: string };
+  queues: Record<string, { waiting: number; active: number; completed: number; failed: number; delayed: number }>;
+}> {
+  const result: {
+    redis: { connected: boolean; url: string };
+    queues: Record<string, { waiting: number; active: number; completed: number; failed: number; delayed: number }>;
+  } = {
+    redis: { connected: false, url: REDIS_URL.replace(/:[^:@]+@/, ':***@') }, // Hide password
+    queues: {}
+  };
+
+  try {
+    const conn = getConnection();
+    await conn.ping();
+    result.redis.connected = true;
+  } catch {
+    result.redis.connected = false;
+    return result;
+  }
+
+  const queues = [
+    { name: 'reminders', queue: reminderQueue },
+    { name: 'messageBuffer', queue: messageBufferQueue },
+    { name: 'whatsappIncoming', queue: whatsappIncomingQueue },
+    { name: 'inactivityCheck', queue: inactivityCheckQueue },
+    { name: 'aiResponse', queue: aiResponseQueue },
+    { name: 'outboundMessage', queue: outboundMessageQueue },
+    { name: 'mediaDownload', queue: mediaDownloadQueue }
+  ];
+
+  for (const { name, queue } of queues) {
+    if (queue) {
+      try {
+        const [waiting, active, completed, failed, delayed] = await Promise.all([
+          queue.getWaitingCount(),
+          queue.getActiveCount(),
+          queue.getCompletedCount(),
+          queue.getFailedCount(),
+          queue.getDelayedCount()
+        ]);
+        result.queues[name] = { waiting, active, completed, failed, delayed };
+      } catch (err) {
+        result.queues[name] = { waiting: -1, active: -1, completed: -1, failed: -1, delayed: -1 };
+      }
+    }
+  }
+
+  return result;
+}
+
+// Log queue status on startup
+export async function logQueuesStatus(): Promise<void> {
+  const status = await getQueuesStatus();
+  
+  console.log('═══════════════════════════════════════════════════════════════');
+  console.log('📊 BULLMQ QUEUES STATUS');
+  console.log('═══════════════════════════════════════════════════════════════');
+  console.log(`Redis: ${status.redis.connected ? '✅ CONNECTED' : '❌ DISCONNECTED'}`);
+  console.log(`Redis URL: ${status.redis.url}`);
+  console.log('───────────────────────────────────────────────────────────────');
+  
+  for (const [name, stats] of Object.entries(status.queues)) {
+    const hasJobs = stats.waiting > 0 || stats.active > 0 || stats.delayed > 0;
+    const icon = hasJobs ? '📬' : '📭';
+    console.log(`${icon} ${name}: waiting=${stats.waiting} active=${stats.active} delayed=${stats.delayed} failed=${stats.failed}`);
+  }
+  console.log('═══════════════════════════════════════════════════════════════');
+}
+
 export async function closeQueues(): Promise<void> {
   const closeTasks: Promise<void>[] = [];
   

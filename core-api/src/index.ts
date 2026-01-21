@@ -208,6 +208,9 @@ async function initializeWorkers(): Promise<void> {
       await bullmqModules.schedulePendingReminders();
       await bullmqModules.scheduleExpiredBufferCheck();
       
+      // Log queue status for diagnostics
+      await queuesIndex.logQueuesStatus();
+      
       console.log('All BullMQ workers initialized successfully');
     } catch (error) {
       console.error('Failed to initialize BullMQ, falling back to legacy workers:', error);

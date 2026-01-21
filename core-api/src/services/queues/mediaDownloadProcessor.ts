@@ -327,6 +327,15 @@ export function startMediaDownloadProcessor(): Worker | null {
   try {
     const connection = getQueueConnection();
     
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('🖼️  MEDIA DOWNLOAD PROCESSOR - STARTING');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log(`   Queue: ${QUEUE_NAMES.MEDIA_DOWNLOAD}`);
+    console.log(`   Concurrency: 3`);
+    console.log(`   Rate Limit: 10 jobs/second`);
+    console.log(`   Max Attempts: ${MAX_MEDIA_DOWNLOAD_ATTEMPTS}`);
+    console.log('═══════════════════════════════════════════════════════════════');
+    
     mediaDownloadWorker = new Worker<MediaDownloadJobData>(
       QUEUE_NAMES.MEDIA_DOWNLOAD,
       processMediaDownload,
@@ -341,21 +350,35 @@ export function startMediaDownloadProcessor(): Worker | null {
     );
 
     mediaDownloadWorker.on('completed', (job) => {
-      console.log(`[MEDIA_DL] Job ${job.id} completed successfully`);
+      const data = job.data;
+      console.log(`[MEDIA_DL] ✅ Job ${job.id} COMPLETED - mediaId=${data.mediaId} type=${data.mediaType} contact=${data.contactPhone}`);
     });
 
     mediaDownloadWorker.on('failed', (job, err) => {
-      console.error(`[MEDIA_DL] Job ${job?.id} failed after ${job?.attemptsMade} attempts:`, err.message);
+      const data = job?.data;
+      console.error(`[MEDIA_DL] ❌ Job ${job?.id} FAILED after ${job?.attemptsMade} attempts:`, {
+        error: err.message,
+        mediaId: data?.mediaId,
+        mediaType: data?.mediaType,
+        contact: data?.contactPhone,
+        businessId: data?.businessId
+      });
     });
 
     mediaDownloadWorker.on('error', (err) => {
-      console.error('[MEDIA_DL] Worker error:', err.message);
+      console.error('[MEDIA_DL] ⚠️ Worker error:', err.message);
     });
 
-    console.log('[MEDIA_DL] Media download processor started (concurrency: 3)');
+    mediaDownloadWorker.on('active', (job) => {
+      const data = job.data;
+      console.log(`[MEDIA_DL] 🔄 Job ${job.id} ACTIVE - Starting download for mediaId=${data.mediaId} type=${data.mediaType}`);
+    });
+
+    console.log('[MEDIA_DL] ✅ Media download processor started successfully');
     return mediaDownloadWorker;
   } catch (error: any) {
-    console.error('[MEDIA_DL] Failed to start processor:', error.message);
+    console.error('[MEDIA_DL] ❌ Failed to start processor:', error.message);
+    console.error('[MEDIA_DL] Stack:', error.stack);
     return null;
   }
 }
