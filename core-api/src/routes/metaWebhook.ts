@@ -249,57 +249,13 @@ async function processMessage(
   let mediaUrl: string | undefined;
   let mediaPendingData: { mediaId: string; mimetype: string; mediaType: string } | null = null;
   
+  // MEDIA FLOW: Prefer async queue, fallback to sync if Redis unavailable
   if (msg.mediaId) {
-    console.log(`[META WEBHOOK MEDIA] Processing ${msg.type} media: mediaId=${msg.mediaId}, mimetype=${msg.mimetype}, from=${msg.from}`);
-    const mediaStartTime = Date.now();
-    try {
-      const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
-      console.log(`[META WEBHOOK MEDIA] Got Meta URL for ${msg.mediaId}: ${metaMediaUrl?.substring(0, 80)}...`);
-      
-      if (isS3Configured()) {
-        webhookLogger.debug({ mediaId: msg.mediaId, type: msg.type }, 'Downloading media from Meta');
-        const mediaBuffer = await metaService.downloadMedia(metaMediaUrl);
-        const uploadResult = await uploadBuffer(
-          mediaBuffer, 
-          msg.mimetype || 'application/octet-stream', 
-          instance.businessId
-        );
-        
-        if (uploadResult) {
-          mediaUrl = uploadResult.url;
-          logWebhookEvent({
-            eventType: 'media_upload',
-            phoneNumberId: metaService['credentials'].phoneNumberId,
-            instanceId: instance.id,
-            businessId: instance.businessId,
-            provider: providerType,
-            mediaId: msg.mediaId,
-            mediaType: msg.type,
-            duration: Date.now() - mediaStartTime,
-            metadata: { url: mediaUrl, mimetype: msg.mimetype }
-          });
-        } else {
-          mediaUrl = metaMediaUrl;
-          webhookLogger.warn({ mediaId: msg.mediaId }, 'Failed to upload to S3, using Meta URL');
-        }
-      } else {
-        mediaUrl = metaMediaUrl;
-      }
-    } catch (error: any) {
-      const errorMessage = error.message || 'Unknown error';
-      const isCircuitBreakerOpen = errorMessage === 'META_CIRCUIT_BREAKER_OPEN';
-      const isNetworkError = ['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN'].some(
-        code => errorMessage.includes(code) || error.code === code
-      );
-      
-      console.error(`[META WEBHOOK MEDIA] FAILED to process ${msg.type} mediaId=${msg.mediaId}: ${errorMessage}`, {
-        status: error?.response?.status,
-        data: error?.response?.data,
-        code: error?.code,
-        isCircuitBreakerOpen,
-        isNetworkError,
-        willRetryAsync: true
-      });
+    const mediaQueue = getMediaDownloadQueue();
+    
+    if (mediaQueue) {
+      // ASYNC PATH: Queue for background download (preferred)
+      console.log(`[META WEBHOOK MEDIA] Will queue async download for ${msg.type}: mediaId=${msg.mediaId}, from=${msg.from}`);
       
       mediaPendingData = {
         mediaId: msg.mediaId,
@@ -307,17 +263,56 @@ async function processMessage(
         mediaType: msg.type
       };
       
-      logWebhookEvent({
-        eventType: 'error',
-        phoneNumberId: metaService['credentials'].phoneNumberId,
-        instanceId: instance.id,
-        businessId: instance.businessId,
-        provider: providerType,
-        mediaId: msg.mediaId,
-        error: errorMessage,
-        duration: Date.now() - mediaStartTime,
-        metadata: { willRetryAsync: true }
-      });
+      mediaUrl = undefined;
+      // Note: logWebhookEvent will be called after successful enqueue in the second phase
+    } else {
+      // SYNC FALLBACK: No Redis available, download immediately
+      console.log(`[META WEBHOOK MEDIA] No queue available, downloading sync for ${msg.type}: mediaId=${msg.mediaId}`);
+      const mediaStartTime = Date.now();
+      
+      try {
+        const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
+        console.log(`[META WEBHOOK MEDIA] Got Meta URL: ${metaMediaUrl?.substring(0, 80)}...`);
+        
+        if (isS3Configured()) {
+          const mediaBuffer = await metaService.downloadMedia(metaMediaUrl);
+          const uploadResult = await uploadBuffer(
+            mediaBuffer, 
+            msg.mimetype || 'application/octet-stream', 
+            instance.businessId
+          );
+          
+          if (uploadResult) {
+            mediaUrl = uploadResult.url;
+            logWebhookEvent({
+              eventType: 'media_upload',
+              phoneNumberId: metaService['credentials'].phoneNumberId,
+              instanceId: instance.id,
+              businessId: instance.businessId,
+              provider: providerType,
+              mediaId: msg.mediaId,
+              mediaType: msg.type,
+              duration: Date.now() - mediaStartTime,
+              metadata: { url: mediaUrl, mimetype: msg.mimetype, syncFallback: true }
+            });
+          } else {
+            mediaUrl = metaMediaUrl;
+            console.warn(`[META WEBHOOK MEDIA] S3 upload failed, using Meta URL`);
+          }
+        } else {
+          mediaUrl = metaMediaUrl;
+        }
+      } catch (error: any) {
+        console.error(`[META WEBHOOK MEDIA] Sync download failed: ${error.message}`);
+        // Save Meta URL as fallback (will expire, but better than nothing)
+        try {
+          const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
+          mediaUrl = metaMediaUrl;
+          console.log(`[META WEBHOOK MEDIA] Using temporary Meta URL as fallback`);
+        } catch {
+          console.error(`[META WEBHOOK MEDIA] Could not get Meta URL either`);
+        }
+      }
     }
   } else if (['image', 'video', 'audio', 'sticker', 'document'].includes(msg.type)) {
     console.warn(`[META WEBHOOK MEDIA] Received ${msg.type} message but NO mediaId present! from=${msg.from}, messageId=${msg.messageId}`);
@@ -357,52 +352,126 @@ async function processMessage(
       select: { id: true }
     });
     
-    // If media download failed, enqueue async retry
+    // ASYNC MEDIA: Enqueue download for media messages (with fallback on failure)
     if (mediaPendingData && messageLog?.id) {
       const mediaQueue = getMediaDownloadQueue();
+      let enqueueSuccess = false;
+      
       if (mediaQueue) {
-        const jobData: MediaDownloadJobData = {
-          messageLogId: messageLog.id,
-          businessId: instance.businessId,
-          instanceId: instance.id,
-          mediaId: mediaPendingData.mediaId,
-          mediaType: mediaPendingData.mediaType,
-          mimetype: mediaPendingData.mimetype,
-          provider: providerType,
-          accessToken: metaService['credentials'].accessToken,
-          phoneNumberId: metaService['credentials'].phoneNumberId,
-          contactPhone: msg.from,
-          attemptNumber: 1
-        };
+        try {
+          const jobData: MediaDownloadJobData = {
+            messageLogId: messageLog.id,
+            businessId: instance.businessId,
+            instanceId: instance.id,
+            mediaId: mediaPendingData.mediaId,
+            mediaType: mediaPendingData.mediaType,
+            mimetype: mediaPendingData.mimetype,
+            provider: providerType,
+            accessToken: metaService['credentials'].accessToken,
+            phoneNumberId: metaService['credentials'].phoneNumberId,
+            contactPhone: msg.from,
+            attemptNumber: 1
+          };
+          
+          await mediaQueue.add(`media-${mediaPendingData.mediaId}`, jobData, {
+            delay: 500,
+            priority: 1
+          });
+          
+          enqueueSuccess = true;
+          
+          // Update messageLog to mark media as pending
+          const existingLog = await prisma.messageLog.findUnique({
+            where: { id: messageLog.id },
+            select: { metadata: true }
+          });
+          const existingMetadata = (existingLog?.metadata as Record<string, any>) || {};
+          
+          await prisma.messageLog.update({
+            where: { id: messageLog.id },
+            data: {
+              metadata: {
+                ...existingMetadata,
+                mediaPending: true,
+                mediaId: mediaPendingData.mediaId,
+                mediaType: mediaPendingData.mediaType,
+                mimetype: mediaPendingData.mimetype
+              }
+            }
+          });
+          
+          console.log(`[META WEBHOOK MEDIA] Enqueued async download for mediaId=${mediaPendingData.mediaId}`);
+          
+          logWebhookEvent({
+            eventType: 'media_download',
+            phoneNumberId: metaService['credentials'].phoneNumberId,
+            instanceId: instance.id,
+            businessId: instance.businessId,
+            provider: providerType,
+            mediaId: mediaPendingData.mediaId,
+            mediaType: mediaPendingData.mediaType,
+            metadata: { asyncDownload: true, status: 'queued' }
+          });
+        } catch (enqueueError: any) {
+          console.error(`[META WEBHOOK MEDIA] Queue add failed: ${enqueueError.message}`);
+          enqueueSuccess = false;
+        }
+      }
+      
+      // FALLBACK: If queue unavailable or enqueue failed, try sync download now
+      if (!enqueueSuccess) {
+        console.warn(`[META WEBHOOK MEDIA] Fallback sync download for mediaId=${mediaPendingData.mediaId}`);
         
-        await mediaQueue.add(`media-${mediaPendingData.mediaId}`, jobData, {
-          delay: 2000, // Wait 2 seconds before first retry
-          priority: 1
-        });
-        
-        // Update messageLog to mark media as pending (merge with existing metadata)
-        const existingLog = await prisma.messageLog.findUnique({
+        // Get existing metadata to preserve it
+        const existingLogForFallback = await prisma.messageLog.findUnique({
           where: { id: messageLog.id },
           select: { metadata: true }
         });
-        const existingMetadata = (existingLog?.metadata as Record<string, any>) || {};
+        const existingMetadataForFallback = (existingLogForFallback?.metadata as Record<string, any>) || {};
         
-        await prisma.messageLog.update({
-          where: { id: messageLog.id },
-          data: {
-            metadata: {
-              ...existingMetadata,
-              mediaPending: true,
-              mediaId: mediaPendingData.mediaId,
-              mediaType: mediaPendingData.mediaType,
-              mimetype: mediaPendingData.mimetype
+        try {
+          const metaMediaUrl = await metaService.getMediaUrl(mediaPendingData.mediaId);
+          let finalUrl = metaMediaUrl;
+          
+          if (isS3Configured()) {
+            const mediaBuffer = await metaService.downloadMedia(metaMediaUrl);
+            const uploadResult = await uploadBuffer(mediaBuffer, mediaPendingData.mimetype, instance.businessId);
+            if (uploadResult) {
+              finalUrl = uploadResult.url;
             }
           }
-        });
-        
-        console.log(`[META WEBHOOK MEDIA] Enqueued async download for mediaId=${mediaPendingData.mediaId}, messageLogId=${messageLog.id}`);
-      } else {
-        console.error(`[META WEBHOOK MEDIA] Cannot enqueue media download - queue not initialized`);
+          
+          // Update messageLog with the media URL (merge with existing metadata)
+          await prisma.messageLog.update({
+            where: { id: messageLog.id },
+            data: {
+              mediaUrl: finalUrl,
+              metadata: {
+                ...existingMetadataForFallback,
+                mediaPending: false,
+                mediaId: mediaPendingData.mediaId,
+                mediaDownloadFallback: true,
+                mediaDownloadCompletedAt: new Date().toISOString()
+              }
+            }
+          });
+          console.log(`[META WEBHOOK MEDIA] Fallback download success: ${finalUrl.substring(0, 60)}...`);
+        } catch (fallbackError: any) {
+          console.error(`[META WEBHOOK MEDIA] Fallback download also failed: ${fallbackError.message}`);
+          // Mark as failed so UI knows media is not available (merge metadata)
+          await prisma.messageLog.update({
+            where: { id: messageLog.id },
+            data: {
+              metadata: {
+                ...existingMetadataForFallback,
+                mediaPending: false,
+                mediaDownloadFailed: true,
+                mediaId: mediaPendingData.mediaId,
+                mediaError: fallbackError.message
+              }
+            }
+          });
+        }
       }
     }
     
