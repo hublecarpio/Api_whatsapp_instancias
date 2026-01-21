@@ -18,6 +18,7 @@ import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsF
 import { getContactStageStatus } from '../services/funnelStageService.js';
 import { createAutoOrder } from '../services/orderAutoCreator.js';
 import { createOrder, findProductWithScope, formatAgentToolResponse } from '../services/orderService.js';
+import { queueAgentResponse, markMessageAsRead as markMsgRead, isQueueAvailable, extractMediaFromText as extractMediaHelper } from '../services/whatsappSender.js';
 
 const router = Router();
 
@@ -819,6 +820,114 @@ async function sendMessageInParts(
   return { sentMedia };
 }
 
+async function sendAgentResponseDirect(
+  business: any,
+  instance: any,
+  backendId: string | undefined,
+  contactPhone: string,
+  phone: string,
+  aiResponse: string,
+  splitMessages: boolean,
+  contactName?: string,
+  incomingMessageId?: string
+): Promise<void> {
+  let sentMedia: any[] = [];
+  
+  if ((instance.provider === 'META_CLOUD' && instance.metaCredential) || 
+      (instance.provider === 'META_COEXIST' && instance.metaCoexistCredential)) {
+    const isCoexist = instance.provider === 'META_COEXIST';
+    const accessToken = isCoexist 
+      ? (instance.metaCoexistCredential!.systemAccessToken || instance.metaCoexistCredential!.userAccessToken)
+      : instance.metaCredential!.accessToken;
+    const phoneNumberId = isCoexist 
+      ? instance.metaCoexistCredential!.phoneNumberId 
+      : instance.metaCredential!.phoneNumberId;
+    const metaBusinessId = isCoexist 
+      ? instance.metaCoexistCredential!.metaBusinessId 
+      : instance.metaCredential!.businessId;
+    
+    const metaService = new MetaCloudService({
+      accessToken,
+      phoneNumberId,
+      businessId: metaBusinessId
+    });
+    
+    // Mark message as read for Meta providers (legacy fallback)
+    if (incomingMessageId) {
+      try {
+        await metaService.markAsRead(incomingMessageId);
+      } catch (readErr: any) {
+        console.warn('[Direct Send] Failed to mark as read:', readErr.message);
+      }
+    }
+    
+    const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
+    const finalText = cleanMarkdownForWhatsApp(cleanedText);
+    
+    if (finalText) {
+      if (splitMessages) {
+        const parts = smartSplitMessage(finalText);
+        for (let i = 0; i < parts.length; i++) {
+          if (i > 0) {
+            const delay = calculateTypingDelay(parts[i]);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+          await metaService.sendMessage({ to: contactPhone, text: parts[i] });
+        }
+      } else {
+        await metaService.sendMessage({ to: contactPhone, text: finalText });
+      }
+    }
+    
+    for (const media of mediaItems) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (media.type === 'image') {
+          await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'image' });
+        } else if (media.type === 'video') {
+          await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'video' });
+        } else if (media.type === 'file') {
+          await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'document', filename: media.fileName });
+        }
+        sentMedia.push(media);
+      } catch (mediaError: any) {
+        console.error(`[Direct Send] Failed to send media: ${media.url}`, mediaError.message);
+      }
+    }
+  } else if (backendId) {
+    const result = await sendMessageInParts(backendId, phone, aiResponse, splitMessages);
+    sentMedia = result.sentMedia;
+  }
+  
+  await prisma.messageLog.create({
+    data: {
+      businessId: business.id,
+      instanceId: instance?.id,
+      direction: 'outbound',
+      recipient: contactPhone,
+      message: aiResponse,
+      metadata: {
+        contactJid: phone,
+        contactPhone,
+        contactName: contactName || '',
+        agentVersion: 'legacy_direct',
+        provider: instance.provider,
+        splitMessages,
+        sentMedia: sentMedia.length > 0 ? sentMedia.map((m: any) => ({ type: m.type, url: m.url })) : undefined
+      }
+    }
+  });
+  
+  dispatchAgentMessage(
+    business.id,
+    contactPhone,
+    aiResponse,
+    sentMedia.length > 0 ? sentMedia.map((m: any) => m.url) : undefined,
+    undefined,
+    instance?.id
+  ).catch(err => console.error('[Direct Send] Failed to dispatch webhook:', err.message));
+}
+
 async function processWithAgentV2(
   business: any,
   messages: string[],
@@ -912,145 +1021,50 @@ async function processWithAgentV2(
   
   if (aiResponse && instance) {
     try {
-      let sentMedia: any[] = [];
-      
-      if ((instance.provider === 'META_CLOUD' && instance.metaCredential) || 
-          (instance.provider === 'META_COEXIST' && instance.metaCoexistCredential)) {
-        // Meta Cloud API or Meta Coexist
-        const isCoexist = instance.provider === 'META_COEXIST';
-        const accessToken = isCoexist 
-          ? (instance.metaCoexistCredential!.systemAccessToken || instance.metaCoexistCredential!.userAccessToken)
-          : instance.metaCredential!.accessToken;
-        const phoneNumberId = isCoexist 
-          ? instance.metaCoexistCredential!.phoneNumberId 
-          : instance.metaCredential!.phoneNumberId;
-        const metaBusinessId = isCoexist 
-          ? instance.metaCoexistCredential!.metaBusinessId 
-          : instance.metaCredential!.businessId;
-        
-        const metaService = new MetaCloudService({
-          accessToken,
-          phoneNumberId,
-          businessId: metaBusinessId
+      // Mark message as read before responding
+      let messageIdToMark = providerMessageId;
+      if (!messageIdToMark) {
+        const lastInboundMessage = await prisma.messageLog.findFirst({
+          where: {
+            businessId: business.id,
+            sender: contactPhone,
+            direction: 'inbound'
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { providerMessageId: true }
         });
-        
-        console.log(`[Agent V2] Sending response via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'} API`);
-        
-        // Mark message as read AFTER buffer expires (before responding)
-        try {
-          // Use the providerMessageId passed directly, or fallback to DB lookup
-          let messageIdToMark = providerMessageId;
-          
-          if (!messageIdToMark) {
-            console.log(`[Agent V2] No providerMessageId passed, looking up in DB for:`, contactPhone);
-            const lastInboundMessage = await prisma.messageLog.findFirst({
-              where: {
-                businessId: business.id,
-                sender: contactPhone,
-                direction: 'inbound'
-              },
-              orderBy: { createdAt: 'desc' },
-              select: { providerMessageId: true }
-            });
-            messageIdToMark = lastInboundMessage?.providerMessageId || undefined;
-          }
-          
-          if (messageIdToMark) {
-            await metaService.markMessageAsRead(messageIdToMark);
-            console.log(`[Agent V2] ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'} message marked as read:`, messageIdToMark);
-          } else {
-            console.log('[Agent V2] No providerMessageId available to mark as read');
-          }
-        } catch (readError: any) {
-          console.log('Could not mark Meta message as read:', readError.message);
-        }
-        
-        // Send the message via Meta Cloud/Coexist
-        const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
-        const finalText = cleanMarkdownForWhatsApp(cleanedText);
-        
-        // Use only media URLs explicitly included in the AI response (no auto-matching)
-        const allMedia = [...mediaItems];
-        
-        if (finalText) {
-          if (splitMessages) {
-            const parts = smartSplitMessage(finalText);
-            for (let i = 0; i < parts.length; i++) {
-              if (i > 0) {
-                const delay = calculateTypingDelay(parts[i]);
-                await new Promise(resolve => setTimeout(resolve, delay));
-              }
-              await metaService.sendMessage({ to: contactPhone, text: parts[i] });
-            }
-          } else {
-            await metaService.sendMessage({ to: contactPhone, text: finalText });
-          }
-        }
-        
-        for (const media of allMedia) {
-          try {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            if (media.type === 'image') {
-              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'image' });
-            } else if (media.type === 'video') {
-              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'video' });
-            } else if (media.type === 'file') {
-              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'document', filename: media.fileName });
-            }
-            sentMedia.push(media);
-          } catch (mediaError: any) {
-            console.error(`[Agent V2] Failed to send media via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'}: ${media.url}`, mediaError.message);
-          }
-        }
-      } else if (backendId) {
-        // Baileys API
-        // Mark messages as read before responding
-        try {
-          await axios.post(`${WA_API_URL}/instances/${backendId}/markAsRead`, {
-            from: phone
-          });
-        } catch (readError: any) {
-          console.log('Could not mark messages as read:', readError.message);
-        }
-        
-        // Send the message (media URLs in the response are detected and sent automatically)
-        const result = await sendMessageInParts(backendId, phone, aiResponse, splitMessages);
-        sentMedia = result.sentMedia;
+        messageIdToMark = lastInboundMessage?.providerMessageId || undefined;
       }
       
-      // Log the outbound message
-      await prisma.messageLog.create({
-        data: {
+      if (messageIdToMark) {
+        await markMsgRead({ instanceId: instance.id, providerMessageId: messageIdToMark });
+        console.log(`[Agent V2] Message marked as read:`, messageIdToMark);
+      }
+      
+      // Queue the response for sending via unified outbound queue
+      if (isQueueAvailable()) {
+        const queueResult = await queueAgentResponse({
           businessId: business.id,
-          instanceId: instance?.id,
-          direction: 'outbound',
-          recipient: contactPhone,
-          message: aiResponse,
-          metadata: {
-            contactJid: phone,
-            contactPhone,
-            contactName: contactName || '',
-            agentVersion: 'v2',
-            provider: instance.provider,
-            splitMessages,
-            sentMedia: sentMedia.length > 0 ? sentMedia.map((m: any) => ({ type: m.type, url: m.url })) : undefined
-          }
+          instanceId: instance.id,
+          to: contactPhone,
+          response: aiResponse,
+          splitMessages,
+          priority: 'normal'
+        });
+        
+        if (queueResult.success) {
+          console.log(`[Agent V2] Response queued: ${queueResult.jobIds?.length || 1} jobs for ${contactPhone}`);
+        } else {
+          console.error(`[Agent V2] Failed to queue response: ${queueResult.error}`);
+          throw new Error(queueResult.error);
         }
-      });
+      } else {
+        // Fallback to direct send if queue not available (legacy mode)
+        console.warn('[Agent V2] Queue not available, falling back to direct send');
+        await sendAgentResponseDirect(business, instance, backendId, contactPhone, phone, aiResponse, splitMessages, contactName, messageIdToMark);
+      }
       
-      console.log(`[Agent V2] Response sent to ${contactPhone}:`, aiResponse.substring(0, 100));
-      
-      // Dispatch agent_message webhook
-      dispatchAgentMessage(
-        business.id,
-        contactPhone,
-        aiResponse,
-        sentMedia.length > 0 ? sentMedia.map((m: any) => m.url) : undefined,
-        undefined,
-        instance?.id
-      ).catch(err => console.error('[Agent V2] Failed to dispatch agent_message webhook:', err.message));
-      
-      // Schedule follow-up after sending response
+      // Schedule follow-up after queuing response
       await scheduleFollowUp(business.id, contactPhone, 'ai', instance?.id);
     } catch (sendError: any) {
       console.error('Failed to send WhatsApp message (V2):', sendError.response?.data || sendError.message);
@@ -2385,138 +2399,50 @@ async function processWithAgent(
   const instance = business.instances[0];
   if (instance) {
     try {
-      let sentMedia: MediaItem[] = [];
-      
-      if ((instance.provider === 'META_CLOUD' && instance.metaCredential) ||
-          (instance.provider === 'META_COEXIST' && instance.metaCoexistCredential)) {
-        // Meta Cloud API or Meta Coexist
-        const isCoexist = instance.provider === 'META_COEXIST';
-        const accessToken = isCoexist 
-          ? (instance.metaCoexistCredential!.systemAccessToken || instance.metaCoexistCredential!.userAccessToken)
-          : instance.metaCredential!.accessToken;
-        const phoneNumberId = isCoexist 
-          ? instance.metaCoexistCredential!.phoneNumberId 
-          : instance.metaCredential!.phoneNumberId;
-        const metaBusinessId = isCoexist 
-          ? instance.metaCoexistCredential!.metaBusinessId 
-          : instance.metaCredential!.businessId;
-        
-        console.log(`[${isCoexist ? 'META COEXIST' : 'META CLOUD'}] Sending response via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'} API`);
-        const metaService = new MetaCloudService({
-          accessToken,
-          phoneNumberId,
-          businessId: metaBusinessId
+      // Mark message as read before responding
+      let messageIdToMark = providerMessageId;
+      if (!messageIdToMark) {
+        const lastInboundMessage = await prisma.messageLog.findFirst({
+          where: {
+            businessId,
+            sender: contactPhone,
+            direction: 'inbound'
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { providerMessageId: true }
         });
-        
-        // Mark message as read AFTER buffer expires (before responding)
-        try {
-          // Use the providerMessageId passed directly, or fallback to DB lookup
-          let messageIdToMark = providerMessageId;
-          
-          if (!messageIdToMark) {
-            console.log(`[${isCoexist ? 'META COEXIST' : 'META CLOUD'}] No providerMessageId passed, looking up in DB for:`, contactPhone);
-            const lastInboundMessage = await prisma.messageLog.findFirst({
-              where: {
-                businessId,
-                sender: contactPhone,
-                direction: 'inbound'
-              },
-              orderBy: { createdAt: 'desc' },
-              select: { providerMessageId: true }
-            });
-            messageIdToMark = lastInboundMessage?.providerMessageId || undefined;
-          }
-          
-          if (messageIdToMark) {
-            await metaService.markMessageAsRead(messageIdToMark);
-            console.log(`[${isCoexist ? 'META COEXIST' : 'META CLOUD'}] Message marked as read:`, messageIdToMark);
-          } else {
-            console.log(`[${isCoexist ? 'META COEXIST' : 'META CLOUD'}] No providerMessageId available to mark as read`);
-          }
-        } catch (readError: any) {
-          console.log('Could not mark Meta message as read:', readError.message);
-        }
-        
-        const { cleanedText, mediaItems } = extractMediaFromText(aiResponse);
-        const finalText = cleanMarkdownForWhatsApp(cleanedText);
-        
-        // Use only media URLs explicitly included in the AI response (no auto-matching)
-        const allMedia = [...mediaItems];
-        
-        if (finalText) {
-          if (splitMessages) {
-            const parts = smartSplitMessage(finalText);
-            for (let i = 0; i < parts.length; i++) {
-              if (i > 0) {
-                const delay = calculateTypingDelay(parts[i]);
-                await new Promise(resolve => setTimeout(resolve, delay));
-              }
-              await metaService.sendMessage({ to: contactPhone, text: parts[i] });
-            }
-          } else {
-            await metaService.sendMessage({ to: contactPhone, text: finalText });
-          }
-        }
-        
-        for (const media of allMedia) {
-          try {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            if (media.type === 'image') {
-              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'image' });
-            } else if (media.type === 'video') {
-              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'video' });
-            } else if (media.type === 'file') {
-              await metaService.sendMessage({ to: contactPhone, mediaUrl: media.url, mediaType: 'document', filename: media.fileName });
-            }
-            sentMedia.push(media);
-          } catch (mediaError: any) {
-            console.error(`Failed to send media via ${isCoexist ? 'Meta Coexist' : 'Meta Cloud'}: ${media.url}`, mediaError.message);
-          }
-        }
-      } else if (instance.instanceBackendId) {
-        // Send via Baileys API
-        try {
-          await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/markAsRead`, {
-            from: phone
-          });
-        } catch (readError: any) {
-          console.log('Could not mark messages as read:', readError.message);
-        }
-        
-        // Send the message (media URLs in the response are detected and sent automatically)
-        const result = await sendMessageInParts(instance.instanceBackendId, phone, aiResponse, splitMessages);
-        sentMedia = result.sentMedia;
+        messageIdToMark = lastInboundMessage?.providerMessageId || undefined;
       }
       
-      await prisma.messageLog.create({
-        data: {
+      if (messageIdToMark) {
+        await markMsgRead({ instanceId: instance.id, providerMessageId: messageIdToMark });
+        console.log(`[Agent V1] Message marked as read:`, messageIdToMark);
+      }
+      
+      // Queue the response for sending via unified outbound queue
+      if (isQueueAvailable()) {
+        const queueResult = await queueAgentResponse({
           businessId,
           instanceId: instance.id,
-          direction: 'outbound',
-          recipient: contactPhone,
-          message: aiResponse,
-          metadata: {
-            contactJid: phone,
-            contactPhone,
-            contactName: contactName || '',
-            provider: instance.provider,
-            splitMessages,
-            sentMedia: sentMedia.length > 0 ? sentMedia.map(m => ({ type: m.type, url: m.url })) : undefined
-          }
+          to: contactPhone,
+          response: aiResponse,
+          splitMessages,
+          priority: 'normal'
+        });
+        
+        if (queueResult.success) {
+          console.log(`[Agent V1] Response queued: ${queueResult.jobIds?.length || 1} jobs for ${contactPhone}`);
+        } else {
+          console.error(`[Agent V1] Failed to queue response: ${queueResult.error}`);
+          throw new Error(queueResult.error);
         }
-      });
+      } else {
+        // Fallback to direct send if queue not available (legacy mode)
+        console.warn('[Agent V1] Queue not available, falling back to direct send');
+        await sendAgentResponseDirect(business, instance, instance.instanceBackendId || undefined, contactPhone, phone, aiResponse, splitMessages, contactName, messageIdToMark);
+      }
       
-      // Dispatch agent_message webhook
-      dispatchAgentMessage(
-        businessId,
-        contactPhone,
-        aiResponse,
-        sentMedia.length > 0 ? sentMedia.map(m => m.url) : undefined,
-        undefined,
-        instance?.id
-      ).catch(err => console.error('[Agent V1] Failed to dispatch agent_message webhook:', err.message));
-      
-      // Schedule follow-up after sending response
+      // Schedule follow-up after queuing response
       await scheduleFollowUp(businessId, contactPhone, 'ai', instance?.id);
     } catch (sendError: any) {
       console.error('Failed to send WhatsApp message:', sendError.response?.data || sendError.message);
