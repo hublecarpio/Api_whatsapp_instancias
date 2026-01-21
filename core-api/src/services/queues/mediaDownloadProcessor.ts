@@ -328,6 +328,8 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
         if (shouldCallAI) {
           console.log(`${logPrefix} Calling AI agent with media ready...`);
           
+          // AI agent receives ONLY the Gemini-processed text, not the raw S3 URL
+          // The mediaAnalysis is already concatenated into fullMessageForAgent
           await axios.post(`${CORE_API_URL}/agent/think`, {
             business_id: businessId,
             instanceId,
@@ -336,8 +338,6 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
             phoneNumber: cleanPhone,
             contactName: pushName,
             user_message: fullMessageForAgent,
-            mediaUrl: finalMediaUrl,
-            mediaAnalysis: mediaAnalysis || undefined,
             providerMessageId: fullMessageLog.providerMessageId || undefined
           }, {
             headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET },
