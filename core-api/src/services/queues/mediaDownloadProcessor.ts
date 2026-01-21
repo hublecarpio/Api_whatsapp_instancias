@@ -288,10 +288,19 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
         }
       });
 
-      // Check if bot is enabled
+      // Check if bot is enabled (business level and contact level)
+      const cleanPhone = contactPhone.replace(/\D/g, '');
+      
       const business = await prisma.business.findUnique({
         where: { id: businessId },
         select: { botEnabled: true }
+      });
+
+      const contact = await prisma.contact.findUnique({
+        where: {
+          businessId_phone: { businessId, phone: cleanPhone }
+        },
+        select: { botDisabled: true, botTestEnabled: true }
       });
 
       if (fullMessageLog) {
@@ -300,12 +309,23 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
         const messageText = fullMessageLog.message || '';
         const mediaAnalysis = msgMetadata.mediaAnalysis || '';
         const fullMessageForAgent = messageText + (mediaAnalysis ? `\n\n${mediaAnalysis}` : '');
-        const cleanPhone = contactPhone.replace(/\D/g, '');
         
-        // Check if bot is enabled before calling AI
-        const botEnabled = business?.botEnabled ?? true;
+        // Check if bot is enabled (same logic as processIncomingMessage)
+        let shouldCallAI = true;
         
-        if (botEnabled) {
+        if (!business?.botEnabled) {
+          // Bot globally disabled, check if contact has test mode enabled
+          if (!contact?.botTestEnabled) {
+            shouldCallAI = false;
+            console.log(`${logPrefix} Bot disabled for business, skipping AI`);
+          }
+        } else if (contact?.botDisabled) {
+          // Bot globally enabled but disabled for this contact
+          shouldCallAI = false;
+          console.log(`${logPrefix} Bot disabled for contact ${cleanPhone}, skipping AI`);
+        }
+        
+        if (shouldCallAI) {
           console.log(`${logPrefix} Calling AI agent with media ready...`);
           
           await axios.post(`${CORE_API_URL}/agent/think`, {
@@ -325,8 +345,6 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
           });
           
           console.log(`${logPrefix} AI agent called successfully`);
-        } else {
-          console.log(`${logPrefix} Bot disabled for business, skipping AI`);
         }
       }
     } catch (aiError: any) {
