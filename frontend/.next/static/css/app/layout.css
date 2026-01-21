@@ -2002,6 +2002,9 @@ body.glass-mode .mobile-drawer {
 .border-purple-500\/30 {
   border-color: rgb(168 85 247 / 0.3);
 }
+.border-purple-500\/40 {
+  border-color: rgb(168 85 247 / 0.4);
+}
 .border-red-500\/20 {
   border-color: rgb(239 68 68 / 0.2);
 }
@@ -2308,6 +2311,9 @@ body.glass-mode .mobile-drawer {
 .bg-gray-900\/50 {
   background-color: rgb(17 24 39 / 0.5);
 }
+.bg-gray-900\/95 {
+  background-color: rgb(17 24 39 / 0.95);
+}
 .bg-green-100 {
   --tw-bg-opacity: 1;
   background-color: rgb(220 252 231 / var(--tw-bg-opacity, 1));
@@ -2370,11 +2376,11 @@ body.glass-mode .mobile-drawer {
 .bg-purple-500\/10 {
   background-color: rgb(168 85 247 / 0.1);
 }
-.bg-purple-500\/15 {
-  background-color: rgb(168 85 247 / 0.15);
-}
 .bg-purple-500\/20 {
   background-color: rgb(168 85 247 / 0.2);
+}
+.bg-purple-500\/30 {
+  background-color: rgb(168 85 247 / 0.3);
 }
 .bg-purple-600 {
   --tw-bg-opacity: 1;
@@ -2930,6 +2936,10 @@ body.glass-mode .mobile-drawer {
 .text-emerald-500 {
   --tw-text-opacity: 1;
   color: rgb(16 185 129 / var(--tw-text-opacity, 1));
+}
+.text-gray-200 {
+  --tw-text-opacity: 1;
+  color: rgb(229 231 235 / var(--tw-text-opacity, 1));
 }
 .text-gray-300 {
   --tw-text-opacity: 1;

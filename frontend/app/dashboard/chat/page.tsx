@@ -1710,20 +1710,27 @@ export default function ChatPage() {
                           <span className="text-xs opacity-70">(no disponible)</span>
                         </div>
                       )}
-                      {msg.message && <p className="break-words whitespace-pre-wrap text-sm sm:text-base">{msg.message}</p>}
+                      {msg.message && (
+                        <p className="break-words whitespace-pre-wrap text-sm sm:text-base">
+                          {/* Filter out the Gemini analysis from message text if it exists in metadata */}
+                          {msg.metadata?.mediaAnalysis 
+                            ? msg.message.split(msg.metadata.mediaAnalysis)[0].replace(/\n\n$/, '').trim() || msg.message
+                            : msg.message}
+                        </p>
+                      )}
                       {msg.direction === 'inbound' && msg.metadata?.mediaAnalysis && (
                         <div className="mt-1 group relative inline-block">
-                          <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-purple-500/15 text-purple-400 rounded cursor-help">
+                          <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-purple-500/30 text-purple-300 rounded cursor-help font-medium">
                             <span>✨</span>
                             <span>Analizado</span>
                           </span>
-                          <div className="absolute bottom-full left-0 mb-1 w-56 sm:w-64 p-2 bg-dark-card border border-purple-500/20 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                            <p className="text-[10px] text-purple-400 font-medium mb-0.5">
+                          <div className="absolute bottom-full left-0 mb-1 w-56 sm:w-64 p-2.5 bg-gray-900/95 border border-purple-500/40 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 backdrop-blur-sm">
+                            <p className="text-[11px] text-purple-300 font-semibold mb-1">
                               {msg.metadata?.mediaType === 'audio' || msg.metadata?.type === 'audio' || msg.metadata?.type === 'ptt' ? '🎤 Transcripción:' : 
                                msg.metadata?.mediaType === 'image' || msg.metadata?.type === 'image' || msg.metadata?.type === 'sticker' ? '🖼️ Descripción:' : 
                                msg.metadata?.mediaType === 'video' || msg.metadata?.type === 'video' ? '🎬 Descripción:' : '📎 Análisis:'}
                             </p>
-                            <p className="text-[10px] text-gray-400 whitespace-pre-wrap max-h-32 overflow-y-auto leading-relaxed">
+                            <p className="text-[11px] text-gray-200 whitespace-pre-wrap max-h-32 overflow-y-auto leading-relaxed">
                               {msg.metadata.mediaAnalysis}
                             </p>
                           </div>
