@@ -1,0 +1,46 @@
+El Diagnóstico: "Cuello de Botella de Salida"
+Básicamente, tu servidor le gritó a Facebook (POST /messages) y Facebook no respondió a tiempo, o tu servidor ni siquiera logró salir a internet.
+
+El culpable: AggregateError [ETIMEDOUT].
+
+La causa probable: El "Efecto Represa" post-reinicio.
+
+Al limpiar Redis y redesplegar, es probable que tu Worker haya intentado procesar todos los trabajos pendientes al mismo tiempo.
+
+Abriste demasiadas conexiones simultáneas hacia graph.facebook.com.
+
+El módulo de red de Node.js (node:net) se saturó intentando resolver el DNS o abriendo sockets (internalConnectMultiple), y se agotó el tiempo de espera.
+
+¿Por qué pasa esto en Node.js? (El detalle técnico)
+En el log veo internalConnectMultiple. Esto sucede a menudo en versiones modernas de Node.js cuando intenta conectar por IPv6 primero, falla, y luego intenta IPv4. Si tienes cientos de peticiones concurrentes haciendo ese "baile" de IPv6/IPv4, el sistema colapsa y lanza un Timeout.
+
+Solución Inmediata (Plan de Acción)
+Tienes que controlar la velocidad a la que tu aplicación "escupe" peticiones a Meta, o Meta te va a bloquear por spam o tu servidor se caerá solo.
+
+1. Ajustar la Concurrencia del Worker (Lo más importante) Si usas BullMQ, Bee-Queue o similar para procesar esos jobs, baja la concurrencia.
+
+Mal: concurrency: 100 (Intentar enviar 100 mensajes a la vez).
+
+Bien: concurrency: 5 o 10 (Enviar de a pocos).
+
+2. Aumentar el Timeout de Axios En tu configuración de Axios, dale más margen de respiro (por defecto a veces es muy corto para redes congestionadas).
+
+JavaScript
+const axios = require('axios');
+const instance = axios.create({
+  baseURL: 'https://graph.facebook.com/v18.0',
+  timeout: 10000, // Aumenta a 10 o 15 segundos
+  // ...headers...
+});
+3. (Opcional) Forzar IPv4 Si el error persiste, a veces ayuda forzar a Axios a usar solo IPv4 para evitar el lag de resolución de IPv6:
+
+JavaScript
+const http = require('http');
+const https = require('https');
+
+// En tu config de axios:
+httpAgent: new http.Agent({ family: 4 }),
+httpsAgent: new https.Agent({ family: 4 }),
+Resumen: Tu limpieza de Redis funcionó, pero ahora tu servidor está tan ansioso por trabajar que se está tropezando con sus propios pies. Limita la concurrencia de la cola.
+
+¿Qué librería estás usando para la gestión de colas (Bull, RabbitMQ, SQS)? Saberlo me ayudaría a decirte exactamente dónde cambiar ese número.
