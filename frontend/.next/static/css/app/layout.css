@@ -1932,6 +1932,9 @@ body.glass-mode .mobile-drawer {
 .border-gray-600\/30 {
   border-color: rgb(75 85 99 / 0.3);
 }
+.border-gray-600\/50 {
+  border-color: rgb(75 85 99 / 0.5);
+}
 .border-gray-700 {
   --tw-border-opacity: 1;
   border-color: rgb(55 65 81 / var(--tw-border-opacity, 1));
@@ -2003,6 +2006,9 @@ body.glass-mode .mobile-drawer {
 }
 .border-red-500\/50 {
   border-color: rgb(239 68 68 / 0.5);
+}
+.border-red-600\/30 {
+  border-color: rgb(220 38 38 / 0.3);
 }
 .border-red-600\/50 {
   border-color: rgb(220 38 38 / 0.5);
@@ -2398,6 +2404,9 @@ body.glass-mode .mobile-drawer {
 .bg-red-700 {
   --tw-bg-opacity: 1;
   background-color: rgb(185 28 28 / var(--tw-bg-opacity, 1));
+}
+.bg-red-900\/20 {
+  background-color: rgb(127 29 29 / 0.2);
 }
 .bg-white {
   --tw-bg-opacity: 1;

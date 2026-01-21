@@ -22,6 +22,9 @@ interface Message {
     type?: string;
     pending?: boolean;
     deliveryStatus?: string;
+    mediaPending?: boolean;
+    mediaDownloadFailed?: boolean;
+    mediaId?: string;
   };
 }
 
@@ -74,7 +77,7 @@ export default function ChatPage() {
     
     return () => {
       if (pollingRef.current) {
-        clearInterval(pollingRef.current);
+        clearTimeout(pollingRef.current);
       }
     };
   }, [currentBusiness?.id, instanceNumber, conversationId]);
@@ -143,16 +146,29 @@ export default function ChatPage() {
   };
 
   const startPolling = () => {
-    pollingRef.current = setInterval(async () => {
+    if (pollingRef.current) {
+      clearTimeout(pollingRef.current);
+    }
+    
+    const poll = async () => {
       if (!currentBusiness?.id || !instance?.id) return;
       
       try {
         const res = await messageApi.conversation(currentBusiness.id, conversationId, instance.id);
-        setMessages(res.data || []);
+        const newMessages = res.data || [];
+        setMessages(newMessages);
+        
+        const hasMediaPending = newMessages.some((m: Message) => m.metadata?.mediaPending === true && !m.mediaUrl);
+        const nextInterval = hasMediaPending ? 2000 : 5000;
+        
+        pollingRef.current = setTimeout(poll, nextInterval);
       } catch (error) {
         console.error('Polling error:', error);
+        pollingRef.current = setTimeout(poll, 5000);
       }
-    }, 5000);
+    };
+    
+    pollingRef.current = setTimeout(poll, 5000);
   };
 
   const handleSend = async () => {
@@ -211,9 +227,38 @@ export default function ChatPage() {
   };
 
   const renderMedia = (msg: Message) => {
-    if (!msg.mediaUrl) return null;
-    
     const mediaType = msg.metadata?.mediaType || msg.metadata?.type || '';
+    const isMediPending = msg.metadata?.mediaPending === true && !msg.mediaUrl;
+    const isMediaFailed = msg.metadata?.mediaDownloadFailed === true && !msg.mediaUrl;
+    
+    if (isMediPending) {
+      return (
+        <div className="flex items-center gap-2 p-4 bg-gray-800/50 rounded-lg border border-gray-600/50 min-w-[200px]">
+          <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-400 border-t-transparent"></div>
+          <span className="text-gray-400 text-sm">
+            {mediaType.includes('image') ? 'Descargando imagen...' :
+             mediaType.includes('video') ? 'Descargando video...' :
+             mediaType.includes('audio') ? 'Descargando audio...' :
+             'Descargando archivo...'}
+          </span>
+        </div>
+      );
+    }
+    
+    if (isMediaFailed) {
+      return (
+        <div className="flex items-center gap-2 p-4 bg-red-900/20 rounded-lg border border-red-600/30 min-w-[200px]">
+          <AlertCircle className="w-5 h-5 text-red-400" />
+          <span className="text-red-300 text-sm">
+            Error al descargar {mediaType.includes('image') ? 'imagen' :
+                               mediaType.includes('video') ? 'video' :
+                               mediaType.includes('audio') ? 'audio' : 'archivo'}
+          </span>
+        </div>
+      );
+    }
+    
+    if (!msg.mediaUrl) return null;
     
     if (mediaType.includes('image') || msg.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
       return (
@@ -323,7 +368,7 @@ export default function ChatPage() {
                     ? 'bg-cyan-600 text-white rounded-br-md'
                     : 'bg-gray-700 text-white rounded-bl-md'
                 } ${msg.metadata?.pending ? 'opacity-60' : ''}`}>
-                  {msg.mediaUrl && (
+                  {(msg.mediaUrl || msg.metadata?.mediaPending || msg.metadata?.mediaDownloadFailed) && (
                     <div className="mb-2">
                       {renderMedia(msg)}
                     </div>
