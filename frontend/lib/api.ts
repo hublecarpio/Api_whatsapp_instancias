@@ -665,7 +665,9 @@ export const funnelStagesApi = {
   reorder: (businessId: string, stageIds: string[]) =>
     api.put(`/agent/funnel-stages/${businessId}/reorder`, { stageIds }),
   getExtractionFields: (businessId: string) =>
-    api.get(`/agent/extraction-fields/${businessId}`)
+    api.get(`/agent/extraction-fields/${businessId}`),
+  setContactStage: (businessId: string, contactPhone: string, stageId: string | null, instanceId?: string) =>
+    api.put(`/agent/funnel-stages/${businessId}/contact/${contactPhone}`, { stageId, instanceId })
 };
 
 export const promptImporterApi = {

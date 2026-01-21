@@ -15,9 +15,9 @@ import { getAIResponseQueue } from '../services/queues/index.js';
 import { scheduleFollowUp } from '../services/followUpService.js';
 import { dispatchAgentMessage, dispatchWebhook } from '../services/webhookService.js';
 import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsForIntent, IntentAnalysis } from '../services/intentAnalyzer.js';
-import { getContactStageStatus } from '../services/funnelStageService.js';
+import { getContactStageStatus, setContactStage } from '../services/funnelStageService.js';
 import { createAutoOrder } from '../services/orderAutoCreator.js';
-import { createOrder, findProductWithScope, formatAgentToolResponse } from '../services/orderService.js';
+import { createOrder, findProductWithScope, formatAgentToolResponse, addItemToExistingOrder } from '../services/orderService.js';
 import { queueAgentResponse, markMessageAsRead as markMsgRead, isQueueAvailable, extractMediaFromText as extractMediaHelper } from '../services/whatsappSender.js';
 
 const router = Router();
@@ -3821,6 +3821,39 @@ router.put('/funnel-stages/:businessId/reorder', authMiddleware, async (req: Aut
     res.json({ success: true });
   } catch (error: any) {
     console.error('Reorder funnel stages error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/funnel-stages/:businessId/contact/:contactPhone', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId, contactPhone } = req.params;
+    const { stageId, instanceId } = req.body;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    if (!stageId) {
+      await prisma.contactFunnelState.deleteMany({
+        where: { businessId, contactPhone: contactPhone.replace(/\D/g, '') }
+      });
+      return res.json({ success: true, message: 'Contact removed from funnel' });
+    }
+    
+    const result = await setContactStage(businessId, contactPhone, stageId, instanceId);
+    
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    
+    res.json({ success: true, stageName: result.stageName });
+  } catch (error: any) {
+    console.error('Set contact stage error:', error);
     res.status(500).json({ error: error.message });
   }
 });

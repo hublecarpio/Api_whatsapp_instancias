@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
-import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi, funnelStagesApi } from '@/lib/api';
 
 interface Conversation {
   phone: string;
@@ -159,6 +159,8 @@ export default function ChatPage() {
   const [savingField, setSavingField] = useState(false);
   const [currentStage, setCurrentStage] = useState<{id: string; name: string; color: string} | null>(null);
   const [funnelStage, setFunnelStage] = useState<{id: string; name: string; order: number} | null>(null);
+  const [availableFunnelStages, setAvailableFunnelStages] = useState<Array<{id: string; name: string; order: number}>>([]);
+  const [changingFunnelStage, setChangingFunnelStage] = useState(false);
   const [showContactPanel, setShowContactPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
@@ -267,6 +269,7 @@ export default function ChatPage() {
     if (currentBusiness) {
       fetchConversations();
       fetchTags();
+      fetchFunnelStages();
       fetchDailyContacts();
       const interval = setInterval(() => {
         fetchConversations();
@@ -302,6 +305,34 @@ export default function ChatPage() {
       }
     } catch (err) {
       console.error('Failed to fetch tags:', err);
+    }
+  };
+
+  const fetchFunnelStages = async () => {
+    if (!currentBusiness) return;
+    try {
+      const res = await funnelStagesApi.list(currentBusiness.id, selectedInstanceId || undefined);
+      setAvailableFunnelStages(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch funnel stages:', err);
+    }
+  };
+
+  const handleChangeFunnelStage = async (stageId: string) => {
+    if (!currentBusiness || !selectedPhone) return;
+    setChangingFunnelStage(true);
+    try {
+      await funnelStagesApi.setContactStage(
+        currentBusiness.id, 
+        selectedPhone, 
+        stageId || null, 
+        selectedConversationInstanceId || undefined
+      );
+      await fetchContactExtractedData(selectedPhone);
+    } catch (err) {
+      console.error('Failed to change funnel stage:', err);
+    } finally {
+      setChangingFunnelStage(false);
     }
   };
 
@@ -1450,10 +1481,24 @@ export default function ChatPage() {
                     )}
                   </div>
                 </div>
-                <select value={getContactTag(selectedPhone)?.id || ''} onChange={(e) => handleAssignTag(selectedPhone, e.target.value)} className="hidden sm:block text-xs bg-dark-card border border-dark-border rounded px-2 py-1 text-white" disabled={assigningTag}>
-                  <option value="">Sin etapa</option>
-                  {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
-                </select>
+                {availableFunnelStages.length > 0 ? (
+                  <select 
+                    value={funnelStage?.id || ''} 
+                    onChange={(e) => handleChangeFunnelStage(e.target.value)} 
+                    className="hidden sm:block text-xs bg-dark-card border border-dark-border rounded px-2 py-1 text-white" 
+                    disabled={changingFunnelStage}
+                  >
+                    <option value="">Sin etapa</option>
+                    {availableFunnelStages.map(stage => (
+                      <option key={stage.id} value={stage.id}>{stage.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <select value={getContactTag(selectedPhone)?.id || ''} onChange={(e) => handleAssignTag(selectedPhone, e.target.value)} className="hidden sm:block text-xs bg-dark-card border border-dark-border rounded px-2 py-1 text-white" disabled={assigningTag}>
+                    <option value="">Sin etiqueta</option>
+                    {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
+                  </select>
+                )}
                 {!isAdvisorMode && (getContactAdvisor(selectedPhone) ? (
                   <span className="hidden sm:flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

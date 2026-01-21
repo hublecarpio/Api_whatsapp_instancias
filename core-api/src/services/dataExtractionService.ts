@@ -50,22 +50,30 @@ export async function extractDataFromConversation(
       return [];
     }
 
-    const conversationText = conversationHistory
-      .slice(-6)
-      .map(m => `${m.role === 'user' ? 'Cliente' : 'Agente'}: ${m.content}`)
+    const clientMessagesOnly = conversationHistory
+      .filter(m => m.role === 'user')
+      .slice(-8);
+    
+    if (clientMessagesOnly.length === 0) {
+      console.log('[DataExtraction] No client messages found for extraction');
+      return [];
+    }
+    
+    const conversationText = clientMessagesOnly
+      .map(m => `Cliente: ${m.content}`)
       .join('\n');
 
     const fieldDescriptions = fieldsToExtract.map((f: any) => 
       `- ${f.fieldKey} (${f.fieldLabel}): ${f.description || f.fieldLabel}`
     ).join('\n');
 
-    const systemPrompt = `Eres un asistente de extracción de datos. Tu tarea es identificar información específica de una conversación y extraerla.
+    const systemPrompt = `Eres un asistente de extracción de datos. Tu tarea es identificar información específica de los mensajes del cliente y extraerla.
 
-Analiza la conversación y extrae los siguientes campos si están presentes:
+Analiza SOLO los mensajes del cliente y extrae los siguientes campos si están presentes:
 ${fieldDescriptions}
 
 REGLAS:
-1. Solo extrae información que el CLIENTE haya proporcionado explícitamente
+1. Solo extrae información que el CLIENTE haya proporcionado explícitamente en sus mensajes
 2. No inventes datos ni hagas suposiciones
 3. Si un dato no está presente, devuelve null
 4. Para emails, valida que tenga formato correcto

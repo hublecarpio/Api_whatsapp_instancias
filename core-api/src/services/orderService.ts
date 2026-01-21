@@ -408,3 +408,82 @@ export function formatAgentToolResponse(result: CreateOrderResult, currencySymbo
       : undefined
   };
 }
+
+export interface AddItemResult {
+  success: boolean;
+  orderId?: string;
+  newTotal?: number;
+  itemCount?: number;
+  reason: string;
+}
+
+export async function addItemToExistingOrder(
+  businessId: string,
+  contactPhone: string,
+  item: OrderItem,
+  instanceId?: string
+): Promise<AddItemResult> {
+  const normalizedPhone = contactPhone.replace(/\D/g, '');
+  
+  try {
+    const existingOrder = await checkExistingPendingOrder(businessId, normalizedPhone, instanceId);
+    
+    if (!existingOrder) {
+      return { success: false, reason: 'No pending order found for this contact' };
+    }
+    
+    const currentItems = await prisma.orderItem.findMany({
+      where: { orderId: existingOrder.id }
+    });
+    
+    const existingItem = currentItems.find(i => 
+      (i.productId && i.productId === item.productId) || 
+      i.productTitle.toLowerCase() === item.productTitle.toLowerCase()
+    );
+    
+    if (existingItem) {
+      await prisma.orderItem.update({
+        where: { id: existingItem.id },
+        data: {
+          quantity: existingItem.quantity + item.quantity,
+          unitPrice: item.unitPrice || existingItem.unitPrice
+        }
+      });
+      console.log(`[ORDER-SERVICE] Updated existing item quantity in order ${existingOrder.id}`);
+    } else {
+      await prisma.orderItem.create({
+        data: {
+          orderId: existingOrder.id,
+          productId: item.productId,
+          productTitle: item.productTitle,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          imageUrl: item.imageUrl
+        }
+      });
+      console.log(`[ORDER-SERVICE] Added new item to order ${existingOrder.id}`);
+    }
+    
+    const updatedItems = await prisma.orderItem.findMany({
+      where: { orderId: existingOrder.id }
+    });
+    
+    const newTotal = updatedItems.reduce((sum, i) => sum + (i.unitPrice * i.quantity), 0);
+    
+    await prisma.order.update({
+      where: { id: existingOrder.id },
+      data: { totalAmount: newTotal }
+    });
+    
+    return {
+      success: true,
+      orderId: existingOrder.id,
+      newTotal,
+      itemCount: updatedItems.length,
+      reason: existingItem ? 'Quantity updated for existing item' : 'New item added to order'
+    };
+  } catch (error: any) {
+    console.error('[ORDER-SERVICE] Error adding item to order:', error.message);
+    return { success: false, reason: error.message };
+  }
+}

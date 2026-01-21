@@ -170,6 +170,54 @@ export async function advanceContactStage(
   return { success: true, newStage: status.nextStage.name };
 }
 
+export async function setContactStage(
+  businessId: string,
+  contactPhone: string,
+  stageId: string,
+  instanceId?: string
+): Promise<{ success: boolean; stageName?: string; error?: string }> {
+  const normalizedPhone = contactPhone.replace(/\D/g, '');
+  
+  const stage = await prisma.funnelStage.findFirst({
+    where: { id: stageId, businessId, isActive: true }
+  });
+  
+  if (!stage) {
+    return { success: false, error: 'Stage not found or inactive' };
+  }
+  
+  await prisma.contactFunnelState.upsert({
+    where: {
+      businessId_contactPhone: {
+        businessId,
+        contactPhone: normalizedPhone
+      }
+    },
+    create: {
+      businessId,
+      contactPhone: normalizedPhone,
+      stageId: stage.id,
+      enteredAt: new Date()
+    },
+    update: {
+      stageId: stage.id,
+      enteredAt: new Date()
+    }
+  });
+  
+  console.log(`[FunnelStage] Contact ${normalizedPhone} manually set to stage: ${stage.name}`);
+  
+  tryAutoCreateOrderOnStageAdvance(businessId, normalizedPhone, stage.name, instanceId)
+    .then(result => {
+      if (result.created) {
+        console.log(`[FunnelStage] Auto-order created on manual stage set: ${result.orderId}`);
+      }
+    })
+    .catch(err => console.error('[FunnelStage] Auto-order error on manual set:', err.message));
+  
+  return { success: true, stageName: stage.name };
+}
+
 export async function checkAndAdvanceStage(
   businessId: string,
   contactPhone: string,
