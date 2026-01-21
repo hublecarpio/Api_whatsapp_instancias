@@ -1,7 +1,22 @@
 import axios, { AxiosInstance } from 'axios';
 import FormData from 'form-data';
 import https from 'https';
+import dns from 'dns';
 import { Agent, fetch as undiciFetch, setGlobalDispatcher, Dispatcher } from 'undici';
+
+// Force IPv4 resolution globally to avoid IPv6 connection issues in Docker
+dns.setDefaultResultOrder('ipv4first');
+
+// Custom IPv4-only lookup function for undici
+function ipv4Lookup(
+  hostname: string,
+  options: any,
+  callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void
+): void {
+  dns.lookup(hostname, { family: 4 }, (err, address, family) => {
+    callback(err, address || '', family || 4);
+  });
+}
 
 const META_API_URL = 'https://graph.facebook.com/v21.0';
 
@@ -125,6 +140,9 @@ async function metaApiRequest(
     throw new Error('META_CIRCUIT_BREAKER_OPEN');
   }
   
+  const startTime = Date.now();
+  const logPrefix = `[META-REQ ${phoneNumberId.slice(-4)}]`;
+  
   try {
     let responseData: any;
     
@@ -140,6 +158,7 @@ async function metaApiRequest(
           : JSON.stringify(options.body);
       }
       
+      console.log(`${logPrefix} Undici ${options.method} attempt ${retryCount + 1}, timeout=${timeout}ms`);
       const response = await fetchWithTimeout(url, fetchOptions, timeout);
       
       if (!response.ok) {
@@ -152,6 +171,7 @@ async function metaApiRequest(
       }
       
       responseData = await response.json();
+      console.log(`${logPrefix} Undici SUCCESS in ${Date.now() - startTime}ms`);
     } else {
       const axiosConfig: any = {
         method: options.method,
@@ -165,14 +185,21 @@ async function metaApiRequest(
         axiosConfig.data = options.body;
       }
       
+      console.log(`${logPrefix} Axios ${options.method} attempt ${retryCount + 1}, timeout=${timeout}ms, agent=${retryCount > 0 ? 'fresh' : 'pool'}`);
+      
       const response = await axios(axiosConfig);
       responseData = response.data;
+      console.log(`${logPrefix} Axios SUCCESS in ${Date.now() - startTime}ms`);
     }
     
     recordSuccess(phoneNumberId);
     return responseData;
   } catch (error: any) {
+    const elapsed = Date.now() - startTime;
     const isNetworkError = isNetworkTimeoutError(error);
+    const errorCode = error?.code || error?.cause?.code || 'UNKNOWN';
+    
+    console.error(`${logPrefix} FAILED in ${elapsed}ms: code=${errorCode}, isNetwork=${isNetworkError}, msg=${error?.message?.substring(0, 100)}`);
     
     // Only record network failures to circuit breaker
     if (isNetworkError) {
@@ -181,7 +208,7 @@ async function metaApiRequest(
     
     if (isNetworkError && retryCount < maxRetries) {
       const delay = Math.min(1500 * Math.pow(1.5, retryCount), 8000);
-      console.log(`[META] Retrying request in ${delay}ms (attempt ${retryCount + 2}/${maxRetries + 1})...`);
+      console.log(`${logPrefix} Retrying in ${delay}ms (attempt ${retryCount + 2}/${maxRetries + 1})...`);
       await new Promise(r => setTimeout(r, delay));
       return metaApiRequest(phoneNumberId, url, options, retryCount + 1);
     }
@@ -191,6 +218,7 @@ async function metaApiRequest(
 }
 
 // Undici agent with better connection handling
+// Force IPv4 to avoid IPv6 connection issues in Docker containers
 const undiciAgent = new Agent({
   keepAliveTimeout: 30000,
   keepAliveMaxTimeout: 60000,
@@ -198,17 +226,21 @@ const undiciAgent = new Agent({
   pipelining: 1,
   connect: {
     timeout: 30000,
+    autoSelectFamily: false, // Disable happy eyeballs
+    lookup: ipv4Lookup, // Force IPv4-only DNS resolution
   }
 });
 
 // Legacy axios agent for backward compatibility
+// Force IPv4 to avoid IPv6 connection issues in Docker containers
 const httpsAgent = new https.Agent({
   keepAlive: true,
   keepAliveMsecs: 5000,
   timeout: 90000,
   maxSockets: 100,
   maxFreeSockets: 20,
-  scheduling: 'fifo'
+  scheduling: 'fifo',
+  family: 4 // Force IPv4
 });
 
 const metaAxios: AxiosInstance = axios.create({
@@ -220,9 +252,11 @@ const metaAxios: AxiosInstance = axios.create({
 });
 
 // Fresh agent for retries (no connection reuse)
+// Force IPv4 to avoid IPv6 issues
 const freshAgent = new https.Agent({
   keepAlive: false,
-  timeout: 60000
+  timeout: 60000,
+  family: 4 // Force IPv4
 });
 
 // Helper function for undici fetch with timeout
