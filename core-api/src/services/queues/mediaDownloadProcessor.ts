@@ -3,6 +3,8 @@ import prisma from '../prisma.js';
 import { QUEUE_NAMES, MediaDownloadJobData, getQueueConnection, getMediaDownloadQueue } from './index.js';
 import { MetaCloudService, getCircuitBreakerState } from '../metaCloud.js';
 import { uploadBuffer, isS3Configured } from '../storage.js';
+import { dispatchMediaUpdate } from '../webhookService.js';
+import { geminiService } from '../gemini.js';
 
 const MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
 const CIRCUIT_BREAKER_RETRY_DELAY = 35000; // 35 seconds - wait for CB to enter half-open
@@ -188,6 +190,87 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
     });
 
     console.log(`${logPrefix} SUCCESS - MessageLog updated with mediaUrl`);
+    
+    // Process media with Gemini for AI agent context (with idempotency check)
+    if (geminiService.isConfigured()) {
+      const mediaTypes = ['audio', 'ptt', 'image', 'sticker', 'video'];
+      if (mediaTypes.includes(mediaType)) {
+        // Check if already processed to prevent duplicate analysis
+        const logForGeminiCheck = await prisma.messageLog.findUnique({
+          where: { id: messageLogId },
+          select: { metadata: true }
+        });
+        const existingMeta = (logForGeminiCheck?.metadata as Record<string, any>) || {};
+        
+        if (existingMeta.mediaAnalysisAt) {
+          console.log(`${logPrefix} Gemini analysis already done, skipping`);
+        } else {
+          try {
+            console.log(`${logPrefix} Processing ${mediaType} with Gemini for AI context...`);
+            const result = await geminiService.processMedia(finalMediaUrl, mediaType, '');
+            
+            if (result.success && result.text) {
+              let mediaAnalysis = result.text;
+              if (mediaType === 'audio' || mediaType === 'ptt') {
+                mediaAnalysis = `[Transcripción de audio]: ${result.text}`;
+              } else if (mediaType === 'image' || mediaType === 'sticker') {
+                mediaAnalysis = `[Descripción de imagen]: ${result.text}`;
+              } else if (mediaType === 'video') {
+                mediaAnalysis = `[Descripción de video]: ${result.text}`;
+              }
+              
+              // Re-fetch to get current state (avoid race conditions)
+              const logForUpdate = await prisma.messageLog.findUnique({
+                where: { id: messageLogId },
+                select: { metadata: true, message: true }
+              });
+              const metadataForGemini = (logForUpdate?.metadata as Record<string, any>) || {};
+              
+              // Only append if not already present in message
+              let updatedMessage = logForUpdate?.message || '';
+              if (!updatedMessage.includes('[Transcripción de audio]') && 
+                  !updatedMessage.includes('[Descripción de imagen]') &&
+                  !updatedMessage.includes('[Descripción de video]')) {
+                updatedMessage = updatedMessage 
+                  ? `${updatedMessage}\n\n${mediaAnalysis}`
+                  : mediaAnalysis;
+              }
+              
+              await prisma.messageLog.update({
+                where: { id: messageLogId },
+                data: {
+                  message: updatedMessage,
+                  metadata: {
+                    ...metadataForGemini,
+                    mediaAnalysis: result.text,
+                    mediaAnalysisType: mediaType,
+                    mediaAnalysisAt: new Date().toISOString()
+                  }
+                }
+              });
+              console.log(`${logPrefix} Gemini analysis complete and saved`);
+            }
+          } catch (geminiError: any) {
+            console.warn(`${logPrefix} Gemini processing failed (non-critical): ${geminiError.message}`);
+          }
+        }
+      }
+    }
+    
+    // Dispatch media_update webhook to notify external systems
+    try {
+      await dispatchMediaUpdate(
+        businessId,
+        contactPhone,
+        messageLogId,
+        finalMediaUrl,
+        mediaType,
+        instanceId
+      );
+      console.log(`${logPrefix} media_update webhook dispatched`);
+    } catch (webhookError: any) {
+      console.warn(`${logPrefix} Failed to dispatch media_update webhook: ${webhookError.message}`);
+    }
 
   } catch (error: any) {
     const errorMessage = error.message || 'Unknown error';

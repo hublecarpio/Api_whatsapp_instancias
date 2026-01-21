@@ -1,3 +1,8 @@
+// CRITICAL: Force IPv4 resolution BEFORE any other imports
+// This prevents ETIMEDOUT errors from IPv6 attempts in Docker containers
+import dns from 'dns';
+dns.setDefaultResultOrder('ipv4first');
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';

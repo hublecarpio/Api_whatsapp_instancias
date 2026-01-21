@@ -9,7 +9,7 @@ interface WebhookPayload {
   data: Record<string, any>;
 }
 
-const DEFAULT_WEBHOOK_EVENTS = ['user_message', 'agent_message', 'stage_change', 'state_change', 'tool_call'];
+const DEFAULT_WEBHOOK_EVENTS = ['user_message', 'agent_message', 'stage_change', 'state_change', 'tool_call', 'media_update'];
 
 function normalizeEventName(event: string): string {
   return event.toLowerCase().replace(/\s+/g, '_');
@@ -276,5 +276,22 @@ export async function dispatchStageChange(
     contactPhone,
     oldStage,
     newStage
+  }, instanceId);
+}
+
+export async function dispatchMediaUpdate(
+  businessId: string,
+  contactPhone: string,
+  messageId: string,
+  mediaUrl: string,
+  mediaType: string,
+  instanceId?: string
+): Promise<void> {
+  await dispatchWebhook(businessId, 'media_update', {
+    contactPhone,
+    messageId,
+    mediaUrl,
+    mediaType,
+    status: 'downloaded'
   }, instanceId);
 }

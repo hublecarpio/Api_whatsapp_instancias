@@ -3,7 +3,7 @@ import prisma, { withRetry } from '../services/prisma.js';
 import { MetaCloudService, MetaWebhookPayload, ParsedMessage, ParsedStatus } from '../services/metaCloud.js';
 import { processIncomingMessage } from '../services/messageIngest.js';
 import { uploadBuffer, isS3Configured } from '../services/storage.js';
-import { dispatchUserMessage } from '../services/webhookService.js';
+import { dispatchUserMessage, dispatchMediaUpdate } from '../services/webhookService.js';
 import { webhookLogger, logWebhookEvent } from '../services/logger.js';
 import { getRedisConnection, isRedisAvailable } from '../services/redis.js';
 import { getMediaDownloadQueue, MediaDownloadJobData } from '../services/queues/index.js';
@@ -266,51 +266,71 @@ async function processMessage(
       mediaUrl = undefined;
       // Note: logWebhookEvent will be called after successful enqueue in the second phase
     } else {
-      // SYNC FALLBACK: No Redis available, download immediately
+      // SYNC FALLBACK: No Redis available, download immediately with retries
       console.log(`[META WEBHOOK MEDIA] No queue available, downloading sync for ${msg.type}: mediaId=${msg.mediaId}`);
       const mediaStartTime = Date.now();
+      const maxSyncRetries = 3;
       
-      try {
-        const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
-        console.log(`[META WEBHOOK MEDIA] Got Meta URL: ${metaMediaUrl?.substring(0, 80)}...`);
-        
-        if (isS3Configured()) {
-          const mediaBuffer = await metaService.downloadMedia(metaMediaUrl);
-          const uploadResult = await uploadBuffer(
-            mediaBuffer, 
-            msg.mimetype || 'application/octet-stream', 
-            instance.businessId
-          );
+      for (let attempt = 0; attempt <= maxSyncRetries; attempt++) {
+        try {
+          if (attempt > 0) {
+            const delay = 1500 * Math.pow(1.5, attempt - 1);
+            console.log(`[META WEBHOOK MEDIA] Retry attempt ${attempt}/${maxSyncRetries} after ${delay}ms`);
+            await new Promise(r => setTimeout(r, delay));
+          }
           
-          if (uploadResult) {
-            mediaUrl = uploadResult.url;
-            logWebhookEvent({
-              eventType: 'media_upload',
-              phoneNumberId: metaService['credentials'].phoneNumberId,
-              instanceId: instance.id,
-              businessId: instance.businessId,
-              provider: providerType,
-              mediaId: msg.mediaId,
-              mediaType: msg.type,
-              duration: Date.now() - mediaStartTime,
-              metadata: { url: mediaUrl, mimetype: msg.mimetype, syncFallback: true }
-            });
+          const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
+          console.log(`[META WEBHOOK MEDIA] Got Meta URL: ${metaMediaUrl?.substring(0, 80)}...`);
+          
+          if (isS3Configured()) {
+            const mediaBuffer = await metaService.downloadMedia(metaMediaUrl);
+            const uploadResult = await uploadBuffer(
+              mediaBuffer, 
+              msg.mimetype || 'application/octet-stream', 
+              instance.businessId
+            );
+            
+            if (uploadResult) {
+              mediaUrl = uploadResult.url;
+              logWebhookEvent({
+                eventType: 'media_upload',
+                phoneNumberId: metaService['credentials'].phoneNumberId,
+                instanceId: instance.id,
+                businessId: instance.businessId,
+                provider: providerType,
+                mediaId: msg.mediaId,
+                mediaType: msg.type,
+                duration: Date.now() - mediaStartTime,
+                metadata: { url: mediaUrl, mimetype: msg.mimetype, syncFallback: true, attempts: attempt + 1 }
+              });
+            } else {
+              mediaUrl = metaMediaUrl;
+              console.warn(`[META WEBHOOK MEDIA] S3 upload failed, using Meta URL`);
+            }
           } else {
             mediaUrl = metaMediaUrl;
-            console.warn(`[META WEBHOOK MEDIA] S3 upload failed, using Meta URL`);
           }
-        } else {
-          mediaUrl = metaMediaUrl;
-        }
-      } catch (error: any) {
-        console.error(`[META WEBHOOK MEDIA] Sync download failed: ${error.message}`);
-        // Save Meta URL as fallback (will expire, but better than nothing)
-        try {
-          const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
-          mediaUrl = metaMediaUrl;
-          console.log(`[META WEBHOOK MEDIA] Using temporary Meta URL as fallback`);
-        } catch {
-          console.error(`[META WEBHOOK MEDIA] Could not get Meta URL either`);
+          break; // Success, exit retry loop
+        } catch (error: any) {
+          const isNetworkError = ['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN'].some(
+            code => error.message?.includes(code) || error.code === code
+          );
+          
+          if (attempt < maxSyncRetries && isNetworkError) {
+            console.warn(`[META WEBHOOK MEDIA] Sync download attempt ${attempt + 1} failed (retrying): ${error.message}`);
+            continue;
+          }
+          
+          console.error(`[META WEBHOOK MEDIA] Sync download failed after ${attempt + 1} attempts: ${error.message}`);
+          // Save Meta URL as fallback (will expire, but better than nothing)
+          try {
+            const metaMediaUrl = await metaService.getMediaUrl(msg.mediaId);
+            mediaUrl = metaMediaUrl;
+            console.log(`[META WEBHOOK MEDIA] Using temporary Meta URL as fallback`);
+          } catch {
+            console.error(`[META WEBHOOK MEDIA] Could not get Meta URL either`);
+          }
+          break;
         }
       }
     }
@@ -456,6 +476,19 @@ async function processMessage(
             }
           });
           console.log(`[META WEBHOOK MEDIA] Fallback download success: ${finalUrl.substring(0, 60)}...`);
+          
+          // Also update mediaUrl for the dispatchUserMessage below
+          mediaUrl = finalUrl;
+          
+          // Dispatch media_update webhook for fallback downloads
+          dispatchMediaUpdate(
+            instance.businessId,
+            msg.from,
+            messageLog.id,
+            finalUrl,
+            mediaPendingData.mediaType,
+            instance.id
+          ).catch(err => console.warn(`[META WEBHOOK MEDIA] Failed to dispatch media_update: ${err.message}`));
         } catch (fallbackError: any) {
           console.error(`[META WEBHOOK MEDIA] Fallback download also failed: ${fallbackError.message}`);
           // Mark as failed so UI knows media is not available (merge metadata)
