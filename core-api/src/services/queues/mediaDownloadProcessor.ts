@@ -1,4 +1,5 @@
 import { Worker, Job } from 'bullmq';
+import axios from 'axios';
 import prisma from '../prisma.js';
 import { QUEUE_NAMES, MediaDownloadJobData, getQueueConnection, getMediaDownloadQueue } from './index.js';
 import { MetaCloudService, getCircuitBreakerState } from '../metaCloud.js';
@@ -7,6 +8,8 @@ import { dispatchMediaUpdate } from '../webhookService.js';
 import { geminiService } from '../gemini.js';
 
 const MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
+const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
+const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
 const CIRCUIT_BREAKER_RETRY_DELAY = 35000; // 35 seconds - wait for CB to enter half-open
 
 let mediaDownloadWorker: Worker | null = null;
@@ -270,6 +273,65 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
       console.log(`${logPrefix} media_update webhook dispatched`);
     } catch (webhookError: any) {
       console.warn(`${logPrefix} Failed to dispatch media_update webhook: ${webhookError.message}`);
+    }
+
+    // Call AI agent now that media is ready
+    // Get full message data for AI processing
+    try {
+      const fullMessageLog = await prisma.messageLog.findUnique({
+        where: { id: messageLogId },
+        select: {
+          message: true,
+          metadata: true,
+          sender: true,
+          providerMessageId: true
+        }
+      });
+
+      // Check if bot is enabled
+      const business = await prisma.business.findUnique({
+        where: { id: businessId },
+        select: { botEnabled: true }
+      });
+
+      if (fullMessageLog) {
+        const msgMetadata = (fullMessageLog.metadata as Record<string, any>) || {};
+        const pushName = msgMetadata.pushName || '';
+        const messageText = fullMessageLog.message || '';
+        const mediaAnalysis = msgMetadata.mediaAnalysis || '';
+        const fullMessageForAgent = messageText + (mediaAnalysis ? `\n\n${mediaAnalysis}` : '');
+        const cleanPhone = contactPhone.replace(/\D/g, '');
+        
+        // Check if bot is enabled before calling AI
+        const botEnabled = business?.botEnabled ?? true;
+        
+        if (botEnabled) {
+          console.log(`${logPrefix} Calling AI agent with media ready...`);
+          
+          await axios.post(`${CORE_API_URL}/agent/think`, {
+            business_id: businessId,
+            instanceId,
+            provider,
+            phone: `${cleanPhone}@s.whatsapp.net`,
+            phoneNumber: cleanPhone,
+            contactName: pushName,
+            user_message: fullMessageForAgent,
+            mediaUrl: finalMediaUrl,
+            mediaAnalysis: mediaAnalysis || undefined,
+            providerMessageId: fullMessageLog.providerMessageId || undefined
+          }, {
+            headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET },
+            timeout: 30000
+          });
+          
+          console.log(`${logPrefix} AI agent called successfully`);
+        } else {
+          console.log(`${logPrefix} Bot disabled for business, skipping AI`);
+        }
+      }
+    } catch (aiError: any) {
+      console.error(`${logPrefix} Failed to call AI agent: ${aiError.message}`);
+      // Non-fatal: media is already saved, AI failure shouldn't fail the job
     }
 
   } catch (error: any) {

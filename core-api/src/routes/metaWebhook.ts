@@ -338,6 +338,9 @@ async function processMessage(
     console.warn(`[META WEBHOOK MEDIA] Received ${msg.type} message but NO mediaId present! from=${msg.from}, messageId=${msg.messageId}`);
   }
 
+  // Skip AI if media is pending async download - AI will be called after media is ready
+  const skipAI = !!mediaPendingData;
+  
   const processed = await processIncomingMessage({
     businessId: instance.businessId,
     instanceId: instance.id,
@@ -358,7 +361,8 @@ async function processMessage(
     buttonPayload: msg.buttonPayload,
     interactiveId: msg.interactiveId,
     reaction: msg.reaction,
-    order: msg.order
+    order: msg.order,
+    skipAI
   });
   
   // Only dispatch webhook if message was actually processed (not a duplicate in DB)

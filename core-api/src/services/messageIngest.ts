@@ -29,6 +29,7 @@ export interface IncomingMessage {
   interactiveId?: string;
   reaction?: { messageId: string; emoji: string };
   order?: { catalogId: string; items: Array<{ productId: string; quantity: number; price: number; currency: string }> };
+  skipAI?: boolean; // Skip AI processing when media is pending async download
 }
 
 export async function processIncomingMessage(message: IncomingMessage): Promise<boolean> {
@@ -271,6 +272,13 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
   // Per-contact bot disable (only applies when bot is globally enabled)
   if (business.botEnabled && contact?.botDisabled) {
     console.log('Bot disabled for contact:', cleanPhone, 'in business:', businessId);
+    return true;
+  }
+
+  // Skip AI processing if media is pending async download
+  // The mediaDownloadProcessor will call AI after media is ready
+  if (message.skipAI) {
+    console.log(`[MESSAGE_INGEST] Skipping AI for ${cleanPhone} - media pending async download`);
     return true;
   }
 
