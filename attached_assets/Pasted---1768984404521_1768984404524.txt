@@ -1,0 +1,176 @@
+      ]
+
+    }
+
+  ]
+
+}
+
+================================================================================
+
+2026-01-21T08:32:52.733Z INF module=meta-webhook timestamp=2026-01-21T08:32:52.733Z object=whatsapp_business_account entryCount=1 wabaId=863910693253571 changes=[{"field":"messages","phoneNumberId":"909444395587574","displayPhone":"51992644659","messageCount":1,"statusCount":0}] msg=Webhook event received
+
+2026-01-21T08:32:52.738Z INF module=meta-webhook phoneNumberId=909444395587574 displayPhone=51992644659 instanceId=7f0d921a-ed1a-40f7-b9de-602825b9aa51 provider=META_CLOUD businessId=abeb9f70-3ecb-4b80-9285-1f8a43452633 messageCount=1 statusCount=0 msg=Processing 1 messages and 0 statuses
+
+2026-01-21T08:32:52.738Z INF module=meta-webhook eventType=message_received phoneNumberId=909444395587574 instanceId=7f0d921a-ed1a-40f7-b9de-602825b9aa51 businessId=abeb9f70-3ecb-4b80-9285-1f8a43452633 provider=META_CLOUD messageId=wamid.HBgLNTE5OTI1NDQ4MDEVAgASGBQyQTkxOTUwMjE4Qjg5RjZFOTg1RAA= from=51992544801 messageType=image mediaId=1587183629191446 metadata={"pushName":"Iam Huble","hasContext":false} timestamp=2026-01-21T08:32:52.738Z msg=[909444395587574] message_received
+
+[META WEBHOOK MEDIA] Will queue async download for image: mediaId=1587183629191446, from=51992544801
+
+[Agent Think] Endpoint called - business_id: abeb9f70-3ecb-4b80-9285-1f8a43452633, phone: 51992544801@s.whatsapp.net
+
+Failed to process with AI agent: Request failed with status code 400
+
+[META WEBHOOK] Instance-specific event: {
+
+  instanceId: '7f0d921a-ed1a-40f7-b9de-602825b9aa51',
+
+  object: 'whatsapp_business_account'
+
+}
+
+2026-01-21T08:32:52.818Z INF module=meta-webhook phoneNumberId=909444395587574 displayPhone=51992644659 instanceId=7f0d921a-ed1a-40f7-b9de-602825b9aa51 provider=META_CLOUD businessId=abeb9f70-3ecb-4b80-9285-1f8a43452633 messageCount=1 statusCount=0 msg=Processing 1 messages and 0 statuses
+
+[DEDUP-REDIS] Message wamid.HBgLNTE5OTI1NDQ4MDEVAgASGBQyQTkxOTUwMjE4Qjg5RjZFOTg1RAA= already processed, skipping
+
+2026-01-21T08:32:52.819Z INF module=meta-webhook messageId=wamid.HBgLNTE5OTI1NDQ4MDEVAgASGBQyQTkxOTUwMjE4Qjg5RjZFOTg1RAA= from=51992544801 reason=duplicate msg=Skipping duplicate message
+
+[ExpiredBuffer] Checking for expired buffers...
+
+[ExpiredBuffer] Checking for expired buffers...
+
+Reminder job repeat:f1c1683265942110b28a507504282576:1768984380000 completed
+
+[ExpiredBuffer] Checking for expired buffers...
+
+================================================================================
+
+[META WEBHOOK] === INCOMING REQUEST @ 2026-01-21T08:33:05.622Z ===
+
+[META WEBHOOK] Method: POST
+
+[META WEBHOOK] URL: /webhook/meta
+
+[META WEBHOOK] Content-Type: application/json
+
+[META WEBHOOK] User-Agent: facebookexternalua
+
+[META WEBHOOK] X-Hub-Signature-256: present
+
+[META WEBHOOK] Body type: object
+
+[META WEBHOOK] Body is null: false
+
+[META WEBHOOK] Body is undefined: false
+
+[META WEBHOOK] Body keys: [ 'object', 'entry' ]
+
+[META WEBHOOK] RAW PAYLOAD: {
+
+  "object": "whatsapp_business_account",
+
+
+  "entry": [
+
+    {
+
+      "id": "2913149578881548",
+
+      "changes": [
+
+
+
+{
+
+          "value": {
+
+            "messaging_product": "whatsapp",
+
+            "metadata": {
+
+              "display_phone_number": "51925981193",
+
+              "phone_number_id": "727750223758190"
+
+            },
+
+            "contacts": [
+
+              {
+
+                "profile": {
+
+                  "name": "ARIAS G. 💚"
+
+                },
+
+                "wa_id": "51927881572"
+
+              }
+
+            ],
+
+            "messages": [
+
+              {
+
+                "from": "51927881572",
+
+                "id": "wamid.HBgLNTE5Mjc4ODE1NzIVAgASGCBBQzUxRDUxQ0Y2NzAxODlBNDk4QTcwRTkyQkM2NDYwRAA=",
+
+                "timestamp": "1768984384",
+
+                "text": {
+
+                  "body": "Modelos de todo terreno porfavor"
+
+                },
+
+                "type": "text"
+
+              }
+
+            ]
+
+
+          },
+
+          "field": "messages"
+
+
+
+}
+
+      ]
+
+    }
+
+  ]
+
+}
+
+================================================================================
+
+2026-01-21T08:33:05.622Z INF module=meta-webhook timestamp=2026-01-21T08:33:05.622Z object=whatsapp_business_account entryCount=1 wabaId=2913149578881548 changes=[{"field":"messages","phoneNumberId":"727750223758190","displayPhone":"51925981193","messageCount":1,"statusCount":0}] msg=Webhook event received
+
+2026-01-21T08:33:05.627Z INF module=meta-webhook phoneNumberId=727750223758190 displayPhone=51925981193 instanceId=510a448a-dbbf-4507-abf0-333712bb9bd5 provider=META_CLOUD businessId=c79bdd29-6a0c-4434-82e7-e559a6f86454 messageCount=1 statusCount=0 msg=Processing 1 messages and 0 statuses
+
+2026-01-21T08:33:05.628Z INF module=meta-webhook eventType=message_received phoneNumberId=727750223758190 instanceId=510a448a-dbbf-4507-abf0-333712bb9bd5 businessId=c79bdd29-6a0c-4434-82e7-e559a6f86454 provider=META_CLOUD messageId=wamid.HBgLNTE5Mjc4ODE1NzIVAgASGCBBQzUxRDUxQ0Y2NzAxODlBNDk4QTcwRTkyQkM2NDYwRAA= from=51927881572 messageType=text metadata={"pushName":"ARIAS G. 💚","hasContext":false} timestamp=2026-01-21T08:33:05.628Z msg=[727750223758190] message_received
+
+Bot disabled for business: c79bdd29-6a0c-4434-82e7-e559a6f86454
+
+[Webhook] Attempting dispatch for business c79bdd29-6a0c-4434-82e7-e559a6f86454, event: user_message, instance: 510a448a-dbbf-4507-abf0-333712bb9bd5
+
+[Webhook] Using instance-level webhook for 51925981193
+
+[Webhook] Sending to https://webhook.hubleconsulting.com/webhook/4945bf40-8047-46c5-adb2-271fb50emotofacilefi...
+
+[Webhook] Successfully dispatched user_message to https://webhook.hubleconsulting.com/webhook/4945bf40-8047-46c5-adb2-271fb50emotofacilefi
+
+[META WEBHOOK] Instance-specific event: {
+
+  instanceId: '510a448a-dbbf-4507-abf0-333712bb9bd5',
+
+  object: 'whatsapp_business_account'
+
+}
+

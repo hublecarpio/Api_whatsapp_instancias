@@ -30,6 +30,7 @@ interface Message {
     mediaType?: string;
     type?: string;
     pending?: boolean;
+    mediaPending?: boolean;
     isTemplate?: boolean;
     templateName?: string;
   };
@@ -1684,6 +1685,31 @@ export default function ChatPage() {
                   <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`chat-bubble ${msg.direction === 'outbound' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'} ${msg.metadata?.pending ? 'opacity-70' : ''}`}>
                       {msg.mediaUrl && renderMedia(msg.mediaUrl, msg.direction === 'outbound', msg.metadata?.mediaType || msg.metadata?.type)}
+                      {!msg.mediaUrl && msg.metadata?.mediaPending && (
+                        <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+                          <div className="animate-spin w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full"></div>
+                          <span>
+                            {msg.metadata?.mediaType === 'image' || msg.metadata?.type === 'image' ? 'Cargando imagen...' :
+                             msg.metadata?.mediaType === 'video' || msg.metadata?.type === 'video' ? 'Cargando video...' :
+                             msg.metadata?.mediaType === 'audio' || msg.metadata?.type === 'audio' || msg.metadata?.type === 'ptt' ? 'Cargando audio...' :
+                             msg.metadata?.mediaType === 'document' || msg.metadata?.type === 'document' ? 'Cargando documento...' :
+                             'Cargando multimedia...'}
+                          </span>
+                        </div>
+                      )}
+                      {!msg.mediaUrl && !msg.metadata?.mediaPending && (msg.metadata?.mediaType || msg.metadata?.type) && !msg.message && (
+                        <div className="flex items-center gap-2 text-red-400 text-sm py-2">
+                          <span>
+                            {msg.metadata?.mediaType === 'image' || msg.metadata?.type === 'image' ? '🖼️ Imagen' :
+                             msg.metadata?.mediaType === 'video' || msg.metadata?.type === 'video' ? '🎬 Video' :
+                             msg.metadata?.mediaType === 'audio' || msg.metadata?.type === 'audio' || msg.metadata?.type === 'ptt' ? '🎤 Audio' :
+                             msg.metadata?.mediaType === 'document' || msg.metadata?.type === 'document' ? '📄 Documento' :
+                             msg.metadata?.mediaType === 'sticker' || msg.metadata?.type === 'sticker' ? '😀 Sticker' :
+                             '📎 Archivo'}
+                          </span>
+                          <span className="text-xs opacity-70">(no disponible)</span>
+                        </div>
+                      )}
                       {msg.message && <p className="break-words whitespace-pre-wrap text-sm sm:text-base">{msg.message}</p>}
                       {msg.direction === 'inbound' && msg.metadata?.mediaAnalysis && (
                         <div className="mt-1 group relative inline-block">
