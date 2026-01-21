@@ -1081,4 +1081,25 @@ export class MetaCloudService {
 
     return null;
   }
+
+  async markAsRead(messageId: string): Promise<void> {
+    try {
+      await metaApiRequest(
+        this.credentials.phoneNumberId,
+        `${META_API_URL}/${this.credentials.phoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: this.headers,
+          body: {
+            messaging_product: 'whatsapp',
+            status: 'read',
+            message_id: messageId
+          }
+        }
+      );
+      console.log(`[META] markAsRead SUCCESS: messageId=${messageId}`);
+    } catch (error: any) {
+      console.warn(`[META] markAsRead FAILED: ${error.message}`);
+    }
+  }
 }
