@@ -1,0 +1,100 @@
+[OUTBOUND_WORKER] Send error for msg_6d8793ea-1cc7-4dc4-929d-8eaf8a844b9b: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 4/5): Error
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_6d8793ea-1cc7-4dc4-929d-8eaf8a844b9b failed: TRANSIENT_ERROR
+[OUTBOUND_WORKER] Processing job msg_2dd7ad9d-c08d-44b9-a791-2009f0daf07f for 51954849748 via META_CLOUD (realFailures: 2, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_2dd7ad9d-c08d-44b9-a791-2009f0daf07f: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 3/5): Error
+[META_SEND] Failed: to=51954849748, elapsed=254ms, code=ETIMEDOUT, status=undefined
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_2dd7ad9d-c08d-44b9-a791-2009f0daf07f failed: TRANSIENT_ERROR
+[OUTBOUND_WORKER] Processing job msg_0c1dc7ce-961a-4b56-8d56-ed8303200bca for 51932050985 via META_CLOUD (realFailures: 4, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_0c1dc7ce-961a-4b56-8d56-ed8303200bca: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 5/5): Error
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[META_SEND] Failed: to=51932050985, elapsed=255ms, code=ETIMEDOUT, status=undefined
+[OUTBOUND_WORKER] Job msg_0c1dc7ce-961a-4b56-8d56-ed8303200bca failed: Max real failures (5) reached: Error
+[OUTBOUND_WORKER] Processing job msg_70aaabcf-1d97-41cd-9581-fc03ecd42b5b for 51954849748 via META_CLOUD (realFailures: 2, rateLimits: 0)
+[META_SEND] Failed: to=51954849748, elapsed=254ms, code=ETIMEDOUT, status=undefined
+[OUTBOUND_WORKER] Send error for msg_70aaabcf-1d97-41cd-9581-fc03ecd42b5b: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 3/5): Error
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_70aaabcf-1d97-41cd-9581-fc03ecd42b5b failed: TRANSIENT_ERROR
+[OUTBOUND_WORKER] Processing job msg_b727a200-3030-4ae2-a78e-408f7c658396 for 51932050985 via META_CLOUD (realFailures: 4, rateLimits: 0)
+[META_SEND] Failed: to=51932050985, elapsed=256ms, code=ETIMEDOUT, status=undefined
+[OUTBOUND_WORKER] Send error for msg_b727a200-3030-4ae2-a78e-408f7c658396: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 5/5): Error
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_b727a200-3030-4ae2-a78e-408f7c658396 failed: Max real failures (5) reached: Error
+[OUTBOUND_WORKER] Processing job msg_75197403-a4c7-464f-828e-b6bf6bde68a9 for 51954849748 via META_CLOUD (realFailures: 2, rateLimits: 0)
+[ExpiredBuffer] Checking for expired buffers...
+Reminder job repeat:f1c1683265942110b28a507504282576:1768957740000 completed
+[OUTBOUND_WORKER] Send error for msg_75197403-a4c7-464f-828e-b6bf6bde68a9: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 3/5): Error
+[META_SEND] Failed: to=51954849748, elapsed=264ms, code=ETIMEDOUT, status=undefined
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_75197403-a4c7-464f-828e-b6bf6bde68a9 failed: TRANSIENT_ERROR
+[OUTBOUND_WORKER] Processing job msg_1b819723-e437-4a2f-aaf3-fc752efec769 for 51954849748 via META_CLOUD (realFailures: 2, rateLimits: 0)
+[META_SEND] Failed: to=51954849748, elapsed=261ms, code=ETIMEDOUT, status=undefined
+[OUTBOUND_WORKER] Send error for msg_1b819723-e437-4a2f-aaf3-fc752efec769: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 3/5): Error
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_1b819723-e437-4a2f-aaf3-fc752efec769 failed: TRANSIENT_ERROR
+[OUTBOUND_WORKER] Processing job msg_7d106e9c-3094-4608-b163-a8cf76513dd5 for 51910020798 via META_CLOUD (realFailures: 4, rateLimits: 0)
+[ExpiredBuffer] Checking for expired buffers...
+[OUTBOUND_WORKER] Send error for msg_7d106e9c-3094-4608-b163-a8cf76513dd5: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 5/5): Error
+[META_SEND] Failed: to=51910020798, elapsed=256ms, code=ETIMEDOUT, status=undefined
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_7d106e9c-3094-4608-b163-a8cf76513dd5 failed: Max real failures (5) reached: Error
+[OUTBOUND_WORKER] Processing job msg_76e6da71-dd66-4b01-9da1-ad9d3927e8b4 for 51910020798 via META_CLOUD (realFailures: 4, rateLimits: 0)
+[META_SEND] Failed: to=51910020798, elapsed=257ms, code=ETIMEDOUT, status=undefined
+[OUTBOUND_WORKER] Send error for msg_76e6da71-dd66-4b01-9da1-ad9d3927e8b4: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 5/5): Error
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_76e6da71-dd66-4b01-9da1-ad9d3927e8b4 failed: Max real failures (5) reached: Error
+[OUTBOUND_WORKER] Processing job msg_6d8793ea-1cc7-4dc4-929d-8eaf8a844b9b for 51910020798 via META_CLOUD (realFailures: 4, rateLimits: 0)
+[META_SEND] Failed: to=51910020798, elapsed=255ms, code=ETIMEDOUT, status=undefined
+[OUTBOUND_WORKER] Send error for msg_6d8793ea-1cc7-4dc4-929d-8eaf8a844b9b: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 5/5): Error
+[BACKOFF] Using exponential delay: 32000ms (attempt 5)
+[OUTBOUND_WORKER] Job msg_6d8793ea-1cc7-4dc4-929d-8eaf8a844b9b failed: Max real failures (5) reached: Error
+[OUTBOUND_WORKER] Processing job msg_2dd7ad9d-c08d-44b9-a791-2009f0daf07f for 51954849748 via META_CLOUD (realFailures: 3, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_2dd7ad9d-c08d-44b9-a791-2009f0daf07f: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 4/5): Error
+[META_SEND] Failed: to=51954849748, elapsed=256ms, code=ETIMEDOUT, status=undefined
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_2dd7ad9d-c08d-44b9-a791-2009f0daf07f failed: TRANSIENT_ERROR
+[OUTBOUND_WORKER] Processing job msg_70aaabcf-1d97-41cd-9581-fc03ecd42b5b for 51954849748 via META_CLOUD (realFailures: 3, rateLimits: 0)
+[OUTBOUND_WORKER] Send error for msg_70aaabcf-1d97-41cd-9581-fc03ecd42b5b: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 4/5): Error
+[META_SEND] Failed: to=51954849748, elapsed=255ms, code=ETIMEDOUT, status=undefined
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_70aaabcf-1d97-41cd-9581-fc03ecd42b5b failed: TRANSIENT_ERROR
+[ExpiredBuffer] Checking for expired buffers...
+[OUTBOUND_WORKER] Processing job msg_75197403-a4c7-464f-828e-b6bf6bde68a9 for 51954849748 via META_CLOUD (realFailures: 3, rateLimits: 0)
+[META_SEND] Failed: to=51954849748, elapsed=256ms, code=ETIMEDOUT, status=undefined
+[OUTBOUND_WORKER] Send error for msg_75197403-a4c7-464f-828e-b6bf6bde68a9: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 4/5): Error
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_75197403-a4c7-464f-828e-b6bf6bde68a9 failed: TRANSIENT_ERROR
+[OUTBOUND_WORKER] Processing job msg_1b819723-e437-4a2f-aaf3-fc752efec769 for 51954849748 via META_CLOUD (realFailures: 3, rateLimits: 0)
+[META_SEND] Failed: to=51954849748, elapsed=255ms, code=ETIMEDOUT, status=undefined
+[OUTBOUND_WORKER] Send error for msg_1b819723-e437-4a2f-aaf3-fc752efec769: {"message":"Error","code":"ETIMEDOUT","stack":"AggregateError: Error →     at AxiosError.from (/app/node_modules/axios/dist/node/axios.cjs:914:14) →     at RedirectableRequest.handleRequestError (/app/node_modules/axios/dist/node/axios.cjs:3515:25)"}
+[OUTBOUND_WORKER] Classified as TRANSIENT: code=etimedout, status=undefined, message=error
+[OUTBOUND_WORKER] Transient error (realFailure 4/5): Error
+[BACKOFF] Using custom delay: 10000ms for TRANSIENT_ERROR
+[OUTBOUND_WORKER] Job msg_1b819723-e437-4a2f-aaf3-fc752efec769 failed: TRANSIENT_ERROR
