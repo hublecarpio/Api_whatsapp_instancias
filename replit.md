@@ -23,6 +23,12 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
     *   **Custom Tools Support**: Allows AI agents to call external POST endpoints and utilize native OpenAI function calling.
 *   **Reminder/Follow-up System**: Event-driven scheduling of follow-ups via BullMQ or polling, with AI-enriched message generation and Meta Cloud Template Configuration.
 *   **Redis + BullMQ Queue System**: Manages reminders, message buffering, WhatsApp messages, and AI responses.
+*   **Unified WhatsApp Sender Architecture**: Clean separation between Agent module (generates AI responses) and WhatsApp module (handles all sending):
+    *   `whatsappSender.ts` service provides `queueAgentResponse()`, `queueMessage()`, `markMessageAsRead()`, and `isQueueAvailable()`
+    *   All agent responses flow through `outboundMessageQueue` with proper credential handling per provider (Baileys, Meta Cloud, Meta Coexist)
+    *   Provider-specific recipient normalization: Baileys uses digits-only, Meta preserves full IDs
+    *   Messages saved to DB only after successful send in `outboundMessageProcessor`
+    *   Legacy fallback via `sendAgentResponseDirect()` when Redis unavailable, with consistent metadata (contactJid, contactName)
 *   **Stripe Billing Integration**: Implements tiered pricing, trial periods, recurring payments, webhooks, account suspension, and token credit purchases.
 *   **Email Verification System**: Required for WhatsApp instance creation.
 *   **Robust Deployment**: Dockerized services with improved health checks.
