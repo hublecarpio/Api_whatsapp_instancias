@@ -1844,6 +1844,9 @@ async function processWithAgent(
   // Track if order tool was executed
   let orderToolExecuted = false;
   
+  // Track product images to send automatically (don't rely on AI including the URL)
+  const productImagesToSend: string[] = [];
+  
   while (completion.choices[0]?.message?.tool_calls) {
     const toolCalls = completion.choices[0].message.tool_calls;
     console.log(`[Agent V1] Processing ${toolCalls.length} tool calls: ${toolCalls.map((t: any) => t.function.name).join(', ')}`);
@@ -1902,6 +1905,11 @@ async function processWithAgent(
               url: bestMatch.imageUrl,
               nombre: bestMatch.title
             };
+            // Also save for automatic sending (don't rely on AI including the URL)
+            if (!productImagesToSend.includes(bestMatch.imageUrl)) {
+              productImagesToSend.push(bestMatch.imageUrl);
+              console.log(`[PRODUCT IMAGE] Queued for auto-send: ${bestMatch.imageUrl}`);
+            }
           }
           
           resultContent = JSON.stringify(result);
@@ -2444,6 +2452,59 @@ async function processWithAgent(
       
       // Schedule follow-up after queuing response
       await scheduleFollowUp(businessId, contactPhone, 'ai', instance?.id);
+      
+      // Send product images automatically (don't rely on AI including the URL)
+      // Only send images that were NOT already detected in the AI response
+      const alreadySentUrls = new Set(mediaItems.map(m => m.url));
+      const imagesToSend = productImagesToSend.filter(url => !alreadySentUrls.has(url));
+      
+      if (imagesToSend.length > 0) {
+        console.log(`[PRODUCT IMAGE] Auto-sending ${imagesToSend.length} product images not in AI response`);
+        
+        for (const imageUrl of imagesToSend) {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between images
+            
+            const provider = instance.provider;
+            if (provider === 'BAILEYS' && instance.instanceBackendId) {
+              await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendImage`, {
+                to: contactPhone,
+                url: imageUrl,
+                caption: ''
+              });
+            } else if (['META_CLOUD', 'META_COEXIST'].includes(provider || '')) {
+              // Get credentials from the correct credential object based on provider
+              let accessToken = '';
+              let phoneNumberId = '';
+              
+              if (provider === 'META_COEXIST' && instance.metaCoexistCredential) {
+                accessToken = instance.metaCoexistCredential.systemAccessToken || 
+                              instance.metaCoexistCredential.userAccessToken || '';
+                phoneNumberId = instance.metaCoexistCredential.phoneNumberId;
+              } else if (provider === 'META_CLOUD' && instance.metaCredential) {
+                accessToken = instance.metaCredential.accessToken;
+                phoneNumberId = instance.metaCredential.phoneNumberId;
+              }
+              
+              if (accessToken && phoneNumberId) {
+                const metaService = new MetaCloudService({
+                  accessToken,
+                  phoneNumberId,
+                  businessId: ''
+                });
+                await metaService.sendMessage({
+                  to: contactPhone,
+                  mediaUrl: imageUrl,
+                  mediaType: 'image'
+                });
+              }
+            }
+            console.log(`[PRODUCT IMAGE] Sent: ${imageUrl.substring(0, 60)}...`);
+          } catch (imgError: any) {
+            console.error(`[PRODUCT IMAGE] Failed to send: ${imageUrl}`, imgError.message);
+          }
+        }
+      }
     } catch (sendError: any) {
       console.error('Failed to send WhatsApp message:', sendError.response?.data || sendError.message);
     }

@@ -4,7 +4,7 @@ import prisma from '../prisma.js';
 import { QUEUE_NAMES, MediaDownloadJobData, getQueueConnection, getMediaDownloadQueue } from './index.js';
 import { MetaCloudService, getCircuitBreakerState } from '../metaCloud.js';
 import { uploadBuffer, isS3Configured } from '../storage.js';
-import { dispatchMediaUpdate } from '../webhookService.js';
+import { dispatchMediaUpdate, dispatchUserMessage } from '../webhookService.js';
 import { geminiService } from '../gemini.js';
 
 const MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
@@ -273,6 +273,42 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
       console.log(`${logPrefix} media_update webhook dispatched`);
     } catch (webhookError: any) {
       console.warn(`${logPrefix} Failed to dispatch media_update webhook: ${webhookError.message}`);
+    }
+
+    // Dispatch user_message webhook NOW that media is ready (Option B: wait for media)
+    // Get message data for the webhook
+    try {
+      const messageForWebhook = await prisma.messageLog.findUnique({
+        where: { id: messageLogId },
+        select: {
+          message: true,
+          metadata: true,
+          providerMessageId: true
+        }
+      });
+      
+      if (messageForWebhook) {
+        const webhookMetadata = (messageForWebhook.metadata as Record<string, any>) || {};
+        const pushName = webhookMetadata.pushName || '';
+        const webhookMessage = messageForWebhook.message || '';
+        
+        await dispatchUserMessage(
+          businessId,
+          contactPhone,
+          pushName,
+          webhookMessage,
+          mediaType,
+          finalMediaUrl,
+          {
+            efficoreMessageId: messageLogId,
+            metaMessageId: messageForWebhook.providerMessageId
+          },
+          instanceId
+        );
+        console.log(`${logPrefix} user_message webhook dispatched with mediaUrl`);
+      }
+    } catch (userWebhookError: any) {
+      console.warn(`${logPrefix} Failed to dispatch user_message webhook: ${userWebhookError.message}`);
     }
 
     // Call AI agent now that media is ready

@@ -538,20 +538,26 @@ async function processMessage(
       if (msg.location.name) webhookMessage += ` (${msg.location.name})`;
     }
     
-    dispatchUserMessage(
-      instance.businessId,
-      msg.from,
-      msg.pushName || '',
-      webhookMessage,
-      msg.type,
-      mediaUrl,
-      { 
-        order: msg.order || undefined,
-        efficoreMessageId: messageLog?.id,
-        metaMessageId: msg.messageId
-      },
-      instance.id
-    ).catch(err => webhookLogger.error({ error: err.message }, 'Failed to dispatch user_message webhook'));
+    // Only dispatch user_message webhook if media is NOT pending async download
+    // If media is pending, mediaDownloadProcessor will dispatch after download completes with the mediaUrl
+    if (!mediaPendingData) {
+      dispatchUserMessage(
+        instance.businessId,
+        msg.from,
+        msg.pushName || '',
+        webhookMessage,
+        msg.type,
+        mediaUrl,
+        { 
+          order: msg.order || undefined,
+          efficoreMessageId: messageLog?.id,
+          metaMessageId: msg.messageId
+        },
+        instance.id
+      ).catch(err => webhookLogger.error({ error: err.message }, 'Failed to dispatch user_message webhook'));
+    } else {
+      webhookLogger.debug({ messageId: msg.messageId }, 'Skipping user_message webhook - media pending, will dispatch after download');
+    }
   }
 
   webhookLogger.debug({
