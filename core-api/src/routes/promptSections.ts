@@ -4,6 +4,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/billing.js';
 import OpenAI from 'openai';
 import { geminiService } from '../services/gemini.js';
+import { processEmbeddingsInBackground } from '../services/ragService.js';
 
 const router = Router();
 
@@ -152,7 +153,11 @@ router.post('/:businessId', authMiddleware, requireActiveSubscription, async (re
     }
 
     const embeddingText = `${title}. ${content}`;
-    const embedding = await generateEmbedding(embeddingText);
+    let embedding: number[] | null = null;
+    
+    if (!isCore) {
+      embedding = await generateEmbedding(embeddingText);
+    }
 
     const section = await prisma.promptSection.create({
       data: {
@@ -170,6 +175,13 @@ router.post('/:businessId', authMiddleware, requireActiveSubscription, async (re
         }
       }
     });
+
+    if (!isCore && !embedding) {
+      console.log(`[RAG] Section ${section.id} created without embedding, triggering background processing`);
+      processEmbeddingsInBackground([section.id], businessId).catch(err => {
+        console.error('[RAG] Background embedding error:', err);
+      });
+    }
 
     return res.status(201).json({
       section: {
@@ -212,6 +224,8 @@ router.put('/:businessId/:sectionId', authMiddleware, requireActiveSubscription,
     }
 
     const updateData: any = {};
+    let needsBackgroundEmbedding = false;
+    const finalIsCore = isCore !== undefined ? isCore : existingSection.isCore;
 
     if (title !== undefined) updateData.title = title;
     if (type !== undefined) updateData.type = type;
@@ -221,25 +235,48 @@ router.put('/:businessId/:sectionId', authMiddleware, requireActiveSubscription,
 
     if (content !== undefined && content !== existingSection.content) {
       updateData.content = content;
-      const embeddingText = `${title || existingSection.title}. ${content}`;
-      updateData.embedding = await generateEmbedding(embeddingText);
-      updateData.metadata = {
-        wordCount: content.split(/\s+/).length,
-        hasEmbedding: !!updateData.embedding
-      };
+      
+      if (!finalIsCore) {
+        const embeddingText = `${title || existingSection.title}. ${content}`;
+        updateData.embedding = await generateEmbedding(embeddingText);
+        updateData.metadata = {
+          wordCount: content.split(/\s+/).length,
+          hasEmbedding: !!updateData.embedding
+        };
+        if (!updateData.embedding) {
+          needsBackgroundEmbedding = true;
+        }
+      } else {
+        updateData.metadata = {
+          wordCount: content.split(/\s+/).length,
+          hasEmbedding: false
+        };
+      }
     } else if (title !== undefined && title !== existingSection.title) {
-      const embeddingText = `${title}. ${existingSection.content}`;
-      updateData.embedding = await generateEmbedding(embeddingText);
-      updateData.metadata = {
-        ...((existingSection.metadata as any) || {}),
-        hasEmbedding: !!updateData.embedding
-      };
+      if (!finalIsCore) {
+        const embeddingText = `${title}. ${existingSection.content}`;
+        updateData.embedding = await generateEmbedding(embeddingText);
+        updateData.metadata = {
+          ...((existingSection.metadata as any) || {}),
+          hasEmbedding: !!updateData.embedding
+        };
+        if (!updateData.embedding) {
+          needsBackgroundEmbedding = true;
+        }
+      }
     }
 
     const section = await prisma.promptSection.update({
       where: { id: sectionId },
       data: updateData
     });
+
+    if (needsBackgroundEmbedding) {
+      console.log(`[RAG] Section ${sectionId} updated without embedding, triggering background processing`);
+      processEmbeddingsInBackground([sectionId], businessId).catch(err => {
+        console.error('[RAG] Background embedding error:', err);
+      });
+    }
 
     return res.json({
       section: {
@@ -581,6 +618,7 @@ router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscri
     }
 
     const results = { created: 0, errors: [] as string[] };
+    const createdSectionIds: string[] = [];
 
     for (const section of sections) {
       try {
@@ -589,19 +627,7 @@ router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscri
           continue;
         }
 
-        // Generate embedding for non-core sections
-        let embedding: number[] | null = null;
-        if (!section.isCore) {
-          console.log(`[RAG-IMPORT] Generating embedding for section: ${section.title}`);
-          embedding = await generateEmbedding(`${section.title}\n${section.content}`);
-          if (embedding) {
-            console.log(`[RAG-IMPORT] ✓ Embedding generated (${embedding.length} dimensions)`);
-          } else {
-            console.warn(`[RAG-IMPORT] ✗ No embedding generated for: ${section.title}`);
-          }
-        }
-
-        await prisma.promptSection.create({
+        const newSection = await prisma.promptSection.create({
           data: {
             businessId,
             instanceId: instanceId || null,
@@ -611,26 +637,39 @@ router.post('/:businessId/import-sections', authMiddleware, requireActiveSubscri
             isCore: section.isCore || false,
             priority: section.priority || 5,
             keywords: section.keywords || [],
-            embedding: embedding as any,
             sourceType: 'import',
             enabled: true,
             metadata: {
-              hasEmbedding: !!embedding
+              hasEmbedding: false,
+              importedAt: new Date().toISOString()
             }
           }
         });
+        
         results.created++;
+        
+        if (!section.isCore) {
+          createdSectionIds.push(newSection.id);
+        }
       } catch (err: any) {
         results.errors.push(`${section.title}: ${err.message}`);
       }
     }
 
     console.log(`[RAG-IMPORT] Import complete: ${results.created} created, ${results.errors.length} errors`);
+    console.log(`[RAG-IMPORT] Triggering background embedding for ${createdSectionIds.length} non-core sections`);
+
+    if (createdSectionIds.length > 0) {
+      processEmbeddingsInBackground(createdSectionIds, businessId).catch(err => {
+        console.error('[RAG-IMPORT] Background embedding error:', err);
+      });
+    }
 
     return res.json({
       success: true,
       created: results.created,
-      errors: results.errors
+      errors: results.errors,
+      embeddingsPending: createdSectionIds.length
     });
   } catch (error) {
     console.error('Error importing sections:', error);

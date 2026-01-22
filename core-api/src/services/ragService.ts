@@ -285,3 +285,91 @@ export async function getRAGStats(businessId: string): Promise<{
     withoutEmbeddings
   };
 }
+
+export async function processEmbeddingsInBackground(
+  sectionIds: string[],
+  businessId: string
+): Promise<void> {
+  if (sectionIds.length === 0) {
+    console.log('[RAG] No sections to process for embeddings');
+    return;
+  }
+
+  console.log(`[RAG-BACKGROUND] Starting async embedding processing for ${sectionIds.length} sections`);
+  
+  const MAX_RETRIES = 3;
+  const BASE_DELAY_MS = 1000;
+  
+  let processed = 0;
+  let failed = 0;
+  
+  for (const sectionId of sectionIds) {
+    let retries = 0;
+    let success = false;
+    
+    while (retries < MAX_RETRIES && !success) {
+      try {
+        const section = await prisma.promptSection.findUnique({
+          where: { id: sectionId },
+          select: { id: true, title: true, content: true, embedding: true, isCore: true, metadata: true }
+        });
+        
+        if (!section) {
+          console.log(`[RAG-BACKGROUND] Section ${sectionId} not found, skipping`);
+          break;
+        }
+        
+        if (section.embedding) {
+          console.log(`[RAG-BACKGROUND] Section ${sectionId} already has embedding, skipping`);
+          success = true;
+          break;
+        }
+        
+        if (section.isCore) {
+          console.log(`[RAG-BACKGROUND] Section ${sectionId} is Core, skipping embedding`);
+          success = true;
+          break;
+        }
+        
+        const text = `${section.title}\n${section.content}`;
+        const embedding = await generateEmbedding(text, businessId);
+        
+        if (embedding) {
+          await prisma.promptSection.update({
+            where: { id: sectionId },
+            data: { 
+              embedding,
+              metadata: {
+                ...((section.metadata as any) || {}),
+                hasEmbedding: true,
+                embeddedAt: new Date().toISOString()
+              }
+            }
+          });
+          processed++;
+          success = true;
+          console.log(`[RAG-BACKGROUND] Successfully embedded section ${sectionId} (${processed}/${sectionIds.length})`);
+        } else {
+          throw new Error('Embedding generation returned null');
+        }
+      } catch (error: any) {
+        retries++;
+        const delay = BASE_DELAY_MS * Math.pow(2, retries - 1);
+        console.warn(`[RAG-BACKGROUND] Retry ${retries}/${MAX_RETRIES} for section ${sectionId} after error: ${error.message}`);
+        
+        if (retries < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    if (!success) {
+      failed++;
+      console.error(`[RAG-BACKGROUND] Failed to embed section ${sectionId} after ${MAX_RETRIES} retries`);
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  
+  console.log(`[RAG-BACKGROUND] Completed: ${processed} embedded, ${failed} failed out of ${sectionIds.length} total`);
+}
