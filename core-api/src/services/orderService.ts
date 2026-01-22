@@ -22,6 +22,8 @@ export interface CreateOrderParams {
   shippingCity?: string | null;
   shippingCountry?: string | null;
   locationCoordinates?: string | null;
+  deliveryZoneId?: string | null;
+  shippingCost?: number;
   items: OrderItem[];
   source: 'agent_tool' | 'auto_creator' | 'manual' | 'payment_link';
   skipIdempotency?: boolean;
@@ -116,7 +118,7 @@ export async function checkExistingPendingOrder(
   businessId: string,
   contactPhone: string,
   instanceId?: string | null
-): Promise<{ id: string; status: string; totalAmount: number } | null> {
+): Promise<{ id: string; status: string; totalAmount: number; deliveryZoneId: string | null; shippingCost: number | null; discountAmount: number | null } | null> {
   const normalizedPhone = contactPhone.replace(/\D/g, '');
   
   const existingOrder = await prisma.order.findFirst({
@@ -127,7 +129,7 @@ export async function checkExistingPendingOrder(
       status: { in: ['PENDING_PAYMENT', 'AWAITING_VOUCHER'] }
     },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, status: true, totalAmount: true }
+    select: { id: true, status: true, totalAmount: true, deliveryZoneId: true, shippingCost: true, discountAmount: true }
   });
   
   return existingOrder;
@@ -143,6 +145,8 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
     shippingCity,
     shippingCountry,
     locationCoordinates,
+    deliveryZoneId,
+    shippingCost = 0,
     items,
     source,
     skipIdempotency = false,
@@ -201,7 +205,8 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
     if (existingPending) {
       console.log(`[ORDER-SERVICE] Updating existing pending order ${existingPending.id}`);
       
-      const subtotal = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+      const subtotalAmount = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+      const totalAmount = subtotalAmount + shippingCost;
       
       await prisma.$transaction(async (tx) => {
         await tx.orderItem.deleteMany({
@@ -216,7 +221,10 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
             shippingCity,
             shippingCountry,
             locationCoordinates,
-            totalAmount: subtotal,
+            deliveryZoneId: deliveryZoneId || existingPending.deliveryZoneId || null,
+            shippingCost: shippingCost || existingPending.shippingCost || 0,
+            subtotalAmount,
+            totalAmount,
             idempotencyKey,
             orderSource: source,
             notes: `Updated by ${source}: ${new Date().toISOString()}`,
@@ -237,7 +245,7 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
         success: true, 
         orderId: existingPending.id, 
         status: existingPending.status,
-        totalAmount: subtotal,
+        totalAmount,
         isNew: false, 
         reason: 'Updated existing pending order',
         awaitingVoucher: existingPending.status === 'AWAITING_VOUCHER'
@@ -290,7 +298,7 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
       }
     }
 
-    const totalAmount = subtotalAmount - discountAmount;
+    const totalAmount = subtotalAmount - discountAmount + shippingCost;
 
     try {
       const order = await prisma.$transaction(async (tx) => {
@@ -304,6 +312,8 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
             shippingCity: shippingCity || null,
             shippingCountry: shippingCountry || null,
             locationCoordinates: locationCoordinates || null,
+            deliveryZoneId: deliveryZoneId || null,
+            shippingCost: shippingCost || 0,
             subtotalAmount,
             totalAmount,
             currencyCode: business.currencyCode || 'PEN',
@@ -468,11 +478,17 @@ export async function addItemToExistingOrder(
       where: { orderId: existingOrder.id }
     });
     
-    const newTotal = updatedItems.reduce((sum, i) => sum + (i.unitPrice * i.quantity), 0);
+    const subtotalAmount = updatedItems.reduce((sum, i) => sum + (i.unitPrice * i.quantity), 0);
+    const shippingCost = existingOrder.shippingCost || 0;
+    const discountAmount = existingOrder.discountAmount || 0;
+    const newTotal = subtotalAmount - discountAmount + shippingCost;
     
     await prisma.order.update({
       where: { id: existingOrder.id },
-      data: { totalAmount: newTotal }
+      data: { 
+        subtotalAmount,
+        totalAmount: newTotal 
+      }
     });
     
     return {

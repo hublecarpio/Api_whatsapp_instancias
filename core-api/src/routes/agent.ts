@@ -1109,6 +1109,18 @@ async function processWithAgent(
     orderBy: { createdAt: 'desc' }
   });
   
+  // Load delivery zones filtered by instanceId
+  const deliveryZones = await prisma.deliveryZone.findMany({
+    where: {
+      businessId,
+      isActive: true,
+      OR: instanceId 
+        ? [{ instanceId }, { instanceId: null }]
+        : [{ instanceId: null }]
+    },
+    orderBy: { order: 'asc' }
+  });
+  
   if (!business) {
     throw new Error('Business not found');
   }
@@ -1423,6 +1435,53 @@ async function processWithAgent(
     systemPrompt += `\n- Si el cliente insiste en productos, sugiere que contacte directamente al negocio para más información.`;
   }
   
+  // Add delivery zones for SALES mode
+  if (!isAppointmentMode && deliveryZones.length > 0) {
+    systemPrompt += `\n\n## Zonas de entrega disponibles:`;
+    deliveryZones.forEach((zone: any) => {
+      systemPrompt += `\n- [ZONA:${zone.id}] ${zone.name}`;
+      if (zone.districts && zone.districts.length > 0) {
+        systemPrompt += `: ${zone.districts.join(', ')}`;
+      }
+      if (zone.cost !== null && zone.cost !== undefined) {
+        systemPrompt += ` - Costo envío: ${currencySymbol}${zone.cost}`;
+      }
+      if (zone.freeAbove) {
+        systemPrompt += ` (Gratis si compra es mayor a ${currencySymbol}${zone.freeAbove})`;
+      }
+      if (zone.deliveryTime) {
+        systemPrompt += ` - Tiempo: ${zone.deliveryTime}`;
+      }
+    });
+    systemPrompt += `\n\n## Reglas para zonas de entrega:`;
+    systemPrompt += `\n- SIEMPRE pregunta al cliente a qué zona/distrito pertenece su dirección de entrega.`;
+    systemPrompt += `\n- Verifica que el distrito/zona del cliente esté en la lista de arriba.`;
+    systemPrompt += `\n- Si el cliente menciona un distrito que NO está en ninguna zona, informa que no tienen cobertura en esa zona.`;
+    systemPrompt += `\n- Calcula el total incluyendo el costo de envío según la zona del cliente.`;
+    systemPrompt += `\n- Si la compra supera el monto de "freeAbove", el envío es GRATIS.`;
+  }
+  
+  // Add voucher/order flow instructions for SALES mode
+  if (!isAppointmentMode) {
+    const canUsePaymentLink = business.user?.paymentLinkEnabled ?? false;
+    
+    if (!canUsePaymentLink) {
+      systemPrompt += `\n\n## ⚠️ FLUJO DE VENTA CON VOUCHER - OBLIGATORIO:`;
+      systemPrompt += `\n1. **PASO 1 - PRODUCTO**: Identifica qué producto(s) quiere el cliente y la cantidad.`;
+      systemPrompt += `\n2. **PASO 2 - ZONA DE ENTREGA**: Pregunta el distrito/zona de entrega del cliente para calcular el costo de envío.`;
+      systemPrompt += `\n3. **PASO 3 - RESUMEN Y TOTAL**: Muestra el resumen del pedido con: productos, cantidades, subtotal, costo de envío y TOTAL FINAL.`;
+      systemPrompt += `\n4. **PASO 4 - DATOS DE ENVÍO**: Pide nombre completo y dirección exacta de entrega.`;
+      systemPrompt += `\n5. **PASO 5 - CREAR PEDIDO**: Usa registrar_pedido para crear el pedido con todos los datos.`;
+      systemPrompt += `\n6. **PASO 6 - SOLICITAR VOUCHER**: Pide al cliente que envíe foto del comprobante de pago (voucher/transferencia).`;
+      systemPrompt += `\n7. **PASO 7 - CONFIRMAR**: Cuando el cliente envíe el voucher, se validará automáticamente.`;
+      systemPrompt += `\n\n## Reglas del flujo:`;
+      systemPrompt += `\n- NO saltes pasos. Sigue el orden establecido.`;
+      systemPrompt += `\n- NO crees el pedido sin tener: producto, cantidad, zona de entrega, nombre y dirección.`;
+      systemPrompt += `\n- SIEMPRE muestra el total ANTES de crear el pedido para que el cliente confirme.`;
+      systemPrompt += `\n- Cuando el cliente envíe una imagen de voucher, el sistema la procesará automáticamente.`;
+    }
+  }
+  
   // Add appointments context for APPOINTMENTS mode
   if (isAppointmentMode) {
     systemPrompt += `\n\n## Modo Citas Activo:`;
@@ -1501,16 +1560,32 @@ async function processWithAgent(
   });
   
   if (pendingVoucherOrder) {
-    const productNames = pendingVoucherOrder.items.map(i => i.productTitle).join(', ');
-    systemPrompt += `\n\n## PEDIDO PENDIENTE DE PAGO:`;
-    systemPrompt += `\n- El cliente tiene un pedido pendiente de comprobante de pago`;
+    const productNames = pendingVoucherOrder.items.map(i => `${i.productTitle} x${i.quantity}`).join(', ');
+    const subtotal = pendingVoucherOrder.subtotalAmount || pendingVoucherOrder.items.reduce((sum, i) => sum + (i.unitPrice * i.quantity), 0);
+    const shipping = pendingVoucherOrder.shippingCost || 0;
+    
+    systemPrompt += `\n\n## ⚠️ PEDIDO PENDIENTE DE PAGO (ID: ${pendingVoucherOrder.id.slice(-8)}):`;
     systemPrompt += `\n- Productos: ${productNames}`;
-    systemPrompt += `\n- Total: ${pendingVoucherOrder.currencySymbol}${pendingVoucherOrder.totalAmount.toFixed(2)}`;
+    systemPrompt += `\n- Subtotal: ${pendingVoucherOrder.currencySymbol}${subtotal.toFixed(2)}`;
+    if (shipping > 0) {
+      systemPrompt += `\n- Envío: ${pendingVoucherOrder.currencySymbol}${shipping.toFixed(2)}`;
+    }
+    systemPrompt += `\n- TOTAL A PAGAR: ${pendingVoucherOrder.currencySymbol}${pendingVoucherOrder.totalAmount.toFixed(2)}`;
+    if (pendingVoucherOrder.shippingAddress) {
+      systemPrompt += `\n- Dirección de envío: ${pendingVoucherOrder.shippingAddress}`;
+    }
     
     if (pendingVoucherOrder.voucherImageUrl) {
-      systemPrompt += `\n- COMPROBANTE RECIBIDO: El cliente ya envió su comprobante de pago. Agradécele y confirma que el equipo revisará el pago pronto.`;
+      systemPrompt += `\n\n## ✅ COMPROBANTE RECIBIDO:`;
+      systemPrompt += `\n- El cliente ya envió su comprobante de pago.`;
+      systemPrompt += `\n- Agradécele y confirma que el equipo está validando el pago.`;
+      systemPrompt += `\n- NO le pidas más comprobantes ni datos adicionales.`;
     } else {
-      systemPrompt += `\n- Recuerda pedirle amablemente que envíe el comprobante de pago (foto del voucher/transferencia) para confirmar su pedido.`;
+      systemPrompt += `\n\n## 📱 ESPERANDO COMPROBANTE DE PAGO:`;
+      systemPrompt += `\n- Pide amablemente al cliente que envíe una FOTO del comprobante de pago (voucher/transferencia).`;
+      systemPrompt += `\n- Recuérdale el monto total a depositar: ${pendingVoucherOrder.currencySymbol}${pendingVoucherOrder.totalAmount.toFixed(2)}`;
+      systemPrompt += `\n- Cuando el cliente envíe una IMAGEN, el sistema la procesará automáticamente como comprobante.`;
+      systemPrompt += `\n- NO crees otro pedido mientras este está pendiente.`;
     }
   }
   
@@ -1711,12 +1786,20 @@ async function processWithAgent(
               type: 'string',
               description: 'País de envío'
             },
+            zona_entrega: {
+              type: 'string',
+              description: 'Nombre o ID de la zona de entrega del cliente (ej: "Lima Centro", "Miraflores"). Debe coincidir con una de las zonas de entrega configuradas.'
+            },
+            costo_envio: {
+              type: 'number',
+              description: 'Costo de envío calculado según la zona de entrega. Puede ser 0 si el pedido supera el monto de envío gratis.'
+            },
             coordenadas_ubicacion: {
               type: 'string',
               description: 'Coordenadas GPS de la ubicación del cliente en formato "latitud,longitud" (ejemplo: -12.046374,-77.042793). Se obtiene cuando el cliente comparte su ubicación actual por WhatsApp.'
             }
           },
-          required: ['producto_id', 'nombre_cliente', 'direccion_envio']
+          required: ['producto_id', 'nombre_cliente', 'direccion_envio', 'zona_entrega']
         }
       }
     });
@@ -1966,14 +2049,51 @@ async function processWithAgent(
         const city = args.ciudad || '';
         const country = args.pais || '';
         const locationCoordinates = args.coordenadas_ubicacion || null;
+        const deliveryZoneName = args.zona_entrega || '';
+        const shippingCostFromAgent = args.costo_envio ?? null;
         
         const canUsePaymentLink = business.user?.paymentLinkEnabled || false;
-        console.log(`[Agent V1] Order tool: product="${productSearch}", qty=${quantity}, paymentLink=${canUsePaymentLink}, instance=${instanceId || 'NULL'}`);
+        console.log(`[Agent V1] Order tool: product="${productSearch}", qty=${quantity}, paymentLink=${canUsePaymentLink}, zone="${deliveryZoneName}", shippingCost=${shippingCostFromAgent}, instance=${instanceId || 'NULL'}`);
         
         let paymentResult: string;
         
         if (!canUsePaymentLink) {
           const product = await findProductWithScope(businessId, productSearch, instanceId);
+          
+          // Look up delivery zone and calculate shipping cost
+          let shippingCost = shippingCostFromAgent;
+          let deliveryZoneId: string | null = null;
+          
+          if (deliveryZoneName) {
+            // Try to find delivery zone by name or ID
+            const zone = await prisma.deliveryZone.findFirst({
+              where: {
+                businessId,
+                isActive: true,
+                OR: [
+                  { id: deliveryZoneName },
+                  { name: { contains: deliveryZoneName, mode: 'insensitive' } },
+                  { districts: { has: deliveryZoneName } }
+                ]
+              }
+            });
+            
+            if (zone) {
+              deliveryZoneId = zone.id;
+              // Only calculate shipping if agent didn't provide it
+              if (shippingCost === null) {
+                const subtotal = (product?.price || 0) * quantity;
+                // Check if order qualifies for free shipping
+                if (zone.freeAbove && subtotal >= zone.freeAbove) {
+                  shippingCost = 0;
+                  console.log(`[Agent V1] Free shipping applied (subtotal ${subtotal} >= freeAbove ${zone.freeAbove})`);
+                } else {
+                  shippingCost = zone.cost || 0;
+                }
+              }
+              console.log(`[Agent V1] Found delivery zone: ${zone.name}, shippingCost: ${shippingCost}`);
+            }
+          }
           
           const orderResult = await createOrder({
             businessId,
@@ -1984,6 +2104,8 @@ async function processWithAgent(
             shippingCity: city,
             shippingCountry: country,
             locationCoordinates,
+            deliveryZoneId,
+            shippingCost: shippingCost || 0,
             items: [{
               productId: product?.id || null,
               productTitle: product?.title || productSearch,

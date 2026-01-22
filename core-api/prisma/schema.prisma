@@ -1018,6 +1018,7 @@ model Order {
   shippingZip           String?
   shippingCountry       String?
   locationCoordinates   String?
+  deliveryZoneId        String?
   notes                 String?
   totalAmount           Float
   subtotalAmount        Float?
