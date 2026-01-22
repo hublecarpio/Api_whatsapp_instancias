@@ -1368,13 +1368,21 @@ async function processWithAgent(
         systemPrompt += ` [IMG:${product.imageUrl}]`;
       }
     });
+    systemPrompt += `\n\n## ⚠️ REGLA ABSOLUTAMENTE CRÍTICA - NO INVENTAR PRODUCTOS:`;
+    systemPrompt += `\n- PROHIBIDO inventar, imaginar o suponer productos que NO están en el catálogo de arriba.`;
+    systemPrompt += `\n- Solo puedes ofrecer los ${productCount} productos listados arriba. NADA MÁS.`;
+    systemPrompt += `\n- OBLIGATORIO: Verifica que el producto que menciona el cliente EXISTE en la lista de arriba antes de dar cualquier información.`;
+    systemPrompt += `\n- Si el cliente pregunta por un producto que NO está en la lista de arriba, responde: "Lo siento, ese producto no está disponible en nuestro catálogo. ¿Te puedo ayudar con alguno de nuestros productos disponibles?"`;
+    systemPrompt += `\n- NUNCA menciones marcas, modelos, precios o características de productos que NO estén explícitamente listados arriba.`;
+    systemPrompt += `\n- Si no estás 100% seguro de que el producto existe en la lista, di que no lo tienes disponible.`;
     systemPrompt += `\n\n## Reglas para responder sobre productos:`;
-    systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué KTM tienen"), PRIMERO pregunta qué modelo específico le interesa.`;
-    systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto, muestra los detalles de ese producto.`;
+    systemPrompt += `\n- ANTES de responder sobre cualquier producto, verifica que esté en la lista de arriba.`;
+    systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué tienen"), PRIMERO pregunta qué modelo específico le interesa.`;
+    systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto Y esté en la lista, muestra los detalles de ese producto.`;
     systemPrompt += `\n- ENVÍO DE IMÁGENES: SIEMPRE sigue la "instruccion" que devuelve buscar_producto para enviar la foto del producto.`;
     systemPrompt += `\n- OBLIGATORIO: Si buscar_producto devuelve "imagen_producto", DEBES incluir la URL al final de tu mensaje.`;
     systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
-    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas.`;
+    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas DEL CATÁLOGO.`;
     systemPrompt += `\n- Para generar pedidos, usa el ID del producto (el valor después de "ID:").`;
     systemPrompt += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:`;
     systemPrompt += `\n- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.`;
@@ -1385,19 +1393,34 @@ async function processWithAgent(
     systemPrompt += `\n\n## Catálogo de productos:`;
     systemPrompt += `\nTienes acceso a un catálogo de ${productCount} productos con BÚSQUEDA INTELIGENTE.`;
     systemPrompt += `\nLos precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).`;
+    systemPrompt += `\n\n## ⚠️ REGLA ABSOLUTAMENTE CRÍTICA - NO INVENTAR PRODUCTOS:`;
+    systemPrompt += `\n- PROHIBIDO inventar, imaginar o suponer productos que NO existen en el catálogo.`;
+    systemPrompt += `\n- SIEMPRE usa buscar_producto antes de mencionar cualquier producto al cliente.`;
+    systemPrompt += `\n- Si buscar_producto NO encuentra el producto, responde: "Lo siento, ese producto no está disponible en nuestro catálogo. ¿Te puedo ayudar con otro producto?"`;
+    systemPrompt += `\n- NUNCA menciones marcas, modelos, precios o características de productos sin haberlos buscado primero.`;
+    systemPrompt += `\n- Si buscar_producto retorna error o "no encontrado", NO inventes el producto. Pregunta qué más busca el cliente.`;
     systemPrompt += `\n\n## Reglas para responder sobre productos:`;
-    systemPrompt += `\n- Cuando el cliente mencione un producto, usa buscar_producto inmediatamente.`;
+    systemPrompt += `\n- OBLIGATORIO: Cuando el cliente mencione un producto, usa buscar_producto INMEDIATAMENTE antes de responder.`;
     systemPrompt += `\n- La búsqueda es inteligente: encontrará productos aunque el cliente escriba con errores.`;
-    systemPrompt += `\n- CONFÍA en "mejor_coincidencia" - es el producto más parecido a lo que busca el cliente.`;
+    systemPrompt += `\n- IMPORTANTE sobre "mejor_coincidencia": Verifica que el nombre del producto coincida razonablemente con lo que busca el cliente. Si la similitud es menor al 70% o el nombre es muy diferente, pregunta al cliente si se refiere a ese producto.`;
+    systemPrompt += `\n- Si el resultado de buscar_producto tiene "error: true" o "coincidencia_exacta: false" con baja similitud, NO asumas que es el producto correcto. Pregunta al cliente.`;
     systemPrompt += `\n- ENVÍO DE IMÁGENES: SIEMPRE sigue la "instruccion" que devuelve buscar_producto para enviar la foto del producto.`;
     systemPrompt += `\n- OBLIGATORIO: Si buscar_producto devuelve "imagen_producto", DEBES incluir la URL al final de tu mensaje.`;
     systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
-    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere alternativas.`;
+    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere alternativas DEL CATÁLOGO (usando buscar_producto).`;
     systemPrompt += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:`;
     systemPrompt += `\n- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.`;
     systemPrompt += `\n- NUNCA digas "tu pedido está registrado/agendado/confirmado" sin haber ejecutado la herramienta primero.`;
     systemPrompt += `\n- Solo confirma el pedido DESPUÉS de recibir "exito: true" de la herramienta.`;
     systemPrompt += `\n- Si la herramienta falla, informa al cliente del error y NO confirmes el pedido.`;
+  } else if (!isAppointmentMode && productCount === 0) {
+    // Handle empty catalog case
+    systemPrompt += `\n\n## ⚠️ CATÁLOGO VACÍO - REGLA CRÍTICA:`;
+    systemPrompt += `\n- Este negocio NO tiene productos registrados en el catálogo.`;
+    systemPrompt += `\n- PROHIBIDO inventar, mencionar o sugerir productos de cualquier tipo.`;
+    systemPrompt += `\n- Si el cliente pregunta por productos o precios, responde: "Actualmente no tenemos productos disponibles en nuestro catálogo. ¿Hay algo más en lo que pueda ayudarte?"`;
+    systemPrompt += `\n- NO menciones marcas, modelos ni precios porque NO hay catálogo disponible.`;
+    systemPrompt += `\n- Si el cliente insiste en productos, sugiere que contacte directamente al negocio para más información.`;
   }
   
   // Add appointments context for APPOINTMENTS mode
@@ -1915,8 +1938,10 @@ async function processWithAgent(
           resultContent = JSON.stringify(result);
         } else {
           resultContent = JSON.stringify({ 
-            mensaje: `No se encontraron productos similares a "${searchQuery}"`,
-            sugerencia: 'Intenta con otro término o pregunta al cliente por más detalles'
+            error: true,
+            mensaje: `PRODUCTO NO ENCONTRADO: "${searchQuery}" no existe en el catálogo.`,
+            instruccion_obligatoria: 'NO inventes este producto. Responde al cliente que ese producto no está disponible y pregunta si le interesa otro producto del catálogo.',
+            sugerencia: 'Pregunta al cliente qué otro producto le interesa o si quiere ver las opciones disponibles.'
           });
         }
         
