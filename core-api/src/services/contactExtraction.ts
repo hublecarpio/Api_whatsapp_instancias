@@ -20,7 +20,9 @@ export async function getExtractionFieldsForBusiness(businessId: string) {
       { fieldKey: 'email', fieldLabel: 'Email', required: false, order: 1 },
       { fieldKey: 'direccion', fieldLabel: 'Dirección', required: false, order: 2 },
       { fieldKey: 'ciudad', fieldLabel: 'Ciudad', required: false, order: 3 },
-      { fieldKey: 'telefono_alternativo', fieldLabel: 'Teléfono alternativo', required: false, order: 4 }
+      { fieldKey: 'telefono_alternativo', fieldLabel: 'Teléfono alternativo', required: false, order: 4 },
+      { fieldKey: 'producto', fieldLabel: 'Producto solicitado', required: false, order: 5 },
+      { fieldKey: 'precio', fieldLabel: 'Precio del producto', required: false, order: 6 }
     ];
 
     await prisma.extractionField.createMany({

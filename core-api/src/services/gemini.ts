@@ -509,8 +509,20 @@ IMPORTANTE: stageName DEBE ser EXACTAMENTE igual a uno de los nombres de etapa l
     }
 
     try {
-      const conversationText = conversationHistory
-        .slice(-30)
+      const filteredHistory = conversationHistory
+        .filter(msg => {
+          const content = msg.content.toLowerCase();
+          if (content.includes('[descripción de imagen]') || content.includes('[descripcion de imagen]')) {
+            return false;
+          }
+          if (content.includes('[audio transcrito]') || content.includes('[video analizado]')) {
+            return false;
+          }
+          return true;
+        })
+        .slice(-30);
+
+      const conversationText = filteredHistory
         .map(msg => `${msg.role === 'assistant' ? 'Agente' : 'Cliente'}: ${msg.content}`)
         .join('\n');
 
@@ -522,6 +534,16 @@ DATOS A EXTRAER: ${fieldsList}
 
 CONVERSACIÓN:
 ${conversationText}
+
+REGLAS CRÍTICAS:
+1. Solo extrae información que el CLIENTE haya ESCRITO directamente en sus mensajes
+2. IGNORA COMPLETAMENTE cualquier dato de:
+   - Comprobantes de pago (Yape, Plin, BCP, BBVA, etc.)
+   - Nombres de destinatarios/remitentes en vouchers o transferencias
+   - Descripciones de imágenes o capturas
+3. El NOMBRE es lo que el cliente ESCRIBIÓ, NO el nombre de un voucher de pago
+
+EJEMPLO: Si el cliente escribe "Me llamo Ana" y hay un voucher con nombre "Carlos López", el nombre correcto es "Ana".
 
 Responde SOLO en formato JSON con los datos encontrados. Usa null para datos no encontrados.
 Ejemplo: {"nombre": "Juan Pérez", "email": null, "direccion": "Av. Principal 123"}

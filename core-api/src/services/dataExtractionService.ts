@@ -52,6 +52,16 @@ export async function extractDataFromConversation(
 
     const clientMessagesOnly = conversationHistory
       .filter(m => m.role === 'user')
+      .filter(m => {
+        const content = m.content.toLowerCase();
+        if (content.includes('[descripción de imagen]') || content.includes('[descripcion de imagen]')) {
+          return false;
+        }
+        if (content.includes('[audio transcrito]') || content.includes('[video analizado]')) {
+          return false;
+        }
+        return true;
+      })
       .slice(-8);
     
     if (clientMessagesOnly.length === 0) {
@@ -67,18 +77,28 @@ export async function extractDataFromConversation(
       `- ${f.fieldKey} (${f.fieldLabel}): ${f.description || f.fieldLabel}`
     ).join('\n');
 
-    const systemPrompt = `Eres un asistente de extracción de datos. Tu tarea es identificar información específica de los mensajes del cliente y extraerla.
+    const systemPrompt = `Eres un asistente de extracción de datos. Tu tarea es identificar información específica de los mensajes ESCRITOS por el cliente y extraerla.
 
 Analiza SOLO los mensajes del cliente y extrae los siguientes campos si están presentes:
 ${fieldDescriptions}
 
-REGLAS:
-1. Solo extrae información que el CLIENTE haya proporcionado explícitamente en sus mensajes
-2. No inventes datos ni hagas suposiciones
-3. Si un dato no está presente, devuelve null
-4. Para emails, valida que tenga formato correcto
-5. Para teléfonos, extrae solo los dígitos
-6. Devuelve un JSON con el formato: {"fieldKey": "valor o null", ...}
+REGLAS CRÍTICAS:
+1. Solo extrae información que el CLIENTE haya ESCRITO explícitamente en sus mensajes de texto
+2. IGNORA COMPLETAMENTE cualquier información que provenga de:
+   - Comprobantes de pago (Yape, Plin, transferencias bancarias)
+   - Nombres de destinatarios o remitentes en vouchers
+   - Descripciones de imágenes o capturas de pantalla
+   - Metadatos de transacciones financieras
+3. El NOMBRE del cliente es el que él/ella ESCRIBE en el chat, NO el nombre que aparece en un voucher de pago
+4. No inventes datos ni hagas suposiciones
+5. Si un dato no está presente en texto escrito por el cliente, devuelve null
+6. Para emails, valida que tenga formato correcto
+7. Para teléfonos, extrae solo los dígitos
+8. Devuelve un JSON con el formato: {"fieldKey": "valor o null", ...}
+
+EJEMPLO DE ERROR A EVITAR:
+- Si el cliente escribe "Mi nombre es María García" y luego envía un voucher de Yape con el nombre "Juan Pérez", 
+  el nombre correcto es "María García" (lo que escribió), NO "Juan Pérez" (del voucher).
 
 Responde SOLO con el JSON, sin explicaciones.`;
 

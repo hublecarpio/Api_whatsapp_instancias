@@ -3,6 +3,29 @@ import { getExtractedDataForContact } from './dataExtractionService.js';
 import { getContactStageStatus } from './funnelStageService.js';
 import { createOrder, findProductWithScope } from './orderService.js';
 
+function extractPriceFromText(text: string): number | null {
+  const pricePatterns = [
+    /(?:s\/\.?|S\/\.?|soles?)\s*(\d+(?:[.,]\d{1,2})?)/gi,
+    /(\d+(?:[.,]\d{1,2})?)\s*(?:soles?|S\/\.?|s\/\.?)/gi,
+    /(?:precio|cuesta|vale|costo|monto)[\s:]+(?:s\/\.?|S\/\.?)?\s*(\d+(?:[.,]\d{1,2})?)/gi,
+    /(?:\$|usd?)\s*(\d+(?:[.,]\d{1,2})?)/gi,
+    /(\d+(?:[.,]\d{1,2})?)\s*(?:\$|usd?)/gi
+  ];
+  
+  for (const pattern of pricePatterns) {
+    pattern.lastIndex = 0;
+    const match = pattern.exec(text);
+    if (match) {
+      const priceStr = (match[1] || match[0]).replace(/[^\d.,]/g, '').replace(',', '.');
+      const price = parseFloat(priceStr);
+      if (!isNaN(price) && price > 0 && price < 100000) {
+        return price;
+      }
+    }
+  }
+  return null;
+}
+
 interface OrderReadyData {
   productId: string | null;
   productTitle: string;
@@ -83,6 +106,42 @@ export async function checkOrderReady(
 
   if (!product) {
     console.log(`[ORDER-AUTO] Product not found in catalog: "${productField}". Will create manual order.`);
+    
+    const priceField = extractedData['precio'] || extractedData['price'] || 
+                       extractedData['costo'] || extractedData['monto'];
+    let extractedPrice = 0;
+    
+    if (priceField) {
+      const priceMatch = priceField.toString().replace(/[^\d.,]/g, '').replace(',', '.');
+      extractedPrice = parseFloat(priceMatch) || 0;
+      console.log(`[ORDER-AUTO] Extracted price from extracted data: ${extractedPrice}`);
+    }
+    
+    if (extractedPrice === 0) {
+      const recentMessages = await prisma.messageLog.findMany({
+        where: {
+          businessId,
+          sender: { contains: normalizedPhone },
+          direction: 'INBOUND'
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { message: true }
+      });
+      
+      for (const msg of recentMessages) {
+        if (msg.message) {
+          const priceFromText = extractPriceFromText(msg.message);
+          if (priceFromText) {
+            extractedPrice = priceFromText;
+            console.log(`[ORDER-AUTO] Extracted price from message text: ${extractedPrice}`);
+            break;
+          }
+        }
+      }
+    }
+    
+    console.log(`[ORDER-AUTO-DEBUG] Final price for manual order: ${extractedPrice}`);
     console.log(`[ORDER-AUTO-DEBUG] ========== checkOrderReady END (READY - MANUAL PRODUCT) ==========`);
     return {
       ready: true,
@@ -90,7 +149,7 @@ export async function checkOrderReady(
         productId: null,
         productTitle: productField,
         quantity: parseInt(extractedData['cantidad'] || extractedData['quantity'] || '1') || 1,
-        unitPrice: 0,
+        unitPrice: extractedPrice,
         contactName: nameField,
         shippingAddress: addressField,
         shippingCity: extractedData['ciudad'] || extractedData['city'] || extractedData['distrito'] || null

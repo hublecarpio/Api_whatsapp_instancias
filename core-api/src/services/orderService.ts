@@ -87,8 +87,47 @@ export async function findProductWithScope(
   });
   
   if (!product) {
+    const sizePatternsToKeep = ['100ml', '50ml', '200ml', '250ml', '500ml', '1l', '1lt'];
+    const isSizeSearch = sizePatternsToKeep.some(size => 
+      normalizedSearch.toLowerCase().includes(size) || normalizedSearch.toLowerCase() === size
+    );
+    
+    if (isSizeSearch) {
+      const allProducts = await prisma.product.findMany({
+        where: {
+          businessId,
+          OR: instanceId ? [
+            { instanceId },
+            { instanceId: null }
+          ] : undefined
+        },
+        select: { id: true, title: true, price: true, imageUrl: true }
+      });
+      
+      const searchLower = normalizedSearch.toLowerCase();
+      product = allProducts.find(p => {
+        const titleLower = p.title.toLowerCase();
+        if (titleLower === searchLower) return true;
+        if (titleLower.includes(searchLower)) return true;
+        
+        const searchSize = searchLower.match(/(\d+)\s*(ml|lt?|l)/i);
+        const titleSize = titleLower.match(/(\d+)\s*(ml|lt?|l)/i);
+        if (searchSize && titleSize && searchSize[1] === titleSize[1]) {
+          return true;
+        }
+        return false;
+      }) || null;
+      
+      if (product) {
+        console.log(`[ORDER-SERVICE] Found product by size matching "${normalizedSearch}": ${product.title}`);
+      }
+    }
+  }
+  
+  if (!product) {
+    const wordsToExclude = ['pack', 'und', 'unid', 'x', 'de', 'el', 'la', 'los', 'las', 'un', 'una'];
     const words = normalizedSearch.split(/\s+/).filter((w: string) => 
-      w.length > 3 && !['100ml', '50ml', '200ml', 'pack', 'ml', 'und', 'unid'].includes(w.toLowerCase())
+      w.length > 2 && !wordsToExclude.includes(w.toLowerCase())
     );
     
     for (const word of words) {
