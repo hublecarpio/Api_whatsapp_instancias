@@ -10,7 +10,10 @@ interface Product {
   id: string;
   title: string;
   description?: string;
-  variation?: string;
+  variations: string[];
+  pricePerVariation: number[];
+  stockPerVariation: number[];
+  imageUrls: string[];
   price: number;
   stock: number;
   imageUrl?: string;
@@ -28,7 +31,10 @@ export default function ProductsPage() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [variation, setVariation] = useState('');
+  const [variations, setVariations] = useState<string[]>([]);
+  const [pricePerVariation, setPricePerVariation] = useState<number[]>([]);
+  const [stockPerVariation, setStockPerVariation] = useState<number[]>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('0');
   const [imageUrl, setImageUrl] = useState('');
@@ -95,7 +101,10 @@ export default function ProductsPage() {
   const resetForm = () => {
     setTitle('');
     setDescription('');
-    setVariation('');
+    setVariations([]);
+    setPricePerVariation([]);
+    setStockPerVariation([]);
+    setImageUrls([]);
     setPrice('');
     setStock('0');
     setImageUrl('');
@@ -191,12 +200,12 @@ export default function ProductsPage() {
   };
 
   const downloadCsvExample = () => {
-    const csvContent = `title,description,variation,price,stock,imageUrl
-"Camiseta Negra Basica","Camiseta 100% algodon","Talla M - Negro",29.99,100,https://ejemplo.com/camiseta-negra.jpg
-"Pantalon Jeans Clasico","Pantalon de mezclilla corte recto","Talla 32 - Azul",89.99,50,https://ejemplo.com/jeans-azul.jpg
-"Serum Facial Vitamina C","Serum antioxidante concentrado","30ml",149.99,25,
-"Aceite Esencial Lavanda","Aceite puro para aromaterapia","10ml",24.99,200,https://ejemplo.com/aceite.jpg
-"Arroz Premium","Arroz grano largo selecto","5kg",19.99,150,`;
+    const csvContent = `title,description,variations,pricePerVariation,stockPerVariation,imageUrls
+"Serum Facial Vitamina C","Serum antioxidante concentrado","100ml | 50ml | 30ml","149.99 | 99.99 | 59.99","25 | 40 | 60","https://ejemplo.com/serum-100.jpg | https://ejemplo.com/serum-50.jpg"
+"Camiseta Basica","Camiseta 100% algodon","Talla S | Talla M | Talla L | Talla XL","29.99 | 29.99 | 32.99 | 34.99","15 | 30 | 25 | 10","https://ejemplo.com/camiseta.jpg"
+"Aceite Esencial Lavanda","Aceite puro para aromaterapia","10ml | 20ml","24.99 | 39.99","200 | 100","https://ejemplo.com/aceite.jpg"
+"Arroz Premium","Arroz grano largo selecto","1kg | 5kg | 10kg","8.99 | 19.99 | 35.99","150 | 80 | 30",""
+"Producto Simple","Producto sin variaciones","","49.99","100","https://ejemplo.com/simple.jpg"`;
     
     const BOM = '\uFEFF';
     const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -204,6 +213,60 @@ export default function ProductsPage() {
     link.href = URL.createObjectURL(blob);
     link.download = 'productos_ejemplo.csv';
     link.click();
+  };
+
+  const exportProductsToCsv = () => {
+    if (products.length === 0) {
+      setError('No hay productos para exportar');
+      return;
+    }
+    
+    const escapeCSV = (value: string) => {
+      if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('|')) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    };
+    
+    const headers = 'title,description,variations,pricePerVariation,stockPerVariation,imageUrls';
+    const rows = products.map(p => {
+      const variationsStr = (p.variations || []).join(' | ');
+      const pricesStr = (p.pricePerVariation || []).join(' | ');
+      const stocksStr = (p.stockPerVariation || []).join(' | ');
+      const imagesStr = (p.imageUrls || []).join(' | ');
+      
+      return [
+        escapeCSV(p.title),
+        escapeCSV(p.description || ''),
+        escapeCSV(variationsStr),
+        escapeCSV(pricesStr || String(p.price)),
+        escapeCSV(stocksStr || String(p.stock)),
+        escapeCSV(imagesStr || p.imageUrl || '')
+      ].join(',');
+    });
+    
+    const csvContent = [headers, ...rows].join('\n');
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `productos_${currentBusiness?.name?.replace(/\s+/g, '_') || 'export'}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const parseArrayField = (value: string): string[] => {
+    if (!value || !value.trim()) return [];
+    return value.split('|').map(v => v.trim()).filter(Boolean);
+  };
+
+  const parseNumberArrayField = (value: string): number[] => {
+    if (!value || !value.trim()) return [];
+    return value.split('|').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+  };
+
+  const parseIntArrayField = (value: string): number[] => {
+    if (!value || !value.trim()) return [];
+    return value.split('|').map(v => parseInt(v.trim())).filter(v => !isNaN(v));
   };
 
   const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,31 +295,43 @@ export default function ProductsPage() {
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
       const titleIdx = headers.indexOf('title');
       const descIdx = headers.indexOf('description');
-      const variationIdx = headers.indexOf('variation');
-      const priceIdx = headers.indexOf('price');
-      const stockIdx = headers.indexOf('stock');
-      const imageIdx = headers.indexOf('imageurl');
+      const variationsIdx = headers.indexOf('variations');
+      const pricePerVariationIdx = headers.indexOf('pricepervariation');
+      const stockPerVariationIdx = headers.indexOf('stockpervariation');
+      const imageUrlsIdx = headers.indexOf('imageurls');
       
-      if (titleIdx === -1 || priceIdx === -1) {
-        setError('El CSV debe tener columnas "title" y "price"');
+      if (titleIdx === -1) {
+        setError('El CSV debe tener columna "title"');
         return;
       }
       
       const products = [];
       for (let i = 1; i < lines.length; i++) {
         const values = parseCSVLine(lines[i]);
-        if (values.length > Math.max(titleIdx, priceIdx)) {
+        if (values.length > titleIdx) {
           const title = values[titleIdx]?.trim();
-          const price = parseFloat(values[priceIdx]?.trim() || '0');
           
-          if (title && !isNaN(price)) {
+          if (title) {
+            const variationsArr = variationsIdx >= 0 ? parseArrayField(values[variationsIdx] || '') : [];
+            const pricePerVariationArr = pricePerVariationIdx >= 0 ? parseNumberArrayField(values[pricePerVariationIdx] || '') : [];
+            const stockPerVariationArr = stockPerVariationIdx >= 0 ? parseIntArrayField(values[stockPerVariationIdx] || '') : [];
+            const imageUrlsArr = imageUrlsIdx >= 0 ? parseArrayField(values[imageUrlsIdx] || '') : [];
+            
+            const hasVariations = variationsArr.length > 0;
+            const firstPrice = pricePerVariationArr.length > 0 ? pricePerVariationArr[0] : 0;
+            const totalStock = stockPerVariationArr.length > 0 ? stockPerVariationArr.reduce((a, b) => a + b, 0) : 0;
+            const firstImage = imageUrlsArr.length > 0 ? imageUrlsArr[0] : null;
+            
             products.push({
               title,
               description: descIdx >= 0 ? values[descIdx]?.trim() || null : null,
-              variation: variationIdx >= 0 ? values[variationIdx]?.trim() || null : null,
-              price,
-              stock: stockIdx >= 0 ? parseInt(values[stockIdx]?.trim() || '0') || 0 : 0,
-              imageUrl: imageIdx >= 0 ? values[imageIdx]?.trim() || null : null
+              variations: variationsArr,
+              pricePerVariation: pricePerVariationArr,
+              stockPerVariation: stockPerVariationArr,
+              imageUrls: imageUrlsArr,
+              price: firstPrice,
+              stock: hasVariations ? totalStock : (stockPerVariationArr[0] || 0),
+              imageUrl: firstImage
             });
           }
         }
@@ -301,7 +376,10 @@ export default function ProductsPage() {
   const handleEdit = (product: Product) => {
     setTitle(product.title);
     setDescription(product.description || '');
-    setVariation(product.variation || '');
+    setVariations(product.variations || []);
+    setPricePerVariation(product.pricePerVariation || []);
+    setStockPerVariation(product.stockPerVariation || []);
+    setImageUrls(product.imageUrls || []);
     setPrice(product.price.toString());
     setStock(product.stock?.toString() || '0');
     setImageUrl(product.imageUrl || '');
@@ -320,6 +398,7 @@ export default function ProductsPage() {
 
     try {
       let finalImageUrl = imageUrl;
+      let finalImageUrls = [...imageUrls];
       
       if (pendingFile && title.trim()) {
         const response = await productMediaApi.uploadImage(
@@ -328,16 +407,26 @@ export default function ProductsPage() {
           title.trim()
         );
         finalImageUrl = response.data.url;
+        if (finalImageUrls.length === 0) {
+          finalImageUrls = [response.data.url];
+        }
       }
+
+      const hasVariations = variations.length > 0;
+      const computedPrice = hasVariations && pricePerVariation.length > 0 ? pricePerVariation[0] : parseFloat(price) || 0;
+      const computedStock = hasVariations && stockPerVariation.length > 0 ? stockPerVariation.reduce((a, b) => a + b, 0) : parseInt(stock) || 0;
 
       if (editingProduct) {
         await productApi.update(editingProduct.id, {
           title,
           description,
-          variation,
-          price: parseFloat(price),
-          stock: parseInt(stock),
-          imageUrl: finalImageUrl
+          variations,
+          pricePerVariation,
+          stockPerVariation,
+          imageUrls: finalImageUrls,
+          price: computedPrice,
+          stock: computedStock,
+          imageUrl: finalImageUrl || (finalImageUrls.length > 0 ? finalImageUrls[0] : null)
         });
       } else {
         await productApi.create({
@@ -345,10 +434,13 @@ export default function ProductsPage() {
           instanceId: selectedInstanceId || null,
           title,
           description,
-          variation,
-          price: parseFloat(price),
-          stock: parseInt(stock),
-          imageUrl: finalImageUrl
+          variations,
+          pricePerVariation,
+          stockPerVariation,
+          imageUrls: finalImageUrls,
+          price: computedPrice,
+          stock: computedStock,
+          imageUrl: finalImageUrl || (finalImageUrls.length > 0 ? finalImageUrls[0] : null)
         });
       }
       
@@ -473,8 +565,16 @@ export default function ProductsPage() {
             onClick={downloadCsvExample}
             className="btn btn-secondary text-sm"
           >
-            Descargar CSV ejemplo
+            CSV ejemplo
           </button>
+          {products.length > 0 && (
+            <button
+              onClick={exportProductsToCsv}
+              className="btn btn-secondary text-sm"
+            >
+              Exportar CSV
+            </button>
+          )}
           <label className={`btn btn-secondary text-sm cursor-pointer ${bulkUploading ? 'opacity-50' : ''}`}>
             {bulkUploading ? 'Subiendo...' : 'Importar CSV'}
             <input
@@ -507,7 +607,7 @@ export default function ProductsPage() {
             {editingProduct ? 'Editar producto' : 'Nuevo producto'}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
                   Titulo *
@@ -522,56 +622,142 @@ export default function ProductsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Precio *
-                </label>
-                <input
-                  type="number"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className="input"
-                  step="0.01"
-                  min="0"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Stock
-                </label>
-                <input
-                  type="number"
-                  value={stock}
-                  onChange={(e) => setStock(e.target.value)}
-                  className="input"
-                  min="0"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
                   Descripcion
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="input resize-none"
-                  rows={2}
+                  rows={1}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                  Variacion
-                  <span className="text-gray-500 text-xs ml-2">(ej: 100ml, Rojo, Talla M, 5kg)</span>
+            </div>
+
+            {variations.length === 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Precio *
+                  </label>
+                  <input
+                    type="number"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="input"
+                    step="0.01"
+                    min="0"
+                    required={variations.length === 0}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Stock
+                  </label>
+                  <input
+                    type="number"
+                    value={stock}
+                    onChange={(e) => setStock(e.target.value)}
+                    className="input"
+                    min="0"
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <div className="border border-gray-700 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-medium text-gray-300">
+                  Variaciones
+                  <span className="text-gray-500 text-xs ml-2">(ej: 100ml, 50ml, 30ml - cada una con su precio y stock)</span>
                 </label>
-                <input
-                  type="text"
-                  value={variation}
-                  onChange={(e) => setVariation(e.target.value)}
-                  className="input"
-                  placeholder="Color, tamano, presentacion..."
-                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVariations([...variations, '']);
+                    setPricePerVariation([...pricePerVariation, 0]);
+                    setStockPerVariation([...stockPerVariation, 0]);
+                  }}
+                  className="btn btn-secondary text-xs px-2 py-1"
+                >
+                  + Agregar variacion
+                </button>
               </div>
+              
+              {variations.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-2">
+                  Sin variaciones. El producto tendra un unico precio y stock.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {variations.map((v, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-5">
+                        <input
+                          type="text"
+                          value={v}
+                          onChange={(e) => {
+                            const newVariations = [...variations];
+                            newVariations[idx] = e.target.value;
+                            setVariations(newVariations);
+                          }}
+                          className="input text-sm"
+                          placeholder="Nombre variacion (ej: 100ml)"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="number"
+                          value={pricePerVariation[idx] || 0}
+                          onChange={(e) => {
+                            const newPrices = [...pricePerVariation];
+                            newPrices[idx] = parseFloat(e.target.value) || 0;
+                            setPricePerVariation(newPrices);
+                          }}
+                          className="input text-sm"
+                          placeholder="Precio"
+                          step="0.01"
+                          min="0"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <input
+                          type="number"
+                          value={stockPerVariation[idx] || 0}
+                          onChange={(e) => {
+                            const newStocks = [...stockPerVariation];
+                            newStocks[idx] = parseInt(e.target.value) || 0;
+                            setStockPerVariation(newStocks);
+                          }}
+                          className="input text-sm"
+                          placeholder="Stock"
+                          min="0"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVariations(variations.filter((_, i) => i !== idx));
+                            setPricePerVariation(pricePerVariation.filter((_, i) => i !== idx));
+                            setStockPerVariation(stockPerVariation.filter((_, i) => i !== idx));
+                            setImageUrls(imageUrls.filter((_, i) => i !== idx));
+                          }}
+                          className="text-red-400 hover:text-red-300 p-1"
+                          title="Eliminar variacion"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="text-xs text-gray-500 mt-2">
+                    Stock total: {stockPerVariation.reduce((a, b) => a + b, 0)} | 
+                    Precio desde: {currentBusiness?.currencySymbol || '$'}{Math.min(...pricePerVariation.filter(p => p > 0), Infinity) === Infinity ? 0 : Math.min(...pricePerVariation.filter(p => p > 0))}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -682,17 +868,29 @@ export default function ProductsPage() {
                 />
               )}
               <h3 className="font-semibold text-white">{product.title}</h3>
-              {product.variation && (
-                <span className="inline-block text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded mt-1">
-                  {product.variation}
-                </span>
+              {product.variations && product.variations.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {product.variations.slice(0, 3).map((v, idx) => (
+                    <span key={idx} className="inline-block text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">
+                      {v}
+                    </span>
+                  ))}
+                  {product.variations.length > 3 && (
+                    <span className="inline-block text-xs bg-gray-600/50 text-gray-400 px-2 py-0.5 rounded">
+                      +{product.variations.length - 3} mas
+                    </span>
+                  )}
+                </div>
               )}
               {product.description && (
                 <p className="text-sm text-gray-400 mt-1 line-clamp-2">{product.description}</p>
               )}
               <div className="flex items-center justify-between mt-2">
                 <p className="text-lg font-bold text-neon-blue">
-                  {currentBusiness?.currencySymbol || 'S/.'}{product.price.toFixed(2)}
+                  {product.variations && product.variations.length > 1 
+                    ? `Desde ${currentBusiness?.currencySymbol || 'S/.'}${Math.min(...(product.pricePerVariation || [product.price]).filter(p => p > 0)).toFixed(2)}`
+                    : `${currentBusiness?.currencySymbol || 'S/.'}${product.price.toFixed(2)}`
+                  }
                 </p>
                 <span className={`text-sm px-2 py-0.5 rounded ${
                   product.stock > 0 
@@ -754,21 +952,31 @@ export default function ProductsPage() {
                   )}
                 </div>
                 <div className="col-span-3 w-full sm:w-auto">
-                  <h3 className="font-semibold text-white">
-                    {product.title}
-                    {product.variation && (
-                      <span className="ml-2 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">
-                        {product.variation}
-                      </span>
-                    )}
-                  </h3>
+                  <h3 className="font-semibold text-white">{product.title}</h3>
+                  {product.variations && product.variations.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {product.variations.slice(0, 2).map((v, idx) => (
+                        <span key={idx} className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">
+                          {v}
+                        </span>
+                      ))}
+                      {product.variations.length > 2 && (
+                        <span className="text-xs bg-gray-600/50 text-gray-400 px-2 py-0.5 rounded">
+                          +{product.variations.length - 2}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {product.description && (
                     <p className="text-sm text-gray-400 truncate max-w-xs">{product.description}</p>
                   )}
                 </div>
                 <div className="col-span-2 w-full sm:w-auto">
                   <p className="text-lg font-bold text-neon-blue">
-                    {currentBusiness?.currencySymbol || 'S/.'}{product.price.toFixed(2)}
+                    {product.variations && product.variations.length > 1 
+                      ? `Desde ${currentBusiness?.currencySymbol || 'S/.'}${Math.min(...(product.pricePerVariation || [product.price]).filter(p => p > 0)).toFixed(2)}`
+                      : `${currentBusiness?.currencySymbol || 'S/.'}${product.price.toFixed(2)}`
+                    }
                   </p>
                 </div>
                 <div className="col-span-2 w-full sm:w-auto">

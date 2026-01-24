@@ -50,11 +50,37 @@ function generateIdempotencyKey(
   return IDEMPOTENCY_PREFIX + createHash('sha256').update(data).digest('hex').substring(0, 24);
 }
 
+interface ProductWithVariation {
+  id: string;
+  title: string;
+  price: number;
+  stock: number;
+  imageUrl: string | null;
+  variation: string | null;
+  variationIndex?: number;
+}
+
+function findMatchingVariationIndex(variations: string[], searchTerm: string): number {
+  const searchLower = searchTerm.toLowerCase();
+  
+  for (let i = 0; i < variations.length; i++) {
+    const varLower = variations[i].toLowerCase();
+    if (varLower === searchLower) return i;
+    if (varLower.includes(searchLower) || searchLower.includes(varLower)) return i;
+    
+    const searchSize = searchLower.match(/(\d+)\s*(ml|lt?|l|kg|g)/i);
+    const varSize = varLower.match(/(\d+)\s*(ml|lt?|l|kg|g)/i);
+    if (searchSize && varSize && searchSize[1] === varSize[1]) return i;
+  }
+  
+  return -1;
+}
+
 export async function findProductWithScope(
   businessId: string,
   searchTerm: string,
   instanceId?: string | null
-): Promise<{ id: string; title: string; price: number; imageUrl: string | null; variation: string | null } | null> {
+): Promise<ProductWithVariation | null> {
   const normalizedSearch = searchTerm.trim();
   
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalizedSearch);
@@ -69,100 +95,110 @@ export async function findProductWithScope(
           { instanceId: null }
         ] : undefined
       },
-      select: { id: true, title: true, price: true, imageUrl: true, variation: true }
+      select: { id: true, title: true, price: true, stock: true, imageUrl: true, variations: true, pricePerVariation: true, stockPerVariation: true, imageUrls: true }
     });
-    return product;
+    if (!product) return null;
+    return {
+      id: product.id,
+      title: product.title,
+      price: product.price,
+      stock: product.stockPerVariation.length > 0 ? product.stockPerVariation[0] : product.stock,
+      imageUrl: product.imageUrl,
+      variation: product.variations.length > 0 ? product.variations[0] : null,
+      variationIndex: product.variations.length > 0 ? 0 : undefined
+    };
   }
   
-  let product = await prisma.product.findFirst({
+  const allProducts = await prisma.product.findMany({
     where: {
       businessId,
-      OR: [
-        { title: { contains: normalizedSearch, mode: 'insensitive' } },
-        { variation: { contains: normalizedSearch, mode: 'insensitive' } }
-      ],
-      AND: instanceId ? {
-        OR: [
-          { instanceId },
-          { instanceId: null }
-        ]
-      } : undefined
+      OR: instanceId ? [
+        { instanceId },
+        { instanceId: null }
+      ] : undefined
     },
-    select: { id: true, title: true, price: true, imageUrl: true, variation: true }
+    select: { id: true, title: true, price: true, stock: true, imageUrl: true, variations: true, pricePerVariation: true, stockPerVariation: true, imageUrls: true }
   });
   
-  if (!product) {
-    const sizePatternsToKeep = ['100ml', '50ml', '200ml', '250ml', '500ml', '1l', '1lt'];
-    const isSizeSearch = sizePatternsToKeep.some(size => 
-      normalizedSearch.toLowerCase().includes(size) || normalizedSearch.toLowerCase() === size
-    );
-    
-    if (isSizeSearch) {
-      const allProducts = await prisma.product.findMany({
-        where: {
-          businessId,
-          OR: instanceId ? [
-            { instanceId },
-            { instanceId: null }
-          ] : undefined
-        },
-        select: { id: true, title: true, price: true, imageUrl: true, variation: true }
-      });
-      
-      const searchLower = normalizedSearch.toLowerCase();
-      product = allProducts.find(p => {
-        const titleLower = p.title.toLowerCase();
-        const variationLower = p.variation?.toLowerCase() || '';
-        if (titleLower === searchLower || variationLower === searchLower) return true;
-        if (titleLower.includes(searchLower) || variationLower.includes(searchLower)) return true;
-        
-        const searchSize = searchLower.match(/(\d+)\s*(ml|lt?|l)/i);
-        const titleSize = titleLower.match(/(\d+)\s*(ml|lt?|l)/i);
-        const variationSize = variationLower.match(/(\d+)\s*(ml|lt?|l)/i);
-        if (searchSize && (titleSize && searchSize[1] === titleSize[1]) || (variationSize && searchSize?.[1] === variationSize[1])) {
-          return true;
-        }
-        return false;
-      }) || null;
-      
-      if (product) {
-        console.log(`[ORDER-SERVICE] Found product by size matching "${normalizedSearch}": ${product.title}`);
+  const searchLower = normalizedSearch.toLowerCase();
+  
+  for (const product of allProducts) {
+    if (product.title.toLowerCase().includes(searchLower)) {
+      const varIdx = findMatchingVariationIndex(product.variations, normalizedSearch);
+      const stockVal = varIdx >= 0 && product.stockPerVariation[varIdx] !== undefined ? product.stockPerVariation[varIdx] : product.stock;
+      return {
+        id: product.id,
+        title: product.title,
+        price: varIdx >= 0 && product.pricePerVariation[varIdx] ? product.pricePerVariation[varIdx] : product.price,
+        stock: stockVal,
+        imageUrl: varIdx >= 0 && product.imageUrls[varIdx] ? product.imageUrls[varIdx] : product.imageUrl,
+        variation: varIdx >= 0 ? product.variations[varIdx] : (product.variations[0] || null),
+        variationIndex: varIdx >= 0 ? varIdx : (product.variations.length > 0 ? 0 : undefined)
+      };
+    }
+  }
+  
+  for (const product of allProducts) {
+    if (product.variations && product.variations.length > 0) {
+      const varIdx = findMatchingVariationIndex(product.variations, normalizedSearch);
+      if (varIdx >= 0) {
+        console.log(`[ORDER-SERVICE] Found product by variation "${product.variations[varIdx]}": ${product.title}`);
+        return {
+          id: product.id,
+          title: product.title,
+          price: product.pricePerVariation[varIdx] || product.price,
+          stock: product.stockPerVariation[varIdx] !== undefined ? product.stockPerVariation[varIdx] : product.stock,
+          imageUrl: product.imageUrls[varIdx] || product.imageUrl,
+          variation: product.variations[varIdx],
+          variationIndex: varIdx
+        };
       }
     }
   }
   
-  if (!product) {
-    const wordsToExclude = ['pack', 'und', 'unid', 'x', 'de', 'el', 'la', 'los', 'las', 'un', 'una'];
-    const words = normalizedSearch.split(/\s+/).filter((w: string) => 
-      w.length > 2 && !wordsToExclude.includes(w.toLowerCase())
-    );
-    
-    for (const word of words) {
-      product = await prisma.product.findFirst({
-        where: {
-          businessId,
-          OR: [
-            { title: { contains: word, mode: 'insensitive' } },
-            { variation: { contains: word, mode: 'insensitive' } }
-          ],
-          AND: instanceId ? {
-            OR: [
-              { instanceId },
-              { instanceId: null }
-            ]
-          } : undefined
-        },
-        select: { id: true, title: true, price: true, imageUrl: true, variation: true }
-      });
-      
-      if (product) {
+  for (const product of allProducts) {
+    const combined = `${product.title} ${product.variations.join(' ')}`.toLowerCase();
+    if (combined.includes(searchLower)) {
+      const varIdx = findMatchingVariationIndex(product.variations, normalizedSearch);
+      const stockVal = varIdx >= 0 && product.stockPerVariation[varIdx] !== undefined ? product.stockPerVariation[varIdx] : product.stock;
+      return {
+        id: product.id,
+        title: product.title,
+        price: varIdx >= 0 && product.pricePerVariation[varIdx] ? product.pricePerVariation[varIdx] : product.price,
+        stock: stockVal,
+        imageUrl: varIdx >= 0 && product.imageUrls[varIdx] ? product.imageUrls[varIdx] : product.imageUrl,
+        variation: varIdx >= 0 ? product.variations[varIdx] : (product.variations[0] || null),
+        variationIndex: varIdx >= 0 ? varIdx : (product.variations.length > 0 ? 0 : undefined)
+      };
+    }
+  }
+  
+  const wordsToExclude = ['pack', 'und', 'unid', 'x', 'de', 'el', 'la', 'los', 'las', 'un', 'una'];
+  const words = normalizedSearch.split(/\s+/).filter((w: string) => 
+    w.length > 2 && !wordsToExclude.includes(w.toLowerCase())
+  );
+  
+  for (const word of words) {
+    const wordLower = word.toLowerCase();
+    for (const product of allProducts) {
+      if (product.title.toLowerCase().includes(wordLower)) {
+        const varIdx = findMatchingVariationIndex(product.variations, normalizedSearch);
+        const stockVal = varIdx >= 0 && product.stockPerVariation[varIdx] !== undefined ? product.stockPerVariation[varIdx] : product.stock;
         console.log(`[ORDER-SERVICE] Found product by word "${word}": ${product.title}`);
-        break;
+        return {
+          id: product.id,
+          title: product.title,
+          price: varIdx >= 0 && product.pricePerVariation[varIdx] ? product.pricePerVariation[varIdx] : product.price,
+          stock: stockVal,
+          imageUrl: varIdx >= 0 && product.imageUrls[varIdx] ? product.imageUrls[varIdx] : product.imageUrl,
+          variation: varIdx >= 0 ? product.variations[varIdx] : (product.variations[0] || null),
+          variationIndex: varIdx >= 0 ? varIdx : (product.variations.length > 0 ? 0 : undefined)
+        };
       }
     }
   }
   
-  return product;
+  return null;
 }
 
 export async function checkExistingPendingOrder(

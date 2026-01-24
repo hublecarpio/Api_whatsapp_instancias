@@ -175,14 +175,12 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
         OR: searchTerms.length > 0 ? [
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
-          { variation: { contains: query, mode: 'insensitive' } },
+          { variations: { hasSome: [query] } },
           ...searchTerms.map((term: string) => ({ title: { contains: term, mode: 'insensitive' as const } })),
-          ...searchTerms.map((term: string) => ({ description: { contains: term, mode: 'insensitive' as const } })),
-          ...searchTerms.map((term: string) => ({ variation: { contains: term, mode: 'insensitive' as const } }))
+          ...searchTerms.map((term: string) => ({ description: { contains: term, mode: 'insensitive' as const } }))
         ] : [
           { title: { contains: query, mode: 'insensitive' } },
-          { description: { contains: query, mode: 'insensitive' } },
-          { variation: { contains: query, mode: 'insensitive' } }
+          { description: { contains: query, mode: 'insensitive' } }
         ]
       },
       take: Math.min(limit, 20),
@@ -247,6 +245,47 @@ router.post('/find-best-match', async (req: AuthRequest, res: Response) => {
   }
 });
 
+function normalizeVariationArrays(
+  variations: string[],
+  pricePerVariation: number[],
+  stockPerVariation: number[],
+  imageUrls: string[],
+  legacyPrice?: number,
+  legacyStock?: number,
+  legacyImageUrl?: string | null
+): { variations: string[], pricePerVariation: number[], stockPerVariation: number[], imageUrls: string[], price: number, stock: number, imageUrl: string | null } {
+  if (variations.length === 0) {
+    return {
+      variations: [],
+      pricePerVariation: [],
+      stockPerVariation: [],
+      imageUrls: legacyImageUrl ? [legacyImageUrl] : [],
+      price: legacyPrice ?? 0,
+      stock: legacyStock ?? 0,
+      imageUrl: legacyImageUrl || null
+    };
+  }
+  
+  const len = variations.length;
+  const normalizedPrices = pricePerVariation.slice(0, len);
+  const normalizedStocks = stockPerVariation.slice(0, len);
+  const normalizedImages = imageUrls.slice(0, len);
+  
+  while (normalizedPrices.length < len) normalizedPrices.push(normalizedPrices[normalizedPrices.length - 1] || legacyPrice || 0);
+  while (normalizedStocks.length < len) normalizedStocks.push(normalizedStocks[normalizedStocks.length - 1] || legacyStock || 0);
+  while (normalizedImages.length < len) normalizedImages.push(normalizedImages[normalizedImages.length - 1] || legacyImageUrl || '');
+  
+  return {
+    variations,
+    pricePerVariation: normalizedPrices,
+    stockPerVariation: normalizedStocks,
+    imageUrls: normalizedImages,
+    price: normalizedPrices[0] || legacyPrice || 0,
+    stock: normalizedStocks.reduce((a, b) => a + b, 0),
+    imageUrl: normalizedImages[0] || legacyImageUrl || null
+  };
+}
+
 router.post('/bulk', async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, instanceId, products } = req.body;
@@ -260,23 +299,52 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const validProducts = products.filter((p: any) => p.title && p.price !== undefined);
+    const validProducts = products.filter((p: any) => p.title && (p.price !== undefined || (p.pricePerVariation && p.pricePerVariation.length > 0)));
     
     if (validProducts.length === 0) {
-      return res.status(400).json({ error: 'No valid products found. Each product needs at least title and price.' });
+      return res.status(400).json({ error: 'No valid products found. Each product needs at least title and price (or pricePerVariation).' });
     }
     
     const created = await prisma.product.createMany({
-      data: validProducts.map((p: any) => ({
-        businessId,
-        instanceId: instanceId || null,
-        title: String(p.title).trim(),
-        description: p.description ? String(p.description).trim() : null,
-        variation: p.variation ? String(p.variation).trim() : null,
-        price: parseFloat(p.price),
-        stock: p.stock !== undefined ? parseInt(p.stock) : 0,
-        imageUrl: p.imageUrl ? String(p.imageUrl).trim() : null
-      }))
+      data: validProducts.map((p: any) => {
+        const parseArrayField = (val: any, isNumber = false) => {
+          if (Array.isArray(val)) return isNumber ? val.map(Number).filter((n: number) => !isNaN(n)) : val.filter(Boolean);
+          if (!val) return [];
+          const str = String(val);
+          const sep = str.includes('|') ? '|' : ',';
+          const parts = str.split(sep).map((v: string) => v.trim()).filter(Boolean);
+          return isNumber ? parts.map((v: string) => parseFloat(v)).filter((n: number) => !isNaN(n)) : parts;
+        };
+        
+        const variations = parseArrayField(p.variations);
+        const pricePerVariationRaw = parseArrayField(p.pricePerVariation, true) as number[];
+        const stockPerVariationRaw = parseArrayField(p.stockPerVariation, true).map((v: number) => Math.floor(v)) as number[];
+        const imageUrlsRaw = parseArrayField(p.imageUrls) as string[];
+        
+        const normalized = normalizeVariationArrays(
+          variations,
+          pricePerVariationRaw,
+          stockPerVariationRaw,
+          imageUrlsRaw,
+          p.price !== undefined ? parseFloat(p.price) : undefined,
+          p.stock !== undefined ? parseInt(p.stock) : undefined,
+          p.imageUrl ? String(p.imageUrl).trim() : null
+        );
+        
+        return {
+          businessId,
+          instanceId: instanceId || null,
+          title: String(p.title).trim(),
+          description: p.description ? String(p.description).trim() : null,
+          variations: normalized.variations,
+          pricePerVariation: normalized.pricePerVariation,
+          stockPerVariation: normalized.stockPerVariation,
+          imageUrls: normalized.imageUrls,
+          price: normalized.price,
+          stock: normalized.stock,
+          imageUrl: normalized.imageUrl
+        };
+      })
     });
     
     res.status(201).json({ 
@@ -292,10 +360,10 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, instanceId, title, description, variation, price, stock, imageUrl } = req.body;
+    const { businessId, instanceId, title, description, variations, pricePerVariation, stockPerVariation, imageUrls, price, stock, imageUrl } = req.body;
     
-    if (!businessId || !title || price === undefined) {
-      return res.status(400).json({ error: 'businessId, title and price are required' });
+    if (!businessId || !title) {
+      return res.status(400).json({ error: 'businessId and title are required' });
     }
     
     const business = await checkBusinessAccess(req.userId!, businessId);
@@ -303,16 +371,34 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    const variationsArr = Array.isArray(variations) ? variations.filter(Boolean) : [];
+    const pricePerVariationArr = Array.isArray(pricePerVariation) ? pricePerVariation.map(Number).filter(n => !isNaN(n)) : [];
+    const stockPerVariationArr = Array.isArray(stockPerVariation) ? stockPerVariation.map(Number).filter(n => !isNaN(n)) : [];
+    const imageUrlsArr = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [];
+    
+    const normalized = normalizeVariationArrays(
+      variationsArr,
+      pricePerVariationArr,
+      stockPerVariationArr,
+      imageUrlsArr,
+      price !== undefined ? parseFloat(price) : undefined,
+      stock !== undefined ? parseInt(stock) : undefined,
+      imageUrl
+    );
+    
     const product = await prisma.product.create({
       data: { 
         businessId, 
         instanceId: instanceId || null,
         title, 
-        description,
-        variation: variation || null,
-        price, 
-        stock: stock !== undefined ? parseInt(stock) : 0,
-        imageUrl 
+        description: description || null,
+        variations: normalized.variations,
+        pricePerVariation: normalized.pricePerVariation,
+        stockPerVariation: normalized.stockPerVariation,
+        imageUrls: normalized.imageUrls,
+        price: normalized.price,
+        stock: normalized.stock,
+        imageUrl: normalized.imageUrl
       }
     });
     
@@ -376,7 +462,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, variation, price, stock, imageUrl } = req.body;
+    const { title, description, variations, pricePerVariation, stockPerVariation, imageUrls, price, stock, imageUrl } = req.body;
     
     const existing = await prisma.product.findUnique({
       where: { id: req.params.id },
@@ -387,15 +473,33 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Product not found' });
     }
     
+    const variationsArr = variations !== undefined ? (Array.isArray(variations) ? variations.filter(Boolean) : []) : existing.variations;
+    const pricePerVariationArr = pricePerVariation !== undefined ? (Array.isArray(pricePerVariation) ? pricePerVariation.map(Number).filter((n: number) => !isNaN(n)) : []) : existing.pricePerVariation;
+    const stockPerVariationArr = stockPerVariation !== undefined ? (Array.isArray(stockPerVariation) ? stockPerVariation.map(Number).filter((n: number) => !isNaN(n)) : []) : existing.stockPerVariation;
+    const imageUrlsArr = imageUrls !== undefined ? (Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : []) : existing.imageUrls;
+    
+    const normalized = normalizeVariationArrays(
+      variationsArr,
+      pricePerVariationArr,
+      stockPerVariationArr,
+      imageUrlsArr,
+      price !== undefined ? parseFloat(price) : existing.price,
+      stock !== undefined ? parseInt(stock) : undefined,
+      imageUrl ?? existing.imageUrl
+    );
+    
     const product = await prisma.product.update({
       where: { id: req.params.id },
       data: { 
         title: title ?? existing.title,
         description: description ?? existing.description,
-        variation: variation !== undefined ? variation : existing.variation,
-        price: price ?? existing.price,
-        stock: stock !== undefined ? parseInt(stock) : existing.stock,
-        imageUrl: imageUrl ?? existing.imageUrl
+        variations: normalized.variations,
+        pricePerVariation: normalized.pricePerVariation,
+        stockPerVariation: normalized.stockPerVariation,
+        imageUrls: normalized.imageUrls,
+        price: normalized.price,
+        stock: normalized.stock,
+        imageUrl: normalized.imageUrl
       }
     });
     

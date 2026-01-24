@@ -986,6 +986,9 @@ body.glass-mode .mobile-drawer {
 .col-span-3 {
   grid-column: span 3 / span 3;
 }
+.col-span-5 {
+  grid-column: span 5 / span 5;
+}
 .-m-4 {
   margin: -1rem;
 }
@@ -2447,6 +2450,9 @@ body.glass-mode .mobile-drawer {
 }
 .bg-yellow-900\/20 {
   background-color: rgb(113 63 18 / 0.2);
+}
+.bg-gray-600\/50 {
+  background-color: rgb(75 85 99 / 0.5);
 }
 .bg-opacity-50 {
   --tw-bg-opacity: 0.5;

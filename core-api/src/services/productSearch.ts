@@ -90,11 +90,17 @@ interface SearchResult {
   id: string;
   title: string;
   description: string | null;
+  variations: string[];
+  pricePerVariation: number[];
+  stockPerVariation: number[];
+  imageUrls: string[];
   price: number;
   stock: number;
   imageUrl: string | null;
   available: boolean;
   similarity: number;
+  matchedVariation?: string;
+  matchedVariationIndex?: number;
 }
 
 export async function searchProductsIntelligent(
@@ -128,17 +134,44 @@ export async function searchProductsIntelligent(
       ? calculateSimilarity(query, product.description) * 0.5
       : 0;
     
-    const similarity = Math.max(titleSimilarity, descSimilarity);
+    let variationSimilarity = 0;
+    let matchedVariation: string | undefined;
+    let matchedVariationIndex: number | undefined;
+    
+    if (product.variations && product.variations.length > 0) {
+      for (let i = 0; i < product.variations.length; i++) {
+        const varSim = calculateSimilarity(query, product.variations[i]) * 0.8;
+        if (varSim > variationSimilarity) {
+          variationSimilarity = varSim;
+          matchedVariation = product.variations[i];
+          matchedVariationIndex = i;
+        }
+        const combinedSim = calculateSimilarity(query, `${product.title} ${product.variations[i]}`) * 0.9;
+        if (combinedSim > variationSimilarity) {
+          variationSimilarity = combinedSim;
+          matchedVariation = product.variations[i];
+          matchedVariationIndex = i;
+        }
+      }
+    }
+    
+    const similarity = Math.max(titleSimilarity, descSimilarity, variationSimilarity);
 
     return {
       id: product.id,
       title: product.title,
       description: product.description,
+      variations: product.variations || [],
+      pricePerVariation: product.pricePerVariation || [],
+      stockPerVariation: product.stockPerVariation || [],
+      imageUrls: product.imageUrls || [],
       price: product.price,
       stock: product.stock,
       imageUrl: product.imageUrl,
       available: product.stock > 0,
-      similarity
+      similarity,
+      matchedVariation,
+      matchedVariationIndex
     };
   });
 
