@@ -39,7 +39,9 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **Gemini Multimedia Processing**: Integrates Google Gemini API for audio transcription, image, and video analysis, including payment voucher validation.
 *   **Customizable Contact Data Extraction**: Businesses configure custom fields for AI extraction from conversations, stored with confidence scores and source tracking.
 *   **Automatic Lead Stage Updates**: Lead stages are updated after each interaction cycle using Gemini.
-*   **Intelligent Product Search**: Fuzzy matching with typo tolerance.
+*   **Intelligent Product Search**: Fuzzy matching with typo tolerance, supports searching by product title, description, and variation field.
+*   **Product Variations**: Products support an optional "variation" field for specifying size (100ml, 50ml), color (rojo, azul), weight (5kg, 2kg), or presentation (1 caja, 100 unidades). CSV import/export includes variation column.
+*   **RAG-Based Objection Handling**: Objections are handled through RAG sections with category='OBJECTIONS' instead of predefined scripts, allowing dynamic responses based on business knowledge.
 *   **Provider-Separated Token Usage Tracking**: Tracks token usage by provider and feature.
 *   **Payment Mode Control**: Toggle for Stripe payment link vs. voucher-based order flow.
 *   **Dual Business Objectives (SALES/APPOINTMENTS)**: Businesses can toggle between e-commerce and service modes.
