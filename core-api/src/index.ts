@@ -37,7 +37,6 @@ import promptSectionsRoutes from './routes/promptSections.js';
 import externalApiRoutes from './routes/externalApi.js';
 import googleCalendarRoutes from './routes/googleCalendar.js';
 import metaCoexistRoutes from './routes/metaCoexist.js';
-import objectionsRoutes from './routes/objections.js';
 import promotionsRoutes from './routes/promotions.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
@@ -144,7 +143,6 @@ app.use('/prompt-sections', promptSectionsRoutes);
 app.use('/api/v1', externalApiRoutes);
 app.use('/google-calendar', googleCalendarRoutes);
 app.use('/auth/meta-coexist', metaCoexistRoutes);
-app.use('/objections', objectionsRoutes);
 app.use('/promotions', promotionsRoutes);
 app.use('/internal/wa', waInternalRouter);
 

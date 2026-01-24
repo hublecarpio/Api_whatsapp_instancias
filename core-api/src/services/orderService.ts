@@ -54,7 +54,7 @@ export async function findProductWithScope(
   businessId: string,
   searchTerm: string,
   instanceId?: string | null
-): Promise<{ id: string; title: string; price: number; imageUrl: string | null } | null> {
+): Promise<{ id: string; title: string; price: number; imageUrl: string | null; variation: string | null } | null> {
   const normalizedSearch = searchTerm.trim();
   
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalizedSearch);
@@ -69,7 +69,7 @@ export async function findProductWithScope(
           { instanceId: null }
         ] : undefined
       },
-      select: { id: true, title: true, price: true, imageUrl: true }
+      select: { id: true, title: true, price: true, imageUrl: true, variation: true }
     });
     return product;
   }
@@ -77,13 +77,18 @@ export async function findProductWithScope(
   let product = await prisma.product.findFirst({
     where: {
       businessId,
-      title: { contains: normalizedSearch, mode: 'insensitive' },
-      OR: instanceId ? [
-        { instanceId },
-        { instanceId: null }
-      ] : undefined
+      OR: [
+        { title: { contains: normalizedSearch, mode: 'insensitive' } },
+        { variation: { contains: normalizedSearch, mode: 'insensitive' } }
+      ],
+      AND: instanceId ? {
+        OR: [
+          { instanceId },
+          { instanceId: null }
+        ]
+      } : undefined
     },
-    select: { id: true, title: true, price: true, imageUrl: true }
+    select: { id: true, title: true, price: true, imageUrl: true, variation: true }
   });
   
   if (!product) {
@@ -101,18 +106,20 @@ export async function findProductWithScope(
             { instanceId: null }
           ] : undefined
         },
-        select: { id: true, title: true, price: true, imageUrl: true }
+        select: { id: true, title: true, price: true, imageUrl: true, variation: true }
       });
       
       const searchLower = normalizedSearch.toLowerCase();
       product = allProducts.find(p => {
         const titleLower = p.title.toLowerCase();
-        if (titleLower === searchLower) return true;
-        if (titleLower.includes(searchLower)) return true;
+        const variationLower = p.variation?.toLowerCase() || '';
+        if (titleLower === searchLower || variationLower === searchLower) return true;
+        if (titleLower.includes(searchLower) || variationLower.includes(searchLower)) return true;
         
         const searchSize = searchLower.match(/(\d+)\s*(ml|lt?|l)/i);
         const titleSize = titleLower.match(/(\d+)\s*(ml|lt?|l)/i);
-        if (searchSize && titleSize && searchSize[1] === titleSize[1]) {
+        const variationSize = variationLower.match(/(\d+)\s*(ml|lt?|l)/i);
+        if (searchSize && (titleSize && searchSize[1] === titleSize[1]) || (variationSize && searchSize?.[1] === variationSize[1])) {
           return true;
         }
         return false;
@@ -134,13 +141,18 @@ export async function findProductWithScope(
       product = await prisma.product.findFirst({
         where: {
           businessId,
-          title: { contains: word, mode: 'insensitive' },
-          OR: instanceId ? [
-            { instanceId },
-            { instanceId: null }
-          ] : undefined
+          OR: [
+            { title: { contains: word, mode: 'insensitive' } },
+            { variation: { contains: word, mode: 'insensitive' } }
+          ],
+          AND: instanceId ? {
+            OR: [
+              { instanceId },
+              { instanceId: null }
+            ]
+          } : undefined
         },
-        select: { id: true, title: true, price: true, imageUrl: true }
+        select: { id: true, title: true, price: true, imageUrl: true, variation: true }
       });
       
       if (product) {

@@ -175,11 +175,14 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
         OR: searchTerms.length > 0 ? [
           { title: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
+          { variation: { contains: query, mode: 'insensitive' } },
           ...searchTerms.map((term: string) => ({ title: { contains: term, mode: 'insensitive' as const } })),
-          ...searchTerms.map((term: string) => ({ description: { contains: term, mode: 'insensitive' as const } }))
+          ...searchTerms.map((term: string) => ({ description: { contains: term, mode: 'insensitive' as const } })),
+          ...searchTerms.map((term: string) => ({ variation: { contains: term, mode: 'insensitive' as const } }))
         ] : [
           { title: { contains: query, mode: 'insensitive' } },
-          { description: { contains: query, mode: 'insensitive' } }
+          { description: { contains: query, mode: 'insensitive' } },
+          { variation: { contains: query, mode: 'insensitive' } }
         ]
       },
       take: Math.min(limit, 20),
@@ -269,6 +272,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
         instanceId: instanceId || null,
         title: String(p.title).trim(),
         description: p.description ? String(p.description).trim() : null,
+        variation: p.variation ? String(p.variation).trim() : null,
         price: parseFloat(p.price),
         stock: p.stock !== undefined ? parseInt(p.stock) : 0,
         imageUrl: p.imageUrl ? String(p.imageUrl).trim() : null
@@ -288,7 +292,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { businessId, instanceId, title, description, price, stock, imageUrl } = req.body;
+    const { businessId, instanceId, title, description, variation, price, stock, imageUrl } = req.body;
     
     if (!businessId || !title || price === undefined) {
       return res.status(400).json({ error: 'businessId, title and price are required' });
@@ -304,7 +308,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         businessId, 
         instanceId: instanceId || null,
         title, 
-        description, 
+        description,
+        variation: variation || null,
         price, 
         stock: stock !== undefined ? parseInt(stock) : 0,
         imageUrl 
@@ -371,7 +376,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, price, stock, imageUrl } = req.body;
+    const { title, description, variation, price, stock, imageUrl } = req.body;
     
     const existing = await prisma.product.findUnique({
       where: { id: req.params.id },
@@ -387,6 +392,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       data: { 
         title: title ?? existing.title,
         description: description ?? existing.description,
+        variation: variation !== undefined ? variation : existing.variation,
         price: price ?? existing.price,
         stock: stock !== undefined ? parseInt(stock) : existing.stock,
         imageUrl: imageUrl ?? existing.imageUrl

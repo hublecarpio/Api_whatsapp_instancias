@@ -18,11 +18,6 @@ export type IntentType =
 export interface IntentAnalysis {
   intent: IntentType;
   confidence: number;
-  objection?: {
-    id: string;
-    name: string;
-    responseScript: string;
-  };
   reasoning: string;
   suggestedTools: string[];
   urgency: 'low' | 'medium' | 'high';
@@ -74,27 +69,6 @@ export async function analyzeIntent(
   businessObjective: 'SALES' | 'APPOINTMENTS',
   contactPhone?: string
 ): Promise<IntentAnalysis> {
-  const objections = await prisma.salesObjection.findMany({
-    where: { businessId, isActive: true },
-    orderBy: { priority: 'desc' }
-  });
-
-  const matchedObjection = await matchObjectionByKeywords(message, objections);
-  if (matchedObjection) {
-    return {
-      intent: 'OBJECTION',
-      confidence: 0.95,
-      objection: {
-        id: matchedObjection.id,
-        name: matchedObjection.name,
-        responseScript: matchedObjection.responseScript
-      },
-      reasoning: `Matched objection keyword: ${matchedObjection.name}`,
-      suggestedTools: [],
-      urgency: 'high'
-    };
-  }
-
   if (!isOpenAIConfigured()) {
     return getDefaultIntentWithContext(message, businessObjective);
   }
@@ -119,9 +93,6 @@ ${historyContext}
 Mensaje actual del cliente:
 "${message}"
 
-Objeciones configuradas del negocio:
-${objections.map((o: { name: string; triggerPhrases: string[] }) => `- ${o.name}: ${o.triggerPhrases.join(', ')}`).join('\n')}
-
 Analiza la intención:`
         }
       ],
@@ -131,21 +102,6 @@ Analiza la intención:`
     });
 
     const result = JSON.parse(completion.choices[0]?.message?.content || '{}');
-    
-    let objectionData;
-    if (result.intent === 'OBJECTION' && result.possibleObjection) {
-      const matchedByAI = objections.find((o: { id: string; name: string; responseScript: string }) => 
-        o.name.toLowerCase().includes(result.possibleObjection.toLowerCase()) ||
-        result.possibleObjection.toLowerCase().includes(o.name.toLowerCase())
-      );
-      if (matchedByAI) {
-        objectionData = {
-          id: matchedByAI.id,
-          name: matchedByAI.name,
-          responseScript: matchedByAI.responseScript
-        };
-      }
-    }
 
     await prisma.intentLog.create({
       data: {
@@ -153,7 +109,6 @@ Analiza la intención:`
         contactPhone: contactPhone || '',
         detectedIntent: result.intent || 'OTHER',
         confidence: result.confidence || 0.5,
-        objectionId: objectionData?.id,
         reasoning: result.reasoning
       }
     });
@@ -161,7 +116,6 @@ Analiza la intención:`
     return {
       intent: result.intent || 'OTHER',
       confidence: result.confidence || 0.5,
-      objection: objectionData,
       reasoning: result.reasoning || '',
       suggestedTools: result.suggestedTools || [],
       urgency: result.urgency || 'medium'
@@ -170,23 +124,6 @@ Analiza la intención:`
     console.error('[IntentAnalyzer] Error:', error);
     return getDefaultIntent();
   }
-}
-
-async function matchObjectionByKeywords(
-  message: string,
-  objections: Array<{ id: string; name: string; triggerPhrases: string[]; responseScript: string }>
-): Promise<{ id: string; name: string; triggerPhrases: string[]; responseScript: string } | null> {
-  const lowerMessage = message.toLowerCase();
-  
-  for (const objection of objections) {
-    for (const phrase of objection.triggerPhrases) {
-      if (lowerMessage.includes(phrase.toLowerCase())) {
-        return objection;
-      }
-    }
-  }
-  
-  return null;
 }
 
 function getDefaultIntent(): IntentAnalysis {
@@ -344,13 +281,6 @@ export function buildDynamicPrompt(
   
   if (conversationContext.currentFunnelStage) {
     dynamicPrompt += `\n- Etapa del funnel: ${conversationContext.currentFunnelStage}`;
-  }
-
-  if (intent.objection) {
-    dynamicPrompt += `\n\n## OBJECIÓN DETECTADA - RESPONDER CON CUIDADO:`;
-    dynamicPrompt += `\nObjeción: "${intent.objection.name}"`;
-    dynamicPrompt += `\n\nScript de respuesta sugerido:\n${intent.objection.responseScript}`;
-    dynamicPrompt += `\n\nIMPORTANTE: Adapta el script al contexto de la conversación. No lo copies textualmente.`;
   }
 
   switch (intent.intent) {

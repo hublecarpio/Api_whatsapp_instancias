@@ -575,6 +575,7 @@ model Product {
   instanceId  String?
   title       String
   description String?
+  variation   String?
   price       Float
   stock       Int      @default(0)
   imageUrl    String?

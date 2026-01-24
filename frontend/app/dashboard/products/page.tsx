@@ -10,6 +10,7 @@ interface Product {
   id: string;
   title: string;
   description?: string;
+  variation?: string;
   price: number;
   stock: number;
   imageUrl?: string;
@@ -27,6 +28,7 @@ export default function ProductsPage() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [variation, setVariation] = useState('');
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('0');
   const [imageUrl, setImageUrl] = useState('');
@@ -93,6 +95,7 @@ export default function ProductsPage() {
   const resetForm = () => {
     setTitle('');
     setDescription('');
+    setVariation('');
     setPrice('');
     setStock('0');
     setImageUrl('');
@@ -188,12 +191,12 @@ export default function ProductsPage() {
   };
 
   const downloadCsvExample = () => {
-    const csvContent = `title,description,price,stock,imageUrl
-"Camiseta Negra Basica","Camiseta 100% algodon, talla unica",29.99,100,https://ejemplo.com/camiseta-negra.jpg
-"Pantalon Jeans Clasico","Pantalon de mezclilla corte recto, disponible en azul",89.99,50,https://ejemplo.com/jeans-azul.jpg
-"Zapatillas Deportivas","Zapatillas running con amortiguacion, blanco/negro",149.99,25,
-"Gorra Bordada Logo","Gorra ajustable con logo bordado",24.99,200,https://ejemplo.com/gorra.jpg
-"Pack 3 Calcetines","Set de 3 pares calcetines deportivos",19.99,150,`;
+    const csvContent = `title,description,variation,price,stock,imageUrl
+"Camiseta Negra Basica","Camiseta 100% algodon","Talla M - Negro",29.99,100,https://ejemplo.com/camiseta-negra.jpg
+"Pantalon Jeans Clasico","Pantalon de mezclilla corte recto","Talla 32 - Azul",89.99,50,https://ejemplo.com/jeans-azul.jpg
+"Serum Facial Vitamina C","Serum antioxidante concentrado","30ml",149.99,25,
+"Aceite Esencial Lavanda","Aceite puro para aromaterapia","10ml",24.99,200,https://ejemplo.com/aceite.jpg
+"Arroz Premium","Arroz grano largo selecto","5kg",19.99,150,`;
     
     const BOM = '\uFEFF';
     const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -229,6 +232,7 @@ export default function ProductsPage() {
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
       const titleIdx = headers.indexOf('title');
       const descIdx = headers.indexOf('description');
+      const variationIdx = headers.indexOf('variation');
       const priceIdx = headers.indexOf('price');
       const stockIdx = headers.indexOf('stock');
       const imageIdx = headers.indexOf('imageurl');
@@ -249,6 +253,7 @@ export default function ProductsPage() {
             products.push({
               title,
               description: descIdx >= 0 ? values[descIdx]?.trim() || null : null,
+              variation: variationIdx >= 0 ? values[variationIdx]?.trim() || null : null,
               price,
               stock: stockIdx >= 0 ? parseInt(values[stockIdx]?.trim() || '0') || 0 : 0,
               imageUrl: imageIdx >= 0 ? values[imageIdx]?.trim() || null : null
@@ -296,6 +301,7 @@ export default function ProductsPage() {
   const handleEdit = (product: Product) => {
     setTitle(product.title);
     setDescription(product.description || '');
+    setVariation(product.variation || '');
     setPrice(product.price.toString());
     setStock(product.stock?.toString() || '0');
     setImageUrl(product.imageUrl || '');
@@ -328,6 +334,7 @@ export default function ProductsPage() {
         await productApi.update(editingProduct.id, {
           title,
           description,
+          variation,
           price: parseFloat(price),
           stock: parseInt(stock),
           imageUrl: finalImageUrl
@@ -338,6 +345,7 @@ export default function ProductsPage() {
           instanceId: selectedInstanceId || null,
           title,
           description,
+          variation,
           price: parseFloat(price),
           stock: parseInt(stock),
           imageUrl: finalImageUrl
@@ -539,16 +547,31 @@ export default function ProductsPage() {
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                Descripcion
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="input resize-none"
-                rows={2}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Descripcion
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="input resize-none"
+                  rows={2}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Variacion
+                  <span className="text-gray-500 text-xs ml-2">(ej: 100ml, Rojo, Talla M, 5kg)</span>
+                </label>
+                <input
+                  type="text"
+                  value={variation}
+                  onChange={(e) => setVariation(e.target.value)}
+                  className="input"
+                  placeholder="Color, tamano, presentacion..."
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -659,6 +682,11 @@ export default function ProductsPage() {
                 />
               )}
               <h3 className="font-semibold text-white">{product.title}</h3>
+              {product.variation && (
+                <span className="inline-block text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded mt-1">
+                  {product.variation}
+                </span>
+              )}
               {product.description && (
                 <p className="text-sm text-gray-400 mt-1 line-clamp-2">{product.description}</p>
               )}
@@ -726,7 +754,14 @@ export default function ProductsPage() {
                   )}
                 </div>
                 <div className="col-span-3 w-full sm:w-auto">
-                  <h3 className="font-semibold text-white">{product.title}</h3>
+                  <h3 className="font-semibold text-white">
+                    {product.title}
+                    {product.variation && (
+                      <span className="ml-2 text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">
+                        {product.variation}
+                      </span>
+                    )}
+                  </h3>
                   {product.description && (
                     <p className="text-sm text-gray-400 truncate max-w-xs">{product.description}</p>
                   )}
