@@ -587,7 +587,7 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   
   const openaiTools: any[] = [];
   
-  if (productCount > 20) {
+  if (productCount > 3) {
     openaiTools.push({
       type: 'function',
       function: {

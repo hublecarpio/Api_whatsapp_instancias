@@ -27,7 +27,6 @@ interface AnalysisResult {
     products?: { title: string; description?: string; price: number }[];
     extractionFields?: { key: string; label: string; description?: string }[];
     funnelStages?: { name: string; description?: string; order: number; requiredFieldKeys?: string[]; blockedTopics?: string[] }[];
-    objections?: { triggerPhrase: string; responseTemplate: string }[];
     deliveryZones?: { name: string; cost: number; deliveryTime?: string; districts?: string[] }[];
     agentPrompt?: string;
     agentPersonality?: string;
@@ -38,7 +37,6 @@ interface AnalysisResult {
     products?: string[];
     extractionFields?: string[];
     funnelStages?: string[];
-    objections?: string[];
     deliveryZones?: string[];
   };
   confidence: number;
@@ -46,7 +44,6 @@ interface AnalysisResult {
     products?: number;
     extractionFields?: number;
     funnelStages?: number;
-    objections?: number;
     deliveryZones?: number;
   };
 }
@@ -400,25 +397,6 @@ export default function PromptImporter({ businessId, instanceId, onImportComplet
                       </details>
                     )}
 
-                    {(analysis.config?.objections || []).length > 0 && (
-                      <details className="bg-[#2a2a2a] rounded-lg overflow-hidden">
-                        <summary className="px-4 py-3 cursor-pointer text-white font-medium flex items-center justify-between">
-                          <span>Manejo de Objeciones ({(analysis.config?.objections || []).length})</span>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </summary>
-                        <div className="px-4 pb-4 space-y-2">
-                          {(analysis.config?.objections || []).map((o, i) => (
-                            <div key={i} className="text-sm">
-                              <span className="text-red-400">"{o.triggerPhrase}"</span>
-                              <p className="text-gray-400 text-xs ml-4 mt-1">{o.responseTemplate?.substring(0, 100)}...</p>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-
                     {analysis.config.agentPrompt && (
                       <details className="bg-[#2a2a2a] rounded-lg overflow-hidden">
                         <summary className="px-4 py-3 cursor-pointer text-white font-medium flex items-center justify-between">
@@ -487,7 +465,6 @@ export default function PromptImporter({ businessId, instanceId, onImportComplet
                             {(fullImportResult.results?.config?.products || 0) + 
                              (fullImportResult.results?.config?.fields || 0) + 
                              (fullImportResult.results?.config?.stages || 0) +
-                             (fullImportResult.results?.config?.objections || 0) +
                              (fullImportResult.results?.config?.zones || 0)}
                           </p>
                           <p className="text-gray-400">Configuraciones</p>
@@ -548,10 +525,6 @@ export default function PromptImporter({ businessId, instanceId, onImportComplet
                           <div className="flex justify-between">
                             <span className="text-gray-400">Etapas:</span>
                             <span className="text-blue-400">{fullImportResult.results?.config?.stages || 0}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Objeciones:</span>
-                            <span className="text-blue-400">{fullImportResult.results?.config?.objections || 0}</span>
                           </div>
                         </div>
                       </div>

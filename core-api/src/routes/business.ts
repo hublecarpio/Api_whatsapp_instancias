@@ -396,7 +396,7 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
     // Create automatic backup before clearing configuration
     const instanceFilter = instanceId ? { instanceId } : {};
     
-    const [prompt, sections, extractionFields, funnelStages, deliveryZones, objections] = await Promise.all([
+    const [prompt, sections, extractionFields, funnelStages, deliveryZones] = await Promise.all([
       prisma.agentPrompt.findFirst({
         where: { businessId, ...instanceFilter },
         include: { tools: { where: { enabled: true } } }
@@ -404,8 +404,7 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
       prisma.promptSection.findMany({ where: { businessId, ...instanceFilter } }),
       prisma.extractionField.findMany({ where: { businessId, ...instanceFilter } }),
       prisma.funnelStage.findMany({ where: { businessId, ...instanceFilter }, orderBy: { order: 'asc' } }),
-      prisma.deliveryZone.findMany({ where: { businessId, ...instanceFilter } }),
-      prisma.salesObjection.findMany({ where: { businessId, isActive: true } })
+      prisma.deliveryZone.findMany({ where: { businessId, ...instanceFilter } })
     ]);
 
     const configSnapshot = {
@@ -430,8 +429,7 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
       sections: sections.map(s => ({ title: s.title, content: s.content, type: s.type, isCore: s.isCore, priority: s.priority, enabled: s.enabled })),
       extractionFields: extractionFields.map(f => ({ fieldKey: f.fieldKey, fieldLabel: f.fieldLabel, fieldType: f.fieldType, description: f.description, required: f.required, order: f.order })),
       funnelStages: funnelStages.map(s => ({ name: s.name, order: s.order, requiredFieldKeys: s.requiredFieldKeys, blockedTopics: s.blockedTopics, promptContext: s.promptContext, autoTransition: s.autoTransition })),
-      deliveryZones: deliveryZones.map(z => ({ name: z.name, districts: z.districts, cost: z.cost, deliveryTime: z.deliveryTime, isActive: z.isActive })),
-      objections: objections.map(o => ({ name: o.name, triggerPhrases: o.triggerPhrases, responseScript: o.responseScript, category: o.category, priority: o.priority }))
+      deliveryZones: deliveryZones.map(z => ({ name: z.name, districts: z.districts, cost: z.cost, deliveryTime: z.deliveryTime, isActive: z.isActive }))
     };
 
     // Only create backup if there's actual configuration to backup
