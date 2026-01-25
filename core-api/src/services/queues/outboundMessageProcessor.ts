@@ -103,7 +103,7 @@ async function sendViaBaileys(data: OutboundMessageJobData): Promise<{ success: 
 }
 
 async function sendViaMeta(data: OutboundMessageJobData): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const { to, message, mediaUrl, mediaType } = data;
+  const { to, message, mediaUrl, mediaType, templateData } = data;
   const credential = data.metaCredential || data.metaCoexistCredential;
 
   if (!credential?.accessToken || !credential?.phoneNumberId) {
@@ -112,7 +112,21 @@ async function sendViaMeta(data: OutboundMessageJobData): Promise<{ success: boo
 
   let payload: any;
 
-  if (mediaUrl) {
+  if (templateData) {
+    payload = {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: templateData.name,
+        language: { code: templateData.language },
+        components: templateData.components && templateData.components.length > 0 
+          ? templateData.components 
+          : undefined
+      }
+    };
+    console.log(`[META_SEND] Sending template "${templateData.name}" to ${to}`);
+  } else if (mediaUrl) {
     const type = mediaType || 'image';
     payload = {
       messaging_product: 'whatsapp',
@@ -141,19 +155,20 @@ async function sendViaMeta(data: OutboundMessageJobData): Promise<{ success: boo
         Authorization: `Bearer ${credential.accessToken}`,
         'Content-Type': 'application/json'
       },
-      httpsAgent: metaHttpsAgent, // <--- 3. USAR AGENTE IPV4 AQUÍ
-      timeout: 60000 // Mantener timeout alto
+      httpsAgent: metaHttpsAgent,
+      timeout: 60000
     });
 
     const elapsed = Date.now() - startTime;
     const messageId = response.data.messages?.[0]?.id;
-    console.log(`[META_SEND] Success: to=${to}, messageId=${messageId}, elapsed=${elapsed}ms`);
+    const msgType = templateData ? `template:${templateData.name}` : (mediaUrl ? mediaType : 'text');
+    console.log(`[META_SEND] Success: to=${to}, type=${msgType}, messageId=${messageId}, elapsed=${elapsed}ms`);
     return { success: true, messageId };
   } catch (error: any) {
     const elapsed = Date.now() - startTime;
-    // Log mejorado para ver si es timeout de conexión o respuesta
     const errorType = error.code || 'UNKNOWN';
-    console.error(`[META_SEND] Failed: to=${to}, elapsed=${elapsed}ms, code=${errorType}, status=${error.response?.status}`);
+    const errorDetails = error.response?.data?.error?.message || error.message;
+    console.error(`[META_SEND] Failed: to=${to}, elapsed=${elapsed}ms, code=${errorType}, status=${error.response?.status}, error=${errorDetails}`);
     throw error;
   }
 }
@@ -308,23 +323,37 @@ async function processOutboundMessage(job: Job<OutboundMessageJobData>, token?: 
     throw error;
   }
 
+  const messageContent = data.templateData 
+    ? `[Template: ${data.templateData.name}]` 
+    : (data.message || (data.mediaUrl ? `[Media: ${data.mediaType || 'file'}]` : ''));
+  
+  const metadata: Record<string, any> = { 
+    source: data.source, 
+    provider: data.provider,
+    mediaType: data.mediaType,
+    queueJobId: data.jobId,
+    processingTimeMs: Date.now() - startTime
+  };
+  
+  if (data.templateData) {
+    metadata.template = data.templateData.name;
+    metadata.templateLanguage = data.templateData.language;
+    if (data.templateData.components) {
+      metadata.templateComponents = JSON.parse(JSON.stringify(data.templateData.components));
+    }
+  }
+    
   await prisma.messageLog.create({
     data: {
       businessId: data.businessId,
       instanceId: data.instanceId,
       sender: data.phoneNumber || data.businessId,
       recipient: data.to,
-      message: data.message || (data.mediaUrl ? `[Media: ${data.mediaType || 'file'}]` : ''),
+      message: messageContent,
       direction: 'outbound',
       mediaUrl: data.mediaUrl || null,
       providerMessageId: result.messageId,
-      metadata: { 
-        source: data.source, 
-        provider: data.provider,
-        mediaType: data.mediaType,
-        queueJobId: data.jobId,
-        processingTimeMs: Date.now() - startTime
-      }
+      metadata
     }
   });
 

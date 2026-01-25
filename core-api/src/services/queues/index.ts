@@ -90,6 +90,25 @@ export interface AIResponseJobData {
   provider?: string;
 }
 
+export interface TemplateComponent {
+  type: 'header' | 'body' | 'button';
+  parameters?: Array<{
+    type: string;
+    text?: string;
+    image?: { link: string };
+    video?: { link: string };
+    document?: { link: string; filename?: string };
+  }>;
+  sub_type?: string;
+  index?: number;
+}
+
+export interface TemplateData {
+  name: string;
+  language: string;
+  components?: TemplateComponent[];
+}
+
 export interface OutboundMessageJobData {
   jobId: string;
   businessId: string;
@@ -113,6 +132,7 @@ export interface OutboundMessageJobData {
   priority: 'high' | 'normal' | 'low';
   source: 'external_api' | 'agent' | 'broadcast' | 'reminder';
   realFailures?: number;
+  templateData?: TemplateData;
 }
 
 export interface MediaDownloadJobData {

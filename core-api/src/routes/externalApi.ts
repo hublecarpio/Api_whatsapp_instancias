@@ -1561,7 +1561,7 @@ router.post('/templates/sync', validateApiKey, async (req: ApiKeyRequest, res: R
 
 router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
-    const { templateName, to, variables, headerVariables, headerMedia } = req.body;
+    const { templateName, to, variables, headerVariables, headerMedia, priority = 'high', sync = false } = req.body;
     
     if (!templateName || !to) {
       return res.status(400).json({ error: 'templateName y to son requeridos' });
@@ -1631,47 +1631,106 @@ router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: R
       });
     }
     
-    const response = await axios.post(
-      `${META_API_URL}/${creds.phoneNumberId}/messages`,
-      {
-        messaging_product: 'whatsapp',
-        to: cleanTo,
-        type: 'template',
-        template: {
-          name: template.name,
-          language: { code: template.language },
-          components: templateComponents.length > 0 ? templateComponents : undefined
-        }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${creds.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    const queue = getOutboundMessageQueue();
+    const business = req.business;
+    const instance = req.instance;
     
-    await prisma.messageLog.create({
-      data: {
-        businessId: req.businessId!,
-        instanceId: req.instanceId,
-        direction: 'outbound',
-        recipient: cleanTo,
-        message: `[Template: ${template.name}]`,
-        metadata: { 
-          provider: req.instance.provider,
-          template: template.name,
-          variables,
-          viaExternalApi: true
+    if (!queue || sync) {
+      const response = await axios.post(
+        `${META_API_URL}/${creds.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          to: cleanTo,
+          type: 'template',
+          template: {
+            name: template.name,
+            language: { code: template.language },
+            components: templateComponents.length > 0 ? templateComponents : undefined
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${creds.accessToken}`,
+            'Content-Type': 'application/json'
+          }
         }
+      );
+      
+      await prisma.messageLog.create({
+        data: {
+          businessId: req.businessId!,
+          instanceId: req.instanceId,
+          direction: 'outbound',
+          recipient: cleanTo,
+          message: `[Template: ${template.name}]`,
+          metadata: { 
+            provider: req.instance.provider,
+            template: template.name,
+            variables,
+            viaExternalApi: true,
+            sync: true
+          }
+        }
+      });
+      
+      return res.json({
+        success: true,
+        messageId: response.data.messages?.[0]?.id,
+        template: template.name,
+        sync: true
+      });
+    }
+    
+    const jobId = `tpl_${uuidv4()}`;
+    const jobData: OutboundMessageJobData = {
+      jobId,
+      businessId: business.id,
+      instanceId: instance.id,
+      to: cleanTo,
+      provider: instance.provider as 'META_CLOUD' | 'META_COEXIST',
+      metaCredential: instance.metaCredential ? {
+        accessToken: instance.metaCredential.accessToken,
+        phoneNumberId: instance.metaCredential.phoneNumberId
+      } : undefined,
+      metaCoexistCredential: instance.metaCoexistCredential ? {
+        accessToken: instance.metaCoexistCredential.systemAccessToken || instance.metaCoexistCredential.userAccessToken,
+        phoneNumberId: instance.metaCoexistCredential.phoneNumberId
+      } : undefined,
+      phoneNumber: instance.phoneNumber,
+      enqueuedAt: Date.now(),
+      priority: priority as 'high' | 'normal' | 'low',
+      source: 'external_api',
+      templateData: {
+        name: template.name,
+        language: template.language,
+        components: templateComponents.length > 0 ? templateComponents : undefined
       }
+    };
+    
+    const priorityValue = priority === 'high' ? 1 : priority === 'low' ? 10 : 5;
+    
+    await queue.add(jobId, jobData, {
+      jobId,
+      priority: priorityValue,
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 5000 }
     });
     
-    res.json({
+    await eventLogger.info('EXTERNAL_API', `Template "${template.name}" encolado para ${cleanTo}`, {
+      businessId: business.id,
+      details: { to: cleanTo, template: template.name, jobId, priority }
+    });
+    
+    res.status(202).json({
       success: true,
-      messageId: response.data.messages?.[0]?.id,
-      template: template.name
+      queued: true,
+      jobId,
+      to: cleanTo,
+      template: template.name,
+      status: 'pending',
+      statusUrl: `/api/external/message-status/${jobId}`
     });
+    
   } catch (error: any) {
     console.error('API send template error:', error.response?.data || error.message);
     res.status(500).json({ 
