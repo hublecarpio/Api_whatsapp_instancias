@@ -1266,10 +1266,6 @@ async function processWithAgent(
       normalizedContactPhone
     );
     console.log(`[Agent V1] Intent detected: ${intentAnalysis.intent} (${(intentAnalysis.confidence * 100).toFixed(0)}%)`);
-    
-    if (intentAnalysis.objection) {
-      console.log(`[Agent V1] Objection detected: ${intentAnalysis.objection.name}`);
-    }
   } catch (intentError: any) {
     console.error('[Agent V1] Intent analysis failed:', intentError.message);
   }
@@ -4127,11 +4123,10 @@ router.post('/analyze-prompt', authMiddleware, async (req: AuthRequest, res: Res
     }
     
     // Get existing data to detect conflicts
-    const [existingProducts, existingFields, existingStages, existingObjections, existingZones] = await Promise.all([
+    const [existingProducts, existingFields, existingStages, existingZones] = await Promise.all([
       prisma.product.findMany({ where: { businessId: business_id }, select: { title: true } }),
       prisma.extractionField.findMany({ where: { businessId: business_id }, select: { fieldKey: true } }),
       prisma.funnelStage.findMany({ where: { businessId: business_id }, select: { name: true } }),
-      prisma.salesObjection.findMany({ where: { businessId: business_id }, select: { name: true } }),
       prisma.deliveryZone.findMany({ where: { businessId: business_id }, select: { name: true } })
     ]);
     
@@ -4145,9 +4140,6 @@ router.post('/analyze-prompt', authMiddleware, async (req: AuthRequest, res: Res
       funnelStages: result.config.funnelStages.filter((s: { name: string }) =>
         existingStages.some((es: { name: string }) => es.name.toLowerCase() === s.name.toLowerCase())
       ).map((s: { name: string }) => s.name),
-      objections: result.config.objections.filter((o: { trigger: string }) =>
-        existingObjections.some((eo: { name: string }) => eo.name.toLowerCase() === o.trigger.toLowerCase())
-      ).map((o: { trigger: string }) => o.trigger),
       deliveryZones: result.config.deliveryZones.filter((z: { name: string }) =>
         existingZones.some((ez: { name: string }) => ez.name.toLowerCase() === z.name.toLowerCase())
       ).map((z: { name: string }) => z.name)
@@ -4164,7 +4156,6 @@ router.post('/analyze-prompt', authMiddleware, async (req: AuthRequest, res: Res
         products: existingProducts.length,
         extractionFields: existingFields.length,
         funnelStages: existingStages.length,
-        objections: existingObjections.length,
         deliveryZones: existingZones.length
       }
     });
@@ -4195,7 +4186,6 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
       // NOTE: Products are NOT imported here - they're managed separately via CSV import in Products UI
       extractionFields: { created: 0, skipped: 0, errors: [] },
       funnelStages: { created: 0, skipped: 0, errors: [] },
-      objections: { created: 0, skipped: 0, errors: [] },
       deliveryZones: { created: 0, skipped: 0, errors: [] },
       businessInfo: { created: 0, skipped: 0, errors: [] },
       agentPrompt: { created: 0, skipped: 0, errors: [] }
@@ -4271,37 +4261,6 @@ router.post('/import-config', authMiddleware, async (req: AuthRequest, res: Resp
           results.funnelStages.created++;
         } catch (err: any) {
           results.funnelStages.errors.push(`${stage.name}: ${err.message}`);
-        }
-      }
-    }
-    
-    // Import Objections (using SalesObjection model)
-    if (config.objections?.length > 0) {
-      const existingNames = (await prisma.salesObjection.findMany({
-        where: { businessId: business_id },
-        select: { name: true }
-      })).map((o: { name: string }) => o.name.toLowerCase());
-      
-      for (const objection of config.objections) {
-        try {
-          if (skipConflicts && existingNames.includes(objection.trigger.toLowerCase())) {
-            results.objections.skipped++;
-            continue;
-          }
-          await prisma.salesObjection.create({
-            data: {
-              businessId: business_id,
-              name: objection.trigger,
-              triggerPhrases: [objection.trigger],
-              responseScript: objection.response,
-              category: objection.category || 'general',
-              priority: 50,
-              isActive: true
-            }
-          });
-          results.objections.created++;
-        } catch (err: any) {
-          results.objections.errors.push(`${objection.trigger}: ${err.message}`);
         }
       }
     }
@@ -4457,7 +4416,7 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
       masterPrompt: { updated: false, error: null as string | null },
       sections: { created: 0, skipped: 0, cleared: 0, errors: [] as string[] },
       // NOTE: Products are NOT imported via prompt importer - they're managed separately via CSV import
-      config: { fields: 0, stages: 0, objections: 0, zones: 0 }
+      config: { fields: 0, stages: 0, zones: 0 }
     };
     
     // 1. Update Master Prompt
@@ -4614,31 +4573,6 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
               }
             });
             results.config.stages++;
-          } catch {}
-        }
-      }
-      
-      // Objections
-      if (cfg.objections?.length > 0) {
-        const existingNames = new Set((await prisma.salesObjection.findMany({
-          where: { businessId: business_id },
-          select: { name: true }
-        })).map(o => o.name.toLowerCase()));
-        
-        for (const objection of cfg.objections) {
-          if (skipConflicts && existingNames.has(objection.trigger.toLowerCase())) continue;
-          try {
-            await prisma.salesObjection.create({
-              data: {
-                businessId: business_id,
-                name: objection.trigger,
-                triggerPhrases: [objection.trigger],
-                responseScript: objection.response,
-                category: objection.category || 'general',
-                isActive: true
-              }
-            });
-            results.config.objections++;
           } catch {}
         }
       }
@@ -5182,8 +5116,7 @@ router.post('/config/restore/:backupId', authMiddleware, async (req: AuthRequest
       sections: { restored: 0, errors: [] as string[] },
       extractionFields: { restored: 0, errors: [] as string[] },
       funnelStages: { restored: 0, errors: [] as string[] },
-      deliveryZones: { restored: 0, errors: [] as string[] },
-      objections: { restored: 0, errors: [] as string[] }
+      deliveryZones: { restored: 0, errors: [] as string[] }
     };
 
     // If replace mode, clear existing configuration first (same logic as reset-config but without backup)
@@ -5339,28 +5272,6 @@ router.post('/config/restore/:backupId', authMiddleware, async (req: AuthRequest
       }
     }
 
-    // Restore objections (business-wide, no instanceId)
-    if (config.objections?.length > 0) {
-      for (const obj of config.objections) {
-        try {
-          await prisma.salesObjection.create({
-            data: {
-              businessId,
-              name: obj.name,
-              triggerPhrases: obj.triggerPhrases || [],
-              responseScript: obj.responseScript,
-              category: obj.category,
-              priority: obj.priority || 0,
-              isActive: true
-            }
-          });
-          results.objections.restored++;
-        } catch (err: any) {
-          results.objections.errors.push(`${obj.name}: ${err.message}`);
-        }
-      }
-    }
-
     // Restore tools (need to get prompt ID first)
     if (config.tools?.length > 0) {
       const prompt = await prisma.agentPrompt.findFirst({
@@ -5493,18 +5404,6 @@ router.get('/config/export/:businessId', authMiddleware, async (req: AuthRequest
       }
     });
 
-    // Get objections (no instanceId field - always business-wide)
-    const objections = await prisma.salesObjection.findMany({
-      where: { businessId, isActive: true },
-      select: {
-        name: true,
-        triggerPhrases: true,
-        responseScript: true,
-        category: true,
-        priority: true
-      }
-    });
-
     const config = {
       version: '1.0',
       exportedAt: new Date().toISOString(),
@@ -5529,8 +5428,7 @@ router.get('/config/export/:businessId', authMiddleware, async (req: AuthRequest
       sections,
       extractionFields,
       funnelStages,
-      deliveryZones,
-      objections
+      deliveryZones
     };
 
     res.json({ success: true, config });
@@ -5564,8 +5462,7 @@ router.post('/config/import/:businessId', authMiddleware, async (req: AuthReques
       sections: { imported: 0, skipped: 0, errors: [] as string[] },
       extractionFields: { imported: 0, skipped: 0, errors: [] as string[] },
       funnelStages: { imported: 0, skipped: 0, errors: [] as string[] },
-      deliveryZones: { imported: 0, skipped: 0, errors: [] as string[] },
-      objections: { imported: 0, skipped: 0, errors: [] as string[] }
+      deliveryZones: { imported: 0, skipped: 0, errors: [] as string[] }
     };
 
     // Import prompt
@@ -5754,40 +5651,6 @@ router.post('/config/import/:businessId', authMiddleware, async (req: AuthReques
           results.deliveryZones.imported++;
         } catch (err: any) {
           results.deliveryZones.errors.push(`${zone.name}: ${err.message}`);
-        }
-      }
-    }
-
-    // Import objections
-    if (config.objections && Array.isArray(config.objections)) {
-      for (const objection of config.objections) {
-        try {
-          const existing = await prisma.salesObjection.findFirst({
-            where: { businessId, name: objection.name }
-          });
-
-          if (existing && mode === 'merge') {
-            results.objections.skipped++;
-            continue;
-          }
-
-          if (existing && mode === 'replace') {
-            await prisma.salesObjection.delete({ where: { id: existing.id } });
-          }
-
-          await prisma.salesObjection.create({
-            data: {
-              businessId,
-              name: objection.name,
-              triggerPhrases: objection.triggerPhrases || [],
-              responseScript: objection.responseScript || '',
-              category: objection.category,
-              priority: objection.priority || 0
-            }
-          });
-          results.objections.imported++;
-        } catch (err: any) {
-          results.objections.errors.push(`${objection.name}: ${err.message}`);
         }
       }
     }
