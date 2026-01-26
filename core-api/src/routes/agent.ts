@@ -1372,8 +1372,10 @@ async function processWithAgent(
       if (product.description) {
         systemPrompt += ` - ${product.description}`;
       }
-      if (product.imageUrl) {
-        systemPrompt += ` [IMG:${product.imageUrl}]`;
+      // Use imageUrl if available, otherwise use first image from imageUrls array
+      const productImageUrl = product.imageUrl || (product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : null);
+      if (productImageUrl) {
+        systemPrompt += ` [IMG:${productImageUrl}]`;
       }
     });
     systemPrompt += `\n\n## ⚠️ REGLA ABSOLUTAMENTE CRÍTICA - NO INVENTAR PRODUCTOS:`;

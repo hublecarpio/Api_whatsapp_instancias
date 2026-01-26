@@ -157,6 +157,9 @@ export async function searchProductsIntelligent(
     
     const similarity = Math.max(titleSimilarity, descSimilarity, variationSimilarity);
 
+    // Use imageUrl if available, otherwise use first image from imageUrls array
+    const productImageUrl = product.imageUrl || (product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : null);
+    
     return {
       id: product.id,
       title: product.title,
@@ -167,7 +170,7 @@ export async function searchProductsIntelligent(
       imageUrls: product.imageUrls || [],
       price: product.price,
       stock: product.stock,
-      imageUrl: product.imageUrl,
+      imageUrl: productImageUrl,
       available: product.stock > 0,
       similarity,
       matchedVariation,

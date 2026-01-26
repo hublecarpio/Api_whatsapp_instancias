@@ -255,14 +255,16 @@ function normalizeVariationArrays(
   legacyImageUrl?: string | null
 ): { variations: string[], pricePerVariation: number[], stockPerVariation: number[], imageUrls: string[], price: number, stock: number, imageUrl: string | null } {
   if (variations.length === 0) {
+    // Use legacyImageUrl if available, otherwise use first image from imageUrls array
+    const finalImageUrl = legacyImageUrl || (imageUrls && imageUrls.length > 0 ? imageUrls[0] : null);
     return {
       variations: [],
       pricePerVariation: [],
       stockPerVariation: [],
-      imageUrls: legacyImageUrl ? [legacyImageUrl] : [],
+      imageUrls: finalImageUrl ? [finalImageUrl] : (imageUrls || []),
       price: legacyPrice ?? 0,
       stock: legacyStock ?? 0,
-      imageUrl: legacyImageUrl || null
+      imageUrl: finalImageUrl
     };
   }
   
