@@ -2310,7 +2310,7 @@ async function processWithAgent(
             productTitle: product.title,
             quantity,
             unitPrice: product.price,
-            imageUrl: product.imageUrl || (product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : null)
+            imageUrl: product.imageUrl || null
           },
           instanceId
         );
