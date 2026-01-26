@@ -1388,11 +1388,15 @@ async function processWithAgent(
     systemPrompt += `\n\n## Reglas para responder sobre productos:`;
     systemPrompt += `\n- ANTES de responder sobre cualquier producto, verifica que esté en la lista de arriba.`;
     systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué tienen"), PRIMERO pregunta qué modelo específico le interesa.`;
-    systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto Y esté en la lista, muestra los detalles de ese producto.`;
-    systemPrompt += `\n- ENVÍO DE IMÁGENES: SIEMPRE sigue la "instruccion" que devuelve buscar_producto para enviar la foto del producto.`;
-    systemPrompt += `\n- OBLIGATORIO: Si buscar_producto devuelve "imagen_producto", DEBES incluir la URL al final de tu mensaje.`;
-    systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
-    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas DEL CATÁLOGO.`;
+      systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto Y esté en la lista, muestra los detalles de ese producto.`;
+      systemPrompt += `\n\n## 🖼️ REGLA CRÍTICA - ENVÍO DE IMÁGENES DE PRODUCTOS:`;
+      systemPrompt += `\n- OBLIGATORIO: Cada vez que menciones un producto que tiene imagen (marcado con [IMG:URL] en el catálogo), DEBES incluir esa URL en tu respuesta.`;
+      systemPrompt += `\n- Cuando buscar_producto devuelve "imagen_producto" o "instruccion" con una URL, esa URL DEBE aparecer al final de tu mensaje.`;
+      systemPrompt += `\n- SIEMPRE incluye la URL de la imagen al final de tu mensaje cuando respondas sobre un producto que tiene imagen disponible.`;
+      systemPrompt += `\n- Formato: Escribe tu respuesta normal y al final, en una línea separada, incluye SOLO la URL (sin Markdown, sin texto adicional, sin corchetes).`;
+      systemPrompt += `\n- Ejemplo correcto: "Este producto cuesta S/.50 y está disponible.\\nhttps://ejemplo.com/imagen.jpg"`;
+      systemPrompt += `\n- Si un producto NO tiene imagen en el catálogo o buscar_producto NO devuelve imagen, no incluyas ninguna URL.`;
+      systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas DEL CATÁLOGO.`;
     systemPrompt += `\n- Para generar pedidos, usa el ID del producto (el valor después de "ID:").`;
     systemPrompt += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:`;
     systemPrompt += `\n- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.`;
@@ -1413,11 +1417,15 @@ async function processWithAgent(
     systemPrompt += `\n- OBLIGATORIO: Cuando el cliente mencione un producto, usa buscar_producto INMEDIATAMENTE antes de responder.`;
     systemPrompt += `\n- La búsqueda es inteligente: encontrará productos aunque el cliente escriba con errores.`;
     systemPrompt += `\n- IMPORTANTE sobre "mejor_coincidencia": Verifica que el nombre del producto coincida razonablemente con lo que busca el cliente. Si la similitud es menor al 70% o el nombre es muy diferente, pregunta al cliente si se refiere a ese producto.`;
-    systemPrompt += `\n- Si el resultado de buscar_producto tiene "error: true" o "coincidencia_exacta: false" con baja similitud, NO asumas que es el producto correcto. Pregunta al cliente.`;
-    systemPrompt += `\n- ENVÍO DE IMÁGENES: SIEMPRE sigue la "instruccion" que devuelve buscar_producto para enviar la foto del producto.`;
-    systemPrompt += `\n- OBLIGATORIO: Si buscar_producto devuelve "imagen_producto", DEBES incluir la URL al final de tu mensaje.`;
-    systemPrompt += `\n- Incluye la URL SOLA al final de tu mensaje (sin Markdown). Solo UNA imagen por mensaje.`;
-    systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere alternativas DEL CATÁLOGO (usando buscar_producto).`;
+      systemPrompt += `\n- Si el resultado de buscar_producto tiene "error: true" o "coincidencia_exacta: false" con baja similitud, NO asumas que es el producto correcto. Pregunta al cliente.`;
+      systemPrompt += `\n\n## 🖼️ REGLA CRÍTICA - ENVÍO DE IMÁGENES DE PRODUCTOS:`;
+      systemPrompt += `\n- OBLIGATORIO: Cada vez que menciones un producto que tiene imagen, DEBES incluir la URL de la imagen en tu respuesta.`;
+      systemPrompt += `\n- Cuando buscar_producto devuelve "imagen_producto" o "instruccion" con una URL, esa URL DEBE aparecer al final de tu mensaje.`;
+      systemPrompt += `\n- SIEMPRE incluye la URL de la imagen al final de tu mensaje cuando respondas sobre un producto que tiene imagen disponible.`;
+      systemPrompt += `\n- Formato: Escribe tu respuesta normal y al final, en una línea separada, incluye SOLO la URL (sin Markdown, sin texto adicional, sin corchetes).`;
+      systemPrompt += `\n- Ejemplo correcto: "Este producto cuesta S/.50 y está disponible.\\nhttps://ejemplo.com/imagen.jpg"`;
+      systemPrompt += `\n- Si buscar_producto NO devuelve imagen o el producto no tiene imagen, no incluyas ninguna URL.`;
+      systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere alternativas DEL CATÁLOGO (usando buscar_producto).`;
     systemPrompt += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:`;
     systemPrompt += `\n- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.`;
     systemPrompt += `\n- NUNCA digas "tu pedido está registrado/agendado/confirmado" sin haber ejecutado la herramienta primero.`;
@@ -2004,11 +2012,12 @@ async function processWithAgent(
           
           // Add instruction for sending image if best match has image (same direct format as enviar_archivo)
           if (bestMatch?.imageUrl) {
-            result.instruccion = `IMPORTANTE: Incluye esta URL en tu respuesta para enviar la foto del producto: ${bestMatch.imageUrl}`;
+            result.instruccion = `🖼️ OBLIGATORIO: Este producto tiene imagen. DEBES incluir esta URL al final de tu respuesta para que se envíe la foto: ${bestMatch.imageUrl}`;
             result.imagen_producto = {
               url: bestMatch.imageUrl,
               nombre: bestMatch.title
             };
+            result.aviso_imagen = `Este producto tiene imagen disponible. Incluye la URL ${bestMatch.imageUrl} al final de tu respuesta.`;
             // Also save for automatic sending (don't rely on AI including the URL)
             if (!productImagesToSend.includes(bestMatch.imageUrl)) {
               productImagesToSend.push(bestMatch.imageUrl);
