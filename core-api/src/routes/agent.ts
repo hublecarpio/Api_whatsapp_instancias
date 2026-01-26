@@ -17,7 +17,7 @@ import { dispatchAgentMessage, dispatchWebhook } from '../services/webhookServic
 import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsForIntent, IntentAnalysis } from '../services/intentAnalyzer.js';
 import { getContactStageStatus, setContactStage } from '../services/funnelStageService.js';
 import { createAutoOrder } from '../services/orderAutoCreator.js';
-import { createOrder, findProductWithScope, formatAgentToolResponse, addItemToExistingOrder } from '../services/orderService.js';
+import { createOrder, findProductWithScope, formatAgentToolResponse, addItemToExistingOrder, checkExistingPendingOrder } from '../services/orderService.js';
 import { queueAgentResponse, markMessageAsRead as markMsgRead, isQueueAvailable, extractMediaFromText as extractMediaHelper } from '../services/whatsappSender.js';
 
 const router = Router();
@@ -1361,6 +1361,25 @@ async function processWithAgent(
   const productCount = products?.length || 0;
   const isAppointmentMode = business.businessObjective === 'APPOINTMENTS';
   
+  // Check for active pending order
+  const existingOrder = await checkExistingPendingOrder(businessId, normalizedContactPhone, instanceId);
+  let activeOrderInfo = '';
+  if (existingOrder) {
+    const orderItems = await prisma.orderItem.findMany({
+      where: { orderId: existingOrder.id }
+    });
+    const itemsList = orderItems.map(item => `- ${item.productTitle} (x${item.quantity})`).join('\n');
+    activeOrderInfo = `\n\n## 🛒 ORDEN ACTIVA EN ESTA CONVERSACIÓN:\n` +
+      `- ID de pedido: ${existingOrder.id}\n` +
+      `- Estado: ${existingOrder.status === 'AWAITING_VOUCHER' ? 'Esperando comprobante de pago' : 'Pendiente de pago'}\n` +
+      `- Total actual: ${currencySymbol}${existingOrder.totalAmount}\n` +
+      `- Productos en la orden:\n${itemsList}\n\n` +
+      `IMPORTANTE: Esta orden está ACTIVA. Puedes:\n` +
+      `- Agregar más productos usando agregar_producto_orden\n` +
+      `- Completar datos faltantes (dirección, etc.)\n` +
+      `- La orden se mantendrá activa hasta que esté completa con todos los datos y pagos.`;
+  }
+  
   // Add product catalog info only for SALES mode
   if (!isAppointmentMode && productCount > 0 && productCount <= 20) {
     systemPrompt += `\n\n## Catálogo de productos:`;
@@ -1485,6 +1504,17 @@ async function processWithAgent(
       systemPrompt += `\n- NO crees el pedido sin tener: producto, cantidad, zona de entrega, nombre y dirección.`;
       systemPrompt += `\n- SIEMPRE muestra el total ANTES de crear el pedido para que el cliente confirme.`;
       systemPrompt += `\n- Cuando el cliente envíe una imagen de voucher, el sistema la procesará automáticamente.`;
+    }
+    
+    // Add active order info if exists
+    if (activeOrderInfo) {
+      systemPrompt += activeOrderInfo;
+      systemPrompt += `\n\n## 🚨 REGLA CRÍTICA - TRABAJAR CON ORDEN ACTIVA:`;
+      systemPrompt += `\n- Si hay una orden activa (mostrada arriba), DEBES trabajar con esa orden.`;
+      systemPrompt += `\n- Si el cliente quiere agregar más productos, usa agregar_producto_orden (NO uses registrar_pedido de nuevo).`;
+      systemPrompt += `\n- Si faltan datos (dirección, nombre, etc.), puedes pedirlos y actualizar la orden.`;
+      systemPrompt += `\n- La orden permanece activa hasta que esté completa con todos los datos y el pago confirmado.`;
+      systemPrompt += `\n- NO crees una nueva orden si ya hay una activa.`;
     }
   }
   
@@ -1809,6 +1839,31 @@ async function processWithAgent(
         }
       }
     });
+    
+    // Add tool to add products to existing active order
+    if (!canUsePaymentLink) {
+      openaiTools.push({
+        type: 'function' as const,
+        function: {
+          name: 'agregar_producto_orden',
+          description: 'Agrega un producto adicional a una orden activa existente. Usa esta función cuando el cliente quiera agregar más productos a su pedido que ya está en proceso. Solo funciona si hay una orden activa (AWAITING_VOUCHER o PENDING_PAYMENT) para este cliente.',
+          parameters: {
+            type: 'object',
+            properties: {
+              producto_id: {
+                type: 'string',
+                description: 'ID o nombre del producto que el cliente quiere agregar a la orden activa'
+              },
+              cantidad: {
+                type: 'integer',
+                description: 'Cantidad de unidades a agregar (por defecto 1)'
+              }
+            },
+            required: ['producto_id']
+          }
+        }
+      });
+    }
   }
   
   if (business.businessObjective === 'APPOINTMENTS') {
@@ -2123,9 +2178,12 @@ async function processWithAgent(
             source: 'agent_tool'
           });
           
-          const toolResponse = formatAgentToolResponse(orderResult, business.currencySymbol || 'S/.');
+          let toolResponse: any = formatAgentToolResponse(orderResult, business.currencySymbol || 'S/.');
           
+          // Add info about active order if order was created/updated
           if (orderResult.success && orderResult.orderId) {
+            toolResponse.orden_activa = true;
+            toolResponse.mensaje += ` La orden está activa en esta conversación. Puedes agregar más productos usando agregar_producto_orden o completar datos faltantes.`;
             await prisma.paymentLinkRequest.create({
               data: {
                 businessId,
@@ -2219,6 +2277,73 @@ async function processWithAgent(
           tool_call_id: toolCall.id,
           content: paymentResult
         });
+        continue;
+      }
+      
+      if (toolName === 'agregar_producto_orden') {
+        const args = JSON.parse(fn.arguments);
+        const productSearch = args.producto_id;
+        const quantity = args.cantidad || 1;
+        
+        console.log(`[Agent V1] Adding product to existing order: product="${productSearch}", qty=${quantity}`);
+        
+        const product = await findProductWithScope(businessId, productSearch, instanceId);
+        
+        if (!product) {
+          const addItemResult = JSON.stringify({
+            exito: false,
+            error: `Producto "${productSearch}" no encontrado en el catálogo`
+          });
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: addItemResult
+          });
+          continue;
+        }
+        
+        const addItemResult = await addItemToExistingOrder(
+          businessId,
+          contactPhone,
+          {
+            productId: product.id,
+            productTitle: product.title,
+            quantity,
+            unitPrice: product.price,
+            imageUrl: product.imageUrl || (product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : null)
+          },
+          instanceId
+        );
+        
+        if (addItemResult.success) {
+          const response = JSON.stringify({
+            exito: true,
+            mensaje: `Producto "${product.title}" agregado exitosamente a la orden activa`,
+            pedido_id: addItemResult.orderId,
+            total_actualizado: addItemResult.newTotal,
+            cantidad_items: addItemResult.itemCount,
+            moneda: business.currencySymbol || 'S/.',
+            orden_activa: true,
+            instrucciones: 'El producto se agregó a la orden activa. Puedes seguir agregando más productos o completar los datos faltantes.'
+          });
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: response
+          });
+          console.log(`[Agent V1] Product added to order: ${addItemResult.orderId}, new total: ${addItemResult.newTotal}`);
+        } else {
+          const response = JSON.stringify({
+            exito: false,
+            error: addItemResult.reason || 'No se pudo agregar el producto a la orden'
+          });
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: response
+          });
+          console.log(`[Agent V1] Failed to add product: ${addItemResult.reason}`);
+        }
         continue;
       }
       
