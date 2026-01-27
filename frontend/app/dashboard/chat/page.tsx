@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
@@ -159,6 +159,7 @@ export default function ChatPage() {
   const [editingValue, setEditingValue] = useState('');
   const [savingField, setSavingField] = useState(false);
   const [currentStage, setCurrentStage] = useState<{id: string; name: string; color: string} | null>(null);
+  const [contactTags, setContactTags] = useState<Record<string, Tag[]>>({});
   const [funnelStage, setFunnelStage] = useState<{id: string; name: string; order: number} | null>(null);
   const [availableFunnelStages, setAvailableFunnelStages] = useState<Array<{id: string; name: string; order: number}>>([]);
   const [changingFunnelStage, setChangingFunnelStage] = useState(false);
@@ -178,6 +179,12 @@ export default function ChatPage() {
   const [roundRobinAdvisors, setRoundRobinAdvisors] = useState<string[]>([]);
   const [roundRobinWeights, setRoundRobinWeights] = useState<Record<string, number>>({});
   const [savingRoundRobin, setSavingRoundRobin] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{x: number; y: number; phone: string; contactName: string} | null>(null);
+  const [showCreateTagModal, setShowCreateTagModal] = useState(false);
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [tagDropdownPhone, setTagDropdownPhone] = useState<string | null>(null);
+  const [tagDropdownPosition, setTagDropdownPosition] = useState<{x: number; y: number} | null>(null);
+  const [tagQuickAddRef, setTagQuickAddRef] = useState<{phone: string; element: HTMLElement} | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -194,6 +201,9 @@ export default function ChatPage() {
     setSelectedContactName(contactName || '');
     setSelectedConversationInstanceId(instanceId);
     setChatListOpen(false);
+    
+    // Cargar etiquetas del contacto seleccionado
+    fetchContactTags(phone);
     
     const selectedInst = instances.find(i => i.id === instanceId);
     if (selectedInst?.instanceNumber) {
@@ -279,6 +289,15 @@ export default function ChatPage() {
       return () => clearInterval(interval);
     }
   }, [currentBusiness]);
+
+  // Cargar etiquetas de todos los contactos cuando se cargan las conversaciones
+  useEffect(() => {
+    if (conversations.length > 0 && currentBusiness) {
+      conversations.forEach(conv => {
+        fetchContactTags(conv.phone);
+      });
+    }
+  }, [conversations, currentBusiness]);
 
   const fetchDailyContacts = async () => {
     if (!currentBusiness) return;
@@ -474,30 +493,15 @@ export default function ChatPage() {
   const handleAssignTag = async (phone: string, tagId: string) => {
     if (!currentBusiness) return;
     if (!tagId) {
-      try {
-        setAssigningTag(true);
-        await tagsApi.unassign({ business_id: currentBusiness.id, contact_phone: phone });
-        await fetchTags();
-        if (phone === selectedPhone) {
-          setCurrentStage(null);
-          fetchContactExtractedData(phone);
-        }
-      } catch (err) {
-        console.error('Failed to unassign tag:', err);
-      } finally {
-        setAssigningTag(false);
-      }
+      // If tagId is empty, do nothing (we don't remove all tags anymore)
       return;
     }
     setAssigningTag(true);
     try {
       await tagsApi.assign({ business_id: currentBusiness.id, contact_phone: phone, tag_id: tagId });
-      const [tagsResult] = await Promise.all([fetchTags()]);
+      // Refresh tags for this contact
+      await fetchContactTags(phone);
       if (phone === selectedPhone) {
-        const assignedTag = tags.find(t => t.id === tagId);
-        if (assignedTag) {
-          setCurrentStage({ id: assignedTag.id, name: assignedTag.name, color: assignedTag.color });
-        }
         fetchContactExtractedData(phone);
       }
     } catch (err) {
@@ -507,18 +511,68 @@ export default function ChatPage() {
     }
   };
 
+  const handleRemoveTag = async (phone: string, tagId: string) => {
+    if (!currentBusiness) return;
+    setAssigningTag(true);
+    try {
+      await tagsApi.removeAssignment(currentBusiness.id, phone, tagId);
+      // Refresh tags for this contact
+      await fetchContactTags(phone);
+      if (phone === selectedPhone) {
+        fetchContactExtractedData(phone);
+      }
+    } catch (err) {
+      console.error('Failed to remove tag:', err);
+    } finally {
+      setAssigningTag(false);
+    }
+  };
+
+  const fetchContactTags = async (phone: string) => {
+    if (!currentBusiness) return;
+    try {
+      const response = await tagsApi.getContactTags(currentBusiness.id, phone);
+      const contactTagsData = Array.isArray(response.data) ? response.data : (response.data ? [response.data] : []);
+      const tagsList = contactTagsData.map((assignment: any) => assignment.tag || assignment).filter(Boolean);
+      setContactTags(prev => ({ ...prev, [phone]: tagsList }));
+    } catch (err) {
+      console.error('Failed to fetch contact tags:', err);
+      setContactTags(prev => ({ ...prev, [phone]: [] }));
+    }
+  };
+
   const getContactTag = (phone: string): Tag | undefined => {
-    const assignment = assignments.find(a => a.contactPhone === phone);
-    return assignment?.tag;
+    // For backward compatibility, return first tag
+    const tags = contactTags[phone] || [];
+    return tags[0];
+  };
+
+  const getContactTags = (phone: string): Tag[] => {
+    return contactTags[phone] || [];
   };
 
   const getConversationsByTag = (tagId: string | null): Conversation[] => {
     if (!tagId) {
-      const assignedPhones = assignments.map(a => a.contactPhone);
-      return conversations.filter(c => !assignedPhones.includes(c.phone));
+      // Show conversations without any tags
+      return conversations.filter(c => {
+        const tags = getContactTags(c.phone);
+        return tags.length === 0;
+      });
     }
-    const phonesForTag = assignments.filter(a => a.tagId === tagId).map(a => a.contactPhone);
-    return conversations.filter(c => phonesForTag.includes(c.phone));
+    // Show conversations that have this specific tag
+    return conversations.filter(c => {
+      const tags = getContactTags(c.phone);
+      return tags.some(t => t.id === tagId);
+    });
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, phone: string, contactName: string) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, phone, contactName });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
   };
 
   useEffect(() => {
@@ -568,7 +622,8 @@ export default function ChatPage() {
     try {
       const [extractionRes, stageRes] = await Promise.all([
         extractionApi.getContactData(currentBusiness.id, phone),
-        tagsApi.getContactExtractedData(currentBusiness.id, phone)
+        tagsApi.getContactExtractedData(currentBusiness.id, phone),
+        fetchContactTags(phone)
       ]);
       setExtractedFields(extractionRes.data || []);
       const dataMap: Record<string, any> = {};
@@ -576,7 +631,9 @@ export default function ChatPage() {
         if (f.value) dataMap[f.fieldKey] = f.value;
       });
       setContactData(dataMap);
-      setCurrentStage(stageRes.data.currentStage || null);
+      // For backward compatibility, set first tag as currentStage
+      const contactTagsList = contactTags[phone] || [];
+      setCurrentStage(contactTagsList[0] ? { id: contactTagsList[0].id, name: contactTagsList[0].name, color: contactTagsList[0].color } : null);
       setFunnelStage(stageRes.data.funnelStage || null);
     } catch (err) {
       console.error('Failed to fetch contact extracted data:', err);
@@ -1235,7 +1292,7 @@ export default function ChatPage() {
       style={containerStyle}
     >
       <div className="flex-1 flex overflow-hidden sm:rounded-2xl border border-dark-border bg-dark-surface shadow-dark-lg">
-        <div className={`${showChatList ? 'w-full sm:w-80' : 'hidden sm:block sm:w-0'} transition-all duration-300 overflow-hidden border-r border-dark-border flex flex-col`}>
+        <div className={`${showChatList ? 'w-full sm:w-64 lg:w-72' : 'hidden sm:block sm:w-0'} transition-all duration-300 overflow-hidden border-r border-dark-border flex flex-col`}>
           <div className="p-3 border-b border-dark-border bg-dark-card">
             {instances.length > 1 && (
               <div className="mb-2 flex items-center gap-1.5 flex-wrap">
@@ -1354,12 +1411,77 @@ export default function ChatPage() {
                 <span className="font-medium">{dailyContacts.count}/{dailyContacts.limit}</span>
               </div>
             )}
-            {(viewMode === 'kanban' || isAdvisorMode) && tags.length > 0 && (
-              <div className="flex gap-1 overflow-x-auto pb-1 hide-scrollbar">
-                <button onClick={() => setSelectedTag(null)} className={`text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${selectedTag === null ? 'bg-white text-dark-bg' : 'bg-dark-hover text-gray-400 hover:bg-dark-border'}`}>Sin etiqueta</button>
-                {tags.map(tag => (
-                  <button key={tag.id} onClick={() => setSelectedTag(tag.id)} className="text-xs px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0" style={{ backgroundColor: selectedTag === tag.id ? tag.color : `${tag.color}30`, color: selectedTag === tag.id ? 'white' : tag.color }}>{tag.name} ({getConversationsByTag(tag.id).length})</button>
-                ))}
+            {/* Lista de etiquetas mejorada con contadores - Compacta y colapsable */}
+            {tags.length > 0 && (
+              <div className="mb-1.5">
+                <div className="flex items-center justify-between mb-1">
+                  <button
+                    onClick={() => setSelectedTag(null)}
+                    className={`text-xs px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors ${
+                      selectedTag === null 
+                        ? 'bg-neon-blue/20 text-neon-blue' 
+                        : 'text-gray-400 hover:text-white hover:bg-dark-hover'
+                    }`}
+                  >
+                    <span className="text-[10px]">📋</span>
+                    <span className="font-medium text-[11px]">Etiquetas</span>
+                  </button>
+                  <button
+                    onClick={() => setShowCreateTagModal(true)}
+                    className="text-[10px] px-1 py-0.5 rounded bg-dark-hover text-gray-400 hover:text-white hover:bg-dark-border transition-colors"
+                    title="Crear nueva etiqueta"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="space-y-0.5 max-h-[100px] overflow-y-auto scrollbar-thin scrollbar-track-dark-bg scrollbar-thumb-dark-border">
+                  <button 
+                    onClick={() => setSelectedTag(null)} 
+                    className={`w-full text-left text-[11px] px-1.5 py-1 rounded flex items-center justify-between transition-all duration-150 ${
+                      selectedTag === null 
+                        ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/50' 
+                        : 'bg-dark-hover text-gray-400 hover:bg-dark-border hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-gray-600 border border-dark-border" />
+                      <span className="font-medium truncate">Sin etiqueta</span>
+                    </div>
+                    <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-surface opacity-70 flex-shrink-0">
+                      {getConversationsByTag(null).length}
+                    </span>
+                  </button>
+                  {tags.map(tag => {
+                    const count = getConversationsByTag(tag.id).length;
+                    return (
+                      <button 
+                        key={tag.id} 
+                        onClick={() => setSelectedTag(tag.id)} 
+                        className={`w-full text-left text-[11px] px-1.5 py-1 rounded flex items-center justify-between transition-all duration-150 ${
+                          selectedTag === tag.id 
+                            ? 'border' 
+                            : 'hover:bg-dark-border'
+                        }`}
+                        style={{ 
+                          backgroundColor: selectedTag === tag.id ? `${tag.color}30` : 'transparent',
+                          color: selectedTag === tag.id ? tag.color : 'inherit',
+                          borderColor: selectedTag === tag.id ? `${tag.color}50` : 'transparent'
+                        }}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <div 
+                            className="w-2 h-2 rounded-full flex-shrink-0 border border-dark-border" 
+                            style={{ backgroundColor: tag.color }}
+                          />
+                          <span className="font-medium truncate">{tag.name}</span>
+                        </div>
+                        <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-surface opacity-70 flex-shrink-0 ml-1">
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -1377,14 +1499,53 @@ export default function ChatPage() {
                 </div>
                 {searchQuery ? 'No se encontraron resultados' : 'No hay conversaciones'}
               </div>
+            ) : viewMode === 'kanban' ? (
+              <div className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto pb-4 px-2 sm:px-4 scrollbar-thin scrollbar-track-dark-bg scrollbar-thumb-dark-border" style={{ height: 'calc(100vh - 140px)', minHeight: '500px' }}>
+                {/* Columna "Sin etiqueta" */}
+                <KanbanColumn
+                  title="Sin etiqueta"
+                  color="#6B7280"
+                  conversations={getConversationsByTag(null)}
+                  onSelectConversation={handleSelectConversation}
+                  selectedPhone={selectedPhone}
+                  onContextMenu={handleContextMenu}
+                  getContactTags={getContactTags}
+                  formatDate={formatDate}
+                />
+                
+                {/* Columnas por cada etiqueta */}
+                {tags.map(tag => (
+                  <KanbanColumn
+                    key={tag.id}
+                    title={tag.name}
+                    color={tag.color}
+                    conversations={getConversationsByTag(tag.id)}
+                    onSelectConversation={handleSelectConversation}
+                    selectedPhone={selectedPhone}
+                    onContextMenu={handleContextMenu}
+                    getContactTags={getContactTags}
+                    formatDate={formatDate}
+                  />
+                ))}
+              </div>
             ) : (
-              (viewMode === 'kanban' ? getConversationsByTag(selectedTag) : filteredConversations).map((conv) => {
-                const contactTag = getContactTag(conv.phone);
+              filteredConversations.map((conv) => {
+                const contactTagsList = getContactTags(conv.phone);
                 return (
-                  <button key={conv.phone} onClick={() => handleSelectConversation(conv.phone, conv.contactName || '', conv.instanceId || null)} className={`w-full p-3 text-left hover:bg-dark-hover transition-colors flex items-center gap-3 ${selectedPhone === conv.phone ? 'bg-neon-blue/10 border-l-2 border-neon-blue' : ''}`}>
+                  <button 
+                    key={conv.phone} 
+                    onClick={() => handleSelectConversation(conv.phone, conv.contactName || '', conv.instanceId || null)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      handleContextMenu(e, conv.phone, conv.contactName || '');
+                    }}
+                    className={`w-full p-3 text-left hover:bg-dark-hover transition-colors flex items-center gap-3 ${selectedPhone === conv.phone ? 'bg-neon-blue/10 border-l-2 border-neon-blue' : ''}`}
+                  >
                     <div className="w-12 h-12 bg-dark-card rounded-full flex items-center justify-center flex-shrink-0 relative">
                       <span className="text-xl">👤</span>
-                      {contactTag && <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-dark-surface" style={{ backgroundColor: contactTag.color }} />}
+                      {contactTagsList.length > 0 && (
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-dark-surface" style={{ backgroundColor: contactTagsList[0].color }} />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
@@ -1400,7 +1561,28 @@ export default function ChatPage() {
                           )}
                         </span>
                         <p className="text-sm text-gray-400 truncate flex-1">{conv.lastMessage || 'Sin mensajes'}</p>
-                        {contactTag && viewMode === 'list' && <span className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: `${contactTag.color}20`, color: contactTag.color }}>{contactTag.name}</span>}
+                        {contactTagsList.length > 0 && (
+                          <div className="flex gap-1 flex-wrap flex-shrink-0">
+                            {contactTagsList.slice(0, 3).map(tag => (
+                              <span 
+                                key={tag.id} 
+                                className="text-xs px-1.5 py-0.5 rounded-full font-medium border transition-all hover:scale-105" 
+                                style={{ 
+                                  backgroundColor: `${tag.color}20`, 
+                                  color: tag.color,
+                                  borderColor: `${tag.color}40`
+                                }}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                            {contactTagsList.length > 3 && (
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-dark-hover text-gray-400">
+                                +{contactTagsList.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -1410,10 +1592,10 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className={`${selectedPhone ? 'flex' : 'hidden sm:flex'} flex-1 flex-col min-w-0`}>
+        <div className={`${selectedPhone ? 'flex' : 'hidden sm:flex'} flex-1 flex-col min-w-0 overflow-hidden`}>
           {selectedPhone ? (
             <>
-              <div className="px-3 sm:px-4 py-3 border-b border-dark-border bg-dark-card flex items-center gap-3">
+              <div className="px-3 sm:px-4 py-2 border-b border-dark-border bg-dark-card flex items-center gap-2 flex-wrap">
                 <button onClick={() => { setChatListOpen(true); setSelectedPhone(null); router.replace('/dashboard/chat', { scroll: false }); }} className="sm:hidden p-1.5 text-gray-400 hover:text-white transition-colors">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
@@ -1482,24 +1664,68 @@ export default function ChatPage() {
                     )}
                   </div>
                 </div>
-                {availableFunnelStages.length > 0 ? (
-                  <select 
-                    value={funnelStage?.id || ''} 
-                    onChange={(e) => handleChangeFunnelStage(e.target.value)} 
-                    className="hidden sm:block text-xs bg-dark-card border border-dark-border rounded px-2 py-1 text-white" 
-                    disabled={changingFunnelStage}
-                  >
-                    <option value="">Sin etapa</option>
-                    {availableFunnelStages.map(stage => (
-                      <option key={stage.id} value={stage.id}>{stage.name}</option>
+                {/* Funnel Stage y Etiquetas - Compacto en una línea */}
+                <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                  {availableFunnelStages.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-[10px] text-gray-400">Etapa:</span>
+                      <select 
+                        value={funnelStage?.id || ''} 
+                        onChange={(e) => handleChangeFunnelStage(e.target.value)} 
+                        className="text-[11px] bg-dark-card border border-dark-border rounded px-1.5 py-0.5 text-white" 
+                        disabled={changingFunnelStage}
+                      >
+                        <option value="">Sin etapa</option>
+                        {availableFunnelStages.map(stage => (
+                          <option key={stage.id} value={stage.id}>{stage.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  
+                  {/* Etiquetas (manuales) - Compacto */}
+                  <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+                    <span className="text-[10px] text-gray-400 flex-shrink-0">Etiquetas:</span>
+                    {getContactTags(selectedPhone).slice(0, 1).map(tag => (
+                      <span 
+                        key={tag.id}
+                        className="text-[10px] px-1 py-0.5 rounded-full flex items-center gap-0.5 font-medium border transition-all hover:scale-105 cursor-default flex-shrink-0"
+                        style={{ 
+                          backgroundColor: `${tag.color}15`, 
+                          color: tag.color,
+                          borderColor: `${tag.color}40`
+                        }}
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
+                        <span className="truncate max-w-[50px]">{tag.name}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveTag(selectedPhone, tag.id);
+                          }}
+                          className="hover:bg-black/20 rounded-full p-0.5 transition-colors ml-0.5 flex-shrink-0"
+                          title="Remover etiqueta"
+                        >
+                          <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </span>
                     ))}
-                  </select>
-                ) : (
-                  <select value={getContactTag(selectedPhone)?.id || ''} onChange={(e) => handleAssignTag(selectedPhone, e.target.value)} className="hidden sm:block text-xs bg-dark-card border border-dark-border rounded px-2 py-1 text-white" disabled={assigningTag}>
-                    <option value="">Sin etiqueta</option>
-                    {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
-                  </select>
-                )}
+                    {getContactTags(selectedPhone).length > 1 && (
+                      <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-hover text-gray-400 flex-shrink-0">
+                        +{getContactTags(selectedPhone).length - 1}
+                      </span>
+                    )}
+                    <TagQuickAdd
+                      phone={selectedPhone}
+                      currentTags={getContactTags(selectedPhone)}
+                      onOpen={(element) => {
+                        setTagQuickAddRef({ phone: selectedPhone, element });
+                      }}
+                    />
+                  </div>
+                </div>
                 {!isAdvisorMode && (getContactAdvisor(selectedPhone) ? (
                   <span className="hidden sm:flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1603,17 +1829,60 @@ export default function ChatPage() {
                 <div className="px-4 py-3 border-b border-dark-border bg-dark-surface max-h-[50vh] flex flex-col">
                   <div className="flex items-center justify-between mb-3 flex-shrink-0">
                     <h4 className="text-sm font-medium text-white">Datos del Contacto</h4>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-2">
+                      {/* Etapa del Embudo (automática) */}
                       {funnelStage && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30" title="Etapa del flujo de venta">
-                          🎯 {funnelStage.name}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400">Etapa del Embudo:</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30" title="Etapa del flujo de venta (automática)">
+                            🎯 {funnelStage.name}
+                          </span>
+                        </div>
                       )}
-                      {currentStage && (
-                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${currentStage.color}20`, color: currentStage.color }} title="Etapa CRM">
-                          {currentStage.name}
-                        </span>
-                      )}
+                      {/* Etiquetas (manuales) - Compacto */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] text-gray-400 flex-shrink-0">Etiquetas:</span>
+                        <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+                          {getContactTags(selectedPhone).slice(0, 1).map(tag => (
+                            <span 
+                              key={tag.id}
+                              className="text-[10px] px-1 py-0.5 rounded-full flex items-center gap-0.5 font-medium border transition-all hover:scale-105 flex-shrink-0"
+                              style={{ 
+                                backgroundColor: `${tag.color}15`, 
+                                color: tag.color,
+                                borderColor: `${tag.color}40`
+                              }}
+                            >
+                              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
+                              <span className="truncate max-w-[50px]">{tag.name}</span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveTag(selectedPhone, tag.id);
+                                }}
+                                className="hover:bg-black/20 rounded-full p-0.5 transition-colors ml-0.5 flex-shrink-0"
+                                title="Remover etiqueta"
+                              >
+                                <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </span>
+                          ))}
+                          {getContactTags(selectedPhone).length > 1 && (
+                            <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-hover text-gray-400 flex-shrink-0">
+                              +{getContactTags(selectedPhone).length - 1}
+                            </span>
+                          )}
+                          <TagQuickAdd
+                            phone={selectedPhone}
+                            currentTags={getContactTags(selectedPhone)}
+                            onOpen={(element) => {
+                              setTagQuickAddRef({ phone: selectedPhone, element });
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                   {extractedFields.length > 0 ? (
@@ -2224,6 +2493,528 @@ export default function ChatPage() {
           </div>
         </div>
       )}
+
+      {/* Menú contextual (click derecho) */}
+      {contextMenu && (
+        <>
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={closeContextMenu}
+          />
+          <div
+            className="fixed z-50 bg-dark-card border border-dark-border rounded-lg shadow-xl min-w-[200px]"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTagDropdownPhone(contextMenu.phone);
+                  setTagDropdownPosition({ x: contextMenu.x + 200, y: contextMenu.y });
+                  setShowTagDropdown(true);
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-hover rounded transition-colors flex items-center justify-between"
+              >
+                <span>Asignar etiqueta</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  setShowCreateTagModal(true);
+                  closeContextMenu();
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-hover rounded transition-colors"
+              >
+                Crear nueva etiqueta...
+              </button>
+              {getContactTags(contextMenu.phone).length > 0 && (
+                <>
+                  <div className="border-t border-dark-border my-1" />
+                  <div className="px-2 py-1 text-xs text-gray-400">Etiquetas actuales:</div>
+                  {getContactTags(contextMenu.phone).map(tag => (
+                    <button
+                      key={tag.id}
+                      onClick={() => {
+                        handleRemoveTag(contextMenu.phone, tag.id);
+                        closeContextMenu();
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm rounded transition-colors flex items-center gap-2 hover:bg-dark-hover"
+                      style={{ color: tag.color }}
+                    >
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
+                      <span>Remover "{tag.name}"</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Dropdown para TagQuickAdd */}
+      {tagQuickAddRef && tagQuickAddRef.element && (
+        <TagDropdown
+          phone={tagQuickAddRef.phone}
+          position={(() => {
+            try {
+              if (tagQuickAddRef.element && typeof window !== 'undefined') {
+                const rect = tagQuickAddRef.element.getBoundingClientRect();
+                return { x: rect.left, y: rect.bottom + 4 };
+              }
+            } catch (e) {
+              console.error('Error getting button position:', e);
+            }
+            return { x: 0, y: 0 };
+          })()}
+          currentTags={getContactTags(tagQuickAddRef.phone)}
+          onAssign={async (tagId: string) => {
+            await handleAssignTag(tagQuickAddRef.phone, tagId);
+          }}
+          onRemove={async (tagId: string) => {
+            await handleRemoveTag(tagQuickAddRef.phone, tagId);
+          }}
+          onClose={() => {
+            setTagQuickAddRef(null);
+          }}
+        />
+      )}
+
+      {/* Modal para crear etiqueta */}
+      {showCreateTagModal && (
+        <CreateTagModal
+          onClose={() => setShowCreateTagModal(false)}
+          onSuccess={async () => {
+            await fetchTags();
+            setShowCreateTagModal(false);
+          }}
+        />
+      )}
+
+    </div>
+  );
+}
+
+// Componente modal para crear etiqueta
+function CreateTagModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const { currentBusiness } = useBusinessStore();
+  const { selectedInstanceId } = useInstanceStore();
+  const [name, setName] = useState('');
+  const [color, setColor] = useState('#6B7280');
+  const [description, setDescription] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const presetColors = [
+    '#22C55E', '#3B82F6', '#EAB308', '#F97316', '#10B981',
+    '#6B7280', '#8B5CF6', '#EC4899', '#14B8A6', '#F59E0B'
+  ];
+
+  const handleCreate = async () => {
+    if (!name.trim() || !currentBusiness) return;
+    setCreating(true);
+    try {
+      await tagsApi.create({
+        business_id: currentBusiness.id,
+        instance_id: selectedInstanceId || undefined,
+        name: name.trim(),
+        color,
+        description: description.trim() || undefined
+      });
+      onSuccess();
+    } catch (err) {
+      console.error('Failed to create tag:', err);
+      alert('Error al crear etiqueta');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-dark-card border border-dark-border rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-white mb-4">Crear Nueva Etiqueta</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Nombre</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej: VIP, Urgente, etc."
+              className="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded text-white text-sm focus:outline-none focus:border-neon-blue"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Color</label>
+            <div className="flex gap-2 flex-wrap">
+              {presetColors.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
+                  className={`w-8 h-8 rounded-full border-2 transition-all ${color === c ? 'border-white scale-110' : 'border-dark-border'}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="mt-2 w-full h-10 rounded cursor-pointer"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Descripción (opcional)</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Descripción de la etiqueta..."
+              rows={2}
+              className="w-full px-3 py-2 bg-dark-surface border border-dark-border rounded text-white text-sm focus:outline-none focus:border-neon-blue resize-none"
+            />
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={!name.trim() || creating}
+            className="px-4 py-2 bg-neon-blue text-dark-bg rounded-lg font-medium hover:bg-neon-blue-light disabled:opacity-50 transition-colors"
+          >
+            {creating ? 'Creando...' : 'Crear'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Componente dropdown fluido para asignar etiquetas
+function TagDropdown({ 
+  phone, 
+  position, 
+  currentTags, 
+  onClose, 
+  onAssign, 
+  onRemove 
+}: { 
+  phone: string; 
+  position: { x: number; y: number };
+  currentTags: Tag[]; 
+  onClose: () => void; 
+  onAssign: (tagId: string) => Promise<void>; 
+  onRemove: (tagId: string) => Promise<void>;
+}) {
+  const { currentBusiness } = useBusinessStore();
+  const { selectedInstanceId } = useInstanceStore();
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [loading, setLoading] = useState(true);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchTags = async () => {
+      if (!currentBusiness) return;
+      try {
+        const res = await tagsApi.list(currentBusiness.id, selectedInstanceId || undefined);
+        setTags(res.data);
+      } catch (err) {
+        console.error('Failed to fetch tags:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTags();
+  }, [currentBusiness, selectedInstanceId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  const currentTagIds = new Set(currentTags.map(t => t.id));
+
+  // Ajustar posición si el dropdown se sale de la pantalla (responsive)
+  const adjustedPosition = useMemo(() => {
+    if (typeof window === 'undefined') return position;
+    
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const isMobile = viewportWidth < 640; // sm breakpoint
+    
+    let x = position.x;
+    let y = position.y;
+    const dropdownWidth = isMobile ? Math.min(280, viewportWidth - 20) : 320;
+    const dropdownHeight = 400; // max height
+
+    // Ajustar horizontalmente
+    if (x + dropdownWidth > viewportWidth) {
+      x = Math.max(10, viewportWidth - dropdownWidth - 10);
+    }
+    if (x < 10) x = 10;
+
+    // Ajustar verticalmente
+    if (y + dropdownHeight > viewportHeight) {
+      y = Math.max(10, viewportHeight - dropdownHeight - 10);
+    }
+    if (y < 10) y = 10;
+
+    return { x, y };
+  }, [position]);
+
+  return (
+    <>
+      <div 
+        className="fixed inset-0 z-45" 
+        onClick={onClose}
+      />
+      <div
+        ref={dropdownRef}
+        className="fixed z-50 bg-dark-card border border-dark-border rounded-lg shadow-2xl w-[280px] sm:w-[320px] max-h-[400px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
+        style={{ 
+          left: `${adjustedPosition.x}px`, 
+          top: `${adjustedPosition.y}px`,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-2">
+          <div className="px-2 py-1.5 mb-1 border-b border-dark-border">
+            <h4 className="text-sm font-semibold text-white">Asignar Etiquetas</h4>
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-neon-blue" />
+            </div>
+          ) : (
+            <div className="overflow-y-auto max-h-[320px] space-y-0.5">
+              {tags.map(tag => {
+                const isAssigned = currentTagIds.has(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={async () => {
+                      if (isAssigned) {
+                        await onRemove(tag.id);
+                      } else {
+                        await onAssign(tag.id);
+                      }
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded flex items-center justify-between transition-all duration-150 ${
+                      isAssigned 
+                        ? 'bg-opacity-20' 
+                        : 'hover:bg-dark-hover'
+                    }`}
+                    style={{
+                      backgroundColor: isAssigned ? `${tag.color}25` : 'transparent',
+                      color: isAssigned ? tag.color : 'white'
+                    }}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div 
+                        className="w-3 h-3 rounded-full flex-shrink-0 border border-dark-border" 
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span className="text-sm">{tag.name}</span>
+                    </div>
+                    {isAssigned && (
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+              {tags.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-6">No hay etiquetas disponibles</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Componente TagQuickAdd para botón "+" reutilizable
+function TagQuickAdd({
+  phone,
+  currentTags,
+  onOpen
+}: {
+  phone: string;
+  currentTags: Tag[];
+  onOpen: (element: HTMLElement) => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (buttonRef.current) {
+      // Usar setTimeout para asegurar que el DOM esté actualizado
+      setTimeout(() => {
+        if (buttonRef.current) {
+          onOpen(buttonRef.current);
+        }
+      }, 0);
+    }
+  };
+
+  return (
+    <button
+      ref={buttonRef}
+      onClick={handleClick}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      className="text-[10px] px-1 py-0.5 rounded-full bg-dark-hover text-gray-400 hover:text-white hover:bg-dark-border transition-all duration-150 hover:scale-105 flex-shrink-0"
+      title="Agregar etiqueta"
+      type="button"
+    >
+      +
+    </button>
+  );
+}
+
+// Componente KanbanColumn para vista Kanban
+function KanbanColumn({
+  title,
+  color,
+  conversations,
+  onSelectConversation,
+  selectedPhone,
+  onContextMenu,
+  getContactTags,
+  formatDate
+}: {
+  title: string;
+  color: string;
+  conversations: Conversation[];
+  onSelectConversation: (phone: string, contactName: string, instanceId: string | null) => void;
+  selectedPhone: string | null;
+  onContextMenu: (e: React.MouseEvent, phone: string, contactName: string) => void;
+  getContactTags: (phone: string) => Tag[];
+  formatDate: (date: string) => string;
+}) {
+  return (
+    <div className="flex-shrink-0 w-52 sm:w-60 lg:w-64 bg-dark-surface rounded-lg border border-dark-border flex flex-col" style={{ height: '100%', minHeight: '500px', maxHeight: 'calc(100vh - 140px)' }}>
+      {/* Header de la columna */}
+      <div 
+        className="px-3 py-2.5 border-b border-dark-border flex items-center justify-between sticky top-0 bg-dark-surface rounded-t-lg z-10"
+        style={{ borderBottomColor: `${color}30` }}
+      >
+        <div className="flex items-center gap-2">
+          <div 
+            className="w-3 h-3 rounded-full flex-shrink-0 border border-dark-border" 
+            style={{ backgroundColor: color }}
+          />
+          <h3 className="text-sm font-semibold text-white">{title}</h3>
+        </div>
+        <span className="text-xs px-2 py-0.5 rounded-full bg-dark-hover text-gray-400">
+          {conversations.length}
+        </span>
+      </div>
+      
+      {/* Lista de conversaciones */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        {conversations.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-xs">
+            Sin conversaciones
+          </div>
+        ) : (
+          conversations.map((conv) => {
+            const contactTagsList = getContactTags(conv.phone);
+            return (
+              <button
+                key={conv.phone}
+                onClick={() => onSelectConversation(conv.phone, conv.contactName || '', conv.instanceId || null)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onContextMenu(e, conv.phone, conv.contactName || '');
+                }}
+                className={`w-full p-3 text-left bg-dark-card rounded-lg border border-dark-border hover:border-opacity-60 transition-all duration-150 hover:shadow-lg ${
+                  selectedPhone === conv.phone ? 'border-neon-blue bg-neon-blue/10' : ''
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="w-10 h-10 bg-dark-surface rounded-full flex items-center justify-center flex-shrink-0 relative">
+                    <span className="text-lg">👤</span>
+                    {contactTagsList.length > 0 && (
+                      <div 
+                        className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-dark-surface" 
+                        style={{ backgroundColor: contactTagsList[0].color }} 
+                      />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-medium text-white truncate text-sm">{conv.contactName || `+${conv.phone}`}</p>
+                      <span className="text-xs text-gray-500 flex-shrink-0 ml-2">{formatDate(conv.lastMessageAt)}</span>
+                    </div>
+                    <p className="text-xs text-gray-400 truncate mb-2">{conv.lastMessage || 'Sin mensajes'}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`flex-shrink-0 ${(conv.lastMessageDirection || 'outbound') === 'inbound' ? 'text-accent-success' : 'text-gray-500'}`} title={conv.lastMessageDirection === 'inbound' ? 'Cliente respondio' : 'Esperando respuesta'}>
+                        {(conv.lastMessageDirection || 'outbound') === 'inbound' ? (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                        ) : (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                        )}
+                      </span>
+                      {contactTagsList.length > 0 && (
+                        <div className="flex gap-1 flex-wrap">
+                          {contactTagsList.slice(0, 2).map(tag => (
+                            <span 
+                              key={tag.id} 
+                              className="text-xs px-1.5 py-0.5 rounded-full font-medium" 
+                              style={{ 
+                                backgroundColor: `${tag.color}25`, 
+                                color: tag.color,
+                                border: `1px solid ${tag.color}40`
+                              }}
+                            >
+                              {tag.name}
+                            </span>
+                          ))}
+                          {contactTagsList.length > 2 && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-dark-hover text-gray-400">
+                              +{contactTagsList.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
