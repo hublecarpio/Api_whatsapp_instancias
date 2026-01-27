@@ -764,8 +764,8 @@ router.get('/contact-info/:businessId/:contactPhone', async (req: AuthRequest, r
         orderBy: { scheduledAt: 'desc' },
         take: 10
       }),
-      prisma.tagAssignment.findUnique({
-        where: { businessId_contactPhone: { businessId, contactPhone: decodedPhone } },
+      prisma.tagAssignment.findMany({
+        where: { businessId, contactPhone: decodedPhone },
         include: { tag: true }
       })
     ]);
@@ -774,7 +774,8 @@ router.get('/contact-info/:businessId/:contactPhone', async (req: AuthRequest, r
       contact: contactSettings || { contactPhone: decodedPhone, contactName: null },
       orders,
       appointments,
-      tag: tagAssignment?.tag || null
+      tag: tagAssignment.length > 0 ? tagAssignment[0].tag : null,
+      tags: tagAssignment.map(ta => ta.tag)
     });
   } catch (error: any) {
     console.error('Get contact info error:', error);

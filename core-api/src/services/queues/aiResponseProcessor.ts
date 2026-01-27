@@ -8,7 +8,7 @@ import { searchProductsIntelligent } from '../productSearch.js';
 import { parseAgentOutputToWhatsAppEvents, calculateTypingDelay, WhatsAppEvent } from '../agentOutputParser.js';
 import { MetaCloudService } from '../metaCloud.js';
 import { scheduleFollowUp } from '../followUpService.js';
-import { analyzeAndUpdateLeadStage } from '../leadStageService.js';
+// import { analyzeAndUpdateLeadStage } from '../leadStageService.js'; // DISABLED: Tags are now manual-only
 import axios from 'axios';
 import eventLogger from '../eventLogger.js';
 import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
@@ -247,35 +247,24 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     console.log(`[AI Worker] Buffer ${bufferId} deleted after successful processing`);
   }
   
-  // Analyze and update lead stage after agent response (complete interaction cycle)
-  if (result.response) {
-    setImmediate(async () => {
-      try {
-        const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
-        console.log(`[AI Worker] Updating lead stage after agent response for ${normalizedPhone}`);
-        const stageResult = await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
-        if (stageResult.success) {
-          console.log(`[AI Worker] Lead stage updated to "${stageResult.newStage}" (confidence: ${stageResult.confidence})`);
-        }
-      } catch (err: any) {
-        console.error('[AI Worker] Post-response lead stage update failed:', err.message);
-      }
-    });
+  // NOTE: Automatic tag updates by IA are disabled
+  // Tags are now manual-only. Only funnel stages are updated automatically.
+  // The analyzeAndUpdateLeadStage function updated tags automatically, which is no longer desired.
+  // Funnel stages continue to be updated automatically via checkAndAdvanceStage below.
     
-    // Extract custom data from conversation asynchronously
-    setImmediate(async () => {
-      try {
-        const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
-        console.log(`[AI Worker] Extracting custom data for ${normalizedPhone}`);
-        await processDataExtraction(businessId, normalizedPhone, targetInstanceId);
-        
-        // Check if contact can advance to next funnel stage after data extraction
-        await checkAndAdvanceStage(businessId, normalizedPhone, targetInstanceId);
-      } catch (err: any) {
-        console.error('[AI Worker] Data extraction failed:', err.message);
-      }
-    });
-  }
+  // Extract custom data from conversation asynchronously
+  setImmediate(async () => {
+    try {
+      const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+      console.log(`[AI Worker] Extracting custom data for ${normalizedPhone}`);
+      await processDataExtraction(businessId, normalizedPhone, targetInstanceId);
+      
+      // Check if contact can advance to next funnel stage after data extraction
+      await checkAndAdvanceStage(businessId, normalizedPhone, targetInstanceId);
+    } catch (err: any) {
+      console.error('[AI Worker] Data extraction failed:', err.message);
+    }
+  });
   
   return result;
 }
@@ -295,18 +284,17 @@ async function processWithAgentV2Worker(
     business.agentPrompts?.[0];
   const historyLimit = promptConfigV2?.historyLimit || 10;
   
-  // Get current lead stage for context
+  // Get current lead stage for context (now supports multiple tags)
   const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
-  const currentTagAssignment = await prisma.tagAssignment.findUnique({
+  const currentTagAssignments = await prisma.tagAssignment.findMany({
     where: {
-      businessId_contactPhone: {
-        businessId: business.id,
-        contactPhone: normalizedPhone
-      }
+      businessId: business.id,
+      contactPhone: normalizedPhone
     },
     include: { tag: true }
   });
-  const currentLeadStage = currentTagAssignment?.tag?.name || null;
+  // Use first tag for backward compatibility
+  const currentLeadStage = currentTagAssignments.length > 0 ? currentTagAssignments[0].tag?.name || null : null;
   
   const recentMessages = await prisma.messageLog.findMany({
     where: { 
@@ -396,18 +384,17 @@ async function processWithAgentV1Worker(
   // Track tools executed for webhook dispatch
   const toolsExecuted: string[] = [];
   
-  // Get current lead stage for context
+  // Get current lead stage for context (now supports multiple tags)
   const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
-  const currentTagAssignment = await prisma.tagAssignment.findUnique({
+  const currentTagAssignments = await prisma.tagAssignment.findMany({
     where: {
-      businessId_contactPhone: {
-        businessId: business.id,
-        contactPhone: normalizedPhone
-      }
+      businessId: business.id,
+      contactPhone: normalizedPhone
     },
     include: { tag: true }
   });
-  const currentLeadStage = currentTagAssignment?.tag?.name || null;
+  // Use first tag for backward compatibility
+  const currentLeadStage = currentTagAssignments.length > 0 ? currentTagAssignments[0].tag?.name || null : null;
   
   // Get the correct prompt config for this instance
   // Priority: 1) Prompt specific to instanceId, 2) Shared prompt (instanceId=null), 3) First available
@@ -1790,16 +1777,18 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
   // Analyze and update lead stage after agent response (complete interaction cycle)
   if (result.response) {
     setImmediate(async () => {
-      try {
-        const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
-        console.log(`[AI Direct] Updating lead stage after agent response for ${normalizedPhone}`);
-        const stageResult = await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
-        if (stageResult.success) {
-          console.log(`[AI Direct] Lead stage updated to "${stageResult.newStage}" (confidence: ${stageResult.confidence})`);
-        }
-      } catch (err: any) {
-        console.error('[AI Direct] Post-response lead stage update failed:', err.message);
-      }
+      // NOTE: Automatic tag updates by IA are disabled
+      // Tags are now manual-only. Only funnel stages are updated automatically.
+      // try {
+      //   const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+      //   console.log(`[AI Direct] Updating lead stage after agent response for ${normalizedPhone}`);
+      //   const stageResult = await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
+      //   if (stageResult.success) {
+      //     console.log(`[AI Direct] Lead stage updated to "${stageResult.newStage}" (confidence: ${stageResult.confidence})`);
+      //   }
+      // } catch (err: any) {
+      //   console.error('[AI Direct] Post-response lead stage update failed:', err.message);
+      // }
     });
   }
   

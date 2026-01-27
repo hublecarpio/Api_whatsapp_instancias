@@ -14,13 +14,45 @@ import { queueAIResponse, getAIQueueStats } from '../services/queues/aiResponseP
 import { getAIResponseQueue } from '../services/queues/index.js';
 import { scheduleFollowUp } from '../services/followUpService.js';
 import { dispatchAgentMessage, dispatchWebhook } from '../services/webhookService.js';
-import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsForIntent, IntentAnalysis } from '../services/intentAnalyzer.js';
+import { analyzeIntent, buildDynamicPrompt, getConversationContext, selectToolsForIntent, IntentAnalysis, ConversationContext } from '../services/intentAnalyzer.js';
 import { getContactStageStatus, setContactStage } from '../services/funnelStageService.js';
 import { createAutoOrder } from '../services/orderAutoCreator.js';
-import { createOrder, findProductWithScope, formatAgentToolResponse, addItemToExistingOrder, checkExistingPendingOrder } from '../services/orderService.js';
+import { createOrder, findProductWithScope, formatAgentToolResponse, addItemToExistingOrder, checkExistingPendingOrder, createOrderFromAgent } from '../services/orderService.js';
 import { queueAgentResponse, markMessageAsRead as markMsgRead, isQueueAvailable, extractMediaFromText as extractMediaHelper } from '../services/whatsappSender.js';
+import { retrieveRelevantSections, formatSectionsForPrompt } from '../services/ragService.js';
 
 const router = Router();
+
+// Interfaces for layered context system
+interface LayeredContext {
+  systemPrompt: string;
+  tools: OpenAI.Chat.ChatCompletionTool[];
+  metadata: {
+    tokensEstimate: number;
+    layersUsed: string[];
+    coreSectionsCount: number;
+    ragSectionsCount: number;
+  };
+}
+
+interface ContextBuilderParams {
+  business: any;
+  contactPhone: string;
+  messages: string[];
+  instanceId?: string;
+  intentAnalysis?: IntentAnalysis;
+  conversationContext?: ConversationContext;
+  funnelStatus?: any;
+  existingOrder?: any;
+  extractedData?: Record<string, any>;
+  products?: any[];
+  deliveryZones?: any[];
+  agentFiles?: any[];
+  promptConfig?: any;
+  contactSettings?: any;
+  pendingVoucherOrder?: any;
+  contactAssignment?: any;
+}
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -1291,52 +1323,15 @@ async function processWithAgent(
     }
   });
   
-  let systemPrompt = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
-  
-  // Load ALL enabled sections for this instance (CORE + non-CORE)
-  const allSections = await prisma.promptSection.findMany({
-    where: {
-      businessId,
-      enabled: true,
-      OR: instanceId 
-        ? [{ instanceId }, { instanceId: null }]
-        : [{ instanceId: null }]
-    },
-    orderBy: [
-      { isCore: 'desc' },
-      { priority: 'desc' },
-      { createdAt: 'asc' }
-    ]
-  });
-  
-  // Add ALL sections to the prompt (CORE first, then others by priority)
-  if (allSections.length > 0) {
-    const coreCount = allSections.filter(s => s.isCore).length;
-    const nonCoreCount = allSections.length - coreCount;
-    console.log(`[Agent V1] Loading ${allSections.length} sections (${coreCount} CORE, ${nonCoreCount} additional)`);
-    
-    allSections.forEach(section => {
-      systemPrompt += `\n\n## ${section.title}:\n${section.content}`;
-    });
-  }
-  
-  // Store extracted data for later use in buildDynamicPrompt
+  // Store extracted data for later use
   let extractedDataForPrompt: Record<string, any> = {};
-  
-  // Add extracted contact data to prompt so agent knows what info we already have
   if (contactSettings?.notes) {
     try {
       const parsedNotes = JSON.parse(contactSettings.notes);
       const extractedData = parsedNotes.extractedData || {};
       const dataEntries = Object.entries(extractedData).filter(([_, v]) => v && String(v).trim() !== '');
-      
       if (dataEntries.length > 0) {
         extractedDataForPrompt = Object.fromEntries(dataEntries);
-        systemPrompt += `\n\n## DATOS YA RECOLECTADOS DEL CLIENTE (NO volver a pedir):`;
-        dataEntries.forEach(([key, value]) => {
-          systemPrompt += `\n- ${key}: ${value}`;
-        });
-        systemPrompt += `\n\nIMPORTANTE: YA tienes estos datos. NO los vuelvas a pedir. Usa esta información para avanzar en la conversación.`;
         console.log(`[Agent V1] Loaded extracted data for context: ${JSON.stringify(extractedDataForPrompt)}`);
       }
     } catch (parseError) {
@@ -1344,247 +1339,17 @@ async function processWithAgent(
     }
   }
   
-  if (business.policy) {
-    systemPrompt += `\n\n## Políticas del negocio:`;
-    if (business.policy.shippingPolicy) {
-      systemPrompt += `\n- Envíos: ${business.policy.shippingPolicy}`;
-    }
-    if (business.policy.refundPolicy) {
-      systemPrompt += `\n- Devoluciones: ${business.policy.refundPolicy}`;
-    }
-    if (business.policy.brandVoice) {
-      systemPrompt += `\n- Tono de marca: ${business.policy.brandVoice}`;
-    }
-  }
-  
-  const currencySymbol = business.currencySymbol || 'S/.';
-  const productCount = products?.length || 0;
-  const isAppointmentMode = business.businessObjective === 'APPOINTMENTS';
-  
   // Check for active pending order
   const existingOrder = await checkExistingPendingOrder(businessId, normalizedContactPhone, instanceId);
-  let activeOrderInfo = '';
+  let existingOrderWithItems: any = null;
   if (existingOrder) {
     const orderItems = await prisma.orderItem.findMany({
       where: { orderId: existingOrder.id }
     });
-    const itemsList = orderItems.map(item => `- ${item.productTitle} (x${item.quantity})`).join('\n');
-    activeOrderInfo = `\n\n## 🛒 ORDEN ACTIVA EN ESTA CONVERSACIÓN:\n` +
-      `- ID de pedido: ${existingOrder.id}\n` +
-      `- Estado: ${existingOrder.status === 'AWAITING_VOUCHER' ? 'Esperando comprobante de pago' : 'Pendiente de pago'}\n` +
-      `- Total actual: ${currencySymbol}${existingOrder.totalAmount}\n` +
-      `- Productos en la orden:\n${itemsList}\n\n` +
-      `IMPORTANTE: Esta orden está ACTIVA. Puedes:\n` +
-      `- Agregar más productos usando agregar_producto_orden\n` +
-      `- Completar datos faltantes (dirección, etc.)\n` +
-      `- La orden se mantendrá activa hasta que esté completa con todos los datos y pagos.`;
+    existingOrderWithItems = { ...existingOrder, items: orderItems };
   }
   
-  // Add product catalog info only for SALES mode
-  if (!isAppointmentMode && productCount > 0 && productCount <= 20) {
-    systemPrompt += `\n\n## Catálogo de productos:`;
-    products.forEach((product: any) => {
-      systemPrompt += `\n- [ID:${product.id}] ${product.title}: ${currencySymbol}${product.price}`;
-      if (product.stock !== undefined) {
-        systemPrompt += ` (Stock: ${product.stock})`;
-      }
-      if (product.description) {
-        systemPrompt += ` - ${product.description}`;
-      }
-      // Use imageUrl if available, otherwise use first image from imageUrls array
-      const productImageUrl = product.imageUrl || (product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : null);
-      if (productImageUrl) {
-        systemPrompt += ` [IMG:${productImageUrl}]`;
-      }
-    });
-    systemPrompt += `\n\n## ⚠️ REGLA ABSOLUTAMENTE CRÍTICA - NO INVENTAR PRODUCTOS:`;
-    systemPrompt += `\n- PROHIBIDO inventar, imaginar o suponer productos que NO están en el catálogo de arriba.`;
-    systemPrompt += `\n- Solo puedes ofrecer los ${productCount} productos listados arriba. NADA MÁS.`;
-    systemPrompt += `\n- OBLIGATORIO: Verifica que el producto que menciona el cliente EXISTE en la lista de arriba antes de dar cualquier información.`;
-    systemPrompt += `\n- Si el cliente pregunta por un producto que NO está en la lista de arriba, responde: "Lo siento, ese producto no está disponible en nuestro catálogo. ¿Te puedo ayudar con alguno de nuestros productos disponibles?"`;
-    systemPrompt += `\n- NUNCA menciones marcas, modelos, precios o características de productos que NO estén explícitamente listados arriba.`;
-    systemPrompt += `\n- Si no estás 100% seguro de que el producto existe en la lista, di que no lo tienes disponible.`;
-    systemPrompt += `\n\n## Reglas para responder sobre productos:`;
-    systemPrompt += `\n- ANTES de responder sobre cualquier producto, verifica que esté en la lista de arriba.`;
-    systemPrompt += `\n- Si el cliente pregunta de forma general (ej: "precio de motos", "qué tienen"), PRIMERO pregunta qué modelo específico le interesa.`;
-      systemPrompt += `\n- Solo cuando el cliente especifique un modelo concreto Y esté en la lista, muestra los detalles de ese producto.`;
-      systemPrompt += `\n\n## 🖼️ REGLA CRÍTICA - ENVÍO DE IMÁGENES DE PRODUCTOS:`;
-      systemPrompt += `\n- OBLIGATORIO: Cada vez que menciones un producto que tiene imagen (marcado con [IMG:URL] en el catálogo), DEBES incluir esa URL en tu respuesta.`;
-      systemPrompt += `\n- Cuando buscar_producto devuelve "imagen_producto" o "instruccion" con una URL, esa URL DEBE aparecer al final de tu mensaje.`;
-      systemPrompt += `\n- SIEMPRE incluye la URL de la imagen al final de tu mensaje cuando respondas sobre un producto que tiene imagen disponible.`;
-      systemPrompt += `\n- Formato: Escribe tu respuesta normal y al final, en una línea separada, incluye SOLO la URL (sin Markdown, sin texto adicional, sin corchetes).`;
-      systemPrompt += `\n- Ejemplo correcto: "Este producto cuesta S/.50 y está disponible.\\nhttps://ejemplo.com/imagen.jpg"`;
-      systemPrompt += `\n- Si un producto NO tiene imagen en el catálogo o buscar_producto NO devuelve imagen, no incluyas ninguna URL.`;
-      systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y ofrece alternativas DEL CATÁLOGO.`;
-    systemPrompt += `\n- Para generar pedidos, usa el ID del producto (el valor después de "ID:").`;
-    systemPrompt += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:`;
-    systemPrompt += `\n- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.`;
-    systemPrompt += `\n- NUNCA digas "tu pedido está registrado/agendado/confirmado" sin haber ejecutado la herramienta primero.`;
-    systemPrompt += `\n- Solo confirma el pedido DESPUÉS de recibir "exito: true" de la herramienta.`;
-    systemPrompt += `\n- Si la herramienta falla, informa al cliente del error y NO confirmes el pedido.`;
-  } else if (!isAppointmentMode && productCount > 20) {
-    systemPrompt += `\n\n## Catálogo de productos:`;
-    systemPrompt += `\nTienes acceso a un catálogo de ${productCount} productos con BÚSQUEDA INTELIGENTE.`;
-    systemPrompt += `\nLos precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).`;
-    systemPrompt += `\n\n## ⚠️ REGLA ABSOLUTAMENTE CRÍTICA - NO INVENTAR PRODUCTOS:`;
-    systemPrompt += `\n- PROHIBIDO inventar, imaginar o suponer productos que NO existen en el catálogo.`;
-    systemPrompt += `\n- SIEMPRE usa buscar_producto antes de mencionar cualquier producto al cliente.`;
-    systemPrompt += `\n- Si buscar_producto NO encuentra el producto, responde: "Lo siento, ese producto no está disponible en nuestro catálogo. ¿Te puedo ayudar con otro producto?"`;
-    systemPrompt += `\n- NUNCA menciones marcas, modelos, precios o características de productos sin haberlos buscado primero.`;
-    systemPrompt += `\n- Si buscar_producto retorna error o "no encontrado", NO inventes el producto. Pregunta qué más busca el cliente.`;
-    systemPrompt += `\n\n## Reglas para responder sobre productos:`;
-    systemPrompt += `\n- OBLIGATORIO: Cuando el cliente mencione un producto, usa buscar_producto INMEDIATAMENTE antes de responder.`;
-    systemPrompt += `\n- La búsqueda es inteligente: encontrará productos aunque el cliente escriba con errores.`;
-    systemPrompt += `\n- IMPORTANTE sobre "mejor_coincidencia": Verifica que el nombre del producto coincida razonablemente con lo que busca el cliente. Si la similitud es menor al 70% o el nombre es muy diferente, pregunta al cliente si se refiere a ese producto.`;
-      systemPrompt += `\n- Si el resultado de buscar_producto tiene "error: true" o "coincidencia_exacta: false" con baja similitud, NO asumas que es el producto correcto. Pregunta al cliente.`;
-      systemPrompt += `\n\n## 🖼️ REGLA CRÍTICA - ENVÍO DE IMÁGENES DE PRODUCTOS:`;
-      systemPrompt += `\n- OBLIGATORIO: Cada vez que menciones un producto que tiene imagen, DEBES incluir la URL de la imagen en tu respuesta.`;
-      systemPrompt += `\n- Cuando buscar_producto devuelve "imagen_producto" o "instruccion" con una URL, esa URL DEBE aparecer al final de tu mensaje.`;
-      systemPrompt += `\n- SIEMPRE incluye la URL de la imagen al final de tu mensaje cuando respondas sobre un producto que tiene imagen disponible.`;
-      systemPrompt += `\n- Formato: Escribe tu respuesta normal y al final, en una línea separada, incluye SOLO la URL (sin Markdown, sin texto adicional, sin corchetes).`;
-      systemPrompt += `\n- Ejemplo correcto: "Este producto cuesta S/.50 y está disponible.\\nhttps://ejemplo.com/imagen.jpg"`;
-      systemPrompt += `\n- Si buscar_producto NO devuelve imagen o el producto no tiene imagen, no incluyas ninguna URL.`;
-      systemPrompt += `\n- Si un producto tiene stock 0, indica que está agotado y sugiere alternativas DEL CATÁLOGO (usando buscar_producto).`;
-    systemPrompt += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:`;
-    systemPrompt += `\n- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.`;
-    systemPrompt += `\n- NUNCA digas "tu pedido está registrado/agendado/confirmado" sin haber ejecutado la herramienta primero.`;
-    systemPrompt += `\n- Solo confirma el pedido DESPUÉS de recibir "exito: true" de la herramienta.`;
-    systemPrompt += `\n- Si la herramienta falla, informa al cliente del error y NO confirmes el pedido.`;
-  } else if (!isAppointmentMode && productCount === 0) {
-    // Handle empty catalog case
-    systemPrompt += `\n\n## ⚠️ CATÁLOGO VACÍO - REGLA CRÍTICA:`;
-    systemPrompt += `\n- Este negocio NO tiene productos registrados en el catálogo.`;
-    systemPrompt += `\n- PROHIBIDO inventar, mencionar o sugerir productos de cualquier tipo.`;
-    systemPrompt += `\n- Si el cliente pregunta por productos o precios, responde: "Actualmente no tenemos productos disponibles en nuestro catálogo. ¿Hay algo más en lo que pueda ayudarte?"`;
-    systemPrompt += `\n- NO menciones marcas, modelos ni precios porque NO hay catálogo disponible.`;
-    systemPrompt += `\n- Si el cliente insiste en productos, sugiere que contacte directamente al negocio para más información.`;
-  }
-  
-  // Add delivery zones for SALES mode
-  if (!isAppointmentMode && deliveryZones.length > 0) {
-    systemPrompt += `\n\n## Zonas de entrega disponibles:`;
-    deliveryZones.forEach((zone: any) => {
-      systemPrompt += `\n- [ZONA:${zone.id}] ${zone.name}`;
-      if (zone.districts && zone.districts.length > 0) {
-        systemPrompt += `: ${zone.districts.join(', ')}`;
-      }
-      if (zone.cost !== null && zone.cost !== undefined) {
-        systemPrompt += ` - Costo envío: ${currencySymbol}${zone.cost}`;
-      }
-      if (zone.freeAbove) {
-        systemPrompt += ` (Gratis si compra es mayor a ${currencySymbol}${zone.freeAbove})`;
-      }
-      if (zone.deliveryTime) {
-        systemPrompt += ` - Tiempo: ${zone.deliveryTime}`;
-      }
-    });
-    systemPrompt += `\n\n## Reglas para zonas de entrega:`;
-    systemPrompt += `\n- SIEMPRE pregunta al cliente a qué zona/distrito pertenece su dirección de entrega.`;
-    systemPrompt += `\n- Verifica que el distrito/zona del cliente esté en la lista de arriba.`;
-    systemPrompt += `\n- Si el cliente menciona un distrito que NO está en ninguna zona, informa que no tienen cobertura en esa zona.`;
-    systemPrompt += `\n- Calcula el total incluyendo el costo de envío según la zona del cliente.`;
-    systemPrompt += `\n- Si la compra supera el monto de "freeAbove", el envío es GRATIS.`;
-  }
-  
-  // Add voucher/order flow instructions for SALES mode
-  if (!isAppointmentMode) {
-    const canUsePaymentLink = business.user?.paymentLinkEnabled ?? false;
-    
-    if (!canUsePaymentLink) {
-      systemPrompt += `\n\n## ⚠️ FLUJO DE VENTA CON VOUCHER - OBLIGATORIO:`;
-      systemPrompt += `\n1. **PASO 1 - PRODUCTO**: Identifica qué producto(s) quiere el cliente y la cantidad.`;
-      systemPrompt += `\n2. **PASO 2 - ZONA DE ENTREGA**: Pregunta el distrito/zona de entrega del cliente para calcular el costo de envío.`;
-      systemPrompt += `\n3. **PASO 3 - RESUMEN Y TOTAL**: Muestra el resumen del pedido con: productos, cantidades, subtotal, costo de envío y TOTAL FINAL.`;
-      systemPrompt += `\n4. **PASO 4 - DATOS DE ENVÍO**: Pide nombre completo y dirección exacta de entrega.`;
-      systemPrompt += `\n5. **PASO 5 - CREAR PEDIDO**: Usa registrar_pedido para crear el pedido con todos los datos.`;
-      systemPrompt += `\n6. **PASO 6 - SOLICITAR VOUCHER**: Pide al cliente que envíe foto del comprobante de pago (voucher/transferencia).`;
-      systemPrompt += `\n7. **PASO 7 - CONFIRMAR**: Cuando el cliente envíe el voucher, se validará automáticamente.`;
-      systemPrompt += `\n\n## Reglas del flujo:`;
-      systemPrompt += `\n- NO saltes pasos. Sigue el orden establecido.`;
-      systemPrompt += `\n- NO crees el pedido sin tener: producto, cantidad, zona de entrega, nombre y dirección.`;
-      systemPrompt += `\n- SIEMPRE muestra el total ANTES de crear el pedido para que el cliente confirme.`;
-      systemPrompt += `\n- Cuando el cliente envíe una imagen de voucher, el sistema la procesará automáticamente.`;
-    }
-    
-    // Add active order info if exists
-    if (activeOrderInfo) {
-      systemPrompt += activeOrderInfo;
-      systemPrompt += `\n\n## 🚨 REGLA CRÍTICA - TRABAJAR CON ORDEN ACTIVA:`;
-      systemPrompt += `\n- Si hay una orden activa (mostrada arriba), DEBES trabajar con esa orden.`;
-      systemPrompt += `\n- Si el cliente quiere agregar más productos, usa agregar_producto_orden (NO uses registrar_pedido de nuevo).`;
-      systemPrompt += `\n- Si faltan datos (dirección, nombre, etc.), puedes pedirlos y actualizar la orden.`;
-      systemPrompt += `\n- La orden permanece activa hasta que esté completa con todos los datos y el pago confirmado.`;
-      systemPrompt += `\n- NO crees una nueva orden si ya hay una activa.`;
-    }
-  }
-  
-  // Add appointments context for APPOINTMENTS mode
-  if (isAppointmentMode) {
-    systemPrompt += `\n\n## Modo Citas Activo:`;
-    systemPrompt += `\nEres un asistente especializado en agendar citas y consultas.`;
-    systemPrompt += `\n- Usa consultar_disponibilidad para verificar horarios antes de proponer fechas.`;
-    systemPrompt += `\n- Usa agendar_cita cuando el cliente confirme fecha y hora.`;
-    systemPrompt += `\n- Siempre confirma los datos del cliente antes de agendar.`;
-    systemPrompt += `\n- Si no hay horarios disponibles, ofrece fechas alternativas o pregunta qué día prefiere.`;
-  }
-  
-  const contactAssignment = await prisma.tagAssignment.findUnique({
-    where: {
-      businessId_contactPhone: {
-        businessId,
-        contactPhone: contactPhone
-      }
-    },
-    include: {
-      tag: {
-        include: {
-          stagePrompt: true
-        }
-      }
-    }
-  });
-  
-  if (contactAssignment?.tag) {
-    const tag = contactAssignment.tag;
-    systemPrompt += `\n\n## Estado actual del cliente:`;
-    systemPrompt += `\n- Etapa CRM: ${tag.name}`;
-    if (tag.description) {
-      systemPrompt += `\n- Contexto de etapa: ${tag.description}`;
-    }
-    
-    if (tag.stagePrompt) {
-      if (tag.stagePrompt.systemContext) {
-        systemPrompt += `\n\n## Instrucciones especiales para esta etapa:\n${tag.stagePrompt.systemContext}`;
-      }
-      if (tag.stagePrompt.promptOverride) {
-        systemPrompt = tag.stagePrompt.promptOverride + `\n\n${systemPrompt}`;
-      }
-    }
-  }
-  
-  // Add funnel stage context if available
-  if (funnelStatus?.currentStage) {
-    systemPrompt += `\n\n## FLUJO DE VENTA - Etapa actual: "${funnelStatus.currentStage.name}"`;
-    if (funnelStatus.currentStage.promptContext) {
-      systemPrompt += `\n${funnelStatus.currentStage.promptContext}`;
-    }
-    if (funnelStatus.missingFields.length > 0) {
-      systemPrompt += `\n\n### DATOS OBLIGATORIOS PENDIENTES (debes obtenerlos ANTES de avanzar):`;
-      funnelStatus.missingFields.forEach((field: string) => {
-        systemPrompt += `\n- ${field}`;
-      });
-      systemPrompt += `\n\nIMPORTANTE: NO avances a la siguiente etapa ni cierres la venta hasta tener TODOS estos datos.`;
-    } else if (funnelStatus.canAdvance && funnelStatus.nextStage) {
-      systemPrompt += `\n\n### Datos completos - puedes avanzar a "${funnelStatus.nextStage.name}"`;
-    }
-    if (funnelStatus.currentStage.blockedTopics && funnelStatus.currentStage.blockedTopics.length > 0) {
-      systemPrompt += `\n\n### TEMAS BLOQUEADOS en esta etapa (no abordar aún):`;
-      funnelStatus.currentStage.blockedTopics.forEach((topic: string) => {
-        systemPrompt += `\n- ${topic}`;
-      });
-    }
-  }
-  
+  // Load pending voucher order
   const pendingVoucherOrder = await prisma.order.findFirst({
     where: {
       businessId,
@@ -1595,39 +1360,25 @@ async function processWithAgent(
     include: { items: true }
   });
   
-  if (pendingVoucherOrder) {
-    const productNames = pendingVoucherOrder.items.map(i => `${i.productTitle} x${i.quantity}`).join(', ');
-    const subtotal = pendingVoucherOrder.subtotalAmount || pendingVoucherOrder.items.reduce((sum, i) => sum + (i.unitPrice * i.quantity), 0);
-    const shipping = pendingVoucherOrder.shippingCost || 0;
-    
-    systemPrompt += `\n\n## ⚠️ PEDIDO PENDIENTE DE PAGO (ID: ${pendingVoucherOrder.id.slice(-8)}):`;
-    systemPrompt += `\n- Productos: ${productNames}`;
-    systemPrompt += `\n- Subtotal: ${pendingVoucherOrder.currencySymbol}${subtotal.toFixed(2)}`;
-    if (shipping > 0) {
-      systemPrompt += `\n- Envío: ${pendingVoucherOrder.currencySymbol}${shipping.toFixed(2)}`;
+  // Load contact assignment (tags) - now supports multiple tags
+  const contactAssignments = await prisma.tagAssignment.findMany({
+    where: {
+      businessId,
+      contactPhone: contactPhone
+    },
+    include: {
+      tag: {
+        include: {
+          stagePrompt: true
+        }
+      }
     }
-    systemPrompt += `\n- TOTAL A PAGAR: ${pendingVoucherOrder.currencySymbol}${pendingVoucherOrder.totalAmount.toFixed(2)}`;
-    if (pendingVoucherOrder.shippingAddress) {
-      systemPrompt += `\n- Dirección de envío: ${pendingVoucherOrder.shippingAddress}`;
-    }
-    
-    if (pendingVoucherOrder.voucherImageUrl) {
-      systemPrompt += `\n\n## ✅ COMPROBANTE RECIBIDO:`;
-      systemPrompt += `\n- El cliente ya envió su comprobante de pago.`;
-      systemPrompt += `\n- Agradécele y confirma que el equipo está validando el pago.`;
-      systemPrompt += `\n- NO le pidas más comprobantes ni datos adicionales.`;
-    } else {
-      systemPrompt += `\n\n## 📱 ESPERANDO COMPROBANTE DE PAGO:`;
-      systemPrompt += `\n- Pide amablemente al cliente que envíe una FOTO del comprobante de pago (voucher/transferencia).`;
-      systemPrompt += `\n- Recuérdale el monto total a depositar: ${pendingVoucherOrder.currencySymbol}${pendingVoucherOrder.totalAmount.toFixed(2)}`;
-      systemPrompt += `\n- Cuando el cliente envíe una IMAGEN, el sistema la procesará automáticamente como comprobante.`;
-      systemPrompt += `\n- NO crees otro pedido mientras este está pendiente.`;
-    }
-  }
+  });
   
-  systemPrompt = replacePromptVariables(systemPrompt, business.timezone || 'America/Lima');
+  // For backward compatibility, use first tag if exists
+  const contactAssignment = contactAssignments.length > 0 ? contactAssignments[0] : null;
   
-  // Load agent files for file library feature
+  // Load agent files
   const agentFiles = await prisma.agentFile.findMany({
     where: { 
       prompt: { businessId },
@@ -1636,34 +1387,30 @@ async function processWithAgent(
     orderBy: { order: 'asc' }
   });
   
-  if (agentFiles.length > 0) {
-    systemPrompt += `\n\n## Archivos disponibles para enviar:`;
-    systemPrompt += `\nTienes acceso a ${agentFiles.length} archivos que puedes enviar al cliente cuando sea relevante.`;
-    systemPrompt += `\nUsa la función enviar_archivo cuando el cliente pregunte por alguno de estos temas o cuando sea apropiado según el contexto:`;
-    agentFiles.forEach((file, idx) => {
-      systemPrompt += `\n- [ID:${file.id}] ${file.name}`;
-      if (file.description) systemPrompt += `: ${file.description}`;
-      if (file.triggerKeywords) systemPrompt += ` (keywords: ${file.triggerKeywords})`;
-      if (file.triggerContext) systemPrompt += ` | Enviar cuando: ${file.triggerContext}`;
-    });
-    systemPrompt += `\n\nIMPORTANTE: Cuando detectes que el cliente pregunta por algo relacionado a estos archivos (por keywords o contexto), usa enviar_archivo con el ID correspondiente.`;
-  }
+  // Build layered context using new system
+  const layeredContext = await buildLayeredContext({
+    business,
+    contactPhone: normalizedContactPhone,
+    messages: [combinedMessage],
+    instanceId,
+    intentAnalysis: intentAnalysis || undefined,
+    conversationContext,
+    funnelStatus,
+    existingOrder: existingOrderWithItems || undefined,
+    extractedData: extractedDataForPrompt,
+    products,
+    deliveryZones,
+    agentFiles,
+    promptConfig,
+    contactSettings,
+    pendingVoucherOrder: pendingVoucherOrder || undefined,
+    contactAssignment: contactAssignment || undefined
+  }, tools);
   
-  const paymentLinkEnabled = business.user?.paymentLinkEnabled ?? false;
+  const systemPrompt = layeredContext.systemPrompt;
+  const openaiTools = layeredContext.tools;
   
-  if (intentAnalysis) {
-    systemPrompt = buildDynamicPrompt(
-      systemPrompt,
-      intentAnalysis,
-      conversationContext,
-      businessObjective,
-      {
-        paymentLinkEnabled,
-        extractedData: extractedDataForPrompt
-      }
-    );
-    console.log(`[Agent V1] Dynamic prompt built with intent context (paymentMode: ${paymentLinkEnabled ? 'STRIPE' : 'VOUCHER'})`);
-  }
+  console.log(`[Agent V1] Layered context built: ${layeredContext.metadata.layersUsed.join(', ')}, Core: ${layeredContext.metadata.coreSectionsCount}, RAG: ${layeredContext.metadata.ragSectionsCount}, ~${layeredContext.metadata.tokensEstimate} tokens`);
   
   // Filter by instanceId if available to avoid mixing conversations from different instances
   // Build phone filter that matches any variant of the contact phone
@@ -1705,246 +1452,12 @@ async function processWithAgent(
   const combinedUserMessage = messages.join('\n');
   conversationHistory.push({ role: 'user', content: combinedUserMessage });
   
-  const openaiTools: OpenAI.Chat.ChatCompletionTool[] = tools.map(tool => {
-    const toolParams = (tool.parameters as any[]) || [];
-    const dynamicVars = (tool.dynamicVariables as any[]) || [];
-    const properties: Record<string, any> = {};
-    const requiredSet = new Set<string>();
-    
-    if (toolParams.length > 0) {
-      toolParams.forEach((param: any) => {
-        properties[param.name] = {
-          type: param.type || 'string',
-          description: param.description || `Parameter ${param.name}`
-        };
-        if (param.required) {
-          requiredSet.add(param.name);
-        }
-      });
-    } else if (dynamicVars.length === 0) {
-      properties['query'] = { type: 'string', description: 'The query or data to send to the external service' };
-      requiredSet.add('query');
-    }
-    
-    dynamicVars.forEach((v: any) => {
-      let desc = v.description || `Variable ${v.name}`;
-      if (v.formatExample) {
-        desc += ` (formato: ${v.formatExample})`;
-      }
-      // Only add if not already defined in parameters
-      if (!properties[v.name]) {
-        properties[v.name] = {
-          type: 'string',
-          description: desc
-        };
-      }
-      requiredSet.add(v.name);
-    });
-    
-    return {
-      type: 'function' as const,
-      function: {
-        name: tool.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
-        description: tool.description,
-        parameters: {
-          type: 'object',
-          properties,
-          required: Array.from(requiredSet)
-        }
-      }
-    };
-  });
+  // OLD CODE REMOVED - Now using buildLayeredContext above
+  // The following code was replaced by buildLayeredContext:
+  // - Manual prompt construction
+  // - Manual tool construction
   
-  // Sales tools - only for SALES objective (not APPOINTMENTS)
-  const isSalesMode = business.businessObjective !== 'APPOINTMENTS';
-  
-  if (isSalesMode && productCount > 20) {
-    openaiTools.push({
-      type: 'function' as const,
-      function: {
-        name: 'buscar_producto',
-        description: 'Busca productos en el catálogo por nombre o descripción. Usa esta función cuando el cliente pregunte por un producto específico.',
-        parameters: {
-          type: 'object',
-          properties: {
-            consulta: {
-              type: 'string',
-              description: 'Término de búsqueda: nombre del producto o palabras clave de la descripción'
-            }
-          },
-          required: ['consulta']
-        }
-      }
-    });
-  }
-  
-  // ALWAYS add order tool in SALES mode - this is critical for production order creation
-  if (isSalesMode) {
-    const canUsePaymentLink = business.user?.paymentLinkEnabled ?? false;
-    
-    // Use different tool name/description based on payment mode
-    const orderToolName = canUsePaymentLink ? 'crear_enlace_pago' : 'registrar_pedido';
-    const orderToolDescription = canUsePaymentLink 
-      ? 'Genera un enlace de pago para que el cliente complete su compra. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío.'
-      : 'Registra un pedido para el cliente que pagará por transferencia/voucher. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío. El pedido quedará pendiente hasta que el cliente envíe el comprobante de pago.';
-    
-    console.log(`[Agent V1] Adding order tool: ${orderToolName} (productCount: ${productCount}, paymentLinkEnabled: ${canUsePaymentLink})`);
-    
-    openaiTools.push({
-      type: 'function' as const,
-      function: {
-        name: orderToolName,
-        description: orderToolDescription,
-        parameters: {
-          type: 'object',
-          properties: {
-            producto_id: {
-              type: 'string',
-              description: 'ID o nombre del producto que el cliente quiere comprar. Si no hay catálogo, usa el nombre exacto del producto mencionado por el cliente.'
-            },
-            cantidad: {
-              type: 'integer',
-              description: 'Cantidad de unidades a comprar (por defecto 1)'
-            },
-            nombre_cliente: {
-              type: 'string',
-              description: 'Nombre completo del cliente'
-            },
-            direccion_envio: {
-              type: 'string',
-              description: 'Dirección completa de envío'
-            },
-            ciudad: {
-              type: 'string',
-              description: 'Ciudad de envío'
-            },
-            pais: {
-              type: 'string',
-              description: 'País de envío'
-            },
-            zona_entrega: {
-              type: 'string',
-              description: 'Nombre o ID de la zona de entrega del cliente (ej: "Lima Centro", "Miraflores"). Debe coincidir con una de las zonas de entrega configuradas.'
-            },
-            costo_envio: {
-              type: 'number',
-              description: 'Costo de envío calculado según la zona de entrega. Puede ser 0 si el pedido supera el monto de envío gratis.'
-            },
-            coordenadas_ubicacion: {
-              type: 'string',
-              description: 'Coordenadas GPS de la ubicación del cliente en formato "latitud,longitud" (ejemplo: -12.046374,-77.042793). Se obtiene cuando el cliente comparte su ubicación actual por WhatsApp.'
-            }
-          },
-          required: ['producto_id', 'nombre_cliente', 'direccion_envio', 'zona_entrega']
-        }
-      }
-    });
-    
-    // Add tool to add products to existing active order
-    if (!canUsePaymentLink) {
-      openaiTools.push({
-        type: 'function' as const,
-        function: {
-          name: 'agregar_producto_orden',
-          description: 'Agrega un producto adicional a una orden activa existente. Usa esta función cuando el cliente quiera agregar más productos a su pedido que ya está en proceso. Solo funciona si hay una orden activa (AWAITING_VOUCHER o PENDING_PAYMENT) para este cliente.',
-          parameters: {
-            type: 'object',
-            properties: {
-              producto_id: {
-                type: 'string',
-                description: 'ID o nombre del producto que el cliente quiere agregar a la orden activa'
-              },
-              cantidad: {
-                type: 'integer',
-                description: 'Cantidad de unidades a agregar (por defecto 1)'
-              }
-            },
-            required: ['producto_id']
-          }
-        }
-      });
-    }
-  }
-  
-  if (business.businessObjective === 'APPOINTMENTS') {
-    openaiTools.push({
-      type: 'function' as const,
-      function: {
-        name: 'consultar_disponibilidad',
-        description: 'Consulta los horarios disponibles para agendar una cita en una fecha específica.',
-        parameters: {
-          type: 'object',
-          properties: {
-            fecha: {
-              type: 'string',
-              description: 'Fecha para consultar disponibilidad en formato YYYY-MM-DD'
-            }
-          },
-          required: ['fecha']
-        }
-      }
-    });
-    
-    openaiTools.push({
-      type: 'function' as const,
-      function: {
-        name: 'agendar_cita',
-        description: 'Agenda una cita con el cliente en la fecha y hora especificada. Usa esta función cuando el cliente confirme que quiere agendar una cita y hayas verificado disponibilidad.',
-        parameters: {
-          type: 'object',
-          properties: {
-            fecha_hora: {
-              type: 'string',
-              description: 'Fecha y hora de la cita en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss)'
-            },
-            nombre_cliente: {
-              type: 'string',
-              description: 'Nombre completo del cliente'
-            },
-            servicio: {
-              type: 'string',
-              description: 'Tipo de servicio o motivo de la cita'
-            },
-            duracion_minutos: {
-              type: 'integer',
-              description: 'Duración de la cita en minutos (por defecto 60)'
-            },
-            notas: {
-              type: 'string',
-              description: 'Notas adicionales sobre la cita'
-            }
-          },
-          required: ['fecha_hora', 'nombre_cliente']
-        }
-      }
-    });
-  }
-  
-  // Add file sending tool if agent files exist
-  if (agentFiles.length > 0) {
-    openaiTools.push({
-      type: 'function' as const,
-      function: {
-        name: 'enviar_archivo',
-        description: 'Envía un archivo (documento, imagen, catálogo, plano, etc.) al cliente. Usa esta función cuando el cliente pregunte por información que está disponible en los archivos del negocio.',
-        parameters: {
-          type: 'object',
-          properties: {
-            archivo_id: {
-              type: 'string',
-              description: 'ID del archivo a enviar (obtenido de la lista de archivos disponibles)'
-            },
-            mensaje_acompanante: {
-              type: 'string',
-              description: 'Mensaje breve que acompaña al archivo (ej: "Aquí tienes nuestro catálogo de departamentos")'
-            }
-          },
-          required: ['archivo_id']
-        }
-      }
-    });
-  }
-  
+  // Continue with OpenAI API call using layered context
   const modelToUse = getDefaultModel();
   
   const chatParams: any = {
@@ -2031,6 +1544,7 @@ async function processWithAgent(
         console.log(`[PRODUCT SEARCH] Query: "${searchQuery}" (intelligent matching, instanceId: ${instanceId || 'all'})`);
         
         const searchResult = await searchProductsIntelligent(businessId, searchQuery, 10, instanceId);
+        const currencySymbol = business.currencySymbol || 'S/.';
         
         const productResults = searchResult.products.map(p => ({
           id: p.id,
@@ -2120,88 +1634,23 @@ async function processWithAgent(
         let paymentResult: string;
         
         if (!canUsePaymentLink) {
-          const product = await findProductWithScope(businessId, productSearch, instanceId);
-          
-          // Look up delivery zone and calculate shipping cost
-          let shippingCost = shippingCostFromAgent;
-          let deliveryZoneId: string | null = null;
-          
-          if (deliveryZoneName) {
-            // Try to find delivery zone by name or ID
-            const zone = await prisma.deliveryZone.findFirst({
-              where: {
-                businessId,
-                isActive: true,
-                OR: [
-                  { id: deliveryZoneName },
-                  { name: { contains: deliveryZoneName, mode: 'insensitive' } },
-                  { districts: { has: deliveryZoneName } }
-                ]
-              }
-            });
-            
-            if (zone) {
-              deliveryZoneId = zone.id;
-              // Only calculate shipping if agent didn't provide it
-              if (shippingCost === null) {
-                const subtotal = (product?.price || 0) * quantity;
-                // Check if order qualifies for free shipping
-                if (zone.freeAbove && subtotal >= zone.freeAbove) {
-                  shippingCost = 0;
-                  console.log(`[Agent V1] Free shipping applied (subtotal ${subtotal} >= freeAbove ${zone.freeAbove})`);
-                } else {
-                  shippingCost = zone.cost || 0;
-                }
-              }
-              console.log(`[Agent V1] Found delivery zone: ${zone.name}, shippingCost: ${shippingCost}`);
-            }
-          }
-          
-          const orderResult = await createOrder({
+          // Use simplified function that handles everything automatically
+          const result = await createOrderFromAgent({
             businessId,
             instanceId,
             contactPhone,
-            contactName: customerName,
-            shippingAddress,
-            shippingCity: city,
-            shippingCountry: country,
-            locationCoordinates,
-            deliveryZoneId,
-            shippingCost: shippingCost || 0,
-            items: [{
-              productId: product?.id || null,
-              productTitle: product?.title || productSearch,
-              quantity,
-              unitPrice: product?.price || 0,
-              imageUrl: product?.imageUrl || null
-            }],
-            source: 'agent_tool'
+            producto_id: productSearch,
+            cantidad: quantity,
+            nombre_cliente: customerName,
+            direccion_envio: shippingAddress,
+            ciudad: city,
+            pais: country,
+            zona_entrega: deliveryZoneName,
+            costo_envio: shippingCostFromAgent ?? undefined
           });
           
-          let toolResponse: any = formatAgentToolResponse(orderResult, business.currencySymbol || 'S/.');
-          
-          // Add info about active order if order was created/updated
-          if (orderResult.success && orderResult.orderId) {
-            toolResponse.orden_activa = true;
-            toolResponse.mensaje += ` La orden está activa en esta conversación. Puedes agregar más productos usando agregar_producto_orden o completar datos faltantes.`;
-            await prisma.paymentLinkRequest.create({
-              data: {
-                businessId,
-                contactPhone,
-                triggerSource: 'agent',
-                productId: product?.id || null,
-                productName: product?.title || productSearch,
-                amount: orderResult.totalAmount || 0,
-                quantity,
-                isSuccess: true,
-                orderId: orderResult.orderId,
-                isPro: false
-              }
-            });
-          }
-          
-          paymentResult = JSON.stringify(toolResponse);
-          console.log(`[Agent V1] Order result: ${orderResult.success ? 'SUCCESS' : 'FAILED'}, orderId: ${orderResult.orderId || 'N/A'}, isNew: ${orderResult.isNew}`);
+          paymentResult = JSON.stringify(result);
+          console.log(`[Agent V1] Order result: ${result.exito ? 'SUCCESS' : 'FAILED'}, orderId: ${result.pedido_id || 'N/A'}`);
         } else {
           const product = await findProductWithScope(businessId, productSearch, instanceId);
           
@@ -2392,7 +1841,11 @@ async function processWithAgent(
           toolMessages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
-            content: JSON.stringify({ error: 'Error consultando disponibilidad', detalle: error.message })
+            content: JSON.stringify({ 
+              disponible: false, 
+              error: 'Error al consultar disponibilidad', 
+              detalle: error.message 
+            })
           });
         }
         continue;
@@ -2516,6 +1969,73 @@ async function processWithAgent(
         continue;
       }
       
+      // Handle RAG section search tool
+      if (toolName === 'buscar_seccion_rag') {
+        const args = JSON.parse(fn.arguments);
+        const query = args.consulta || args.query || '';
+        
+        console.log(`[RAG SEARCH] Query: "${query}" for business ${businessId}`);
+        
+        try {
+          // Use the RAG service to retrieve relevant sections
+          const ragResult = await retrieveRelevantSections(
+            businessId,
+            query,
+            5, // Limit to 5 most relevant sections
+            instanceId
+          );
+          
+          if (ragResult.ragSections.length > 0) {
+            const formattedSections = formatSectionsForPrompt(ragResult);
+            const result = JSON.stringify({
+              exito: true,
+              secciones_encontradas: ragResult.ragSections.length,
+              secciones: ragResult.ragSections.map((s: any) => ({
+                titulo: s.title,
+                contenido: s.content.substring(0, 500) + (s.content.length > 500 ? '...' : ''),
+                relevancia: s.similarity ? Math.round(s.similarity * 100) + '%' : 'N/A'
+              })),
+              contenido_completo: formattedSections,
+              instruccion: 'Usa esta información para responder al cliente de manera precisa y contextualizada.'
+            });
+            
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: result
+            });
+            console.log(`[RAG SEARCH] Found ${ragResult.ragSections.length} relevant sections`);
+          } else {
+            const result = JSON.stringify({
+              exito: false,
+              mensaje: 'No se encontraron secciones relevantes para esta consulta',
+              sugerencia: 'Responde al cliente basándote en el contexto general disponible'
+            });
+            
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: result
+            });
+            console.log(`[RAG SEARCH] No relevant sections found`);
+          }
+        } catch (error: any) {
+          const result = JSON.stringify({
+            exito: false,
+            error: 'Error al buscar secciones',
+            detalle: error.message
+          });
+          
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: result
+          });
+          console.error(`[RAG SEARCH] Error:`, error);
+        }
+        continue;
+      }
+      
       const tool = tools.find(t => t.name.replace(/[^a-zA-Z0-9_-]/g, '_') === toolName);
       
       if (tool) {
@@ -2598,198 +2118,755 @@ async function processWithAgent(
   
   let aiResponse = completion.choices[0]?.message?.content || 'Lo siento, no pude procesar tu mensaje.';
   
-  // Validate response anti-saturation
-  const validation = validateAgentResponse(aiResponse, conversationHistoryForIntent, businessObjective);
-  if (!validation.isValid) {
-    console.warn(`[Agent V1] Response validation failed: ${validation.issues.join(', ')}`);
-    if (validation.sanitizedResponse) {
-      aiResponse = validation.sanitizedResponse;
-    }
-  } else if (validation.issues.length > 0) {
-    console.log(`[Agent V1] Response warnings: ${validation.issues.join(', ')}`);
-  }
-  
-  console.log(`[AI RESPONSE]:`, aiResponse.substring(0, 300));
-  
-  // FALLBACK: If agent mentioned order confirmation but tool was NOT executed, try auto-create
-  const isSalesModeForFallback = business.businessObjective !== 'APPOINTMENTS';
-  
-  // Strong patterns that indicate definitive order confirmation (not just questions/info)
-  const strongOrderPatterns = [
-    'tu pedido.*registrad', 'tu pedido.*confirmad', 'pedido.*registrado con éxito',
-    'pedido.*confirmado con éxito', 'orden.*registrada con éxito', 'tu orden.*lista',
-    'hemos registrado tu pedido', 'queda registrado', 'pedido ha sido registrado',
-    'preparando.*pedido', 'preparando todo para.*recib',
-    // New patterns for gratitude-based confirmations
-    'gracias por (elegir|comprar|tu compra|tu pedido|preferir)',
-    'gracias por confiar',
-    'te esperamos', 'lo esperamos',
-    'tu (orden|pedido) está en camino',
-    '(listo|perfecto).*te avisamos',
-    'estaremos (enviando|llevando|despachando)',
-    'ya está todo listo',
-    'confirmamos tu (pedido|orden|compra)',
-    'todo listo para (entregar|enviar|despachar)',
-    'en breve (recibirás|te contactamos|te escribimos)',
-    'quedamos atentos a (confirmar|tu pago)'
-  ];
-  const mentionsStrongOrderConfirmation = strongOrderPatterns.some(pattern => 
-    new RegExp(pattern, 'i').test(aiResponse)
-  );
-  
-  // Also check if intent was purchase-related (from intent analyzer if available)
-  const hasPurchaseContext = intentAnalysis?.intent === 'READY_TO_BUY' || 
-                             intentAnalysis?.intent === 'CLOSING';
-  
-  const shouldTriggerFallback = isSalesModeForFallback && 
-                                 !orderToolExecuted && 
-                                 (mentionsStrongOrderConfirmation || hasPurchaseContext);
-  
-  if (shouldTriggerFallback && !orderToolExecuted) {
-    // Double-check: only trigger fallback if tool was definitely NOT executed in this turn
-    console.warn(`[Agent V1] FALLBACK TRIGGERED: Agent confirmed order without using tool!`);
-    console.warn(`[Agent V1] Trigger reason: strongPattern=${mentionsStrongOrderConfirmation}, purchaseContext=${hasPurchaseContext}`);
-    console.log(`[Agent V1] Response snippet: "${aiResponse.substring(0, 200)}..."`);
-    
-    try {
-      const autoOrderResult = await createAutoOrder(businessId, contactPhone, instanceId, true);
-      
-      if (autoOrderResult.created) {
-        console.log(`[Agent V1] FALLBACK SUCCESS: Auto-created order ${autoOrderResult.orderId}`);
-        // Mark as executed to prevent any further creation attempts
-        orderToolExecuted = true;
-      } else if (autoOrderResult.orderId) {
-        console.log(`[Agent V1] FALLBACK: Order already exists or updated: ${autoOrderResult.orderId} - ${autoOrderResult.reason}`);
-      } else {
-        console.warn(`[Agent V1] FALLBACK FAILED: Could not auto-create order - ${autoOrderResult.reason}`);
-        // Log missing fields for diagnostics
-        if (autoOrderResult.reason.includes('Missing fields')) {
-          console.warn(`[Agent V1] Contact ${contactPhone} missing data for auto-order. Manual intervention may be needed.`);
-        }
-        // If product not found, try to create manual order with extracted data
-        if (autoOrderResult.reason.includes('producto_no_encontrado')) {
-          console.warn(`[Agent V1] Product not found in catalog. Consider creating manual order with product name from conversation.`);
-        }
-      }
-    } catch (fallbackError: any) {
-      console.error(`[Agent V1] FALLBACK ERROR:`, fallbackError.message);
-    }
-  }
-  
-  const { mediaItems } = extractMediaFromText(aiResponse);
-  if (mediaItems.length > 0) {
-    console.log(`[MEDIA DETECTED]:`, mediaItems.map(m => `${m.type}: ${m.url}`));
-  } else {
-    console.log(`[MEDIA DETECTED]: None`);
-  }
-  
-  const instance = business.instances[0];
-  if (instance) {
-    try {
-      // Mark message as read before responding
-      let messageIdToMark = providerMessageId;
-      if (!messageIdToMark) {
-        const lastInboundMessage = await prisma.messageLog.findFirst({
-          where: {
-            businessId,
-            sender: contactPhone,
-            direction: 'inbound'
-          },
-          orderBy: { createdAt: 'desc' },
-          select: { providerMessageId: true }
-        });
-        messageIdToMark = lastInboundMessage?.providerMessageId || undefined;
-      }
-      
-      if (messageIdToMark) {
-        await markMsgRead({ instanceId: instance.id, providerMessageId: messageIdToMark });
-        console.log(`[Agent V1] Message marked as read:`, messageIdToMark);
-      }
-      
-      // Queue the response for sending via unified outbound queue
-      if (isQueueAvailable()) {
-        const queueResult = await queueAgentResponse({
-          businessId,
-          instanceId: instance.id,
-          to: contactPhone,
-          response: aiResponse,
-          splitMessages,
-          priority: 'normal'
-        });
-        
-        if (queueResult.success) {
-          console.log(`[Agent V1] Response queued: ${queueResult.jobIds?.length || 1} jobs for ${contactPhone}`);
-        } else {
-          console.error(`[Agent V1] Failed to queue response: ${queueResult.error}`);
-          throw new Error(queueResult.error);
-        }
-      } else {
-        // Fallback to direct send if queue not available (legacy mode)
-        console.warn('[Agent V1] Queue not available, falling back to direct send');
-        await sendAgentResponseDirect(business, instance, instance.instanceBackendId || undefined, contactPhone, phone, aiResponse, splitMessages, contactName, messageIdToMark);
-      }
-      
-      // Schedule follow-up after queuing response
-      await scheduleFollowUp(businessId, contactPhone, 'ai', instance?.id);
-      
-      // Send product images automatically (don't rely on AI including the URL)
-      // Only send images that were NOT already detected in the AI response
-      const alreadySentUrls = new Set(mediaItems.map(m => m.url));
-      const imagesToSend = productImagesToSend.filter(url => !alreadySentUrls.has(url));
-      
-      if (imagesToSend.length > 0) {
-        console.log(`[PRODUCT IMAGE] Auto-sending ${imagesToSend.length} product images not in AI response`);
-        
-        for (const imageUrl of imagesToSend) {
-          try {
-            await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between images
-            
-            const provider = instance.provider;
-            if (provider === 'BAILEYS' && instance.instanceBackendId) {
-              await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendImage`, {
-                to: contactPhone,
-                url: imageUrl,
-                caption: ''
-              });
-            } else if (['META_CLOUD', 'META_COEXIST'].includes(provider || '')) {
-              // Get credentials from the correct credential object based on provider
-              let accessToken = '';
-              let phoneNumberId = '';
-              
-              if (provider === 'META_COEXIST' && instance.metaCoexistCredential) {
-                accessToken = instance.metaCoexistCredential.systemAccessToken || 
-                              instance.metaCoexistCredential.userAccessToken || '';
-                phoneNumberId = instance.metaCoexistCredential.phoneNumberId;
-              } else if (provider === 'META_CLOUD' && instance.metaCredential) {
-                accessToken = instance.metaCredential.accessToken;
-                phoneNumberId = instance.metaCredential.phoneNumberId;
-              }
-              
-              if (accessToken && phoneNumberId) {
-                const metaService = new MetaCloudService({
-                  accessToken,
-                  phoneNumberId,
-                  businessId: ''
-                });
-                await metaService.sendMessage({
-                  to: contactPhone,
-                  mediaUrl: imageUrl,
-                  mediaType: 'image'
-                });
-              }
-            }
-            console.log(`[PRODUCT IMAGE] Sent: ${imageUrl.substring(0, 60)}...`);
-          } catch (imgError: any) {
-            console.error(`[PRODUCT IMAGE] Failed to send: ${imageUrl}`, imgError.message);
-          }
-        }
-      }
-    } catch (sendError: any) {
-      console.error('Failed to send WhatsApp message:', sendError.response?.data || sendError.message);
-    }
+  // Remove image URLs from response if they were sent automatically
+  if (productImagesToSend.length > 0) {
+    const urlRegex = /https?:\/\/[^\s]+/g;
+    aiResponse = aiResponse.replace(urlRegex, (url) => {
+      return productImagesToSend.includes(url) ? '' : url;
+    }).trim();
   }
   
   return { response: aiResponse, tokensUsed: totalTokens };
+}
+
+// ============ LAYERED CONTEXT SYSTEM ============
+
+// CAPA 1: Base Context (Prompt maestro, objetivo, políticas básicas)
+function buildBaseContext(business: any, promptConfig?: any): string {
+  let context = promptConfig?.prompt || 'Eres un asistente de atención al cliente amable y profesional.';
+  
+  const businessObjective = business.businessObjective as 'SALES' | 'APPOINTMENTS';
+  const isAppointmentMode = businessObjective === 'APPOINTMENTS';
+  
+  if (isAppointmentMode) {
+    context += `\n\n## Modo de operación: CITAS Y SERVICIOS
+Tu objetivo principal es ayudar a los clientes a agendar citas y consultar disponibilidad de servicios.
+- Ofrece horarios disponibles cuando el cliente quiera agendar
+- Confirma los detalles de la cita (fecha, hora, servicio)
+- Responde preguntas sobre los servicios ofrecidos
+- NO intentes vender productos ni crear pedidos`;
+  } else {
+    context += `\n\n## Modo de operación: VENTAS
+Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre productos.`;
+  }
+  
+  if (business.policy) {
+    context += `\n\n## Políticas del negocio:`;
+    if (business.policy.brandVoice) {
+      context += `\n- Tono de marca: ${business.policy.brandVoice}`;
+    }
+    if (business.policy.shippingPolicy) {
+      context += `\n- Envíos: ${business.policy.shippingPolicy}`;
+    }
+    if (business.policy.refundPolicy) {
+      context += `\n- Devoluciones: ${business.policy.refundPolicy}`;
+    }
+  }
+  
+  return context;
+}
+
+// CAPA 2: Critical Context (Orden activa, funnel stage, datos extraídos)
+function buildCriticalContext(params: ContextBuilderParams): string {
+  let context = '';
+  
+  // Orden activa
+  if (params.existingOrder) {
+    const currencySymbol = params.business.currencySymbol || 'S/.';
+    const orderItems = params.existingOrder.items || [];
+    const itemsList = orderItems.map((item: any) => `- ${item.productTitle} (x${item.quantity})`).join('\n');
+    
+    context += `\n\n## 🛒 ORDEN ACTIVA EN ESTA CONVERSACIÓN:
+- ID de pedido: ${params.existingOrder.id}
+- Estado: ${params.existingOrder.status === 'AWAITING_VOUCHER' ? 'Esperando comprobante de pago' : 'Pendiente de pago'}
+- Total actual: ${currencySymbol}${params.existingOrder.totalAmount}
+- Productos en la orden:
+${itemsList}
+
+IMPORTANTE: Esta orden está ACTIVA. Puedes:
+- Agregar más productos usando agregar_producto_orden
+- Completar datos faltantes (dirección, etc.)
+- La orden se mantendrá activa hasta que esté completa con todos los datos y pagos.`;
+  }
+  
+  // Funnel stage
+  if (params.funnelStatus?.currentStage) {
+    context += `\n\n## FLUJO DE VENTA - Etapa actual: "${params.funnelStatus.currentStage.name}"`;
+    if (params.funnelStatus.currentStage.promptContext) {
+      context += `\n${params.funnelStatus.currentStage.promptContext}`;
+    }
+    if (params.funnelStatus.missingFields && params.funnelStatus.missingFields.length > 0) {
+      context += `\n\n### DATOS OBLIGATORIOS PENDIENTES (debes obtenerlos ANTES de avanzar):`;
+      params.funnelStatus.missingFields.forEach((field: string) => {
+        context += `\n- ${field}`;
+      });
+      context += `\n\nIMPORTANTE: NO avances a la siguiente etapa ni cierres la venta hasta tener TODOS estos datos.`;
+    } else if (params.funnelStatus.canAdvance && params.funnelStatus.nextStage) {
+      context += `\n\n### Datos completos - puedes avanzar a "${params.funnelStatus.nextStage.name}"`;
+    }
+    if (params.funnelStatus.currentStage.blockedTopics && params.funnelStatus.currentStage.blockedTopics.length > 0) {
+      context += `\n\n### TEMAS BLOQUEADOS en esta etapa (no abordar aún):`;
+      params.funnelStatus.currentStage.blockedTopics.forEach((topic: string) => {
+        context += `\n- ${topic}`;
+      });
+    }
+  }
+  
+  // Estado del pedido (voucher pendiente)
+  if (params.pendingVoucherOrder) {
+    const productNames = params.pendingVoucherOrder.items.map((i: any) => `${i.productTitle} x${i.quantity}`).join(', ');
+    const subtotal = params.pendingVoucherOrder.subtotalAmount || params.pendingVoucherOrder.items.reduce((sum: number, i: any) => sum + (i.unitPrice * i.quantity), 0);
+    const shipping = params.pendingVoucherOrder.shippingCost || 0;
+    
+    context += `\n\n## ⚠️ PEDIDO PENDIENTE DE PAGO (ID: ${params.pendingVoucherOrder.id.slice(-8)}):
+- Productos: ${productNames}
+- Subtotal: ${params.pendingVoucherOrder.currencySymbol}${subtotal.toFixed(2)}`;
+    if (shipping > 0) {
+      context += `\n- Envío: ${params.pendingVoucherOrder.currencySymbol}${shipping.toFixed(2)}`;
+    }
+    context += `\n- TOTAL A PAGAR: ${params.pendingVoucherOrder.currencySymbol}${params.pendingVoucherOrder.totalAmount.toFixed(2)}`;
+    if (params.pendingVoucherOrder.shippingAddress) {
+      context += `\n- Dirección de envío: ${params.pendingVoucherOrder.shippingAddress}`;
+    }
+    
+    if (params.pendingVoucherOrder.voucherImageUrl) {
+      context += `\n\n## ✅ COMPROBANTE RECIBIDO:
+- El cliente ya envió su comprobante de pago.
+- Agradécele y confirma que el equipo está validando el pago.
+- NO le pidas más comprobantes ni datos adicionales.`;
+    } else {
+      context += `\n\n## 📱 ESPERANDO COMPROBANTE DE PAGO:
+- Pide amablemente al cliente que envíe una FOTO del comprobante de pago (voucher/transferencia).
+- Recuérdale el monto total a depositar: ${params.pendingVoucherOrder.currencySymbol}${params.pendingVoucherOrder.totalAmount.toFixed(2)}
+- Cuando el cliente envíe una IMAGEN, el sistema la procesará automáticamente como comprobante.
+- NO crees otro pedido mientras este está pendiente.`;
+    }
+  }
+  
+  // Datos extraídos del cliente
+  if (params.extractedData && Object.keys(params.extractedData).length > 0) {
+    context += `\n\n## DATOS YA RECOLECTADOS DEL CLIENTE (NO volver a pedir):`;
+    Object.entries(params.extractedData).forEach(([key, value]) => {
+      if (value && String(value).trim() !== '') {
+        context += `\n- ${key}: ${value}`;
+      }
+    });
+    context += `\n\nIMPORTANTE: YA tienes estos datos. NO los vuelvas a pedir. Usa esta información para avanzar en la conversación.`;
+  }
+  
+  // Tag/Etapa CRM
+  if (params.contactAssignment?.tag) {
+    const tag = params.contactAssignment.tag;
+    context += `\n\n## Estado actual del cliente:
+- Etapa CRM: ${tag.name}`;
+    if (tag.description) {
+      context += `\n- Contexto de etapa: ${tag.description}`;
+    }
+    
+    if (tag.stagePrompt) {
+      if (tag.stagePrompt.systemContext) {
+        context += `\n\n## Instrucciones especiales para esta etapa:\n${tag.stagePrompt.systemContext}`;
+      }
+      if (tag.stagePrompt.promptOverride) {
+        context = tag.stagePrompt.promptOverride + `\n\n${context}`;
+      }
+    }
+  }
+  
+  return context;
+}
+
+// CAPA 3: Core Context (Secciones Core limitadas a 7 por prioridad)
+async function buildCoreContext(params: ContextBuilderParams): Promise<{ context: string; count: number }> {
+  const { business, instanceId } = params;
+  const businessId = business.id;
+  
+  // Load only Core sections, limited to 7 by priority
+  const coreSections = await prisma.promptSection.findMany({
+    where: {
+      businessId,
+      enabled: true,
+      isCore: true,
+      OR: instanceId 
+        ? [{ instanceId }, { instanceId: null }]
+        : [{ instanceId: null }]
+    },
+    orderBy: [
+      { priority: 'desc' },
+      { createdAt: 'asc' }
+    ],
+    take: 7
+  });
+  
+  let context = '';
+  if (coreSections.length > 0) {
+    const totalCore = await prisma.promptSection.count({
+      where: {
+        businessId,
+        enabled: true,
+        isCore: true,
+        OR: instanceId 
+          ? [{ instanceId }, { instanceId: null }]
+          : [{ instanceId: null }]
+      }
+    });
+    
+    if (totalCore > 7) {
+      console.log(`[LAYERED-CONTEXT] Limited Core sections: ${coreSections.length} of ${totalCore} (showing top 7 by priority)`);
+    } else {
+      console.log(`[LAYERED-CONTEXT] Loaded ${coreSections.length} Core sections`);
+    }
+    
+    coreSections.forEach(section => {
+      context += `\n\n## ${section.title}:\n${section.content}`;
+    });
+  }
+  
+  return { context, count: coreSections.length };
+}
+
+// CAPA 4: Dynamic Context (RAG dinámico + Intent analysis)
+async function buildDynamicContext(params: ContextBuilderParams): Promise<{ context: string; ragCount: number }> {
+  const { business, messages, instanceId, intentAnalysis, conversationContext, extractedData } = params;
+  const businessId = business.id;
+  
+  let context = '';
+  let ragCount = 0;
+  
+  // RAG dinámico: buscar secciones relevantes según el mensaje
+  const combinedMessage = messages.join(' ');
+  try {
+    const ragResult = await retrieveRelevantSections(businessId, combinedMessage, 5, instanceId);
+    
+    if (ragResult.ragSections.length > 0) {
+      const ragContent = formatSectionsForPrompt(ragResult);
+      context += `\n\n${ragContent}`;
+      ragCount = ragResult.ragSections.length;
+      console.log(`[LAYERED-CONTEXT] RAG: ${ragResult.coreSections.length} core + ${ragResult.ragSections.length} dynamic sections`);
+    }
+  } catch (ragError: any) {
+    console.error('[LAYERED-CONTEXT] RAG retrieval failed, continuing without:', ragError.message);
+  }
+  
+  // Intent-based dynamic prompt
+  if (intentAnalysis && conversationContext) {
+    const paymentLinkEnabled = params.business.user?.paymentLinkEnabled ?? false;
+    const dynamicPrompt = buildDynamicPrompt(
+      '', // Base prompt ya está en otras capas
+      intentAnalysis,
+      conversationContext,
+      business.businessObjective as 'SALES' | 'APPOINTMENTS',
+      {
+        paymentLinkEnabled,
+        extractedData: extractedData || {}
+      }
+    );
+    
+    // Solo agregar la parte dinámica (sin el base prompt)
+    const dynamicParts = dynamicPrompt.split('\n\n').filter(part => 
+      part.includes('REGLAS DE COMUNICACIÓN') ||
+      part.includes('DATOS YA EXTRAÍDOS') ||
+      part.includes('CONTEXTO ACTUAL') ||
+      part.includes('INSTRUCCIÓN PARA') ||
+      part.includes('CLIENTE LISTO') ||
+      part.includes('HERRAMIENTAS SUGERIDAS')
+    );
+    
+    if (dynamicParts.length > 0) {
+      context += `\n\n${dynamicParts.join('\n\n')}`;
+    }
+  }
+  
+  return { context, ragCount };
+}
+
+// CAPA 5: Resources Context (Catálogo, zonas, archivos, herramientas)
+function buildResourcesContext(params: ContextBuilderParams): string {
+  const { business, products = [], deliveryZones = [], agentFiles = [] } = params;
+  const businessObjective = business.businessObjective as 'SALES' | 'APPOINTMENTS';
+  const isAppointmentMode = businessObjective === 'APPOINTMENTS';
+  const currencySymbol = business.currencySymbol || 'S/.';
+  const productCount = products.length;
+  
+  let context = '';
+  
+  // Catálogo de productos (solo para SALES mode)
+  if (!isAppointmentMode) {
+    if (productCount > 0 && productCount <= 20) {
+      context += `\n\n## Catálogo de productos:`;
+      products.forEach((product: any) => {
+        context += `\n- [ID:${product.id}] ${product.title}: ${currencySymbol}${product.price}`;
+        if (product.stock !== undefined) {
+          context += ` (Stock: ${product.stock})`;
+        }
+        if (product.description) {
+          context += ` - ${product.description}`;
+        }
+        const productImageUrl = product.imageUrl || (product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : null);
+        if (productImageUrl) {
+          context += ` [IMG:${productImageUrl}]`;
+        }
+      });
+      context += `\n\n## ⚠️ REGLA ABSOLUTAMENTE CRÍTICA - NO INVENTAR PRODUCTOS:
+- PROHIBIDO inventar, imaginar o suponer productos que NO están en el catálogo de arriba.
+- Solo puedes ofrecer los ${productCount} productos listados arriba. NADA MÁS.
+- OBLIGATORIO: Verifica que el producto que menciona el cliente EXISTE en la lista de arriba antes de dar cualquier información.
+- Si el cliente pregunta por un producto que NO está en la lista de arriba, responde: "Lo siento, ese producto no está disponible en nuestro catálogo. ¿Te puedo ayudar con alguno de nuestros productos disponibles?"
+- NUNCA menciones marcas, modelos, precios o características de productos que NO estén explícitamente listados arriba.
+- Si no estás 100% seguro de que el producto existe en la lista, di que no lo tienes disponible.
+- Para generar pedidos, usa el ID del producto (el valor después de "ID:").`;
+      
+      context += `\n\n## 🖼️ REGLA CRÍTICA - ENVÍO DE IMÁGENES DE PRODUCTOS:
+- OBLIGATORIO: Cada vez que menciones un producto que tiene imagen (marcado con [IMG:URL] en el catálogo), DEBES incluir esa URL en tu respuesta.
+- SIEMPRE incluye la URL de la imagen al final de tu mensaje cuando respondas sobre un producto que tiene imagen disponible.
+- Formato: Escribe tu respuesta normal y al final, en una línea separada, incluye SOLO la URL (sin Markdown, sin texto adicional, sin corchetes).
+- Ejemplo correcto: "Este producto cuesta S/.50 y está disponible.\\nhttps://ejemplo.com/imagen.jpg"`;
+    } else if (productCount > 20) {
+      context += `\n\n## Catálogo de productos:
+Tienes acceso a un catálogo de ${productCount} productos con BÚSQUEDA INTELIGENTE.
+Los precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).
+
+## ⚠️ REGLA ABSOLUTAMENTE CRÍTICA - NO INVENTAR PRODUCTOS:
+- PROHIBIDO inventar, imaginar o suponer productos que NO existen en el catálogo.
+- SIEMPRE usa buscar_producto antes de mencionar cualquier producto al cliente.
+- Si buscar_producto NO encuentra el producto, responde: "Lo siento, ese producto no está disponible en nuestro catálogo. ¿Te puedo ayudar con otro producto?"
+- NUNCA menciones marcas, modelos, precios o características de productos sin haberlos buscado primero.
+
+## 🖼️ REGLA CRÍTICA - ENVÍO DE IMÁGENES DE PRODUCTOS:
+- OBLIGATORIO: Cada vez que menciones un producto que tiene imagen, DEBES incluir la URL de la imagen en tu respuesta.
+- Cuando buscar_producto devuelve "imagen_producto" o "instruccion" con una URL, esa URL DEBE aparecer al final de tu mensaje.
+- Formato: Escribe tu respuesta normal y al final, en una línea separada, incluye SOLO la URL (sin Markdown, sin texto adicional, sin corchetes).`;
+    } else if (productCount === 0) {
+      context += `\n\n## ⚠️ CATÁLOGO VACÍO - REGLA CRÍTICA:
+- Este negocio NO tiene productos registrados en el catálogo.
+- PROHIBIDO inventar, mencionar o sugerir productos de cualquier tipo.
+- Si el cliente pregunta por productos o precios, responde: "Actualmente no tenemos productos disponibles en nuestro catálogo. ¿Hay algo más en lo que pueda ayudarte?"
+- NO menciones marcas, modelos ni precios porque NO hay catálogo disponible.`;
+    }
+    
+    // Zonas de entrega
+    if (deliveryZones.length > 0) {
+      context += `\n\n## Zonas de entrega disponibles:`;
+      deliveryZones.forEach((zone: any) => {
+        context += `\n- [ZONA:${zone.id}] ${zone.name}`;
+        if (zone.districts && zone.districts.length > 0) {
+          context += `: ${zone.districts.join(', ')}`;
+        }
+        if (zone.cost !== null && zone.cost !== undefined) {
+          context += ` - Costo envío: ${currencySymbol}${zone.cost}`;
+        }
+        if (zone.freeAbove) {
+          context += ` (Gratis si compra es mayor a ${currencySymbol}${zone.freeAbove})`;
+        }
+        if (zone.deliveryTime) {
+          context += ` - Tiempo: ${zone.deliveryTime}`;
+        }
+      });
+      context += `\n\n## Reglas para zonas de entrega:
+- SIEMPRE pregunta al cliente a qué zona/distrito pertenece su dirección de entrega.
+- Verifica que el distrito/zona del cliente esté en la lista de arriba.
+- Si la compra supera el monto de "freeAbove", el envío es GRATIS.`;
+    }
+    
+    // Flujo de venta
+    const canUsePaymentLink = business.user?.paymentLinkEnabled ?? false;
+    if (!canUsePaymentLink) {
+      context += `\n\n## ⚠️ FLUJO DE VENTA CON VOUCHER - OBLIGATORIO:
+1. **PASO 1 - PRODUCTO**: Identifica qué producto(s) quiere el cliente y la cantidad.
+2. **PASO 2 - ZONA DE ENTREGA**: Pregunta el distrito/zona de entrega del cliente para calcular el costo de envío.
+3. **PASO 3 - RESUMEN Y TOTAL**: Muestra el resumen del pedido con: productos, cantidades, subtotal, costo de envío y TOTAL FINAL.
+4. **PASO 4 - DATOS DE ENVÍO**: Pide nombre completo y dirección exacta de entrega.
+5. **PASO 5 - CREAR PEDIDO**: Usa registrar_pedido para crear el pedido con todos los datos.
+6. **PASO 6 - SOLICITAR VOUCHER**: Pide al cliente que envíe foto del comprobante de pago (voucher/transferencia).
+7. **PASO 7 - CONFIRMAR**: Cuando el cliente envíe el voucher, se validará automáticamente.
+
+## Reglas del flujo:
+- NO saltes pasos. Sigue el orden establecido.
+- NO crees el pedido sin tener: producto, cantidad, zona de entrega, nombre y dirección.
+- SIEMPRE muestra el total ANTES de crear el pedido para que el cliente confirme.`;
+    }
+    
+    // Reglas de pedidos
+    context += `\n\n## REGLA CRÍTICA - REGISTRO DE PEDIDOS:
+- OBLIGATORIO: Antes de confirmar CUALQUIER pedido, DEBES usar la herramienta registrar_pedido o crear_enlace_pago.
+- NUNCA digas "tu pedido está registrado/agendado/confirmado" sin haber ejecutado la herramienta primero.
+- Solo confirma el pedido DESPUÉS de recibir "exito: true" de la herramienta.
+- Si la herramienta falla, informa al cliente del error y NO confirmes el pedido.`;
+    
+    // Orden activa (si existe)
+    if (params.existingOrder) {
+      context += `\n\n## 🚨 REGLA CRÍTICA - TRABAJAR CON ORDEN ACTIVA:
+- Si hay una orden activa (mostrada arriba), DEBES trabajar con esa orden.
+- Si el cliente quiere agregar más productos, usa agregar_producto_orden (NO uses registrar_pedido de nuevo).
+- Si faltan datos (dirección, nombre, etc.), puedes pedirlos y actualizar la orden.
+- La orden permanece activa hasta que esté completa con todos los datos y el pago confirmado.
+- NO crees una nueva orden si ya hay una activa.`;
+    }
+  } else if (isAppointmentMode) {
+    context += `\n\n## Modo Citas Activo:
+Eres un asistente especializado en agendar citas y consultas.
+- Usa consultar_disponibilidad para verificar horarios antes de proponer fechas.
+- Usa agendar_cita cuando el cliente confirme fecha y hora.
+- Siempre confirma los datos del cliente antes de agendar.
+- Si no hay horarios disponibles, ofrece fechas alternativas o pregunta qué día prefiere.`;
+  }
+  
+  // Archivos disponibles
+  if (agentFiles.length > 0) {
+    context += `\n\n## Archivos disponibles para enviar:
+Tienes acceso a ${agentFiles.length} archivos que puedes enviar al cliente cuando sea relevante.
+Usa la función enviar_archivo cuando el cliente pregunte por alguno de estos temas o cuando sea apropiado según el contexto:`;
+    agentFiles.forEach((file) => {
+      context += `\n- [ID:${file.id}] ${file.name}`;
+      if (file.description) context += `: ${file.description}`;
+      if (file.triggerKeywords) context += ` (keywords: ${file.triggerKeywords})`;
+      if (file.triggerContext) context += ` | Enviar cuando: ${file.triggerContext}`;
+    });
+    context += `\n\nIMPORTANTE: Cuando detectes que el cliente pregunta por algo relacionado a estos archivos (por keywords o contexto), usa enviar_archivo con el ID correspondiente.`;
+  }
+  
+  return context;
+}
+
+// Función principal que combina todas las capas y construye herramientas
+async function buildLayeredContext(params: ContextBuilderParams, tools: any[]): Promise<LayeredContext> {
+  const { business, agentFiles = [], products = [] } = params;
+  const businessId = business.id;
+  const productCount = products.length;
+  const isSalesMode = business.businessObjective !== 'APPOINTMENTS';
+  const canUsePaymentLink = business.user?.paymentLinkEnabled ?? false;
+  
+  const layersUsed: string[] = [];
+  
+  // CAPA 1: Base
+  const baseContext = buildBaseContext(business, params.promptConfig);
+  layersUsed.push('base');
+  
+  // CAPA 2: Crítico
+  const criticalContext = buildCriticalContext(params);
+  if (criticalContext) {
+    layersUsed.push('critical');
+  }
+  
+  // CAPA 3: Core (limitado)
+  const coreResult = await buildCoreContext(params);
+  layersUsed.push('core');
+  
+  // CAPA 4: Dinámico (RAG + Intent)
+  const dynamicResult = await buildDynamicContext(params);
+  if (dynamicResult.ragCount > 0) {
+    layersUsed.push('rag');
+  }
+  if (params.intentAnalysis) {
+    layersUsed.push('intent');
+  }
+  
+  // CAPA 5: Recursos
+  const resourcesContext = buildResourcesContext(params);
+  layersUsed.push('resources');
+  
+  // Combinar todas las capas
+  let systemPrompt = baseContext;
+  if (criticalContext) {
+    systemPrompt += criticalContext;
+  }
+  if (coreResult.context) {
+    systemPrompt += coreResult.context;
+  }
+  if (dynamicResult.context) {
+    systemPrompt += dynamicResult.context;
+  }
+  if (resourcesContext) {
+    systemPrompt += resourcesContext;
+  }
+  
+  // Aplicar reemplazo de variables
+  systemPrompt = replacePromptVariables(systemPrompt, business.timezone || 'America/Lima');
+  
+  // Construir herramientas
+  const openaiTools: OpenAI.Chat.ChatCompletionTool[] = tools.map(tool => {
+    const toolParams = (tool.parameters as any[]) || [];
+    const dynamicVars = (tool.dynamicVariables as any[]) || [];
+    const properties: Record<string, any> = {};
+    const requiredSet = new Set<string>();
+    
+    if (toolParams.length > 0) {
+      toolParams.forEach((param: any) => {
+        properties[param.name] = {
+          type: param.type || 'string',
+          description: param.description || `Parameter ${param.name}`
+        };
+        if (param.required) {
+          requiredSet.add(param.name);
+        }
+      });
+    } else if (dynamicVars.length === 0) {
+      properties['query'] = { type: 'string', description: 'The query or data to send to the external service' };
+      requiredSet.add('query');
+    }
+    
+    dynamicVars.forEach((v: any) => {
+      let desc = v.description || `Variable ${v.name}`;
+      if (v.formatExample) {
+        desc += ` (formato: ${v.formatExample})`;
+      }
+      if (!properties[v.name]) {
+        properties[v.name] = {
+          type: 'string',
+          description: desc
+        };
+      }
+      requiredSet.add(v.name);
+    });
+    
+    return {
+      type: 'function' as const,
+      function: {
+        name: tool.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
+        description: tool.description,
+        parameters: {
+          type: 'object',
+          properties,
+          required: Array.from(requiredSet)
+        }
+      }
+    };
+  });
+  
+  // Sales tools
+  if (isSalesMode && productCount > 20) {
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'buscar_producto',
+        description: 'Busca productos en el catálogo por nombre o descripción. Usa esta función cuando el cliente pregunte por un producto específico.',
+        parameters: {
+          type: 'object',
+          properties: {
+            consulta: {
+              type: 'string',
+              description: 'Término de búsqueda: nombre del producto o palabras clave de la descripción'
+            }
+          },
+          required: ['consulta']
+        }
+      }
+    });
+  }
+  
+  // Order tools
+  if (isSalesMode) {
+    const orderToolName = canUsePaymentLink ? 'crear_enlace_pago' : 'registrar_pedido';
+    const orderToolDescription = canUsePaymentLink 
+      ? 'Genera un enlace de pago para que el cliente complete su compra. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío.'
+      : 'Registra un pedido para el cliente que pagará por transferencia/voucher. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío. El pedido quedará pendiente hasta que el cliente envíe el comprobante de pago.';
+    
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: orderToolName,
+        description: orderToolDescription,
+        parameters: {
+          type: 'object',
+          properties: {
+            producto_id: {
+              type: 'string',
+              description: 'ID o nombre del producto que el cliente quiere comprar. Si no hay catálogo, usa el nombre exacto del producto mencionado por el cliente.'
+            },
+            cantidad: {
+              type: 'integer',
+              description: 'Cantidad de unidades a comprar (por defecto 1)'
+            },
+            nombre_cliente: {
+              type: 'string',
+              description: 'Nombre completo del cliente'
+            },
+            direccion_envio: {
+              type: 'string',
+              description: 'Dirección completa de envío'
+            },
+            ciudad: {
+              type: 'string',
+              description: 'Ciudad de envío'
+            },
+            pais: {
+              type: 'string',
+              description: 'País de envío'
+            },
+            zona_entrega: {
+              type: 'string',
+              description: 'Nombre o ID de la zona de entrega del cliente (ej: "Lima Centro", "Miraflores"). Debe coincidir con una de las zonas de entrega configuradas.'
+            },
+            costo_envio: {
+              type: 'number',
+              description: 'Costo de envío calculado según la zona de entrega. Puede ser 0 si el pedido supera el monto de envío gratis.'
+            },
+            coordenadas_ubicacion: {
+              type: 'string',
+              description: 'Coordenadas GPS de la ubicación del cliente en formato "latitud,longitud" (ejemplo: -12.046374,-77.042793). Se obtiene cuando el cliente comparte su ubicación actual por WhatsApp.'
+            }
+          },
+          required: ['producto_id', 'nombre_cliente', 'direccion_envio', 'zona_entrega']
+        }
+      }
+    });
+    
+    if (!canUsePaymentLink) {
+      openaiTools.push({
+        type: 'function' as const,
+        function: {
+          name: 'agregar_producto_orden',
+          description: 'Agrega un producto adicional a una orden activa existente. Usa esta función cuando el cliente quiera agregar más productos a su pedido que ya está en proceso. Solo funciona si hay una orden activa (AWAITING_VOUCHER o PENDING_PAYMENT) para este cliente.',
+          parameters: {
+            type: 'object',
+            properties: {
+              producto_id: {
+                type: 'string',
+                description: 'ID o nombre del producto que el cliente quiere agregar a la orden activa'
+              },
+              cantidad: {
+                type: 'integer',
+                description: 'Cantidad de unidades a agregar (por defecto 1)'
+              }
+            },
+            required: ['producto_id']
+          }
+        }
+      });
+    }
+  }
+  
+  // Appointment tools
+  if (business.businessObjective === 'APPOINTMENTS') {
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'consultar_disponibilidad',
+        description: 'Consulta los horarios disponibles para agendar una cita en una fecha específica.',
+        parameters: {
+          type: 'object',
+          properties: {
+            fecha: {
+              type: 'string',
+              description: 'Fecha para consultar disponibilidad en formato YYYY-MM-DD'
+            }
+          },
+          required: ['fecha']
+        }
+      }
+    });
+    
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'agendar_cita',
+        description: 'Agenda una cita con el cliente en la fecha y hora especificada. Usa esta función cuando el cliente confirme que quiere agendar una cita y hayas verificado disponibilidad.',
+        parameters: {
+          type: 'object',
+          properties: {
+            fecha_hora: {
+              type: 'string',
+              description: 'Fecha y hora de la cita en formato ISO 8601 (YYYY-MM-DDTHH:mm:ss)'
+            },
+            nombre_cliente: {
+              type: 'string',
+              description: 'Nombre completo del cliente'
+            },
+            servicio: {
+              type: 'string',
+              description: 'Tipo de servicio o motivo de la cita'
+            },
+            duracion_minutos: {
+              type: 'integer',
+              description: 'Duración de la cita en minutos (por defecto 60)'
+            },
+            notas: {
+              type: 'string',
+              description: 'Notas adicionales sobre la cita'
+            }
+          },
+          required: ['fecha_hora', 'nombre_cliente']
+        }
+      }
+    });
+  }
+  
+  // File sending tool
+  if (agentFiles.length > 0) {
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'enviar_archivo',
+        description: 'Envía un archivo (documento, imagen, catálogo, plano, etc.) al cliente. Usa esta función cuando el cliente pregunte por información que está disponible en los archivos del negocio.',
+        parameters: {
+          type: 'object',
+          properties: {
+            archivo_id: {
+              type: 'string',
+              description: 'ID del archivo a enviar (obtenido de la lista de archivos disponibles)'
+            },
+            mensaje_acompanante: {
+              type: 'string',
+              description: 'Mensaje breve que acompaña al archivo (ej: "Aquí tienes nuestro catálogo de departamentos")'
+            }
+          },
+          required: ['archivo_id']
+        }
+      }
+    });
+  }
+  
+  // RAG search tool (buscar_seccion_rag)
+  const ragSectionsCount = await prisma.promptSection.count({
+    where: {
+      businessId,
+      enabled: true,
+      isCore: false,
+      OR: params.instanceId 
+        ? [{ instanceId: params.instanceId }, { instanceId: null }]
+        : [{ instanceId: null }]
+    }
+  });
+  
+  if (ragSectionsCount > 0) {
+    openaiTools.push({
+      type: 'function' as const,
+      function: {
+        name: 'buscar_seccion_rag',
+        description: 'Busca información específica en las secciones de conocimiento del negocio usando búsqueda semántica. Usa esta función cuando necesites información detallada sobre políticas, procedimientos, productos especiales, o cualquier tema que no esté en el contexto base.',
+        parameters: {
+          type: 'object',
+          properties: {
+            consulta: {
+              type: 'string',
+              description: 'Consulta o pregunta sobre el tema que necesitas buscar (ej: "política de devoluciones", "garantía de productos", "horarios de atención")'
+            },
+            limit: {
+              type: 'integer',
+              description: 'Número máximo de secciones a recuperar (por defecto 3, máximo 5)'
+            }
+          },
+          required: ['consulta']
+        }
+      }
+    });
+  }
+  
+  // Estimar tokens (aproximado: 1 token ≈ 4 caracteres)
+  const tokensEstimate = Math.ceil(systemPrompt.length / 4);
+  
+  console.log(`[LAYERED-CONTEXT] Built context with layers: ${layersUsed.join(', ')}, Core: ${coreResult.count}, RAG: ${dynamicResult.ragCount}, Tools: ${openaiTools.length}, ~${tokensEstimate} tokens`);
+  
+  return {
+    systemPrompt,
+    tools: openaiTools,
+    metadata: {
+      tokensEstimate,
+      layersUsed,
+      coreSectionsCount: coreResult.count,
+      ragSectionsCount: dynamicResult.ragCount
+    }
+  };
 }
 
 router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Response) => {
@@ -4754,7 +4831,7 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
 
 // ============ RAG KNOWLEDGE SECTIONS ============
 
-import { generateEmbedding, retrieveRelevantSections, formatSectionsForPrompt, getRAGStats } from '../services/ragService.js';
+import { generateEmbedding, getRAGStats } from '../services/ragService.js';
 
 router.post('/parse-prompt-sections', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
