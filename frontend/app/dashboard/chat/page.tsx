@@ -123,6 +123,7 @@ export default function ChatPage() {
   const [assignments, setAssignments] = useState<TagAssignment[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [assigningTag, setAssigningTag] = useState(false);
+  const [tagsExpanded, setTagsExpanded] = useState(false);
   const [windowStatus, setWindowStatus] = useState<WindowStatus | null>(null);
   const [dailyContacts, setDailyContacts] = useState<DailyContactStats | null>(null);
   const [contactBotDisabled, setContactBotDisabled] = useState<boolean>(false);
@@ -1411,77 +1412,85 @@ export default function ChatPage() {
                 <span className="font-medium">{dailyContacts.count}/{dailyContacts.limit}</span>
               </div>
             )}
-            {/* Lista de etiquetas mejorada con contadores - Compacta y colapsable */}
+            {/* Lista de etiquetas - Compacta y colapsable */}
             {tags.length > 0 && (
               <div className="mb-1.5">
-                <div className="flex items-center justify-between mb-1">
-                  <button
-                    onClick={() => setSelectedTag(null)}
-                    className={`text-xs px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors ${
-                      selectedTag === null 
-                        ? 'bg-neon-blue/20 text-neon-blue' 
-                        : 'text-gray-400 hover:text-white hover:bg-dark-hover'
-                    }`}
-                  >
-                    <span className="text-[10px]">📋</span>
-                    <span className="font-medium text-[11px]">Etiquetas</span>
-                  </button>
-                  <button
-                    onClick={() => setShowCreateTagModal(true)}
-                    className="text-[10px] px-1 py-0.5 rounded bg-dark-hover text-gray-400 hover:text-white hover:bg-dark-border transition-colors"
-                    title="Crear nueva etiqueta"
-                  >
-                    +
-                  </button>
-                </div>
-                <div className="space-y-0.5 max-h-[100px] overflow-y-auto scrollbar-thin scrollbar-track-dark-bg scrollbar-thumb-dark-border">
-                  <button 
-                    onClick={() => setSelectedTag(null)} 
-                    className={`w-full text-left text-[11px] px-1.5 py-1 rounded flex items-center justify-between transition-all duration-150 ${
-                      selectedTag === null 
-                        ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/50' 
-                        : 'bg-dark-hover text-gray-400 hover:bg-dark-border hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-gray-600 border border-dark-border" />
-                      <span className="font-medium truncate">Sin etiqueta</span>
-                    </div>
-                    <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-surface opacity-70 flex-shrink-0">
-                      {getConversationsByTag(null).length}
+                <button
+                  onClick={() => setTagsExpanded(!tagsExpanded)}
+                  className="w-full flex items-center justify-between px-1.5 py-1 rounded hover:bg-dark-hover transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <svg 
+                      className={`w-3 h-3 text-gray-400 transition-transform ${tagsExpanded ? 'rotate-90' : ''}`} 
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="text-[11px] font-medium text-gray-400">Etiquetas</span>
+                    <span className="text-[10px] px-1 py-0.5 rounded bg-dark-surface text-gray-500">{tags.length}</span>
+                  </div>
+                  {selectedTag && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neon-blue/20 text-neon-blue">
+                      Filtro activo
                     </span>
-                  </button>
-                  {tags.map(tag => {
-                    const count = getConversationsByTag(tag.id).length;
-                    return (
-                      <button 
-                        key={tag.id} 
-                        onClick={() => setSelectedTag(tag.id)} 
-                        className={`w-full text-left text-[11px] px-1.5 py-1 rounded flex items-center justify-between transition-all duration-150 ${
-                          selectedTag === tag.id 
-                            ? 'border' 
-                            : 'hover:bg-dark-border'
-                        }`}
-                        style={{ 
-                          backgroundColor: selectedTag === tag.id ? `${tag.color}30` : 'transparent',
-                          color: selectedTag === tag.id ? tag.color : 'inherit',
-                          borderColor: selectedTag === tag.id ? `${tag.color}50` : 'transparent'
-                        }}
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <div 
-                            className="w-2 h-2 rounded-full flex-shrink-0 border border-dark-border" 
-                            style={{ backgroundColor: tag.color }}
-                          />
-                          <span className="font-medium truncate">{tag.name}</span>
-                        </div>
-                        <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-surface opacity-70 flex-shrink-0 ml-1">
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                  )}
+                </button>
+                {tagsExpanded && (
+                  <div className="mt-1 space-y-0.5 max-h-[120px] overflow-y-auto scrollbar-thin scrollbar-track-dark-bg scrollbar-thumb-dark-border">
+                    <button 
+                      onClick={() => setSelectedTag(null)} 
+                      className={`w-full text-left text-[11px] px-1.5 py-1 rounded flex items-center justify-between transition-all duration-150 ${
+                        selectedTag === null 
+                          ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/50' 
+                          : 'bg-dark-hover text-gray-400 hover:bg-dark-border hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-gray-600 border border-dark-border" />
+                        <span className="font-medium truncate">Todos</span>
+                      </div>
+                      <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-surface opacity-70 flex-shrink-0">
+                        {getConversationsByTag(null).length}
+                      </span>
+                    </button>
+                    {tags.map(tag => {
+                      const count = getConversationsByTag(tag.id).length;
+                      return (
+                        <button 
+                          key={tag.id} 
+                          onClick={() => setSelectedTag(tag.id)} 
+                          className={`w-full text-left text-[11px] px-1.5 py-1 rounded flex items-center justify-between transition-all duration-150 ${
+                            selectedTag === tag.id 
+                              ? 'border' 
+                              : 'hover:bg-dark-border'
+                          }`}
+                          style={{ 
+                            backgroundColor: selectedTag === tag.id ? `${tag.color}30` : 'transparent',
+                            color: selectedTag === tag.id ? tag.color : 'inherit',
+                            borderColor: selectedTag === tag.id ? `${tag.color}50` : 'transparent'
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <div 
+                              className="w-2 h-2 rounded-full flex-shrink-0 border border-dark-border" 
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            <span className="font-medium truncate">{tag.name}</span>
+                          </div>
+                          <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-surface opacity-70 flex-shrink-0 ml-1">
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setShowCreateTagModal(true)}
+                      className="w-full text-left text-[10px] px-1.5 py-1 rounded text-gray-500 hover:text-white hover:bg-dark-hover transition-colors flex items-center gap-1"
+                    >
+                      <span>+</span> Crear etiqueta
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
