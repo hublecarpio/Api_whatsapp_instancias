@@ -903,6 +903,13 @@ export default function ChatPage() {
     if (responseFilter === 'responded' && direction !== 'inbound') return false;
     if (responseFilter === 'waiting' && direction !== 'outbound') return false;
     
+    // Tag filter
+    if (selectedTag !== null) {
+      const contactTagsList = getContactTags(conv.phone);
+      const hasSelectedTag = contactTagsList.some(t => t.id === selectedTag);
+      if (!hasSelectedTag) return false;
+    }
+    
     // Search filter
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
