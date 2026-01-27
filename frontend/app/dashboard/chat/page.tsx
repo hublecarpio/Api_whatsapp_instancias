@@ -289,7 +289,7 @@ export default function ChatPage() {
       }, 10000);
       return () => clearInterval(interval);
     }
-  }, [currentBusiness]);
+  }, [currentBusiness, selectedInstanceId]);
 
   // Cargar etiquetas de todos los contactos cuando se cargan las conversaciones
   useEffect(() => {
@@ -314,7 +314,7 @@ export default function ChatPage() {
     if (!currentBusiness) return;
     try {
       const [tagsRes, assignmentsRes] = await Promise.all([
-        tagsApi.list(currentBusiness.id),
+        tagsApi.list(currentBusiness.id, selectedInstanceId || undefined),
         tagsApi.getAssignments(currentBusiness.id)
       ]);
       setTags(tagsRes.data);
