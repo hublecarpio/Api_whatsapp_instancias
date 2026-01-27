@@ -50,27 +50,24 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const whereClause: any = { businessId: business_id as string };
-    if (instance_id) {
-      // Return both instance-specific tags AND global tags (instanceId = null)
-      whereClause.OR = [
-        { instanceId: instance_id as string },
-        { instanceId: null }
-      ];
-      delete whereClause.businessId;
-      whereClause.AND = [{ businessId: business_id as string }];
-    } else {
-      whereClause.instanceId = null;
-    }
+    // Build clean where clause for tags query
+    // When instance_id provided: return both instance-specific AND global (null) tags
+    // Otherwise: return only global tags
+    const whereClause = instance_id
+      ? {
+          businessId: business_id as string,
+          OR: [
+            { instanceId: instance_id as string },
+            { instanceId: null }
+          ]
+        }
+      : {
+          businessId: business_id as string,
+          instanceId: null
+        };
 
     const tags = await prisma.tag.findMany({
-      where: instance_id ? {
-        businessId: business_id as string,
-        OR: [
-          { instanceId: instance_id as string },
-          { instanceId: null }
-        ]
-      } : whereClause,
+      where: whereClause,
       include: {
         stagePrompt: true,
         _count: {
