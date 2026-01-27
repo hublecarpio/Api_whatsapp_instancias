@@ -1597,44 +1597,6 @@ export default function ChatPage() {
                   </div>
                 </div>
                 
-                {/* Fila 2: Etapas del funnel como filtro horizontal compacto */}
-                {availableFunnelStages.length > 0 && (
-                  <div className="px-2 py-1 flex items-center gap-1 border-t border-dark-border/30 overflow-x-auto scrollbar-none">
-                    {availableFunnelStages.map((stage, index) => {
-                      const isSelected = funnelStage?.id === stage.id;
-                      const stageColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
-                      const color = stageColors[index % stageColors.length];
-                      return (
-                        <button
-                          key={stage.id}
-                          onClick={() => handleChangeFunnelStage(isSelected ? '' : stage.id)}
-                          disabled={changingFunnelStage}
-                          className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap transition-all flex-shrink-0 ${
-                            isSelected 
-                              ? 'font-semibold ring-1 ring-offset-1 ring-offset-dark-bg' 
-                              : 'opacity-60 hover:opacity-100'
-                          }`}
-                          style={{ 
-                            backgroundColor: isSelected ? color : `${color}20`,
-                            color: isSelected ? '#fff' : color,
-                            boxShadow: isSelected ? `0 0 0 2px ${color}40` : undefined
-                          }}
-                        >
-                          {stage.name}
-                        </button>
-                      );
-                    })}
-                    {/* Asesor asignado - compacto */}
-                    {!isAdvisorMode && getContactAdvisor(selectedPhone) && (
-                      <span className="hidden sm:flex items-center gap-1 text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full flex-shrink-0 ml-auto">
-                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        {getContactAdvisor(selectedPhone)?.name}
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
 
               {showDeleteConfirm && (
