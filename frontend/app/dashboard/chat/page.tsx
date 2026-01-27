@@ -201,7 +201,6 @@ export default function ChatPage() {
     setSelectedPhone(phone);
     setSelectedContactName(contactName || '');
     setSelectedConversationInstanceId(instanceId);
-    setChatListOpen(false);
     
     // Cargar etiquetas del contacto seleccionado
     fetchContactTags(phone);
@@ -242,7 +241,6 @@ export default function ChatPage() {
         setSelectedPhone(conv.phone);
         setSelectedContactName(conv.contactName || '');
         setSelectedConversationInstanceId(conv.instanceId || null);
-        setChatListOpen(false);
       }
     }
   }, [searchParams, conversations, selectedPhone, instances, selectedInstanceId, setSelectedInstanceId]);
