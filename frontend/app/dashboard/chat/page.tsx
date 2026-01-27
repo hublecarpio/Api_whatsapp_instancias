@@ -1566,177 +1566,188 @@ export default function ChatPage() {
         <div className={`${selectedPhone ? 'flex' : 'hidden sm:flex'} flex-1 flex-col min-w-0 overflow-hidden`}>
           {selectedPhone ? (
             <>
-              <div className="px-3 sm:px-4 py-2 border-b border-dark-border bg-dark-card flex items-center gap-2 flex-wrap">
-                <button onClick={() => { setChatListOpen(true); setSelectedPhone(null); router.replace('/dashboard/chat', { scroll: false }); }} className="sm:hidden p-1.5 text-gray-400 hover:text-white transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                </button>
-                <button onClick={() => setChatListOpen(!chatListOpen)} className="hidden sm:block p-1 text-gray-500 hover:text-white transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {chatListOpen ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 5l7 7-7 7M5 5l7 7-7 7" />}
-                  </svg>
-                </button>
-                <div className="w-10 h-10 bg-neon-blue/20 rounded-full flex items-center justify-center">
-                  <span className="text-neon-blue text-lg">👤</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-white truncate">{selectedContactName || `+${selectedPhone}`}</p>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button 
-                      onClick={handleToggleContactBot} 
-                      disabled={contactBotToggling || !currentBusiness.botEnabled} 
-                      title={!currentBusiness.botEnabled ? 'Bot desactivado globalmente' : contactBotDisabled ? 'Bot desactivado para este contacto' : 'Bot activo para este contacto'}
-                      className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
-                        contactBotDisabled 
-                          ? 'bg-accent-error/20 text-accent-error' 
-                          : currentBusiness.botEnabled 
-                            ? 'bg-accent-success/20 text-accent-success' 
-                            : 'bg-dark-hover text-gray-400'
-                      }`}
-                    >
-                      {contactBotDisabled ? '🚫 Bot off' : currentBusiness.botEnabled ? '🤖 Bot' : '😴 Global off'}
-                    </button>
-                    {!currentBusiness.botEnabled && (
-                      <button 
-                        onClick={handleToggleBotTestMode} 
-                        disabled={contactBotTestToggling} 
-                        title={contactBotTestEnabled ? 'Modo testing activo - Bot responderá a este chat' : 'Activar modo testing para probar el bot'}
-                        className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
-                          contactBotTestEnabled 
-                            ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' 
-                            : 'bg-dark-hover text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400'
-                        }`}
-                      >
-                        {contactBotTestEnabled ? '🧪 Testing ON' : '🧪 Test'}
-                      </button>
-                    )}
-                    <button 
-                      onClick={handleToggleContactReminder} 
-                      disabled={contactReminderToggling} 
-                      title={contactRemindersPaused ? 'Recordatorios pausados para este contacto' : 'Recordatorios activos para este contacto'}
-                      className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
-                        contactRemindersPaused 
-                          ? 'bg-accent-warning/20 text-accent-warning' 
-                          : 'bg-purple-500/20 text-purple-400'
-                      }`}
-                    >
-                      {contactRemindersPaused ? '⏸️ Rec off' : '🔔 Rec'}
-                    </button>
-                    {windowStatus && windowStatus.provider && ['META_CLOUD', 'META_COEXIST'].includes(windowStatus.provider) && (
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${windowStatus.windowOpen ? 'bg-neon-blue/20 text-neon-blue' : 'bg-accent-warning/20 text-accent-warning'}`}>
-                        {windowStatus.windowOpen ? `📬 ${windowStatus.hoursRemaining}h` : '📭 Template'}
-                      </span>
-                    )}
-                    {instances.length > 1 && (selectedInstanceId || selectedConversationInstanceId) && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-dark-hover text-gray-300" title="Enviando desde esta instancia">
-                        📱 {instances.find((i: any) => i.id === (selectedInstanceId || selectedConversationInstanceId))?.name || 
-                           instances.find((i: any) => i.id === (selectedInstanceId || selectedConversationInstanceId))?.phoneNumber?.slice(-4) || 
-                           'WhatsApp'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {/* Funnel Stage y Etiquetas - Compacto en una línea */}
-                <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                  {availableFunnelStages.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="text-[10px] text-gray-400">Etapa:</span>
-                      <select 
-                        value={funnelStage?.id || ''} 
-                        onChange={(e) => handleChangeFunnelStage(e.target.value)} 
-                        className="text-[11px] bg-dark-card border border-dark-border rounded px-1.5 py-0.5 text-white" 
-                        disabled={changingFunnelStage}
-                      >
-                        <option value="">Sin etapa</option>
-                        {availableFunnelStages.map(stage => (
-                          <option key={stage.id} value={stage.id}>{stage.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  
-                  {/* Etiquetas (manuales) - Compacto */}
-                  <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
-                    <span className="text-[10px] text-gray-400 flex-shrink-0">Etiquetas:</span>
-                    {getContactTags(selectedPhone).slice(0, 1).map(tag => (
-                      <span 
-                        key={tag.id}
-                        className="text-[10px] px-1 py-0.5 rounded-full flex items-center gap-0.5 font-medium border transition-all hover:scale-105 cursor-default flex-shrink-0"
-                        style={{ 
-                          backgroundColor: `${tag.color}15`, 
-                          color: tag.color,
-                          borderColor: `${tag.color}40`
-                        }}
-                      >
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
-                        <span className="truncate max-w-[50px]">{tag.name}</span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveTag(selectedPhone, tag.id);
-                          }}
-                          className="hover:bg-black/20 rounded-full p-0.5 transition-colors ml-0.5 flex-shrink-0"
-                          title="Remover etiqueta"
-                        >
-                          <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </span>
-                    ))}
-                    {getContactTags(selectedPhone).length > 1 && (
-                      <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-hover text-gray-400 flex-shrink-0">
-                        +{getContactTags(selectedPhone).length - 1}
-                      </span>
-                    )}
-                    <TagQuickAdd
-                      phone={selectedPhone}
-                      currentTags={getContactTags(selectedPhone)}
-                      onOpen={(element) => {
-                        setTagQuickAddRef({ phone: selectedPhone, element });
-                      }}
-                    />
-                  </div>
-                </div>
-                {!isAdvisorMode && (getContactAdvisor(selectedPhone) ? (
-                  <span className="hidden sm:flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    {getContactAdvisor(selectedPhone)?.name}
-                  </span>
-                ) : advisors.length > 0 && (
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAssignContact(selectedPhone, e.target.value);
-                      }
-                    }}
-                    className="hidden sm:block text-xs bg-dark-card border border-dark-border rounded px-2 py-1 text-gray-400"
-                  >
-                    <option value="">Asignar asesor...</option>
-                    {advisors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                ))}
-                <button 
-                  onClick={() => setShowContactPanel(!showContactPanel)}
-                  className={`p-2 rounded-full transition-colors ${showContactPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`}
-                  title="Datos del contacto"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </button>
-                {!isAdvisorMode && (
-                  <button 
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="p-2 rounded-full transition-colors text-gray-400 hover:text-accent-error hover:bg-accent-error/10"
-                    title="Eliminar conversacion y memoria del agente"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              <div className="border-b border-dark-border bg-dark-card">
+                {/* Fila 1: Avatar, nombre y controles principales */}
+                <div className="px-3 sm:px-4 py-2 flex items-center gap-2">
+                  <button onClick={() => { setChatListOpen(true); setSelectedPhone(null); router.replace('/dashboard/chat', { scroll: false }); }} className="sm:hidden p-1.5 text-gray-400 hover:text-white transition-colors flex-shrink-0">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  </button>
+                  <button onClick={() => setChatListOpen(!chatListOpen)} className="hidden sm:block p-1 text-gray-500 hover:text-white transition-colors flex-shrink-0">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {chatListOpen ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 5l7 7-7 7M5 5l7 7-7 7" />}
                     </svg>
                   </button>
+                  <div className="w-10 h-10 bg-neon-blue/20 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-neon-blue text-lg">👤</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-white truncate">{selectedContactName || `+${selectedPhone}`}</p>
+                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                      <button 
+                        onClick={handleToggleContactBot} 
+                        disabled={contactBotToggling || !currentBusiness.botEnabled} 
+                        title={!currentBusiness.botEnabled ? 'Bot desactivado globalmente' : contactBotDisabled ? 'Bot desactivado para este contacto' : 'Bot activo para este contacto'}
+                        className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors flex-shrink-0 ${
+                          contactBotDisabled 
+                            ? 'bg-accent-error/20 text-accent-error' 
+                            : currentBusiness.botEnabled 
+                              ? 'bg-accent-success/20 text-accent-success' 
+                              : 'bg-dark-hover text-gray-400'
+                        }`}
+                      >
+                        {contactBotDisabled ? '🚫 Bot off' : currentBusiness.botEnabled ? '🤖 Bot' : '😴 Global off'}
+                      </button>
+                      {!currentBusiness.botEnabled && (
+                        <button 
+                          onClick={handleToggleBotTestMode} 
+                          disabled={contactBotTestToggling} 
+                          title={contactBotTestEnabled ? 'Modo testing activo - Bot responderá a este chat' : 'Activar modo testing para probar el bot'}
+                          className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors flex-shrink-0 ${
+                            contactBotTestEnabled 
+                              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' 
+                              : 'bg-dark-hover text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-400'
+                          }`}
+                        >
+                          {contactBotTestEnabled ? '🧪 Testing ON' : '🧪 Test'}
+                        </button>
+                      )}
+                      <button 
+                        onClick={handleToggleContactReminder} 
+                        disabled={contactReminderToggling} 
+                        title={contactRemindersPaused ? 'Recordatorios pausados para este contacto' : 'Recordatorios activos para este contacto'}
+                        className={`text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors flex-shrink-0 ${
+                          contactRemindersPaused 
+                            ? 'bg-accent-warning/20 text-accent-warning' 
+                            : 'bg-purple-500/20 text-purple-400'
+                        }`}
+                      >
+                        {contactRemindersPaused ? '⏸️ Rec off' : '🔔 Rec'}
+                      </button>
+                      {windowStatus && windowStatus.provider && ['META_CLOUD', 'META_COEXIST'].includes(windowStatus.provider) && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${windowStatus.windowOpen ? 'bg-neon-blue/20 text-neon-blue' : 'bg-accent-warning/20 text-accent-warning'}`}>
+                          {windowStatus.windowOpen ? `📬 ${windowStatus.hoursRemaining}h` : '📭 Template'}
+                        </span>
+                      )}
+                      {instances.length > 1 && (selectedInstanceId || selectedConversationInstanceId) && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-dark-hover text-gray-300 flex-shrink-0" title="Enviando desde esta instancia">
+                          📱 {instances.find((i: any) => i.id === (selectedInstanceId || selectedConversationInstanceId))?.name || 
+                             instances.find((i: any) => i.id === (selectedInstanceId || selectedConversationInstanceId))?.phoneNumber?.slice(-4) || 
+                             'WhatsApp'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Botones de acción del header - siempre visibles a la derecha */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button 
+                      onClick={() => setShowContactPanel(!showContactPanel)}
+                      className={`p-2 rounded-full transition-colors ${showContactPanel ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`}
+                      title="Datos del contacto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                    {!isAdvisorMode && (
+                      <button 
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="p-2 rounded-full transition-colors text-gray-400 hover:text-accent-error hover:bg-accent-error/10"
+                        title="Eliminar conversacion y memoria del agente"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Fila 2: Etapa, Etiquetas y Asesor - en una fila separada */}
+                {(availableFunnelStages.length > 0 || getContactTags(selectedPhone).length > 0 || (!isAdvisorMode && advisors.length > 0)) && (
+                  <div className="px-3 sm:px-4 py-1.5 flex items-center gap-3 border-t border-dark-border/50 overflow-x-auto scrollbar-none">
+                    {availableFunnelStages.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-[10px] text-gray-400">Etapa:</span>
+                        <select 
+                          value={funnelStage?.id || ''} 
+                          onChange={(e) => handleChangeFunnelStage(e.target.value)} 
+                          className="text-[11px] bg-dark-surface border border-dark-border rounded px-1.5 py-0.5 text-white" 
+                          disabled={changingFunnelStage}
+                        >
+                          <option value="">Sin etapa</option>
+                          {availableFunnelStages.map(stage => (
+                            <option key={stage.id} value={stage.id}>{stage.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    
+                    {/* Etiquetas (manuales) */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className="text-[10px] text-gray-400">Etiquetas:</span>
+                      {getContactTags(selectedPhone).slice(0, 2).map(tag => (
+                        <span 
+                          key={tag.id}
+                          className="text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 font-medium border transition-all"
+                          style={{ 
+                            backgroundColor: `${tag.color}15`, 
+                            color: tag.color,
+                            borderColor: `${tag.color}40`
+                          }}
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
+                          <span className="truncate max-w-[60px]">{tag.name}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveTag(selectedPhone, tag.id);
+                            }}
+                            className="hover:bg-black/20 rounded-full p-0.5 transition-colors ml-0.5"
+                            title="Remover etiqueta"
+                          >
+                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </span>
+                      ))}
+                      {getContactTags(selectedPhone).length > 2 && (
+                        <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-hover text-gray-400">
+                          +{getContactTags(selectedPhone).length - 2}
+                        </span>
+                      )}
+                      <TagQuickAdd
+                        phone={selectedPhone}
+                        currentTags={getContactTags(selectedPhone)}
+                        onOpen={(element) => {
+                          setTagQuickAddRef({ phone: selectedPhone, element });
+                        }}
+                      />
+                    </div>
+
+                    {/* Asesor asignado */}
+                    {!isAdvisorMode && (getContactAdvisor(selectedPhone) ? (
+                      <span className="hidden sm:flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded flex-shrink-0">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        {getContactAdvisor(selectedPhone)?.name}
+                      </span>
+                    ) : advisors.length > 0 && (
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleAssignContact(selectedPhone, e.target.value);
+                          }
+                        }}
+                        className="hidden sm:block text-[11px] bg-dark-surface border border-dark-border rounded px-1.5 py-0.5 text-gray-400 flex-shrink-0"
+                      >
+                        <option value="">Asignar asesor...</option>
+                        {advisors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    ))}
+                  </div>
                 )}
               </div>
 
