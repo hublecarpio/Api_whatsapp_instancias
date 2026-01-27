@@ -111,6 +111,9 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [conversationOffset, setConversationOffset] = useState(0);
   const [sending, setSending] = useState(false);
   const [chatListOpen, setChatListOpen] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -288,6 +291,14 @@ export default function ChatPage() {
       return () => clearInterval(interval);
     }
   }, [currentBusiness, selectedInstanceId]);
+
+  // Recargar conversaciones cuando cambian los filtros (tag o búsqueda)
+  useEffect(() => {
+    if (currentBusiness) {
+      setConversationOffset(0);
+      fetchConversations();
+    }
+  }, [selectedTag, searchQuery]);
 
   // Cargar etiquetas de todos los contactos cuando se cargan las conversaciones
   useEffect(() => {
@@ -897,23 +908,11 @@ export default function ChatPage() {
 
   const filteredConversations = conversations.filter(conv => {
     // Response filter (with fallback for undefined lastMessageDirection)
+    // Tag and search filters are now handled server-side
     const direction = conv.lastMessageDirection || 'outbound';
     if (responseFilter === 'responded' && direction !== 'inbound') return false;
     if (responseFilter === 'waiting' && direction !== 'outbound') return false;
-    
-    // Tag filter
-    if (selectedTag !== null) {
-      const contactTagsList = getContactTags(conv.phone);
-      const hasSelectedTag = contactTagsList.some(t => t.id === selectedTag);
-      if (!hasSelectedTag) return false;
-    }
-    
-    // Search filter
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    const phoneMatch = conv.phone.toLowerCase().includes(query);
-    const nameMatch = conv.contactName?.toLowerCase().includes(query);
-    return phoneMatch || nameMatch;
+    return true;
   });
 
   useEffect(() => {
@@ -928,16 +927,52 @@ export default function ChatPage() {
     prevMessagesLengthRef.current = messages.length;
   }, [messages]);
 
-  const fetchConversations = async (instanceIdOverride?: string | null) => {
+  const fetchConversations = async (instanceIdOverride?: string | null, options?: { loadMore?: boolean }) => {
     if (!currentBusiness) return;
     try {
       const effectiveInstanceId = instanceIdOverride !== undefined ? instanceIdOverride : selectedInstanceId;
-      const response = await messageApi.conversations(currentBusiness.id, effectiveInstanceId || undefined);
-      setConversations(response.data);
+      const offset = options?.loadMore ? conversationOffset : 0;
+      
+      if (options?.loadMore) {
+        setLoadingMore(true);
+      }
+      
+      const response = await messageApi.conversations(
+        currentBusiness.id, 
+        effectiveInstanceId || undefined,
+        { 
+          limit: 50, 
+          offset,
+          tagId: selectedTag || undefined,
+          search: searchQuery || undefined
+        }
+      );
+      
+      const data = response.data;
+      // Handle both old format (array) and new format (object with conversations)
+      if (Array.isArray(data)) {
+        setConversations(data);
+        setHasMore(false);
+      } else {
+        if (options?.loadMore) {
+          setConversations(prev => [...prev, ...data.conversations]);
+        } else {
+          setConversations(data.conversations);
+        }
+        setHasMore(data.hasMore);
+        setConversationOffset(offset + data.conversations.length);
+      }
     } catch (err) {
       console.error('Failed to fetch conversations:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+  
+  const loadMoreConversations = () => {
+    if (!loadingMore && hasMore) {
+      fetchConversations(selectedInstanceId, { loadMore: true });
     }
   };
 
@@ -1459,7 +1494,16 @@ export default function ChatPage() {
             )}
           </div>
           
-          <div className="flex-1 overflow-y-auto scrollbar-thin scroll-smooth-ios">
+          <div 
+            className="flex-1 overflow-y-auto scrollbar-thin scroll-smooth-ios"
+            onScroll={(e) => {
+              const target = e.target as HTMLDivElement;
+              const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
+              if (nearBottom && hasMore && !loadingMore) {
+                loadMoreConversations();
+              }
+            }}
+          >
             {(loading || instanceSwitching) ? (
               <div className="p-4 text-center">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-neon-blue mx-auto mb-2" />
@@ -1532,6 +1576,20 @@ export default function ChatPage() {
                   </button>
                 );
               })
+            )}
+            {loadingMore && (
+              <div className="p-4 text-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-neon-blue mx-auto" />
+                <p className="text-xs text-gray-500 mt-1">Cargando más...</p>
+              </div>
+            )}
+            {!loading && !loadingMore && hasMore && (
+              <button 
+                onClick={loadMoreConversations}
+                className="w-full p-3 text-center text-sm text-neon-blue hover:bg-dark-hover transition-colors"
+              >
+                Cargar más conversaciones
+              </button>
             )}
           </div>
         </div>

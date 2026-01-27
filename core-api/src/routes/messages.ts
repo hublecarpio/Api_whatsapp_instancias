@@ -94,11 +94,22 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/conversations', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id, instance_id, include_archived } = req.query;
+    const { 
+      business_id, 
+      instance_id, 
+      include_archived,
+      limit = '50',
+      offset = '0',
+      tag_id,
+      search
+    } = req.query;
     
     if (!business_id) {
       return res.status(400).json({ error: 'business_id is required' });
     }
+    
+    const limitNum = Math.min(parseInt(limit as string) || 50, 100);
+    const offsetNum = parseInt(offset as string) || 0;
     
     const user = await getUserWithRole(req.userId!);
     if (!user) {
@@ -115,7 +126,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     if (isAdvisor) {
       assignedPhones = await getAssignedContactPhones(req.userId!, business_id as string);
       if (assignedPhones.length === 0) {
-        return res.json([]);
+        return res.json({ conversations: [], hasMore: false, total: 0 });
       }
     }
     
@@ -132,12 +143,27 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       archivedInstanceIds = archivedInstances.map(i => i.id);
     }
     
+    // If tag_id filter is active, get phones with that tag first
+    let tagFilterPhones: string[] | null = null;
+    if (tag_id) {
+      const tagAssignments = await prisma.tagAssignment.findMany({
+        where: { 
+          tagId: tag_id as string,
+          tag: { businessId: business_id as string }
+        },
+        select: { contactPhone: true }
+      });
+      tagFilterPhones = tagAssignments.map(ta => ta.contactPhone);
+      if (tagFilterPhones.length === 0) {
+        return res.json({ conversations: [], hasMore: false, total: 0 });
+      }
+    }
+    
     const whereClause: any = { businessId: business_id as string };
     
     if (instance_id) {
       whereClause.instanceId = instance_id as string;
     } else if (archivedInstanceIds.length > 0) {
-      // Exclude messages from archived instances
       whereClause.OR = [
         { instanceId: { notIn: archivedInstanceIds } },
         { instanceId: null }
@@ -145,10 +171,8 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
     }
     
     if (isAdvisor && assignedPhones.length > 0) {
-      // Need to combine with assigned phones filter
       const phoneFilter = assignedPhones.flatMap(p => [{ sender: p }, { recipient: p }]);
       if (whereClause.OR) {
-        // Complex: need both archived filter AND phone filter
         whereClause.AND = [
           { OR: whereClause.OR },
           { OR: phoneFilter }
@@ -186,21 +210,16 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       
       const metadata = msg.metadata as any;
       
-      // Priority: use contactPhone from metadata (already resolved), then clean sender/recipient
-      // This handles cases where the original sender was @lid but we have the resolved phone
       if (metadata?.contactPhone) {
         phone = metadata.contactPhone.toString().replace(/\D/g, '');
       } else {
-        // Normalize phone: remove @s.whatsapp.net, @lid suffixes and keep only digits
         phone = phone.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
       }
       
-      // Skip invalid phones (too short) or @lid numbers that weren't resolved (too long, typically 15+ digits)
       if (!phone || phone.length < 8 || phone.length > 15) return;
       
       const contactName = metadata?.contactName || metadata?.pushName || '';
       
-      // Use phone+instanceId as key to separate conversations per instance
       const instanceId = msg.instanceId || 'default';
       const conversationKey = `${phone}_${instanceId}`;
       
@@ -227,10 +246,32 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       }
     });
     
-    const conversations = Array.from(conversationsMap.values())
+    let allConversations = Array.from(conversationsMap.values())
       .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime());
     
-    res.json(conversations);
+    // Apply tag filter
+    if (tagFilterPhones) {
+      allConversations = allConversations.filter(c => tagFilterPhones!.includes(c.phone));
+    }
+    
+    // Apply search filter (server-side)
+    if (search && typeof search === 'string' && search.trim()) {
+      const searchLower = search.toLowerCase().trim();
+      allConversations = allConversations.filter(c => 
+        c.phone.includes(searchLower) || 
+        (c.contactName && c.contactName.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    const total = allConversations.length;
+    const paginatedConversations = allConversations.slice(offsetNum, offsetNum + limitNum);
+    const hasMore = offsetNum + limitNum < total;
+    
+    res.json({ 
+      conversations: paginatedConversations, 
+      hasMore,
+      total 
+    });
   } catch (error) {
     console.error('Get conversations error:', error);
     res.status(500).json({ error: 'Failed to get conversations' });

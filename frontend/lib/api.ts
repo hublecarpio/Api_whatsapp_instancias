@@ -284,9 +284,13 @@ export const waApi = {
 };
 
 export const messageApi = {
-  conversations: (businessId: string, instanceId?: string) => {
+  conversations: (businessId: string, instanceId?: string, options?: { limit?: number; offset?: number; tagId?: string; search?: string }) => {
     let url = `/messages/conversations?business_id=${businessId}`;
     if (instanceId) url += `&instance_id=${instanceId}`;
+    if (options?.limit) url += `&limit=${options.limit}`;
+    if (options?.offset) url += `&offset=${options.offset}`;
+    if (options?.tagId) url += `&tag_id=${options.tagId}`;
+    if (options?.search) url += `&search=${encodeURIComponent(options.search)}`;
     return api.get(url);
   },
   getConversationsByInstance: (businessId: string, instanceId: string) => {
