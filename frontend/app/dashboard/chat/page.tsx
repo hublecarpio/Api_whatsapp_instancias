@@ -1419,54 +1419,6 @@ export default function ChatPage() {
                 <span className="font-medium">{dailyContacts.count}/{dailyContacts.limit}</span>
               </div>
             )}
-            {/* Filtro de etiquetas estilo WhatsApp Business - horizontal */}
-            {tags.length > 0 && (
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 -mx-1 px-1">
-                <button 
-                  onClick={() => setSelectedTag(null)} 
-                  className={`flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all border ${
-                    selectedTag === null 
-                      ? 'bg-white text-dark-bg border-white font-medium' 
-                      : 'bg-dark-surface text-gray-300 border-dark-border hover:bg-dark-hover'
-                  }`}
-                >
-                  <span>Todos</span>
-                  <span className="text-[10px] opacity-70">{getConversationsByTag(null).length}</span>
-                </button>
-                {tags.map(tag => {
-                  const count = getConversationsByTag(tag.id).length;
-                  const isSelected = selectedTag === tag.id;
-                  return (
-                    <button 
-                      key={tag.id} 
-                      onClick={() => setSelectedTag(isSelected ? null : tag.id)} 
-                      className={`flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all border ${
-                        isSelected ? 'font-medium' : 'hover:opacity-80'
-                      }`}
-                      style={{ 
-                        backgroundColor: isSelected ? tag.color : `${tag.color}20`,
-                        color: isSelected ? '#fff' : tag.color,
-                        borderColor: isSelected ? tag.color : `${tag.color}40`
-                      }}
-                    >
-                      <div 
-                        className="w-2 h-2 rounded-full flex-shrink-0" 
-                        style={{ backgroundColor: isSelected ? '#fff' : tag.color }}
-                      />
-                      <span className="whitespace-nowrap">{tag.name}</span>
-                      {count > 0 && <span className="text-[10px] opacity-70">{count}</span>}
-                    </button>
-                  );
-                })}
-                <button
-                  onClick={() => setShowCreateTagModal(true)}
-                  className="flex-shrink-0 text-[11px] px-2 py-1 rounded-full bg-dark-surface text-gray-500 border border-dark-border hover:text-white hover:bg-dark-hover transition-colors"
-                  title="Crear etiqueta"
-                >
-                  +
-                </button>
-              </div>
-            )}
           </div>
           
           <div className="flex-1 overflow-y-auto scrollbar-thin scroll-smooth-ios">
