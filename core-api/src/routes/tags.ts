@@ -52,13 +52,25 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response): Promise
 
     const whereClause: any = { businessId: business_id as string };
     if (instance_id) {
-      whereClause.instanceId = instance_id as string;
+      // Return both instance-specific tags AND global tags (instanceId = null)
+      whereClause.OR = [
+        { instanceId: instance_id as string },
+        { instanceId: null }
+      ];
+      delete whereClause.businessId;
+      whereClause.AND = [{ businessId: business_id as string }];
     } else {
       whereClause.instanceId = null;
     }
 
     const tags = await prisma.tag.findMany({
-      where: whereClause,
+      where: instance_id ? {
+        businessId: business_id as string,
+        OR: [
+          { instanceId: instance_id as string },
+          { instanceId: null }
+        ]
+      } : whereClause,
       include: {
         stagePrompt: true,
         _count: {
