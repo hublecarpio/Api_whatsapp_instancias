@@ -238,6 +238,13 @@ export function parseAgentOutputToWhatsAppEvents(raw: string, options: ParseOpti
   // Convert [MEDIA:url] format to direct URL (handles multiline and whitespace)
   text = text.replace(/\[MEDIA:\s*(https?:\/\/[^\s\]]+)\s*\]/gi, '$1');
   
+  // Convert markdown image syntax ![alt text](url) to just the URL
+  // This allows the URL to be properly detected as a media file
+  text = text.replace(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g, '$1');
+  
+  // Convert markdown link syntax [text](url) to just the URL for media files
+  text = text.replace(/\[[^\]]*\]\((https?:\/\/[^)]+\.(?:png|jpg|jpeg|gif|webp|pdf|doc|docx|mp4|mp3|ogg))\)/gi, '$1');
+  
   const urlRegex = /(https?:\/\/[^\s)]+)(?=\s|$)/g;
 
   interface Token { type: 'text' | 'url'; value: string }
