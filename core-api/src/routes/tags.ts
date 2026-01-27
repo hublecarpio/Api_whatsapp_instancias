@@ -336,13 +336,11 @@ router.post('/assign', authMiddleware, async (req: AuthRequest, res: Response): 
     }
 
     // Check if this specific tag is already assigned to this contact
-    const existingAssignment = await prisma.tagAssignment.findUnique({
+    const existingAssignment = await prisma.tagAssignment.findFirst({
       where: {
-        businessId_contactPhone_tagId: {
-          businessId: business_id,
-          contactPhone: contact_phone,
-          tagId: tag_id
-        }
+        businessId: business_id,
+        contactPhone: contact_phone,
+        tagId: tag_id
       }
     });
 
@@ -376,13 +374,11 @@ router.post('/assign', authMiddleware, async (req: AuthRequest, res: Response): 
   } catch (error: any) {
     if (error.code === 'P2002') {
       // Unique constraint violation - tag already assigned
-      const assignment = await prisma.tagAssignment.findUnique({
+      const assignment = await prisma.tagAssignment.findFirst({
         where: {
-          businessId_contactPhone_tagId: {
-            businessId: req.body.business_id,
-            contactPhone: req.body.contact_phone,
-            tagId: req.body.tag_id
-          }
+          businessId: req.body.business_id,
+          contactPhone: req.body.contact_phone,
+          tagId: req.body.tag_id
         }
       });
       res.json(assignment);
@@ -414,13 +410,11 @@ router.delete('/assign/:tagId', authMiddleware, async (req: AuthRequest, res: Re
       return;
     }
 
-    const assignment = await prisma.tagAssignment.findUnique({
+    const assignment = await prisma.tagAssignment.findFirst({
       where: {
-        businessId_contactPhone_tagId: {
-          businessId: business_id as string,
-          contactPhone: contact_phone as string,
-          tagId: tagId
-        }
+        businessId: business_id as string,
+        contactPhone: contact_phone as string,
+        tagId: tagId
       }
     });
 
@@ -441,11 +435,7 @@ router.delete('/assign/:tagId', authMiddleware, async (req: AuthRequest, res: Re
 
     await prisma.tagAssignment.delete({
       where: {
-        businessId_contactPhone_tagId: {
-          businessId: business_id as string,
-          contactPhone: contact_phone as string,
-          tagId: tagId
-        }
+        id: assignment.id
       }
     });
 
@@ -482,13 +472,11 @@ router.delete('/assign', authMiddleware, async (req: AuthRequest, res: Response)
 
     // If tag_id is provided, remove only that specific tag assignment
     if (tag_id) {
-      const assignment = await prisma.tagAssignment.findUnique({
+      const assignment = await prisma.tagAssignment.findFirst({
         where: {
-          businessId_contactPhone_tagId: {
-            businessId: business_id,
-            contactPhone: contact_phone,
-            tagId: tag_id
-          }
+          businessId: business_id,
+          contactPhone: contact_phone,
+          tagId: tag_id
         }
       });
 
@@ -505,11 +493,7 @@ router.delete('/assign', authMiddleware, async (req: AuthRequest, res: Response)
 
         await prisma.tagAssignment.delete({
           where: {
-            businessId_contactPhone_tagId: {
-              businessId: business_id,
-              contactPhone: contact_phone,
-              tagId: tag_id
-            }
+            id: assignment.id
           }
         });
       }
