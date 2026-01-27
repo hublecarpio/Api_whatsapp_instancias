@@ -55,6 +55,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/products/page.js"
+    ],
+    "/dashboard/contacts/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/contacts/page.js"
     ]
   }
 }
