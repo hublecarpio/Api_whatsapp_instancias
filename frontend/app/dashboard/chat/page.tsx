@@ -1662,91 +1662,42 @@ export default function ChatPage() {
                   </div>
                 </div>
                 
-                {/* Fila 2: Etapa, Etiquetas y Asesor - en una fila separada */}
-                {(availableFunnelStages.length > 0 || getContactTags(selectedPhone).length > 0 || (!isAdvisorMode && advisors.length > 0)) && (
-                  <div className="px-3 sm:px-4 py-1.5 flex items-center gap-3 border-t border-dark-border/50 overflow-x-auto scrollbar-none">
-                    {availableFunnelStages.length > 0 && (
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <span className="text-[10px] text-gray-400">Etapa:</span>
-                        <select 
-                          value={funnelStage?.id || ''} 
-                          onChange={(e) => handleChangeFunnelStage(e.target.value)} 
-                          className="text-[11px] bg-dark-surface border border-dark-border rounded px-1.5 py-0.5 text-white" 
+                {/* Fila 2: Etapas del funnel como filtro horizontal compacto */}
+                {availableFunnelStages.length > 0 && (
+                  <div className="px-2 py-1 flex items-center gap-1 border-t border-dark-border/30 overflow-x-auto scrollbar-none">
+                    {availableFunnelStages.map((stage, index) => {
+                      const isSelected = funnelStage?.id === stage.id;
+                      const stageColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+                      const color = stageColors[index % stageColors.length];
+                      return (
+                        <button
+                          key={stage.id}
+                          onClick={() => handleChangeFunnelStage(isSelected ? '' : stage.id)}
                           disabled={changingFunnelStage}
-                        >
-                          <option value="">Sin etapa</option>
-                          {availableFunnelStages.map(stage => (
-                            <option key={stage.id} value={stage.id}>{stage.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    
-                    {/* Etiquetas (manuales) */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <span className="text-[10px] text-gray-400">Etiquetas:</span>
-                      {getContactTags(selectedPhone).slice(0, 2).map(tag => (
-                        <span 
-                          key={tag.id}
-                          className="text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 font-medium border transition-all"
+                          className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap transition-all flex-shrink-0 ${
+                            isSelected 
+                              ? 'font-semibold ring-1 ring-offset-1 ring-offset-dark-bg' 
+                              : 'opacity-60 hover:opacity-100'
+                          }`}
                           style={{ 
-                            backgroundColor: `${tag.color}15`, 
-                            color: tag.color,
-                            borderColor: `${tag.color}40`
+                            backgroundColor: isSelected ? color : `${color}20`,
+                            color: isSelected ? '#fff' : color,
+                            boxShadow: isSelected ? `0 0 0 2px ${color}40` : undefined
                           }}
                         >
-                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
-                          <span className="truncate max-w-[60px]">{tag.name}</span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveTag(selectedPhone, tag.id);
-                            }}
-                            className="hover:bg-black/20 rounded-full p-0.5 transition-colors ml-0.5"
-                            title="Remover etiqueta"
-                          >
-                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </span>
-                      ))}
-                      {getContactTags(selectedPhone).length > 2 && (
-                        <span className="text-[10px] px-1 py-0.5 rounded-full bg-dark-hover text-gray-400">
-                          +{getContactTags(selectedPhone).length - 2}
-                        </span>
-                      )}
-                      <TagQuickAdd
-                        phone={selectedPhone}
-                        currentTags={getContactTags(selectedPhone)}
-                        onOpen={(element) => {
-                          setTagQuickAddRef({ phone: selectedPhone, element });
-                        }}
-                      />
-                    </div>
-
-                    {/* Asesor asignado */}
-                    {!isAdvisorMode && (getContactAdvisor(selectedPhone) ? (
-                      <span className="hidden sm:flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded flex-shrink-0">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          {stage.name}
+                        </button>
+                      );
+                    })}
+                    {/* Asesor asignado - compacto */}
+                    {!isAdvisorMode && getContactAdvisor(selectedPhone) && (
+                      <span className="hidden sm:flex items-center gap-1 text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full flex-shrink-0 ml-auto">
+                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                         {getContactAdvisor(selectedPhone)?.name}
                       </span>
-                    ) : advisors.length > 0 && (
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            handleAssignContact(selectedPhone, e.target.value);
-                          }
-                        }}
-                        className="hidden sm:block text-[11px] bg-dark-surface border border-dark-border rounded px-1.5 py-0.5 text-gray-400 flex-shrink-0"
-                      >
-                        <option value="">Asignar asesor...</option>
-                        {advisors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                      </select>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>
@@ -2561,6 +2512,26 @@ export default function ChatPage() {
           }}
           onClose={() => {
             setTagQuickAddRef(null);
+          }}
+        />
+      )}
+
+      {/* Dropdown para menú contextual de asignar etiqueta */}
+      {showTagDropdown && tagDropdownPhone && tagDropdownPosition && (
+        <TagDropdown
+          phone={tagDropdownPhone}
+          position={tagDropdownPosition}
+          currentTags={getContactTags(tagDropdownPhone)}
+          onAssign={async (tagId: string) => {
+            await handleAssignTag(tagDropdownPhone, tagId);
+          }}
+          onRemove={async (tagId: string) => {
+            await handleRemoveTag(tagDropdownPhone, tagId);
+          }}
+          onClose={() => {
+            setShowTagDropdown(false);
+            setTagDropdownPhone(null);
+            setTagDropdownPosition(null);
           }}
         />
       )}
