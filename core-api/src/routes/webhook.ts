@@ -586,8 +586,9 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                 // Normalize phone to digits only for consistent tag assignment
                 const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
                 const instanceId = instance?.id;
-                console.log(`[WEBHOOK] Lead stage analysis for normalized phone: ${normalizedPhone} (original: ${contactPhone}), instanceId: ${instanceId || 'none'}`);
-                await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
+                console.log(`[WEBHOOK] Processing data extraction for normalized phone: ${normalizedPhone} (original: ${contactPhone}), instanceId: ${instanceId || 'none'}`);
+                // NOTE: Automatic tag updates by IA are disabled - tags are now manual-only
+                // await analyzeAndUpdateLeadStage(businessId, normalizedPhone);
                 
                 // Use processDataExtraction which triggers auto-order creation
                 await processDataExtraction(businessId, normalizedPhone, instanceId);

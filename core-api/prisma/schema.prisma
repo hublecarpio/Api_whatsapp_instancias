@@ -870,7 +870,8 @@ model TagAssignment {
 
   tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
-  @@unique([businessId, contactPhone])
+  @@unique([businessId, contactPhone, tagId])
+  @@index([businessId, contactPhone])
   @@index([businessId, tagId])
   @@index([tagId])
 }

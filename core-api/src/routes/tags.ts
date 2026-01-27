@@ -335,40 +335,26 @@ router.post('/assign', authMiddleware, async (req: AuthRequest, res: Response): 
       return;
     }
 
+    // Check if this specific tag is already assigned to this contact
     const existingAssignment = await prisma.tagAssignment.findUnique({
       where: {
-        businessId_contactPhone: {
+        businessId_contactPhone_tagId: {
           businessId: business_id,
-          contactPhone: contact_phone
+          contactPhone: contact_phone,
+          tagId: tag_id
         }
       }
     });
 
     if (existingAssignment) {
-      await prisma.tagHistory.updateMany({
-        where: {
-          businessId: business_id,
-          contactPhone: contact_phone,
-          removedAt: null
-        },
-        data: { removedAt: new Date() }
-      });
+      // Tag already assigned, return existing assignment
+      res.json(existingAssignment);
+      return;
     }
 
-    const assignment = await prisma.tagAssignment.upsert({
-      where: {
-        businessId_contactPhone: {
-          businessId: business_id,
-          contactPhone: contact_phone
-        }
-      },
-      update: {
-        tagId: tag_id,
-        assignedAt: new Date(),
-        assignedBy: req.userId,
-        source: source || 'manual'
-      },
-      create: {
+    // Create new assignment (allows multiple tags per contact)
+    const assignment = await prisma.tagAssignment.create({
+      data: {
         tagId: tag_id,
         businessId: business_id,
         contactPhone: contact_phone,
@@ -388,13 +374,94 @@ router.post('/assign', authMiddleware, async (req: AuthRequest, res: Response): 
 
     res.json(assignment);
   } catch (error: any) {
+    if (error.code === 'P2002') {
+      // Unique constraint violation - tag already assigned
+      const assignment = await prisma.tagAssignment.findUnique({
+        where: {
+          businessId_contactPhone_tagId: {
+            businessId: req.body.business_id,
+            contactPhone: req.body.contact_phone,
+            tagId: req.body.tag_id
+          }
+        }
+      });
+      res.json(assignment);
+      return;
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/assign/:tagId', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tagId } = req.params;
+    const { business_id, contact_phone } = req.query;
+
+    if (!business_id || !contact_phone) {
+      res.status(400).json({ error: 'business_id and contact_phone are required' });
+      return;
+    }
+
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    const business = await checkBusinessAccess(req.userId!, business_id as string, user.role, user.parentUserId);
+    if (!business) {
+      res.status(404).json({ error: 'Business not found' });
+      return;
+    }
+
+    const assignment = await prisma.tagAssignment.findUnique({
+      where: {
+        businessId_contactPhone_tagId: {
+          businessId: business_id as string,
+          contactPhone: contact_phone as string,
+          tagId: tagId
+        }
+      }
+    });
+
+    if (!assignment) {
+      res.status(404).json({ error: 'Tag assignment not found' });
+      return;
+    }
+
+    await prisma.tagHistory.updateMany({
+      where: {
+        businessId: business_id as string,
+        contactPhone: contact_phone as string,
+        tagId: tagId,
+        removedAt: null
+      },
+      data: { removedAt: new Date() }
+    });
+
+    await prisma.tagAssignment.delete({
+      where: {
+        businessId_contactPhone_tagId: {
+          businessId: business_id as string,
+          contactPhone: contact_phone as string,
+          tagId: tagId
+        }
+      }
+    });
+
+    res.json({ success: true });
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Assignment not found' });
+      return;
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
 router.delete('/assign', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { business_id, contact_phone } = req.body;
+    const { business_id, contact_phone, tag_id } = req.body;
 
     if (!business_id || !contact_phone) {
       res.status(400).json({ error: 'business_id and contact_phone are required' });
@@ -413,6 +480,45 @@ router.delete('/assign', authMiddleware, async (req: AuthRequest, res: Response)
       return;
     }
 
+    // If tag_id is provided, remove only that specific tag assignment
+    if (tag_id) {
+      const assignment = await prisma.tagAssignment.findUnique({
+        where: {
+          businessId_contactPhone_tagId: {
+            businessId: business_id,
+            contactPhone: contact_phone,
+            tagId: tag_id
+          }
+        }
+      });
+
+      if (assignment) {
+        await prisma.tagHistory.updateMany({
+          where: {
+            businessId: business_id,
+            contactPhone: contact_phone,
+            tagId: tag_id,
+            removedAt: null
+          },
+          data: { removedAt: new Date() }
+        });
+
+        await prisma.tagAssignment.delete({
+          where: {
+            businessId_contactPhone_tagId: {
+              businessId: business_id,
+              contactPhone: contact_phone,
+              tagId: tag_id
+            }
+          }
+        });
+      }
+
+      res.json({ success: true });
+      return;
+    }
+
+    // If no tag_id, remove all tag assignments for this contact (legacy behavior)
     await prisma.tagHistory.updateMany({
       where: {
         businessId: business_id,
@@ -422,12 +528,10 @@ router.delete('/assign', authMiddleware, async (req: AuthRequest, res: Response)
       data: { removedAt: new Date() }
     });
 
-    await prisma.tagAssignment.delete({
+    await prisma.tagAssignment.deleteMany({
       where: {
-        businessId_contactPhone: {
-          businessId: business_id,
-          contactPhone: contact_phone
-        }
+        businessId: business_id,
+        contactPhone: contact_phone
       }
     });
 
@@ -536,12 +640,11 @@ router.get('/contact/:contact_phone', authMiddleware, async (req: AuthRequest, r
       return;
     }
 
-    const assignment = await prisma.tagAssignment.findUnique({
+    // Get all tag assignments for this contact (multiple tags support)
+    const assignments = await prisma.tagAssignment.findMany({
       where: {
-        businessId_contactPhone: {
-          businessId: business_id as string,
-          contactPhone: contact_phone
-        }
+        businessId: business_id as string,
+        contactPhone: contact_phone
       },
       include: {
         tag: {
@@ -549,10 +652,16 @@ router.get('/contact/:contact_phone', authMiddleware, async (req: AuthRequest, r
             stagePrompt: true
           }
         }
-      }
+      },
+      orderBy: { assignedAt: 'desc' }
     });
 
-    res.json(assignment);
+    // Return array of assignments (for backward compatibility, also return single assignment if only one exists)
+    if (assignments.length === 1) {
+      res.json(assignments[0]);
+    } else {
+      res.json(assignments);
+    }
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -797,18 +906,21 @@ router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req:
       } catch {}
     }
 
-    const currentTag = await prisma.tagAssignment.findUnique({
+    // Get all tag assignments for this contact (multiple tags support)
+    const tagAssignments = await prisma.tagAssignment.findMany({
       where: {
-        businessId_contactPhone: {
-          businessId: business_id as string,
-          contactPhone: contact_phone
-        }
+        businessId: business_id as string,
+        contactPhone: contact_phone
       },
-      include: { tag: true }
+      include: { tag: true },
+      orderBy: { assignedAt: 'desc' }
     });
     
     // Get funnel stage status for this contact (auto-creates if not exists and funnel stages are configured)
     const funnelStatus = await getContactStageStatus(business_id as string, contact_phone);
+    
+    // For backward compatibility, return first tag as currentStage, but also return all tags
+    const currentTag = tagAssignments[0];
     
     res.json({
       extractedData,
@@ -817,6 +929,13 @@ router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req:
         name: currentTag.tag.name,
         color: currentTag.tag.color
       } : null,
+      tags: tagAssignments.map(ta => ({
+        id: ta.tag.id,
+        name: ta.tag.name,
+        color: ta.tag.color,
+        assignedAt: ta.assignedAt,
+        source: ta.source
+      })),
       funnelStage: funnelStatus.currentStage ? {
         id: funnelStatus.currentStage.id,
         name: funnelStatus.currentStage.name,

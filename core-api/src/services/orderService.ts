@@ -1,6 +1,7 @@
 import prisma from './prisma.js';
 import { createHash } from 'crypto';
 import { findMatchingPromotion, calculateDiscount } from '../routes/promotions.js';
+import { getExtractedDataForContact } from './dataExtractionService.js';
 
 const IDEMPOTENCY_WINDOW_MINUTES = 30;
 const IDEMPOTENCY_PREFIX = 'ORD:';
@@ -588,5 +589,221 @@ export async function addItemToExistingOrder(
   } catch (error: any) {
     console.error('[ORDER-SERVICE] Error adding item to order:', error.message);
     return { success: false, reason: error.message };
+  }
+}
+
+export interface CreateOrderFromAgentParams {
+  businessId: string;
+  instanceId?: string | null;
+  contactPhone: string;
+  producto_id: string;
+  cantidad?: number;
+  nombre_cliente?: string;
+  direccion_envio?: string;
+  ciudad?: string;
+  pais?: string;
+  zona_entrega?: string;
+  costo_envio?: number;
+}
+
+export interface CreateOrderFromAgentResult {
+  exito: boolean;
+  mensaje: string;
+  pedido_id?: string;
+  total?: number;
+  moneda?: string;
+  orden_activa?: boolean;
+  error?: string;
+}
+
+export async function createOrderFromAgent(params: CreateOrderFromAgentParams): Promise<CreateOrderFromAgentResult> {
+  const {
+    businessId,
+    instanceId,
+    contactPhone,
+    producto_id,
+    cantidad = 1,
+    nombre_cliente,
+    direccion_envio,
+    ciudad,
+    pais,
+    zona_entrega,
+    costo_envio
+  } = params;
+
+  const normalizedPhone = contactPhone.replace(/\D/g, '');
+  
+  console.log(`[ORDER-FROM-AGENT] Creating order for ${normalizedPhone}, product: "${producto_id}", qty: ${cantidad}`);
+
+  try {
+    // Get business info for currency
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+      select: { 
+        currencyCode: true, 
+        currencySymbol: true,
+        user: { select: { paymentLinkEnabled: true } }
+      }
+    });
+
+    if (!business) {
+      return {
+        exito: false,
+        mensaje: 'No se pudo crear el pedido',
+        error: 'Business not found'
+      };
+    }
+
+    // Get extracted data from contact
+    const extractedData = await getExtractedDataForContact(businessId, normalizedPhone);
+    console.log(`[ORDER-FROM-AGENT] Extracted data: ${JSON.stringify(extractedData)}`);
+
+    // Map extracted data to order fields (use agent data if provided, otherwise use extracted)
+    const contactName = nombre_cliente || 
+      extractedData['nombre'] || 
+      extractedData['name'] || 
+      extractedData['nombre_completo'] || 
+      extractedData['cliente'] || 
+      '';
+
+    const shippingAddress = direccion_envio || 
+      extractedData['direccion'] || 
+      extractedData['address'] || 
+      extractedData['direccion_envio'] || 
+      extractedData['ubicacion'] || 
+      '';
+
+    const shippingCity = ciudad || 
+      extractedData['ciudad'] || 
+      extractedData['city'] || 
+      '';
+
+    const shippingCountry = pais || 
+      extractedData['pais'] || 
+      extractedData['country'] || 
+      '';
+
+    // Find product
+    const product = await findProductWithScope(businessId, producto_id, instanceId);
+    
+    if (!product) {
+      return {
+        exito: false,
+        mensaje: 'No se pudo crear el pedido',
+        error: `Producto "${producto_id}" no encontrado en el catálogo`
+      };
+    }
+
+    // Look up delivery zone and calculate shipping cost
+    let shippingCost = costo_envio ?? null;
+    let deliveryZoneId: string | null = null;
+
+    if (zona_entrega || shippingAddress) {
+      // Try to find delivery zone by name, ID, or by address/district
+      const zoneSearchTerm = zona_entrega || shippingAddress;
+      
+      const zone = await prisma.deliveryZone.findFirst({
+        where: {
+          businessId,
+          isActive: true,
+          OR: [
+            { id: zoneSearchTerm },
+            { name: { contains: zoneSearchTerm, mode: 'insensitive' } },
+            { districts: { has: zoneSearchTerm } }
+          ]
+        }
+      });
+
+      if (zone) {
+        deliveryZoneId = zone.id;
+        // Only calculate shipping if agent didn't provide it
+        if (shippingCost === null) {
+          const subtotal = product.price * cantidad;
+          // Check if order qualifies for free shipping
+          if (zone.freeAbove && subtotal >= zone.freeAbove) {
+            shippingCost = 0;
+            console.log(`[ORDER-FROM-AGENT] Free shipping applied (subtotal ${subtotal} >= freeAbove ${zone.freeAbove})`);
+          } else {
+            shippingCost = zone.cost || 0;
+          }
+        }
+        console.log(`[ORDER-FROM-AGENT] Found delivery zone: ${zone.name}, shippingCost: ${shippingCost}`);
+      }
+    }
+
+    // Create order
+    const orderResult = await createOrder({
+      businessId,
+      instanceId,
+      contactPhone: normalizedPhone,
+      contactName,
+      shippingAddress,
+      shippingCity: shippingCity || null,
+      shippingCountry: shippingCountry || null,
+      locationCoordinates: null,
+      deliveryZoneId,
+      shippingCost: shippingCost || 0,
+      items: [{
+        productId: product.id,
+        productTitle: product.title,
+        quantity: cantidad,
+        unitPrice: product.price,
+        imageUrl: product.imageUrl || null
+      }],
+      source: 'agent_tool'
+    });
+
+    if (!orderResult.success) {
+      return {
+        exito: false,
+        mensaje: 'No se pudo crear el pedido',
+        error: orderResult.reason
+      };
+    }
+
+    // Format response
+    const currencySymbol = business.currencySymbol || 'S/.';
+    let response: CreateOrderFromAgentResult = {
+      exito: true,
+      mensaje: orderResult.isNew 
+        ? 'Pedido registrado exitosamente' 
+        : 'Pedido actualizado exitosamente',
+      pedido_id: orderResult.orderId,
+      total: orderResult.totalAmount,
+      moneda: currencySymbol,
+      orden_activa: true
+    };
+
+    // Add info about active order
+    if (orderResult.orderId) {
+      response.mensaje += ` La orden está activa en esta conversación. Puedes agregar más productos usando agregar_producto_orden o completar datos faltantes.`;
+      
+      // Create payment link request record
+      await prisma.paymentLinkRequest.create({
+        data: {
+          businessId,
+          contactPhone: normalizedPhone,
+          triggerSource: 'agent',
+          productId: product.id,
+          productName: product.title,
+          amount: orderResult.totalAmount || 0,
+          quantity: cantidad,
+          isSuccess: true,
+          orderId: orderResult.orderId,
+          isPro: false
+        }
+      });
+    }
+
+    console.log(`[ORDER-FROM-AGENT] Order ${orderResult.isNew ? 'created' : 'updated'}: ${orderResult.orderId}, total: ${orderResult.totalAmount}`);
+    
+    return response;
+  } catch (error: any) {
+    console.error('[ORDER-FROM-AGENT] Error creating order:', error);
+    return {
+      exito: false,
+      mensaje: 'No se pudo crear el pedido',
+      error: error.message || 'Unknown error'
+    };
   }
 }

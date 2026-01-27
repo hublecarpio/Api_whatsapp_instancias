@@ -53,17 +53,17 @@ export async function analyzeAndUpdateLeadStage(
       description: tag.description || tag.name
     }));
 
-    const currentAssignment = await prisma.tagAssignment.findUnique({
+    // Get all tag assignments (now supports multiple tags per contact)
+    const currentAssignments = await prisma.tagAssignment.findMany({
       where: {
-        businessId_contactPhone: {
-          businessId,
-          contactPhone
-        }
+        businessId,
+        contactPhone
       },
       include: { tag: true }
     });
 
-    const currentStageName = currentAssignment?.tag?.name;
+    // Use first tag for stage analysis (backward compatibility)
+    const currentStageName = currentAssignments.length > 0 ? currentAssignments[0].tag?.name : undefined;
 
     const analysis = await geminiService.analyzeLeadStage(
       conversationHistory, 
@@ -83,6 +83,8 @@ export async function analyzeAndUpdateLeadStage(
       return { success: false, error: `Stage "${analysis.stageName}" not found in available tags` };
     }
 
+    const currentAssignment = currentAssignments.length > 0 ? currentAssignments[0] : null;
+    
     if (!analysis.shouldChange || currentAssignment?.tagId === targetTag.id) {
       return {
         success: true,
@@ -105,25 +107,27 @@ export async function analyzeAndUpdateLeadStage(
       });
     }
 
-    await prisma.tagAssignment.upsert({
+    // NOTE: Automatic tag assignment is disabled. Tags are now manual-only.
+    // This code is kept for backward compatibility but should not be used.
+    // To assign a tag, use the tagId in the unique constraint:
+    const existingAssignment = await prisma.tagAssignment.findFirst({
       where: {
-        businessId_contactPhone: {
-          businessId,
-          contactPhone
-        }
-      },
-      update: {
-        tagId: targetTag.id,
-        assignedAt: new Date(),
-        source: 'ai_auto'
-      },
-      create: {
-        tagId: targetTag.id,
         businessId,
         contactPhone,
-        source: 'ai_auto'
+        tagId: targetTag.id
       }
     });
+    
+    if (!existingAssignment) {
+      await prisma.tagAssignment.create({
+        data: {
+          tagId: targetTag.id,
+          businessId,
+          contactPhone,
+          source: 'ai_auto'
+        }
+      });
+    }
 
     await prisma.tagHistory.create({
       data: {
