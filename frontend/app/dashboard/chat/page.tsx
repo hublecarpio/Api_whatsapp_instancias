@@ -1499,35 +1499,6 @@ export default function ChatPage() {
                 </div>
                 {searchQuery ? 'No se encontraron resultados' : 'No hay conversaciones'}
               </div>
-            ) : viewMode === 'kanban' ? (
-              <div className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto pb-4 px-2 sm:px-4 scrollbar-thin scrollbar-track-dark-bg scrollbar-thumb-dark-border" style={{ height: 'calc(100vh - 140px)', minHeight: '500px' }}>
-                {/* Columna "Sin etiqueta" */}
-                <KanbanColumn
-                  title="Sin etiqueta"
-                  color="#6B7280"
-                  conversations={getConversationsByTag(null)}
-                  onSelectConversation={handleSelectConversation}
-                  selectedPhone={selectedPhone}
-                  onContextMenu={handleContextMenu}
-                  getContactTags={getContactTags}
-                  formatDate={formatDate}
-                />
-                
-                {/* Columnas por cada etiqueta */}
-                {tags.map(tag => (
-                  <KanbanColumn
-                    key={tag.id}
-                    title={tag.name}
-                    color={tag.color}
-                    conversations={getConversationsByTag(tag.id)}
-                    onSelectConversation={handleSelectConversation}
-                    selectedPhone={selectedPhone}
-                    onContextMenu={handleContextMenu}
-                    getContactTags={getContactTags}
-                    formatDate={formatDate}
-                  />
-                ))}
-              </div>
             ) : (
               filteredConversations.map((conv) => {
                 const contactTagsList = getContactTags(conv.phone);

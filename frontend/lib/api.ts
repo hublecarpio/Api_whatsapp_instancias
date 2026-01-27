@@ -414,10 +414,10 @@ export const tagsApi = {
     api.post(`/tags/${tagId}/stage-prompt`, data),
   assign: (data: { business_id: string; contact_phone: string; tag_id: string; source?: string }) =>
     api.post('/tags/assign', data),
-  removeAssignment: (businessId: string, contactPhone: string, tagId: string) =>
-    api.delete(`/tags/assign/${tagId}?business_id=${businessId}&contact_phone=${encodeURIComponent(contactPhone)}`),
-  unassign: (data: { business_id: string; contact_phone: string; tag_id?: string }) =>
+  unassign: (data: { business_id: string; contact_phone: string }) =>
     api.delete('/tags/assign', { data }),
+  removeAssignment: (businessId: string, contactPhone: string, tagId: string) =>
+    api.delete(`/tags/assign/${tagId}?business_id=${businessId}&contact_phone=${contactPhone}`),
   getAssignments: (businessId: string, tagId?: string) =>
     api.get(`/tags/assignments?business_id=${businessId}${tagId ? `&tag_id=${tagId}` : ''}`),
   getContactTag: (businessId: string, contactPhone: string) =>
