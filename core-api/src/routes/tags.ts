@@ -344,54 +344,63 @@ router.post('/assign', authMiddleware, async (req: AuthRequest, res: Response): 
       return;
     }
 
-    // Check if this specific tag is already assigned to this contact
-    const existingAssignment = await prisma.tagAssignment.findFirst({
-      where: {
-        businessId: business_id,
-        contactPhone: contact_phone,
-        tagId: tag_id
-      }
-    });
+    // Use upsert to handle race conditions and existing assignments
+    const assignment = await prisma.$transaction(async (tx) => {
+      // First check if assignment exists
+      const existing = await tx.tagAssignment.findFirst({
+        where: {
+          businessId: business_id,
+          contactPhone: contact_phone,
+          tagId: tag_id
+        }
+      });
 
-    if (existingAssignment) {
-      // Tag already assigned, return existing assignment
-      res.json(existingAssignment);
-      return;
-    }
-
-    // Create new assignment (allows multiple tags per contact)
-    const assignment = await prisma.tagAssignment.create({
-      data: {
-        tagId: tag_id,
-        businessId: business_id,
-        contactPhone: contact_phone,
-        assignedBy: req.userId,
-        source: source || 'manual'
+      if (existing) {
+        return existing;
       }
-    });
 
-    await prisma.tagHistory.create({
-      data: {
-        tagId: tag_id,
-        businessId: business_id,
-        contactPhone: contact_phone,
-        source: source || 'manual'
-      }
+      // Create new assignment
+      const newAssignment = await tx.tagAssignment.create({
+        data: {
+          tagId: tag_id,
+          businessId: business_id,
+          contactPhone: contact_phone,
+          assignedBy: req.userId,
+          source: source || 'manual'
+        }
+      });
+
+      // Also create history entry
+      await tx.tagHistory.create({
+        data: {
+          tagId: tag_id,
+          businessId: business_id,
+          contactPhone: contact_phone,
+          source: source || 'manual'
+        }
+      });
+
+      return newAssignment;
     });
 
     res.json(assignment);
   } catch (error: any) {
+    console.error('[Tags] Assignment error:', error.message, error.code);
     if (error.code === 'P2002') {
-      // Unique constraint violation - tag already assigned
-      const assignment = await prisma.tagAssignment.findFirst({
-        where: {
-          businessId: req.body.business_id,
-          contactPhone: req.body.contact_phone,
-          tagId: req.body.tag_id
+      // Unique constraint violation - return existing assignment
+      try {
+        const assignment = await prisma.tagAssignment.findFirst({
+          where: {
+            businessId: req.body.business_id,
+            contactPhone: req.body.contact_phone,
+            tagId: req.body.tag_id
+          }
+        });
+        if (assignment) {
+          res.json(assignment);
+          return;
         }
-      });
-      res.json(assignment);
-      return;
+      } catch (e) {}
     }
     res.status(500).json({ error: error.message });
   }
