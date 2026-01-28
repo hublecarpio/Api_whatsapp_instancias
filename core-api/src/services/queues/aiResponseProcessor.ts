@@ -736,6 +736,64 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
     console.log(`[AI Worker V1] Appointment tool configured with ${appointmentExtractionFields.length} custom fields, ${Object.keys(extractedContactData).length} already extracted`);
   }
   
+  // Add order creation tool for SALES mode
+  if (businessObjective === 'SALES') {
+    // Get delivery zones for the business
+    const deliveryZones = await prisma.deliveryZone.findMany({
+      where: { businessId: business.id, isActive: true },
+      select: { id: true, name: true, cost: true }
+    });
+    
+    const zoneDescriptions = deliveryZones.length > 0
+      ? deliveryZones.map(z => `${z.name} (envío: ${business.currencySymbol || 'S/.'}${z.cost})`).join(', ')
+      : 'No hay zonas configuradas';
+    
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: 'confirmar_pedido',
+        description: `Registra un pedido cuando el cliente confirma su compra. Usa esta función SOLO cuando el cliente dice explícitamente "sí lo quiero", "confirmo", "procede con el pedido", etc. Zonas disponibles: ${zoneDescriptions}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            producto: { 
+              type: 'string', 
+              description: 'Nombre exacto del producto que el cliente quiere comprar' 
+            },
+            cantidad: { 
+              type: 'number', 
+              description: 'Cantidad de productos (default: 1)' 
+            },
+            nombre_cliente: { 
+              type: 'string', 
+              description: 'Nombre completo del cliente' 
+            },
+            direccion: { 
+              type: 'string', 
+              description: 'Dirección completa de envío' 
+            },
+            zona_envio: { 
+              type: 'string', 
+              description: 'Zona o distrito de envío para calcular costo' 
+            },
+            metodo_pago: { 
+              type: 'string', 
+              enum: ['YAPE', 'PLIN', 'TRANSFERENCIA', 'EFECTIVO', 'OTRO'],
+              description: 'Método de pago preferido por el cliente' 
+            },
+            notas: { 
+              type: 'string', 
+              description: 'Notas adicionales del pedido (opcional)' 
+            }
+          },
+          required: ['producto', 'nombre_cliente', 'direccion']
+        }
+      }
+    });
+    
+    console.log(`[AI Worker V1] Order creation tool (confirmar_pedido) added for SALES mode`);
+  }
+  
   // Add custom tools from business configuration
   for (const customTool of userTools) {
     const parameters: any = {
@@ -1106,6 +1164,198 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
             role: 'tool',
             tool_call_id: toolCall.id,
             content: `Error al agendar cita: ${err.response?.data?.error || err.message}`
+          });
+        }
+      } else if (toolName === 'confirmar_pedido') {
+        // Handle order creation tool
+        const args = JSON.parse(fn.arguments);
+        const normalizedPhone = contactPhone.replace(/\D/g, '');
+        
+        console.log(`[AI Worker] Creating order via confirmar_pedido tool:`, args);
+        
+        try {
+          // Validate required fields
+          if (!args.producto || args.producto.trim() === '') {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Error: Falta el nombre del producto. Pregunta al cliente qué producto desea.'
+            });
+            continue;
+          }
+          
+          if (!args.nombre_cliente || args.nombre_cliente.trim() === '') {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Error: Falta el nombre del cliente. Pregunta su nombre antes de confirmar el pedido.'
+            });
+            continue;
+          }
+          
+          if (!args.direccion || args.direccion.trim() === '') {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: 'Error: Falta la dirección de envío. Pregunta la dirección antes de confirmar el pedido.'
+            });
+            continue;
+          }
+          
+          const quantity = Math.max(1, parseInt(args.cantidad) || 1);
+          
+          // Import order service dynamically to avoid circular dependencies
+          const { createOrder, findProductWithScope } = await import('../orderService.js');
+          
+          // Find the product using proper scope (supports variations and instance)
+          const matchedProduct = await findProductWithScope(business.id, args.producto, instanceId);
+          
+          if (!matchedProduct) {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: `Error: No se encontró el producto "${args.producto}" en el catálogo. Por favor verifica el nombre exacto.`
+            });
+            continue;
+          }
+          
+          // Find delivery zone (by name or districts)
+          let shippingCost = 0;
+          let zoneId: string | null = null;
+          let zoneWarning = '';
+          
+          const zones = await prisma.deliveryZone.findMany({
+            where: { businessId: business.id, isActive: true }
+          });
+          
+          if (zones.length > 0) {
+            if (args.zona_envio) {
+              const searchZone = args.zona_envio.toLowerCase().trim();
+              
+              // Try matching by zone name first
+              let matchedZone = zones.find(z => 
+                z.name.toLowerCase().includes(searchZone) ||
+                searchZone.includes(z.name.toLowerCase())
+              );
+              
+              // If not found, try matching in districts array
+              if (!matchedZone) {
+                matchedZone = zones.find(z => 
+                  z.districts?.some((d: string) => 
+                    d.toLowerCase().includes(searchZone) ||
+                    searchZone.includes(d.toLowerCase())
+                  )
+                );
+              }
+              
+              if (matchedZone) {
+                shippingCost = matchedZone.cost || 0;
+                zoneId = matchedZone.id;
+              } else {
+                zoneWarning = ` (Nota: zona "${args.zona_envio}" no encontrada, envío sin costo adicional)`;
+              }
+            } else {
+              zoneWarning = ' (Nota: no se especificó zona de envío)';
+            }
+          }
+          
+          const unitPrice = matchedProduct.price;
+          
+          // Create the order
+          const orderResult = await createOrder({
+            businessId: business.id,
+            instanceId: instanceId || null,
+            contactPhone: normalizedPhone,
+            contactName: args.nombre_cliente || contactName || 'Cliente',
+            shippingAddress: args.direccion || '',
+            shippingCity: args.zona_envio || null,
+            items: [{
+              productId: matchedProduct.id,
+              productTitle: matchedProduct.title,
+              quantity: quantity,
+              unitPrice: unitPrice,
+              imageUrl: matchedProduct.imageUrl || null
+            }],
+            shippingCost: shippingCost,
+            deliveryZoneId: zoneId,
+            source: 'agent_tool'
+          });
+          
+          if (orderResult.success && orderResult.orderId) {
+            const orderId = orderResult.orderId;
+            const currSym = business.currencySymbol || 'S/.';
+            const subtotal = unitPrice * quantity;
+            const total = subtotal + shippingCost;
+            
+            // Save extracted data for future reference
+            const dataToSave = [
+              { key: 'nombre_cliente', value: args.nombre_cliente },
+              { key: 'direccion', value: args.direccion },
+              { key: 'producto', value: matchedProduct.title },
+              { key: 'zona_envio', value: args.zona_envio },
+              { key: 'metodo_pago', value: args.metodo_pago }
+            ].filter(d => d.value);
+            
+            for (const data of dataToSave) {
+              await prisma.contactExtractedData.upsert({
+                where: {
+                  businessId_contactPhone_fieldKey: {
+                    businessId: business.id,
+                    contactPhone: normalizedPhone,
+                    fieldKey: data.key
+                  }
+                },
+                create: {
+                  businessId: business.id,
+                  contactPhone: normalizedPhone,
+                  fieldKey: data.key,
+                  fieldValue: data.value,
+                  confidence: 1.0,
+                  source: 'order_tool'
+                },
+                update: {
+                  fieldValue: data.value,
+                  confidence: 1.0,
+                  source: 'order_tool',
+                  updatedAt: new Date()
+                }
+              });
+            }
+            
+            toolsExecuted.push('confirmar_pedido');
+            
+            const variationInfo = matchedProduct.variation ? ` (${matchedProduct.variation})` : '';
+            const confirmationMsg = `Pedido #${orderId.slice(-6).toUpperCase()} creado exitosamente.${zoneWarning}
+Resumen:
+- Producto: ${matchedProduct.title}${variationInfo} x${quantity}
+- Subtotal: ${currSym}${subtotal.toFixed(2)}
+- Envío: ${currSym}${shippingCost.toFixed(2)}
+- TOTAL: ${currSym}${total.toFixed(2)}
+- Dirección: ${args.direccion}
+- Estado: Esperando comprobante de pago
+
+Informa al cliente el total y pídele que envíe su comprobante de pago.`;
+            
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: confirmationMsg
+            });
+            
+            console.log(`[AI Worker] Order created successfully: ${orderId}`);
+          } else {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: `Error al crear el pedido: ${orderResult.reason || 'Error desconocido'}`
+            });
+          }
+        } catch (err: any) {
+          console.error('[AI Worker] Order creation failed:', err.message);
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: `Error al crear pedido: ${err.message}`
           });
         }
       } else if (toolName.startsWith('custom_')) {
