@@ -746,6 +746,19 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
   
   // Add order creation tool for SALES mode
   if (businessObjective === 'SALES') {
+    // Get already extracted data for this contact (same as APPOINTMENTS mode)
+    const salesExtractedData = await getExtractedDataForContact(business.id, contactPhone.replace(/\D/g, ''));
+    
+    // Add extracted data to prompt context so agent doesn't repeat questions
+    if (Object.keys(salesExtractedData).length > 0) {
+      let extractedDataContext = '\n\n## DATOS YA CONOCIDOS DEL CLIENTE (NO preguntes por estos):';
+      for (const [key, value] of Object.entries(salesExtractedData)) {
+        extractedDataContext += `\n- ${key}: ${value}`;
+      }
+      systemPrompt += extractedDataContext;
+      console.log(`[AI Worker V1] SALES mode: ${Object.keys(salesExtractedData).length} extracted data fields added to context`);
+    }
+    
     // Get delivery zones for the business
     const deliveryZones = await prisma.deliveryZone.findMany({
       where: { businessId: business.id, isActive: true },
