@@ -2,6 +2,49 @@ import prisma from './prisma.js';
 import { callOpenAI, ChatMessage, isOpenAIConfigured, logTokenUsage } from './openaiService.js';
 import { dispatchStateChange } from './webhookService.js';
 import { tryAutoCreateOrderOnDataUpdate } from './orderAutoCreator.js';
+import { checkAndAdvanceStage } from './funnelStageService.js';
+
+// List of profanity/insult patterns to filter out from extracted data
+const PROFANITY_PATTERNS = [
+  /conchatumadre/i, /conchatu/i, /reconchatu/i,
+  /mierda/i, /puta/i, /carajo/i, /cojudo/i, /huevon/i, /webón/i,
+  /imbecil/i, /estupido/i, /idiota/i, /pendejo/i, /cabron/i,
+  /fuck/i, /shit/i, /bitch/i, /asshole/i, /bastard/i,
+  /chucha/i, /ctm/i, /csm/i, /ptm/i, /hdp/i,
+  /verga/i, /culiao/i, /maricon/i, /marica/i
+];
+
+function containsProfanity(value: string): boolean {
+  if (!value || typeof value !== 'string') return false;
+  const cleanValue = value.toLowerCase().replace(/\s+/g, '');
+  return PROFANITY_PATTERNS.some(pattern => pattern.test(cleanValue));
+}
+
+function isValidExtractedValue(fieldKey: string, value: string): { valid: boolean; reason?: string } {
+  if (!value || typeof value !== 'string') {
+    return { valid: false, reason: 'empty value' };
+  }
+  
+  // Check for profanity in name-related fields
+  const nameFields = ['nombre', 'name', 'nombre_completo', 'nombreCompleto', 'cliente', 'nombres'];
+  if (nameFields.some(f => fieldKey.toLowerCase().includes(f.toLowerCase()))) {
+    if (containsProfanity(value)) {
+      return { valid: false, reason: 'profanity detected in name field' };
+    }
+    // Names should be at least 2 characters and contain letters, spaces, hyphens, apostrophes
+    if (value.length < 2 || !/^[a-záéíóúñüA-ZÁÉÍÓÚÑÜ\s\-']+$/.test(value)) {
+      return { valid: false, reason: 'invalid name format' };
+    }
+  }
+  
+  // General profanity check for all fields
+  if (containsProfanity(value)) {
+    console.log(`[DataExtraction] ⚠️ Profanity filtered from ${fieldKey}: "${value}"`);
+    return { valid: false, reason: 'profanity detected' };
+  }
+  
+  return { valid: true };
+}
 
 interface ExtractionResult {
   fieldKey: string;
@@ -172,6 +215,15 @@ export async function saveExtractedData(
 ): Promise<void> {
   try {
     for (const data of extractedData) {
+      // Validate extracted value before saving
+      if (data.value) {
+        const validation = isValidExtractedValue(data.fieldKey, data.value);
+        if (!validation.valid) {
+          console.log(`[DataExtraction] ❌ Rejected ${data.fieldKey}="${data.value}" - ${validation.reason}`);
+          continue;
+        }
+      }
+      
       const existing = await prisma.contactExtractedData.findUnique({
         where: {
           businessId_contactPhone_fieldKey: {
@@ -246,6 +298,12 @@ export async function saveExtractedData(
           }
         })
         .catch(err => console.error('[DataExtraction] Auto-order error:', err.message));
+    }
+    
+    // After saving all data, check if contact can advance to next funnel stage
+    if (extractedData.length > 0) {
+      checkAndAdvanceStage(businessId, contactPhone, instanceId)
+        .catch(err => console.error('[DataExtraction] Stage advance check error:', err.message));
     }
   } catch (error: any) {
     console.error('[DataExtraction] Error saving extracted data:', error.message);

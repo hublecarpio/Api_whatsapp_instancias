@@ -2,6 +2,30 @@ import prisma from './prisma.js';
 import { getExtractedDataForContact } from './dataExtractionService.js';
 import { tryAutoCreateOrderOnStageAdvance } from './orderAutoCreator.js';
 
+// Normalize field key for flexible matching (nombre_completo = nombreCompleto = NombreCompleto)
+function normalizeFieldKey(key: string): string {
+  return key.toLowerCase().replace(/[_\s-]/g, '');
+}
+
+// Find value in extracted data with flexible key matching
+function findExtractedValue(extractedData: Record<string, string>, targetKey: string): string | undefined {
+  const normalizedTarget = normalizeFieldKey(targetKey);
+  
+  // First try exact match
+  if (extractedData[targetKey]) {
+    return extractedData[targetKey];
+  }
+  
+  // Then try normalized match
+  for (const [key, value] of Object.entries(extractedData)) {
+    if (normalizeFieldKey(key) === normalizedTarget) {
+      return value;
+    }
+  }
+  
+  return undefined;
+}
+
 interface StageStatus {
   currentStage: {
     id: string;
@@ -75,7 +99,8 @@ export async function getContactStageStatus(
     });
 
     for (const fieldKey of currentStage.requiredFieldKeys) {
-      const value = extractedData[fieldKey];
+      // Use flexible matching to find value (nombre_completo = nombreCompleto)
+      const value = findExtractedValue(extractedData, fieldKey);
       if (value) {
         collectedFields[fieldKey] = value;
       } else {
@@ -224,10 +249,23 @@ export async function checkAndAdvanceStage(
   instanceId?: string
 ): Promise<void> {
   try {
-    const status = await getContactStageStatus(businessId, contactPhone);
+    const normalizedPhone = contactPhone.replace(/\D/g, '');
+    const status = await getContactStageStatus(businessId, normalizedPhone);
+    
+    console.log(`[FunnelStage] 📊 Stage check for ${normalizedPhone}:`);
+    console.log(`[FunnelStage]   Current stage: ${status.currentStage?.name || 'none'}`);
+    console.log(`[FunnelStage]   Can advance: ${status.canAdvance}`);
+    console.log(`[FunnelStage]   Missing fields: ${status.missingFields.length > 0 ? status.missingFields.join(', ') : 'none'}`);
+    console.log(`[FunnelStage]   Collected fields: ${JSON.stringify(status.collectedFields)}`);
+    console.log(`[FunnelStage]   Next stage: ${status.nextStage?.name || 'final'}`);
     
     if (status.canAdvance && status.nextStage) {
-      await advanceContactStage(businessId, contactPhone, instanceId);
+      console.log(`[FunnelStage] ✅ Advancing to: ${status.nextStage.name}`);
+      await advanceContactStage(businessId, normalizedPhone, instanceId);
+    } else if (status.canAdvance && !status.nextStage) {
+      console.log(`[FunnelStage] 🏁 Already at final stage: ${status.currentStage?.name}`);
+    } else {
+      console.log(`[FunnelStage] ⏳ Cannot advance yet - missing: ${status.missingFields.join(', ')}`);
     }
   } catch (err: any) {
     console.error('[FunnelStage] Error checking stage advancement:', err.message);
