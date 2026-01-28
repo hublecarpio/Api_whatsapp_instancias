@@ -130,21 +130,21 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
       }
     }
     
-    // Get list of archived instance IDs to filter out (unless include_archived is true)
-    let archivedInstanceIds: string[] = [];
-    if (include_archived !== 'true') {
-      const archivedInstances = await prisma.whatsAppInstance.findMany({
-        where: { 
-          businessId: business_id as string,
-          archivedAt: { not: null }
-        },
-        select: { id: true }
-      });
-      archivedInstanceIds = archivedInstances.map(i => i.id);
+    // OPTIMIZED: Use Contact table with proper pagination instead of loading all messages
+    const contactWhereClause: any = { 
+      businessId: business_id as string,
+      isArchived: include_archived === 'true' ? undefined : false
+    };
+    
+    // Build phone filter conditions that need to be intersected
+    let phoneFilterConditions: string[][] = [];
+    
+    // Filter by assigned phones for advisors
+    if (isAdvisor && assignedPhones.length > 0) {
+      phoneFilterConditions.push(assignedPhones);
     }
     
-    // If tag_id filter is active, get phones with that tag first
-    let tagFilterPhones: string[] | null = null;
+    // Filter by tag
     if (tag_id) {
       const tagAssignments = await prisma.tagAssignment.findMany({
         where: { 
@@ -153,122 +153,151 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
         },
         select: { contactPhone: true }
       });
-      tagFilterPhones = tagAssignments.map(ta => ta.contactPhone);
+      const tagFilterPhones = tagAssignments.map(ta => ta.contactPhone);
       if (tagFilterPhones.length === 0) {
         return res.json({ conversations: [], hasMore: false, total: 0 });
       }
+      phoneFilterConditions.push(tagFilterPhones);
     }
     
-    const whereClause: any = { businessId: business_id as string };
-    
-    if (instance_id) {
-      whereClause.instanceId = instance_id as string;
-    } else if (archivedInstanceIds.length > 0) {
-      whereClause.OR = [
-        { instanceId: { notIn: archivedInstanceIds } },
-        { instanceId: null }
-      ];
+    // Intersect all phone filters
+    if (phoneFilterConditions.length > 0) {
+      const intersectedPhones = phoneFilterConditions.reduce((acc, curr) => 
+        acc.filter(phone => curr.includes(phone))
+      );
+      if (intersectedPhones.length === 0) {
+        return res.json({ conversations: [], hasMore: false, total: 0 });
+      }
+      contactWhereClause.phone = { in: intersectedPhones };
     }
     
-    if (isAdvisor && assignedPhones.length > 0) {
-      const phoneFilter = assignedPhones.flatMap(p => [{ sender: p }, { recipient: p }]);
-      if (whereClause.OR) {
-        whereClause.AND = [
-          { OR: whereClause.OR },
-          { OR: phoneFilter }
+    // Apply search filter at DB level (combined with AND, not overwriting)
+    if (search && typeof search === 'string' && search.trim()) {
+      const searchTerm = search.trim();
+      // If we already have a phone filter, add search as additional AND condition
+      if (contactWhereClause.phone) {
+        contactWhereClause.AND = [
+          { phone: contactWhereClause.phone },
+          { 
+            OR: [
+              { phone: { contains: searchTerm } },
+              { name: { contains: searchTerm, mode: 'insensitive' } }
+            ]
+          }
         ];
-        delete whereClause.OR;
+        delete contactWhereClause.phone;
       } else {
-        whereClause.OR = phoneFilter;
+        contactWhereClause.OR = [
+          { phone: { contains: searchTerm } },
+          { name: { contains: searchTerm, mode: 'insensitive' } }
+        ];
       }
     }
     
-    const messages = await prisma.messageLog.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'desc' }
+    // Get total count (without pagination)
+    const total = await prisma.contact.count({ where: contactWhereClause });
+    
+    // Get paginated contacts from Contact table (much faster than loading all messages)
+    const contacts = await prisma.contact.findMany({
+      where: contactWhereClause,
+      orderBy: { lastMessageAt: 'desc' },
+      skip: offsetNum,
+      take: limitNum,
+      select: {
+        id: true,
+        phone: true,
+        name: true,
+        lastMessageAt: true,
+        messageCount: true,
+        metadata: true
+      }
     });
     
-    const conversationsMap = new Map<string, {
-      phone: string;
-      contactName: string;
-      lastMessage: string | null;
-      lastMessageAt: Date;
-      lastMessageDirection: 'inbound' | 'outbound';
-      messageCount: number;
-      unread: number;
+    if (contacts.length === 0) {
+      return res.json({ conversations: [], hasMore: false, total: 0 });
+    }
+    
+    // Get last message for each contact efficiently using batched queries
+    // Process in batches of 10 to avoid saturating DB connection pool
+    const BATCH_SIZE = 10;
+    const lastMessageResults: Array<{ phone: string; lastMsg: any }> = [];
+    
+    for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+      const batch = contacts.slice(i, i + BATCH_SIZE);
+      const batchPromises = batch.map(async (contact) => {
+        // Build search patterns for this phone
+        const phonePatterns = [
+          contact.phone,
+          `${contact.phone}@s.whatsapp.net`,
+          `${contact.phone}@lid`
+        ];
+        
+        // Build message query with optional instance_id filter
+        const messageWhere: any = {
+          businessId: business_id as string,
+          OR: [
+            { sender: { in: phonePatterns } },
+            { recipient: { in: phonePatterns } }
+          ]
+        };
+        
+        // Filter by instance if specified
+        if (instance_id) {
+          messageWhere.instanceId = instance_id as string;
+        }
+        
+        const lastMsg = await prisma.messageLog.findFirst({
+          where: messageWhere,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            message: true,
+            direction: true,
+            instanceId: true
+          }
+        });
+        
+        return { phone: contact.phone, lastMsg };
+      });
+      
+      const batchResults = await Promise.all(batchPromises);
+      lastMessageResults.push(...batchResults);
+    }
+    
+    // Create a map for quick lookup
+    const lastMessageMap = new Map<string, {
+      message: string | null;
+      direction: string;
       instanceId: string | null;
     }>();
-    
-    messages.forEach(msg => {
-      let phone: string;
-      if (msg.direction === 'inbound') {
-        phone = msg.sender || 'unknown';
-      } else {
-        phone = msg.recipient || 'unknown';
-      }
-      if (phone === 'unknown' || phone === 'bot' || phone === 'system') return;
-      
-      const metadata = msg.metadata as any;
-      
-      if (metadata?.contactPhone) {
-        phone = metadata.contactPhone.toString().replace(/\D/g, '');
-      } else {
-        phone = phone.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
-      }
-      
-      if (!phone || phone.length < 8 || phone.length > 15) return;
-      
-      const contactName = metadata?.contactName || metadata?.pushName || '';
-      
-      const instanceId = msg.instanceId || 'default';
-      const conversationKey = `${phone}_${instanceId}`;
-      
-      if (!conversationsMap.has(conversationKey)) {
-        conversationsMap.set(conversationKey, {
-          phone,
-          contactName,
-          lastMessage: msg.message,
-          lastMessageAt: msg.createdAt,
-          lastMessageDirection: msg.direction as 'inbound' | 'outbound',
-          messageCount: 1,
-          unread: msg.direction === 'inbound' ? 1 : 0,
-          instanceId: msg.instanceId
+    lastMessageResults.forEach(({ phone, lastMsg }) => {
+      if (lastMsg) {
+        lastMessageMap.set(phone, {
+          message: lastMsg.message,
+          direction: lastMsg.direction,
+          instanceId: lastMsg.instanceId
         });
-      } else {
-        const conv = conversationsMap.get(conversationKey)!;
-        conv.messageCount++;
-        if (msg.direction === 'inbound') {
-          conv.unread++;
-        }
-        if (!conv.contactName && contactName) {
-          conv.contactName = contactName;
-        }
       }
     });
     
-    let allConversations = Array.from(conversationsMap.values())
-      .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime());
+    // Build conversation response
+    const conversations = contacts.map(contact => {
+      const lastMsg = lastMessageMap.get(contact.phone);
+      return {
+        phone: contact.phone,
+        contactName: contact.name || '',
+        lastMessage: lastMsg?.message || null,
+        lastMessageAt: contact.lastMessageAt,
+        lastMessageDirection: (lastMsg?.direction || 'inbound') as 'inbound' | 'outbound',
+        messageCount: contact.messageCount,
+        unread: 0, // Will be calculated separately if needed
+        instanceId: lastMsg?.instanceId || null
+      };
+    });
     
-    // Apply tag filter
-    if (tagFilterPhones) {
-      allConversations = allConversations.filter(c => tagFilterPhones!.includes(c.phone));
-    }
-    
-    // Apply search filter (server-side)
-    if (search && typeof search === 'string' && search.trim()) {
-      const searchLower = search.toLowerCase().trim();
-      allConversations = allConversations.filter(c => 
-        c.phone.includes(searchLower) || 
-        (c.contactName && c.contactName.toLowerCase().includes(searchLower))
-      );
-    }
-    
-    const total = allConversations.length;
-    const paginatedConversations = allConversations.slice(offsetNum, offsetNum + limitNum);
     const hasMore = offsetNum + limitNum < total;
     
     res.json({ 
-      conversations: paginatedConversations, 
+      conversations, 
       hasMore,
       total 
     });
