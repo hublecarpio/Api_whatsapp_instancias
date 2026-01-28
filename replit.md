@@ -74,6 +74,13 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
     *   **Priority System**: Core sections (priority 10) always included, non-core sections retrieved via cosine similarity + keyword boosting
     *   **Gemini-Powered Import**: `parsePromptToSections()` uses Gemini to automatically categorize raw prompts into structured sections
     *   **Content Suggestions**: `suggestMissingContent()` provides AI-generated suggestions for missing categories
+*   **Early Order Creation System**: Orders created at STEP 3 (product + zone + payment method confirmed) instead of STEP 5. Features:
+    *   **Partial Payments**: `paidAmount`, `pendingAmount`, `lastVoucherAmount` fields track cumulative payments
+    *   **Multiple Vouchers**: Each voucher upload adds to paidAmount until totalAmount is reached
+    *   **Payment History**: Full audit trail in `notes.paymentHistory[]` with amount, brand, operationCode, imageUrl, timestamps
+    *   **Order Auto-Confirmation**: Status changes to PAID when paidAmount >= totalAmount
+    *   **Zone Validation**: Enforces delivery zone requirement when business has zones configured
+*   **Enhanced Production Debugging**: Structured logging with [ORDER-CREATE], [ORDER-VOUCHER], [ORDER-PAYMENT], [AI-*] tags, environment detection (REPLIT vs PRODUCTION), Redis availability tracking
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
