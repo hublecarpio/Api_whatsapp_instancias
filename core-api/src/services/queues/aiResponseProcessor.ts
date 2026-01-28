@@ -15,6 +15,14 @@ import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
 import { retrieveRelevantSections, formatSectionsForPrompt } from '../ragService.js';
 import { processDataExtraction, getExtractedDataForContact, getAppointmentFieldsData } from '../dataExtractionService.js';
 import { getContactStageStatus, buildStageContextForPrompt, checkAndAdvanceStage } from '../funnelStageService.js';
+import { 
+  getOrderToolDefinitions, 
+  handleAgregarProducto, 
+  handleConsultarPedido, 
+  handleConfirmarEntrega,
+  findActiveOrder,
+  OrderToolContext 
+} from '../tools/orderTools.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
@@ -791,7 +799,60 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
       }
     });
     
-    console.log(`[AI Worker V1] Order creation tool (confirmar_pedido) added for SALES mode`);
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: 'agregar_producto_orden',
+        description: 'Agrega un producto adicional a la orden activa del cliente. Usa esta función cuando el cliente ya tiene un pedido y quiere agregar más productos.',
+        parameters: {
+          type: 'object',
+          properties: {
+            producto: { 
+              type: 'string', 
+              description: 'Nombre del producto a agregar' 
+            },
+            cantidad: { 
+              type: 'number', 
+              description: 'Cantidad a agregar (default: 1)' 
+            }
+          },
+          required: ['producto']
+        }
+      }
+    });
+    
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: 'consultar_pedido',
+        description: 'Consulta el estado actual del pedido del cliente. Usa esta función cuando el cliente pregunta por su pedido, cuánto debe, qué productos tiene, etc.',
+        parameters: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }
+    });
+    
+    openaiTools.push({
+      type: 'function',
+      function: {
+        name: 'confirmar_entrega',
+        description: 'Marca el pedido como entregado. Usa esta función cuando el cliente confirma que recibió su pedido.',
+        parameters: {
+          type: 'object',
+          properties: {
+            notas: { 
+              type: 'string', 
+              description: 'Notas sobre la entrega (opcional)' 
+            }
+          },
+          required: []
+        }
+      }
+    });
+    
+    console.log(`[AI Worker V1] Order tools added for SALES mode: confirmar_pedido, agregar_producto_orden, consultar_pedido, confirmar_entrega`);
   }
   
   // Add custom tools from business configuration
@@ -1358,6 +1419,68 @@ Informa al cliente el total y pídele que envíe su comprobante de pago.`;
             content: `Error al crear pedido: ${err.message}`
           });
         }
+      } else if (toolName === 'agregar_producto_orden') {
+        const args = JSON.parse(fn.arguments);
+        const ctx: OrderToolContext = {
+          businessId: business.id,
+          instanceId: instanceId || null,
+          contactPhone,
+          contactName: contactName || 'Cliente',
+          currencySymbol: business.currencySymbol || 'S/.'
+        };
+        
+        const result = await handleAgregarProducto(args, ctx);
+        
+        if (result.toolExecuted) {
+          toolsExecuted.push(result.toolExecuted);
+        }
+        
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: result.content
+        });
+      } else if (toolName === 'consultar_pedido') {
+        const ctx: OrderToolContext = {
+          businessId: business.id,
+          instanceId: instanceId || null,
+          contactPhone,
+          contactName: contactName || 'Cliente',
+          currencySymbol: business.currencySymbol || 'S/.'
+        };
+        
+        const result = await handleConsultarPedido(ctx);
+        
+        if (result.toolExecuted) {
+          toolsExecuted.push(result.toolExecuted);
+        }
+        
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: result.content
+        });
+      } else if (toolName === 'confirmar_entrega') {
+        const args = JSON.parse(fn.arguments);
+        const ctx: OrderToolContext = {
+          businessId: business.id,
+          instanceId: instanceId || null,
+          contactPhone,
+          contactName: contactName || 'Cliente',
+          currencySymbol: business.currencySymbol || 'S/.'
+        };
+        
+        const result = await handleConfirmarEntrega(args, ctx);
+        
+        if (result.toolExecuted) {
+          toolsExecuted.push(result.toolExecuted);
+        }
+        
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: result.content
+        });
       } else if (toolName.startsWith('custom_')) {
         // Handle custom tools
         const actualToolName = toolName.replace('custom_', '');
