@@ -2368,23 +2368,49 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
 function buildCriticalContext(params: ContextBuilderParams): string {
   let context = '';
   
-  // Orden activa
+  // Orden activa con tracking de pagos
   if (params.existingOrder) {
     const currencySymbol = params.business.currencySymbol || 'S/.';
     const orderItems = params.existingOrder.items || [];
-    const itemsList = orderItems.map((item: any) => `- ${item.productTitle} (x${item.quantity})`).join('\n');
+    const itemsList = orderItems.map((item: any) => `- ${item.productTitle} (x${item.quantity}) - ${currencySymbol}${(item.unitPrice * item.quantity).toFixed(2)}`).join('\n');
+    
+    const paidAmount = params.existingOrder.paidAmount || 0;
+    const totalAmount = params.existingOrder.totalAmount || 0;
+    const pendingAmount = Math.max(0, totalAmount - paidAmount);
+    const paymentProgress = paidAmount > 0 ? `(${((paidAmount / totalAmount) * 100).toFixed(0)}% pagado)` : '';
+    
+    let statusText = 'Pendiente de pago';
+    if (params.existingOrder.status === 'AWAITING_VOUCHER') {
+      if (paidAmount > 0 && paidAmount < totalAmount) {
+        statusText = 'Pago parcial recibido - esperando completar pago';
+      } else {
+        statusText = 'Esperando comprobante de pago';
+      }
+    } else if (params.existingOrder.status === 'PAID') {
+      statusText = 'PAGADO COMPLETAMENTE';
+    }
     
     context += `\n\n## 🛒 ORDEN ACTIVA EN ESTA CONVERSACIÓN:
-- ID de pedido: ${params.existingOrder.id}
-- Estado: ${params.existingOrder.status === 'AWAITING_VOUCHER' ? 'Esperando comprobante de pago' : 'Pendiente de pago'}
-- Total actual: ${currencySymbol}${params.existingOrder.totalAmount}
+- ID de pedido: ${params.existingOrder.id.slice(-8).toUpperCase()}
+- Estado: ${statusText} ${paymentProgress}
 - Productos en la orden:
 ${itemsList}
 
-IMPORTANTE: Esta orden está ACTIVA. Puedes:
+### 💰 ESTADO DE PAGO:
+- Total del pedido: ${currencySymbol}${totalAmount.toFixed(2)}
+- Monto pagado: ${currencySymbol}${paidAmount.toFixed(2)}
+- Monto pendiente: ${currencySymbol}${pendingAmount.toFixed(2)}`;
+
+    if (paidAmount > 0 && pendingAmount > 0) {
+      context += `\n\n⚠️ El cliente ha realizado un pago parcial. Falta ${currencySymbol}${pendingAmount.toFixed(2)} para completar el pedido.
+Cuando el cliente envíe otro voucher, se SUMARÁ al monto pagado.`;
+    }
+
+    context += `\n\nIMPORTANTE: Esta orden está ACTIVA. Puedes:
 - Agregar más productos usando agregar_producto_orden
-- Completar datos faltantes (dirección, etc.)
-- La orden se mantendrá activa hasta que esté completa con todos los datos y pagos.`;
+- Completar datos faltantes (dirección, nombre)
+- Recibir múltiples pagos parciales hasta completar el total
+- La orden se mantendrá activa hasta que el monto pagado = total.`;
   }
   
   // Funnel stage
@@ -2666,22 +2692,31 @@ Los precios están en ${business.currencyCode || 'PEN'} (${currencySymbol}).
 - Si la compra supera el monto de "freeAbove", el envío es GRATIS.`;
     }
     
-    // Flujo de venta
+    // Flujo de venta con orden temprana
     const canUsePaymentLink = business.user?.paymentLinkEnabled ?? false;
     if (!canUsePaymentLink) {
-      context += `\n\n## ⚠️ FLUJO DE VENTA CON VOUCHER - OBLIGATORIO:
+      context += `\n\n## ⚠️ FLUJO DE VENTA CON VOUCHER - ORDEN TEMPRANA:
 1. **PASO 1 - PRODUCTO**: Identifica qué producto(s) quiere el cliente y la cantidad.
-2. **PASO 2 - ZONA DE ENTREGA**: Pregunta el distrito/zona de entrega del cliente para calcular el costo de envío.
-3. **PASO 3 - RESUMEN Y TOTAL**: Muestra el resumen del pedido con: productos, cantidades, subtotal, costo de envío y TOTAL FINAL.
-4. **PASO 4 - DATOS DE ENVÍO**: Pide nombre completo y dirección exacta de entrega.
-5. **PASO 5 - CREAR PEDIDO**: Usa registrar_pedido para crear el pedido con todos los datos.
-6. **PASO 6 - SOLICITAR VOUCHER**: Pide al cliente que envíe foto del comprobante de pago (voucher/transferencia).
-7. **PASO 7 - CONFIRMAR**: Cuando el cliente envíe el voucher, se validará automáticamente.
+2. **PASO 2 - ZONA DE ENTREGA**: Pregunta el distrito/zona de entrega para calcular el costo de envío.
+3. **PASO 3 - CREAR ORDEN Y CONFIRMAR**: 
+   - Muestra resumen: productos, cantidades, subtotal, envío y TOTAL FINAL.
+   - Pregunta el método de pago (transferencia, Yape, Plin, etc.)
+   - USA registrar_pedido INMEDIATAMENTE después de que el cliente confirme el método de pago.
+   - La orden se crea ACTIVA en este paso (no esperar más datos).
+4. **PASO 4 - DATOS DE ENVÍO**: Con la orden activa, pide nombre y dirección exacta de entrega (estos datos se pueden agregar después).
+5. **PASO 5 - SOLICITAR VOUCHER**: Pide al cliente que envíe foto del comprobante de pago.
+6. **PASO 6 - PAGOS PARCIALES**: 
+   - Si el cliente envía un pago parcial, se suma al monto pagado de la orden.
+   - La orden muestra: Pagado vs Pendiente.
+   - El cliente puede enviar múltiples vouchers hasta completar el total.
+7. **PASO 7 - CONFIRMAR**: Cuando el monto pagado = total, el pedido se marca como PAGADO automáticamente.
 
-## Reglas del flujo:
-- NO saltes pasos. Sigue el orden establecido.
-- NO crees el pedido sin tener: producto, cantidad, zona de entrega, nombre y dirección.
-- SIEMPRE muestra el total ANTES de crear el pedido para que el cliente confirme.`;
+## Reglas del flujo (ORDEN TEMPRANA):
+- CREA la orden después de: producto + zona + confirmación de método de pago.
+- NO esperes tener dirección completa para crear la orden - se puede agregar después.
+- La orden permanece ACTIVA en toda la conversación para agregar productos o pagos.
+- Cada voucher enviado SUMA al monto pagado (no reemplaza).
+- SIEMPRE informa al cliente cuánto ha pagado y cuánto falta.`;
     }
     
     // Reglas de pedidos
@@ -2852,12 +2887,12 @@ async function buildLayeredContext(params: ContextBuilderParams, tools: any[]): 
     });
   }
   
-  // Order tools
+  // Order tools - with early order creation (address optional)
   if (isSalesMode) {
     const orderToolName = canUsePaymentLink ? 'crear_enlace_pago' : 'registrar_pedido';
     const orderToolDescription = canUsePaymentLink 
       ? 'Genera un enlace de pago para que el cliente complete su compra. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío.'
-      : 'Registra un pedido para el cliente que pagará por transferencia/voucher. Usa esta función cuando el cliente confirme que quiere comprar un producto y tengas todos sus datos de envío. El pedido quedará pendiente hasta que el cliente envíe el comprobante de pago.';
+      : 'Registra un pedido temprano para el cliente que pagará por transferencia/voucher. IMPORTANTE: Usa esta función INMEDIATAMENTE después de que el cliente confirme producto, zona de entrega y método de pago. La dirección de envío se puede agregar después - NO es obligatoria para crear el pedido. El pedido quedará activo para recibir pagos parciales.';
     
     openaiTools.push({
       type: 'function' as const,
@@ -2877,19 +2912,19 @@ async function buildLayeredContext(params: ContextBuilderParams, tools: any[]): 
             },
             nombre_cliente: {
               type: 'string',
-              description: 'Nombre completo del cliente'
+              description: 'Nombre completo del cliente (opcional, se puede agregar después)'
             },
             direccion_envio: {
               type: 'string',
-              description: 'Dirección completa de envío'
+              description: 'Dirección completa de envío (opcional, se puede agregar después de crear el pedido)'
             },
             ciudad: {
               type: 'string',
-              description: 'Ciudad de envío'
+              description: 'Ciudad de envío (opcional)'
             },
             pais: {
               type: 'string',
-              description: 'País de envío'
+              description: 'País de envío (opcional)'
             },
             zona_entrega: {
               type: 'string',
@@ -2904,7 +2939,7 @@ async function buildLayeredContext(params: ContextBuilderParams, tools: any[]): 
               description: 'Coordenadas GPS de la ubicación del cliente en formato "latitud,longitud" (ejemplo: -12.046374,-77.042793). Se obtiene cuando el cliente comparte su ubicación actual por WhatsApp.'
             }
           },
-          required: ['producto_id', 'nombre_cliente', 'direccion_envio', 'zona_entrega']
+          required: ['producto_id', 'zona_entrega']
         }
       }
     });

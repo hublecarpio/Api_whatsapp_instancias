@@ -4,9 +4,25 @@ import { geminiService } from './gemini.js';
 import { assignNextRoundRobinAdvisor } from '../routes/advisor.js';
 import { cancelPendingFollowUps } from './followUpService.js';
 import { logTokenUsage } from './tokenLogger.js';
+import { registerVoucherPayment } from './orderService.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
+
+// Environment detection for debugging
+const IS_REPLIT = process.env.REPL_ID ? true : false;
+const ENV_NAME = IS_REPLIT ? 'REPLIT' : 'PRODUCTION';
+
+function logIngest(tag: string, message: string, data?: any) {
+  const timestamp = new Date().toISOString();
+  const envTag = `[${ENV_NAME}]`;
+  const fullTag = `[INGEST-${tag}]`;
+  if (data) {
+    console.log(`${timestamp} ${envTag} ${fullTag} ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`${timestamp} ${envTag} ${fullTag} ${message}`);
+  }
+}
 
 export interface IncomingMessage {
   businessId: string;
@@ -123,12 +139,14 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
   if (type === 'image' && mediaUrl && geminiService.isConfigured()) {
     const normalizedOrderPhone = from.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
     
+    // Find orders that can still receive payments (not fully paid yet)
+    // This allows multiple partial payments even if a voucher was already received
     const pendingVoucherOrder = await prisma.order.findFirst({
       where: {
         businessId,
         contactPhone: normalizedOrderPhone,
-        status: 'AWAITING_VOUCHER',
-        voucherImageUrl: null
+        status: { in: ['AWAITING_VOUCHER', 'PENDING_PAYMENT'] }
+        // Removed voucherImageUrl: null to allow multiple voucher uploads
       },
       orderBy: { createdAt: 'desc' },
       include: { items: true }
@@ -147,32 +165,76 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
         );
         
         if (voucherValidation.isPaymentProof && voucherValidation.isValid) {
+          const voucherAmount = voucherValidation.amount || 0;
+          
+          // Guard: Do not register payments with zero or very low amounts
+          if (voucherAmount <= 0) {
+            logIngest('VOUCHER-SKIP', `Voucher detected but amount is zero/invalid - skipping payment registration`, {
+              orderId: pendingVoucherOrder.id,
+              detectedAmount: voucherAmount,
+              brand: voucherValidation.brand,
+              reason: 'Zero or negative amount detected'
+            });
+            // Continue with regular message processing, don't register as payment
+          } else {
+          
+          logIngest('VOUCHER', `Valid voucher detected`, {
+            orderId: pendingVoucherOrder.id,
+            brand: voucherValidation.brand,
+            detectedAmount: voucherAmount,
+            orderTotal: pendingVoucherOrder.totalAmount,
+            currentPaidAmount: pendingVoucherOrder.paidAmount || 0,
+            operationCode: voucherValidation.operationCode
+          });
+          
+          // Register the voucher payment with partial payment tracking
+          const paymentResult = await registerVoucherPayment(
+            pendingVoucherOrder.id,
+            voucherAmount,
+            mediaUrl,
+            voucherValidation.brand || undefined,
+            voucherValidation.operationCode || undefined
+          );
+          
           voucherValidationData = {
             orderId: pendingVoucherOrder.id,
             brand: voucherValidation.brand,
-            detectedAmount: voucherValidation.amount,
+            detectedAmount: voucherAmount,
             currency: voucherValidation.currency,
             operationCode: voucherValidation.operationCode,
             confidence: voucherValidation.confidence,
             reason: voucherValidation.reason,
             validatedAt: new Date().toISOString(),
-            provider
+            provider,
+            paymentResult: {
+              previousPaidAmount: paymentResult.previousPaidAmount,
+              newPaidAmount: paymentResult.newPaidAmount,
+              pendingAmount: paymentResult.pendingAmount,
+              isFullyPaid: paymentResult.isFullyPaid
+            }
           };
           
-          await prisma.order.update({
-            where: { id: pendingVoucherOrder.id },
-            data: {
-              voucherImageUrl: mediaUrl,
-              voucherReceivedAt: new Date(),
-              notes: JSON.stringify({ voucherValidation: voucherValidationData })
-            }
+          logIngest('VOUCHER-PAYMENT', `Payment registered`, {
+            orderId: pendingVoucherOrder.id,
+            previousPaid: paymentResult.previousPaidAmount,
+            voucherAmount,
+            newPaid: paymentResult.newPaidAmount,
+            total: paymentResult.totalAmount,
+            pending: paymentResult.pendingAmount,
+            isFullyPaid: paymentResult.isFullyPaid,
+            newStatus: paymentResult.newStatus
           });
-          console.log(`[VOUCHER] Valid voucher attached to order ${pendingVoucherOrder.id}: brand=${voucherValidation.brand}, amount=${voucherValidation.amount}, code=${voucherValidation.operationCode}`);
           
-          voucherContext = `\n\n[COMPROBANTE DE PAGO RECIBIDO Y VALIDADO] Se ha recibido un comprobante de pago válido para el pedido #${pendingVoucherOrder.id.slice(-6).toUpperCase()}. Banco/App: ${voucherValidation.brand || 'detectado'}, Monto: ${voucherValidation.currency || ''}${voucherValidation.amount || 'detectado'}. El equipo verificará el pago y procesará el pedido. Agradece al cliente por enviar su comprobante y confirma que su pedido será procesado.`;
+          // Build context message based on payment status
+          const currencySymbol = pendingVoucherOrder.currencySymbol || 'S/.';
+          if (paymentResult.isFullyPaid) {
+            voucherContext = `\n\n[COMPROBANTE DE PAGO RECIBIDO - PAGO COMPLETO] Se ha recibido un comprobante de pago para el pedido #${pendingVoucherOrder.id.slice(-6).toUpperCase()}. Banco/App: ${voucherValidation.brand || 'detectado'}, Monto: ${currencySymbol}${voucherAmount.toFixed(2)}. El pago está COMPLETO. Total pagado: ${currencySymbol}${paymentResult.newPaidAmount.toFixed(2)}. El pedido ha sido confirmado. Agradece al cliente y confirma que su pedido será procesado.`;
+          } else {
+            voucherContext = `\n\n[COMPROBANTE DE PAGO RECIBIDO - PAGO PARCIAL] Se ha recibido un comprobante de pago para el pedido #${pendingVoucherOrder.id.slice(-6).toUpperCase()}. Banco/App: ${voucherValidation.brand || 'detectado'}, Monto: ${currencySymbol}${voucherAmount.toFixed(2)}. Total pagado hasta ahora: ${currencySymbol}${paymentResult.newPaidAmount.toFixed(2)} de ${currencySymbol}${paymentResult.totalAmount.toFixed(2)}. Monto pendiente: ${currencySymbol}${paymentResult.pendingAmount.toFixed(2)}. Informa al cliente el monto que falta y pídele que envíe otro comprobante cuando complete el pago.`;
+          }
           
           mediaAnalysis = voucherContext;
-          mediaAnalysisRaw = `[VOUCHER VALIDADO] ${voucherValidation.brand || 'Comprobante'} - ${voucherValidation.currency || ''}${voucherValidation.amount || '?'} - Código: ${voucherValidation.operationCode || 'N/A'}`;
+          mediaAnalysisRaw = `[VOUCHER ${paymentResult.isFullyPaid ? 'COMPLETO' : 'PARCIAL'}] ${voucherValidation.brand || 'Comprobante'} - ${currencySymbol}${voucherAmount.toFixed(2)} - Pagado: ${currencySymbol}${paymentResult.newPaidAmount.toFixed(2)}/${currencySymbol}${paymentResult.totalAmount.toFixed(2)} - Código: ${voucherValidation.operationCode || 'N/A'}`;
           
           await logTokenUsage({
             userId: business.userId,
@@ -183,8 +245,14 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
             completionTokens: 128,
             provider: 'gemini'
           });
+          } // Close the voucherAmount > 0 else block
         } else {
-          console.log(`[VOUCHER] Image not validated as voucher: isPaymentProof=${voucherValidation.isPaymentProof}, isValid=${voucherValidation.isValid}, reason=${voucherValidation.reason}`);
+          logIngest('VOUCHER-INVALID', `Image not validated as voucher`, {
+            orderId: pendingVoucherOrder.id,
+            isPaymentProof: voucherValidation.isPaymentProof,
+            isValid: voucherValidation.isValid,
+            reason: voucherValidation.reason
+          });
         }
       } catch (voucherError: any) {
         console.error(`[VOUCHER] Error validating voucher:`, voucherError.message);

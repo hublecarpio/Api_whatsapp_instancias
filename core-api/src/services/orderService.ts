@@ -6,6 +6,21 @@ import { getExtractedDataForContact } from './dataExtractionService.js';
 const IDEMPOTENCY_WINDOW_MINUTES = 30;
 const IDEMPOTENCY_PREFIX = 'ORD:';
 
+// Environment detection for debugging
+const IS_REPLIT = process.env.REPL_ID ? true : false;
+const ENV_NAME = IS_REPLIT ? 'REPLIT' : 'PRODUCTION';
+
+function logOrder(tag: string, message: string, data?: any) {
+  const timestamp = new Date().toISOString();
+  const envTag = `[${ENV_NAME}]`;
+  const fullTag = `[ORDER-${tag}]`;
+  if (data) {
+    console.log(`${timestamp} ${envTag} ${fullTag} ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`${timestamp} ${envTag} ${fullTag} ${message}`);
+  }
+}
+
 export interface OrderItem {
   productId: string | null;
   productTitle: string;
@@ -206,7 +221,7 @@ export async function checkExistingPendingOrder(
   businessId: string,
   contactPhone: string,
   instanceId?: string | null
-): Promise<{ id: string; status: string; totalAmount: number; deliveryZoneId: string | null; shippingCost: number | null; discountAmount: number | null } | null> {
+): Promise<{ id: string; status: string; totalAmount: number; paidAmount: number; deliveryZoneId: string | null; shippingCost: number | null; discountAmount: number | null } | null> {
   const normalizedPhone = contactPhone.replace(/\D/g, '');
   
   const existingOrder = await prisma.order.findFirst({
@@ -217,7 +232,15 @@ export async function checkExistingPendingOrder(
       status: { in: ['PENDING_PAYMENT', 'AWAITING_VOUCHER'] }
     },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, status: true, totalAmount: true, deliveryZoneId: true, shippingCost: true, discountAmount: true }
+    select: { id: true, status: true, totalAmount: true, paidAmount: true, deliveryZoneId: true, shippingCost: true, discountAmount: true }
+  });
+  
+  logOrder('CHECK', `Checking for existing pending order`, {
+    phone: normalizedPhone,
+    found: !!existingOrder,
+    orderId: existingOrder?.id,
+    status: existingOrder?.status,
+    paidAmount: existingOrder?.paidAmount
   });
   
   return existingOrder;
@@ -243,7 +266,17 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
 
   const normalizedPhone = contactPhone.replace(/\D/g, '');
   
-  console.log(`[ORDER-SERVICE] Creating order for ${normalizedPhone}, source: ${source}, items: ${items.length}`);
+  logOrder('CREATE', `Starting order creation`, {
+    phone: normalizedPhone,
+    source,
+    itemCount: items.length,
+    items: items.map(i => ({ title: i.productTitle, qty: i.quantity, price: i.unitPrice })),
+    instanceId,
+    deliveryZoneId,
+    shippingCost,
+    hasAddress: !!shippingAddress,
+    hasName: !!contactName
+  });
 
   try {
     const business = await prisma.business.findUnique({
@@ -275,7 +308,11 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
       });
 
       if (recentOrder) {
-        console.log(`[ORDER-SERVICE] Idempotency hit: order ${recentOrder.id} already exists`);
+        logOrder('IDEMPOTENCY', `Order already exists (idempotency hit)`, {
+          orderId: recentOrder.id,
+          status: recentOrder.status,
+          totalAmount: recentOrder.totalAmount
+        });
         return { 
           success: true, 
           orderId: recentOrder.id, 
@@ -291,7 +328,11 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
     const existingPending = await checkExistingPendingOrder(businessId, normalizedPhone, instanceId);
     
     if (existingPending) {
-      console.log(`[ORDER-SERVICE] Updating existing pending order ${existingPending.id}`);
+      logOrder('UPDATE', `Updating existing pending order`, {
+        orderId: existingPending.id,
+        currentStatus: existingPending.status,
+        currentTotal: existingPending.totalAmount
+      });
       
       const subtotalAmount = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
       const totalAmount = subtotalAmount + shippingCost;
@@ -430,7 +471,17 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
         });
       });
 
-      console.log(`[ORDER-SERVICE] Order created: ${order.id}, total: ${totalAmount}, status: AWAITING_VOUCHER`);
+      logOrder('SUCCESS', `Order created successfully`, {
+        orderId: order.id,
+        status: 'AWAITING_VOUCHER',
+        subtotalAmount,
+        shippingCost,
+        discountAmount,
+        totalAmount,
+        itemCount: items.length,
+        hasPromotion: !!promotionId,
+        promotionName: promotionName || null
+      });
 
       return { 
         success: true, 
@@ -464,7 +515,12 @@ export async function createOrder(params: CreateOrderParams): Promise<CreateOrde
     }
 
   } catch (error: any) {
-    console.error(`[ORDER-SERVICE] Error creating order:`, error);
+    logOrder('ERROR', `Failed to create order`, {
+      error: error.message,
+      stack: error.stack?.split('\n').slice(0, 5).join('\n'),
+      phone: normalizedPhone,
+      source
+    });
     return { success: false, isNew: false, reason: error.message || 'Unknown error' };
   }
 }
@@ -698,6 +754,25 @@ export async function createOrderFromAgent(params: CreateOrderFromAgentParams): 
     let shippingCost = costo_envio ?? null;
     let deliveryZoneId: string | null = null;
 
+    // Check if business has delivery zones configured
+    const businessHasZones = await prisma.deliveryZone.count({
+      where: { businessId, isActive: true }
+    }) > 0;
+
+    // If business has delivery zones and neither zona_entrega nor shippingAddress provided, require zone
+    if (businessHasZones && !zona_entrega && !shippingAddress) {
+      logOrder('CREATE-ERROR', `Business has delivery zones but zona_entrega not provided`, {
+        businessId,
+        contactPhone: normalizedPhone,
+        producto: product.title
+      });
+      return {
+        exito: false,
+        mensaje: 'Se requiere especificar la zona de entrega para calcular el costo de envío',
+        error: 'Delivery zone required but not provided'
+      };
+    }
+
     if (zona_entrega || shippingAddress) {
       // Try to find delivery zone by name, ID, or by address/district
       const zoneSearchTerm = zona_entrega || shippingAddress;
@@ -722,12 +797,32 @@ export async function createOrderFromAgent(params: CreateOrderFromAgentParams): 
           // Check if order qualifies for free shipping
           if (zone.freeAbove && subtotal >= zone.freeAbove) {
             shippingCost = 0;
-            console.log(`[ORDER-FROM-AGENT] Free shipping applied (subtotal ${subtotal} >= freeAbove ${zone.freeAbove})`);
+            logOrder('CREATE', `Free shipping applied (subtotal ${subtotal} >= freeAbove ${zone.freeAbove})`);
           } else {
             shippingCost = zone.cost || 0;
           }
         }
-        console.log(`[ORDER-FROM-AGENT] Found delivery zone: ${zone.name}, shippingCost: ${shippingCost}`);
+        logOrder('CREATE', `Found delivery zone: ${zone.name}, shippingCost: ${shippingCost}`);
+      } else if (businessHasZones) {
+        // Business has zones but the provided zone/address was not matched - return error
+        logOrder('CREATE-ERROR', `Delivery zone not found: "${zoneSearchTerm}"`, {
+          businessId,
+          searchTerm: zoneSearchTerm,
+          providedZona: zona_entrega,
+          providedAddress: shippingAddress
+        });
+        return {
+          exito: false,
+          mensaje: zona_entrega 
+            ? `Zona de entrega "${zona_entrega}" no encontrada. Por favor verifica el nombre de la zona.`
+            : `No se encontró una zona de entrega para la dirección proporcionada. Por favor indica la zona.`,
+          error: `Delivery zone not found for: "${zoneSearchTerm}"`
+        };
+      } else {
+        logOrder('CREATE-INFO', `Delivery zone not found but business has no zones configured - proceeding without zone`, {
+          businessId,
+          searchTerm: zoneSearchTerm
+        });
       }
     }
 
@@ -795,15 +890,231 @@ export async function createOrderFromAgent(params: CreateOrderFromAgentParams): 
       });
     }
 
-    console.log(`[ORDER-FROM-AGENT] Order ${orderResult.isNew ? 'created' : 'updated'}: ${orderResult.orderId}, total: ${orderResult.totalAmount}`);
+    logOrder('AGENT-SUCCESS', `Order ${orderResult.isNew ? 'created' : 'updated'} via agent`, {
+      orderId: orderResult.orderId,
+      total: orderResult.totalAmount,
+      product: product.title,
+      quantity: cantidad
+    });
     
     return response;
   } catch (error: any) {
-    console.error('[ORDER-FROM-AGENT] Error creating order:', error);
+    logOrder('AGENT-ERROR', `Failed to create order via agent`, {
+      error: error.message,
+      product: producto_id,
+      phone: contactPhone
+    });
     return {
       exito: false,
       mensaje: 'No se pudo crear el pedido',
       error: error.message || 'Unknown error'
     };
   }
+}
+
+// ============================================================================
+// PAYMENT TRACKING FUNCTIONS
+// ============================================================================
+
+export interface VoucherPaymentResult {
+  success: boolean;
+  orderId: string;
+  previousPaidAmount: number;
+  newPaidAmount: number;
+  totalAmount: number;
+  pendingAmount: number;
+  isFullyPaid: boolean;
+  statusChanged: boolean;
+  newStatus?: string;
+  message: string;
+}
+
+export async function registerVoucherPayment(
+  orderId: string,
+  voucherAmount: number,
+  voucherImageUrl: string,
+  voucherBrand?: string,
+  operationCode?: string
+): Promise<VoucherPaymentResult> {
+  logOrder('VOUCHER', `Registering voucher payment`, {
+    orderId,
+    voucherAmount,
+    voucherBrand,
+    operationCode,
+    hasImage: !!voucherImageUrl
+  });
+
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        totalAmount: true,
+        paidAmount: true,
+        status: true,
+        currencySymbol: true,
+        notes: true
+      }
+    });
+
+    if (!order) {
+      logOrder('VOUCHER-ERROR', `Order not found`, { orderId });
+      return {
+        success: false,
+        orderId,
+        previousPaidAmount: 0,
+        newPaidAmount: 0,
+        totalAmount: 0,
+        pendingAmount: 0,
+        isFullyPaid: false,
+        statusChanged: false,
+        message: 'Orden no encontrada'
+      };
+    }
+
+    const previousPaidAmount = order.paidAmount || 0;
+    const newPaidAmount = previousPaidAmount + voucherAmount;
+    const pendingAmount = Math.max(0, order.totalAmount - newPaidAmount);
+    const isFullyPaid = newPaidAmount >= order.totalAmount;
+
+    // Determine new status based on payment
+    let newStatus = order.status;
+    let statusChanged = false;
+
+    if (isFullyPaid && order.status !== 'PAID') {
+      newStatus = 'PAID';
+      statusChanged = true;
+    } else if (voucherAmount > 0 && order.status === 'AWAITING_VOUCHER') {
+      // Partial payment received but not fully paid - keep as AWAITING_VOUCHER but with paidAmount updated
+      newStatus = 'AWAITING_VOUCHER';
+    }
+
+    // Build payment history in notes
+    let notesData: any = {};
+    try {
+      notesData = order.notes ? JSON.parse(order.notes) : {};
+    } catch (e) {
+      notesData = { previousNotes: order.notes };
+    }
+
+    if (!notesData.paymentHistory) {
+      notesData.paymentHistory = [];
+    }
+
+    // Include all voucher evidence per payment for full auditability
+    notesData.paymentHistory.push({
+      timestamp: new Date().toISOString(),
+      amount: voucherAmount,
+      brand: voucherBrand || 'unknown',
+      operationCode: operationCode || null,
+      imageUrl: voucherImageUrl, // Preserve each voucher image URL
+      previousTotal: previousPaidAmount,
+      newTotal: newPaidAmount
+    });
+
+    // Update order with new payment info
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paidAmount: newPaidAmount,
+        pendingAmount: pendingAmount,
+        lastVoucherAmount: voucherAmount,
+        voucherImageUrl,
+        voucherReceivedAt: new Date(),
+        status: newStatus,
+        paidAt: isFullyPaid ? new Date() : undefined,
+        notes: JSON.stringify(notesData)
+      }
+    });
+
+    logOrder('VOUCHER-SUCCESS', `Voucher payment registered`, {
+      orderId,
+      previousPaidAmount,
+      newPaidAmount,
+      totalAmount: order.totalAmount,
+      pendingAmount,
+      isFullyPaid,
+      statusChanged,
+      newStatus
+    });
+
+    const currencySymbol = order.currencySymbol || 'S/.';
+    let message = isFullyPaid
+      ? `Pago completo recibido. Tu pedido ha sido confirmado.`
+      : `Pago parcial de ${currencySymbol}${voucherAmount.toFixed(2)} recibido. Monto pagado: ${currencySymbol}${newPaidAmount.toFixed(2)} de ${currencySymbol}${order.totalAmount.toFixed(2)}. Pendiente: ${currencySymbol}${pendingAmount.toFixed(2)}`;
+
+    return {
+      success: true,
+      orderId,
+      previousPaidAmount,
+      newPaidAmount,
+      totalAmount: order.totalAmount,
+      pendingAmount,
+      isFullyPaid,
+      statusChanged,
+      newStatus,
+      message
+    };
+  } catch (error: any) {
+    logOrder('VOUCHER-ERROR', `Failed to register voucher payment`, {
+      orderId,
+      error: error.message
+    });
+    return {
+      success: false,
+      orderId,
+      previousPaidAmount: 0,
+      newPaidAmount: 0,
+      totalAmount: 0,
+      pendingAmount: 0,
+      isFullyPaid: false,
+      statusChanged: false,
+      message: error.message || 'Error al registrar el pago'
+    };
+  }
+}
+
+export async function getOrderPaymentStatus(
+  businessId: string,
+  contactPhone: string,
+  instanceId?: string
+): Promise<{
+  hasActiveOrder: boolean;
+  orderId?: string;
+  totalAmount?: number;
+  paidAmount?: number;
+  pendingAmount?: number;
+  status?: string;
+  items?: { title: string; quantity: number; price: number }[];
+} | null> {
+  const normalizedPhone = contactPhone.replace(/\D/g, '');
+
+  const order = await prisma.order.findFirst({
+    where: {
+      businessId,
+      contactPhone: normalizedPhone,
+      ...(instanceId ? { instanceId } : {}),
+      status: { in: ['PENDING_PAYMENT', 'AWAITING_VOUCHER'] }
+    },
+    orderBy: { createdAt: 'desc' },
+    include: { items: true }
+  });
+
+  if (!order) {
+    return { hasActiveOrder: false };
+  }
+
+  return {
+    hasActiveOrder: true,
+    orderId: order.id,
+    totalAmount: order.totalAmount,
+    paidAmount: order.paidAmount || 0,
+    pendingAmount: order.totalAmount - (order.paidAmount || 0),
+    status: order.status,
+    items: order.items.map(i => ({
+      title: i.productTitle,
+      quantity: i.quantity,
+      price: i.unitPrice
+    }))
+  };
 }

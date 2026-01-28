@@ -1028,6 +1028,8 @@ model Order {
   totalAmount           Float
   subtotalAmount        Float?
   shippingCost          Float?      @default(0)
+  paidAmount            Float       @default(0)
+  pendingAmount         Float?
   currencyCode          String      @default("PEN")
   currencySymbol        String      @default("S/.")
   status                OrderStatus @default(PENDING_PAYMENT)
@@ -1036,6 +1038,7 @@ model Order {
   paidAt                DateTime?
   voucherImageUrl       String?
   voucherReceivedAt     DateTime?
+  lastVoucherAmount     Float?
   deliveryAgentName     String?
   deliveryAgentPhone    String?
   deliveryNotes         String?

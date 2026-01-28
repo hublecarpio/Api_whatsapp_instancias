@@ -18,6 +18,23 @@ import { getContactStageStatus, buildStageContextForPrompt, checkAndAdvanceStage
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 
+// Environment detection for debugging production vs Replit
+const IS_REPLIT = process.env.REPL_ID ? true : false;
+const ENV_NAME = IS_REPLIT ? 'REPLIT' : 'PRODUCTION';
+const HAS_REDIS = !!process.env.REDIS_URL;
+
+function logAI(tag: string, message: string, data?: any) {
+  const timestamp = new Date().toISOString();
+  const envTag = `[${ENV_NAME}]`;
+  const redisTag = HAS_REDIS ? '[REDIS]' : '[NO-REDIS]';
+  const fullTag = `[AI-${tag}]`;
+  if (data) {
+    console.log(`${timestamp} ${envTag} ${redisTag} ${fullTag} ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`${timestamp} ${envTag} ${redisTag} ${fullTag} ${message}`);
+  }
+}
+
 interface ToolLogData {
   businessId: string;
   toolId?: string;
@@ -1647,8 +1664,17 @@ async function sendWhatsAppResponse(
 
 export function startAIResponseWorker(): Worker<AIResponseJobData> {
   if (aiResponseWorker) {
+    logAI('WORKER', 'AI Worker already running, returning existing instance');
     return aiResponseWorker;
   }
+
+  logAI('WORKER-START', `Starting AI Response Worker`, {
+    environment: ENV_NAME,
+    hasRedis: HAS_REDIS,
+    redisUrl: process.env.REDIS_URL ? 'configured' : 'not configured',
+    concurrency: WORKER_CONCURRENCY,
+    lockDuration: LOCK_DURATION
+  });
 
   const connection = getQueueConnection();
   
@@ -1672,11 +1698,24 @@ export function startAIResponseWorker(): Worker<AIResponseJobData> {
   );
 
   aiResponseWorker.on('completed', (job, result) => {
-    console.log(`[AI Worker] Job ${job.id} completed, response length: ${result?.response?.length || 0}`);
+    logAI('JOB-COMPLETE', `Job completed`, {
+      jobId: job.id,
+      responseLength: result?.response?.length || 0,
+      businessId: job.data?.businessId,
+      contactPhone: job.data?.contactPhone,
+      tokensUsed: result?.tokensUsed
+    });
   });
 
   aiResponseWorker.on('failed', async (job, error) => {
-    console.error(`[AI Worker] Job ${job?.id} failed:`, error.message);
+    logAI('JOB-FAILED', `Job failed`, {
+      jobId: job?.id,
+      error: error.message,
+      businessId: job?.data?.businessId,
+      contactPhone: job?.data?.contactPhone,
+      bufferId: job?.data?.bufferId,
+      attemptsMade: job?.attemptsMade
+    });
     if (job?.data?.bufferId) {
       const maxAttempts = job?.opts?.attempts || 3;
       const attemptsMade = job?.attemptsMade || 0;
@@ -1723,7 +1762,11 @@ export function startAIResponseWorker(): Worker<AIResponseJobData> {
     console.log('[AI Worker] Worker closed');
   });
 
-  console.log(`[AI Worker] Started with concurrency: ${WORKER_CONCURRENCY}`);
+  logAI('WORKER-READY', `AI Worker started successfully`, {
+    environment: ENV_NAME,
+    concurrency: WORKER_CONCURRENCY,
+    queueName: QUEUE_NAMES.AI_RESPONSE
+  });
   return aiResponseWorker;
 }
 
