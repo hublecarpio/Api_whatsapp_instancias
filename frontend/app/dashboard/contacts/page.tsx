@@ -67,6 +67,79 @@ export default function ContactsPage() {
   const [newTag, setNewTag] = useState('');
   const [error, setError] = useState<string | null>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteWithOrders, setDeleteWithOrders] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [orderFilter, setOrderFilter] = useState<string>('');
+
+  const toggleSelectContact = (phone: string) => {
+    setSelectedContacts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(phone)) {
+        newSet.delete(phone);
+      } else {
+        newSet.add(phone);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedContacts.size === contacts.length) {
+      setSelectedContacts(new Set());
+    } else {
+      setSelectedContacts(new Set(contacts.map(c => c.phone)));
+    }
+  };
+
+  const deleteSelectedContacts = async () => {
+    if (!currentBusiness?.id || selectedContacts.size === 0) return;
+    
+    try {
+      setDeleting(true);
+      const phones = Array.from(selectedContacts);
+      
+      await axios.post(
+        `${API_URL}/contacts/bulk-delete`,
+        { businessId: currentBusiness.id, phones, deleteOrders: deleteWithOrders },
+        { headers: getAuthHeader() }
+      );
+      
+      setSelectedContacts(new Set());
+      setShowDeleteModal(false);
+      setDeleteWithOrders(false);
+      await loadContacts(page, searchQuery, orderFilter);
+    } catch (error: any) {
+      console.error('Error deleting contacts:', error);
+      showError(error.response?.data?.error || error.message || 'Error al eliminar contactos');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteSingleContact = async (phone: string) => {
+    if (!currentBusiness?.id) return;
+    
+    try {
+      setDeleting(true);
+      await axios.delete(
+        `${API_URL}/contacts/${encodeURIComponent(phone)}?businessId=${currentBusiness.id}${deleteWithOrders ? '&deleteOrders=true' : ''}`,
+        { headers: getAuthHeader() }
+      );
+      
+      setExpandedPhone(null);
+      setExpandedDetail(null);
+      setShowDeleteModal(false);
+      setDeleteWithOrders(false);
+      await loadContacts(page, searchQuery, orderFilter);
+    } catch (error: any) {
+      console.error('Error deleting contact:', error);
+      showError(error.response?.data?.error || error.message || 'Error al eliminar contacto');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const showError = (message: string) => {
     if (errorTimeoutRef.current) {
@@ -91,7 +164,7 @@ export default function ContactsPage() {
     return { Authorization: `Bearer ${token}` };
   };
 
-  const loadContacts = async (pageNum = 1, search = '') => {
+  const loadContacts = async (pageNum = 1, search = '', filter = '') => {
     if (!currentBusiness?.id) return;
     
     try {
@@ -102,9 +175,18 @@ export default function ContactsPage() {
       params.set('businessId', currentBusiness.id);
       if (search) params.set('search', search);
       
+      if (filter === 'has_order') {
+        params.set('hasOrder', 'has_order');
+      } else if (filter === 'no_order') {
+        params.set('hasOrder', 'no_order');
+      } else if (filter === 'pending' || filter === 'paid' || filter === 'delivered') {
+        params.set('orderStatus', filter);
+      }
+      
       const response = await axios.get(`${API_URL}/contacts?${params}`, { headers: getAuthHeader() });
       setContacts(response.data.contacts);
       setPagination(response.data.pagination);
+      setSelectedContacts(new Set());
     } catch (error: any) {
       console.error('Error loading contacts:', error);
       showError(error.response?.data?.error || error.message || 'Error al cargar contactos');
@@ -184,7 +266,7 @@ export default function ContactsPage() {
       );
 
       await loadContactDetail(expandedPhone);
-      await loadContacts(page, searchQuery);
+      await loadContacts(page, searchQuery, orderFilter);
       setIsEditing(false);
     } catch (error: any) {
       console.error('Error saving contact:', error);
@@ -286,7 +368,7 @@ export default function ContactsPage() {
       );
       
       setRefreshResult({ created: response.data.created, updated: response.data.updated });
-      await loadContacts(page, searchQuery);
+      await loadContacts(page, searchQuery, orderFilter);
       
       setTimeout(() => setRefreshResult(null), 5000);
     } catch (error: any) {
@@ -356,7 +438,7 @@ export default function ContactsPage() {
       
       setImportResult({ created: response.data.created, updated: response.data.updated, errors: response.data.errors });
       setShowImportModal(false);
-      await loadContacts(page, searchQuery);
+      await loadContacts(page, searchQuery, orderFilter);
       
       setTimeout(() => setImportResult(null), 8000);
     } catch (error: any) {
@@ -369,13 +451,13 @@ export default function ContactsPage() {
   };
 
   useEffect(() => {
-    loadContacts(page, searchQuery);
-  }, [currentBusiness?.id, page]);
+    loadContacts(page, searchQuery, orderFilter);
+  }, [currentBusiness?.id, page, orderFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setPage(1);
-      loadContacts(1, searchQuery);
+      loadContacts(1, searchQuery, orderFilter);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -486,7 +568,7 @@ export default function ContactsPage() {
         </div>
       )}
 
-      <div className="mb-6">
+      <div className="mb-6 flex flex-col sm:flex-row gap-4">
         <input
           type="text"
           placeholder="Buscar por nombre o telefono..."
@@ -494,7 +576,33 @@ export default function ContactsPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="input w-full sm:w-96"
         />
+        <select
+          value={orderFilter}
+          onChange={(e) => setOrderFilter(e.target.value)}
+          className="input w-full sm:w-48"
+        >
+          <option value="">Todos los contactos</option>
+          <option value="has_order">Con pedidos</option>
+          <option value="no_order">Sin pedidos</option>
+          <option value="pending">Pedido pendiente</option>
+          <option value="paid">Pedido pagado</option>
+          <option value="delivered">Pedido entregado</option>
+        </select>
       </div>
+
+      {selectedContacts.size > 0 && (
+        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center justify-between">
+          <span className="text-blue-300 text-sm">
+            {selectedContacts.size} contacto{selectedContacts.size > 1 ? 's' : ''} seleccionado{selectedContacts.size > 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+          >
+            Eliminar seleccionados
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="card">
@@ -514,14 +622,35 @@ export default function ContactsPage() {
         </div>
       ) : (
         <div className="space-y-2">
+          <div className="flex items-center gap-3 px-4 py-2 text-sm text-gray-400">
+            <input
+              type="checkbox"
+              checked={selectedContacts.size === contacts.length && contacts.length > 0}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 rounded border-gray-600 bg-dark-surface focus:ring-neon-blue focus:ring-offset-0"
+            />
+            <span>Seleccionar todos</span>
+          </div>
           {contacts.map((contact) => (
             <div key={contact.id} className="card overflow-hidden">
               <div
-                onClick={() => toggleExpand(contact.phone)}
                 className="flex items-center justify-between cursor-pointer hover:bg-dark-hover/50 -m-4 p-4 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-neon-blue/20 flex items-center justify-center text-lg flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedContacts.has(contact.phone)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggleSelectContact(contact.phone);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-4 h-4 rounded border-gray-600 bg-dark-surface focus:ring-neon-blue focus:ring-offset-0"
+                  />
+                  <div 
+                    onClick={() => toggleExpand(contact.phone)}
+                    className="w-10 h-10 rounded-full bg-neon-blue/20 flex items-center justify-center text-lg flex-shrink-0 cursor-pointer"
+                  >
                     {contact.name ? contact.name.charAt(0).toUpperCase() : '👤'}
                   </div>
                   <div className="min-w-0">
@@ -857,6 +986,60 @@ export default function ContactsPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1e1e1e] rounded-xl border border-gray-700 max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-white mb-4">Eliminar Contacto{selectedContacts.size > 1 ? 's' : ''}</h3>
+            <p className="text-gray-300 mb-4">
+              {selectedContacts.size > 0 
+                ? `¿Estás seguro de que deseas eliminar ${selectedContacts.size} contacto${selectedContacts.size > 1 ? 's' : ''}?`
+                : expandedPhone 
+                  ? `¿Estás seguro de que deseas eliminar este contacto?`
+                  : ''
+              }
+            </p>
+            <p className="text-gray-400 text-sm mb-4">
+              Se eliminarán: historial de mensajes, datos extraídos, estado del funnel, y etiquetas.
+            </p>
+            <div className="mb-4">
+              <label className="flex items-center gap-2 text-gray-300 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteWithOrders}
+                  onChange={(e) => setDeleteWithOrders(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-600 bg-dark-surface"
+                />
+                También eliminar pedidos asociados
+              </label>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteWithOrders(false);
+                }}
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedContacts.size > 0) {
+                    deleteSelectedContacts();
+                  } else if (expandedPhone) {
+                    deleteSingleContact(expandedPhone);
+                  }
+                }}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -472,7 +472,30 @@ export const ordersApi = {
   listPaymentLinks: (businessId: string, status?: string) =>
     api.get(`/orders/payment-links?businessId=${businessId}${status ? `&status=${status}` : ''}`),
   exportCSV: (businessId: string, status?: string, instanceId?: string) =>
-    api.get(`/orders/export/csv?businessId=${businessId}${status ? `&status=${status}` : ''}${instanceId ? `&instanceId=${instanceId}` : ''}`, { responseType: 'blob' })
+    api.get(`/orders/export/csv?businessId=${businessId}${status ? `&status=${status}` : ''}${instanceId ? `&instanceId=${instanceId}` : ''}`, { responseType: 'blob' }),
+  delete: (orderId: string) =>
+    api.delete(`/orders/${orderId}`)
+};
+
+export const contactsApi = {
+  list: (businessId: string, params?: { search?: string; page?: number; limit?: number; archived?: string; tag?: string; hasOrder?: string; orderStatus?: string }) => {
+    const query = new URLSearchParams();
+    query.set('businessId', businessId);
+    if (params?.search) query.set('search', params.search);
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.archived) query.set('archived', params.archived);
+    if (params?.tag) query.set('tag', params.tag);
+    if (params?.hasOrder) query.set('hasOrder', params.hasOrder);
+    if (params?.orderStatus) query.set('orderStatus', params.orderStatus);
+    return api.get(`/contacts?${query}`);
+  },
+  get: (phone: string, businessId: string) =>
+    api.get(`/contacts/${encodeURIComponent(phone)}?businessId=${businessId}`),
+  delete: (phone: string, businessId: string, deleteOrders?: boolean) =>
+    api.delete(`/contacts/${encodeURIComponent(phone)}?businessId=${businessId}${deleteOrders ? '&deleteOrders=true' : ''}`),
+  bulkDelete: (businessId: string, phones: string[], deleteOrders?: boolean) =>
+    api.post('/contacts/bulk-delete', { businessId, phones, deleteOrders })
 };
 
 export const extractionApi = {

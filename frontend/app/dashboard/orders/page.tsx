@@ -184,6 +184,21 @@ export default function OrdersPage() {
   const [productSearch, setProductSearch] = useState('');
   const [showProductSelector, setShowProductSelector] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  const [confirmDeleteOrderId, setConfirmDeleteOrderId] = useState<string | null>(null);
+
+  const deleteOrder = async (orderId: string) => {
+    try {
+      setDeletingOrderId(orderId);
+      await ordersApi.delete(orderId);
+      setConfirmDeleteOrderId(null);
+      await loadOrders();
+    } catch (error) {
+      console.error('Error deleting order:', error);
+    } finally {
+      setDeletingOrderId(null);
+    }
+  };
 
   const exportCSV = async () => {
     if (!currentBusiness?.id) return;
@@ -1109,8 +1124,19 @@ export default function OrdersPage() {
                             <span>Creado: {formatDate(order.createdAt)}</span>
                           )}
                         </div>
-                        <div className="text-lg sm:text-xl font-bold text-white">
-                          Total: {order.currencySymbol}{order.totalAmount.toFixed(2)}
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteOrderId(order.id);
+                            }}
+                            className="px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30 rounded text-xs transition-colors"
+                          >
+                            Eliminar
+                          </button>
+                          <div className="text-lg sm:text-xl font-bold text-white">
+                            Total: {order.currencySymbol}{order.totalAmount.toFixed(2)}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1383,6 +1409,32 @@ export default function OrdersPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
                 Abrir conversacion completa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteOrderId && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1e1e1e] rounded-xl border border-gray-700 max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-white mb-4">Eliminar Pedido</h3>
+            <p className="text-gray-300 mb-6">
+              ¿Estás seguro de que deseas eliminar este pedido? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteOrderId(null)}
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => deleteOrder(confirmDeleteOrderId)}
+                disabled={deletingOrderId === confirmDeleteOrderId}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {deletingOrderId === confirmDeleteOrderId ? 'Eliminando...' : 'Eliminar'}
               </button>
             </div>
           </div>

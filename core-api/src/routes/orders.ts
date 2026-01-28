@@ -912,4 +912,44 @@ router.patch('/:orderId/status', authMiddleware, async (req: any, res) => {
   }
 });
 
+router.delete('/:orderId', authMiddleware, async (req: any, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: order.businessId,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
+    await prisma.orderItem.deleteMany({
+      where: { orderId }
+    });
+
+    await prisma.order.delete({
+      where: { id: orderId }
+    });
+
+    console.log(`[ORDERS] Order ${orderId} deleted by user ${req.userId}`);
+    res.json({ success: true, message: 'Pedido eliminado exitosamente' });
+  } catch (error: any) {
+    console.error('[ORDERS] Error deleting order:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

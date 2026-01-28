@@ -37,7 +37,7 @@ router.use(authMiddleware);
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
-    const { search, page = '1', limit = '50', businessId, archived, tag } = req.query;
+    const { search, page = '1', limit = '50', businessId, archived, tag, hasOrder, orderStatus } = req.query;
 
     if (!businessId) {
       return res.status(400).json({ error: 'businessId es requerido' });
@@ -55,9 +55,47 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
+    let contactPhonesToFilter: string[] | null = null;
+    
+    if (hasOrder || orderStatus) {
+      const orderWhere: any = { businessId: business.id };
+      
+      if (orderStatus === 'pending') {
+        orderWhere.status = { in: ['PENDING_PAYMENT', 'AWAITING_VOUCHER'] };
+      } else if (orderStatus === 'paid') {
+        orderWhere.status = { in: ['PAID', 'PROCESSING', 'SHIPPED'] };
+      } else if (orderStatus === 'delivered') {
+        orderWhere.status = 'DELIVERED';
+      }
+      
+      const ordersWithPhones = await prisma.order.findMany({
+        where: orderWhere,
+        select: { contactPhone: true },
+        distinct: ['contactPhone']
+      });
+      
+      const phonesWithOrders = ordersWithPhones.map(o => o.contactPhone);
+      
+      if (hasOrder === 'has_order' || orderStatus) {
+        contactPhonesToFilter = phonesWithOrders;
+      } else if (hasOrder === 'no_order') {
+        const allContacts = await prisma.contact.findMany({
+          where: { businessId: business.id },
+          select: { phone: true }
+        });
+        contactPhonesToFilter = allContacts
+          .map(c => c.phone)
+          .filter(phone => !phonesWithOrders.includes(phone));
+      }
+    }
+
     const whereClause: any = { 
       businessId: business.id
     };
+    
+    if (contactPhonesToFilter !== null) {
+      whereClause.phone = { in: contactPhonesToFilter };
+    }
     
     if (archived === 'true') {
       whereClause.isArchived = true;
@@ -917,6 +955,190 @@ router.post('/:phone/bot-test', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error('[CONTACTS] Error toggling bot test mode:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/:phone', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { phone } = req.params;
+    const { businessId, deleteOrders } = req.query;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const normalizedPhone = phone.replace(/\D/g, '');
+
+    const contact = await prisma.contact.findUnique({
+      where: { businessId_phone: { businessId: business.id, phone: normalizedPhone } }
+    });
+
+    if (!contact) {
+      return res.status(404).json({ error: 'Contacto no encontrado' });
+    }
+
+    const deletedData = await prisma.$transaction(async (tx) => {
+      const deletedMessages = await tx.messageLog.deleteMany({
+        where: {
+          businessId: business.id,
+          OR: [
+            { sender: normalizedPhone },
+            { recipient: normalizedPhone }
+          ]
+        }
+      });
+
+      const deletedExtracted = await tx.contactExtractedData.deleteMany({
+        where: { businessId: business.id, contactPhone: normalizedPhone }
+      });
+
+      const deletedFunnel = await tx.contactFunnelState.deleteMany({
+        where: { businessId: business.id, contactPhone: normalizedPhone }
+      });
+
+      const deletedTags = await tx.tagAssignment.deleteMany({
+        where: { businessId: business.id, contactPhone: normalizedPhone }
+      });
+
+      const deletedIntents = await tx.intentLog.deleteMany({
+        where: { businessId: business.id, contactPhone: normalizedPhone }
+      });
+
+      let deletedOrders = { count: 0 };
+      if (deleteOrders === 'true') {
+        await tx.orderItem.deleteMany({
+          where: { order: { businessId: business.id, contactPhone: normalizedPhone } }
+        });
+        deletedOrders = await tx.order.deleteMany({
+          where: { businessId: business.id, contactPhone: normalizedPhone }
+        });
+      }
+
+      await tx.contact.delete({
+        where: { id: contact.id }
+      });
+
+      return {
+        messages: deletedMessages.count,
+        extractedData: deletedExtracted.count,
+        funnelState: deletedFunnel.count,
+        tags: deletedTags.count,
+        intents: deletedIntents.count,
+        orders: deletedOrders.count
+      };
+    });
+
+    console.log(`[CONTACTS] Contact ${normalizedPhone} deleted with all related data:`, deletedData);
+
+    res.json({ 
+      success: true, 
+      message: 'Contacto y datos relacionados eliminados exitosamente',
+      deleted: deletedData
+    });
+  } catch (error: any) {
+    console.error('[CONTACTS] Error deleting contact:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bulk-delete', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { businessId, phones, deleteOrders } = req.body;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId es requerido' });
+    }
+
+    if (!phones || !Array.isArray(phones) || phones.length === 0) {
+      return res.status(400).json({ error: 'phones debe ser un array con al menos un número' });
+    }
+
+    if (phones.length > 100) {
+      return res.status(400).json({ error: 'Máximo 100 contactos por operación' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: { id: businessId as string, userId }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    const normalizedPhones = phones.map((p: string) => p.replace(/\D/g, ''));
+
+    const deletedData = await prisma.$transaction(async (tx) => {
+      const deletedMessages = await tx.messageLog.deleteMany({
+        where: {
+          businessId: business.id,
+          OR: [
+            { sender: { in: normalizedPhones } },
+            { recipient: { in: normalizedPhones } }
+          ]
+        }
+      });
+
+      const deletedExtracted = await tx.contactExtractedData.deleteMany({
+        where: { businessId: business.id, contactPhone: { in: normalizedPhones } }
+      });
+
+      const deletedFunnel = await tx.contactFunnelState.deleteMany({
+        where: { businessId: business.id, contactPhone: { in: normalizedPhones } }
+      });
+
+      const deletedTags = await tx.tagAssignment.deleteMany({
+        where: { businessId: business.id, contactPhone: { in: normalizedPhones } }
+      });
+
+      const deletedIntents = await tx.intentLog.deleteMany({
+        where: { businessId: business.id, contactPhone: { in: normalizedPhones } }
+      });
+
+      let deletedOrders = { count: 0 };
+      if (deleteOrders === true) {
+        await tx.orderItem.deleteMany({
+          where: { order: { businessId: business.id, contactPhone: { in: normalizedPhones } } }
+        });
+        deletedOrders = await tx.order.deleteMany({
+          where: { businessId: business.id, contactPhone: { in: normalizedPhones } }
+        });
+      }
+
+      const deletedContacts = await tx.contact.deleteMany({
+        where: { businessId: business.id, phone: { in: normalizedPhones } }
+      });
+
+      return {
+        contacts: deletedContacts.count,
+        messages: deletedMessages.count,
+        extractedData: deletedExtracted.count,
+        funnelState: deletedFunnel.count,
+        tags: deletedTags.count,
+        intents: deletedIntents.count,
+        orders: deletedOrders.count
+      };
+    });
+
+    console.log(`[CONTACTS] Bulk delete: ${deletedData.contacts} contacts deleted with all related data`);
+
+    res.json({ 
+      success: true, 
+      message: `${deletedData.contacts} contactos eliminados exitosamente`,
+      deleted: deletedData
+    });
+  } catch (error: any) {
+    console.error('[CONTACTS] Error bulk deleting contacts:', error);
     res.status(500).json({ error: error.message });
   }
 });
