@@ -634,6 +634,7 @@ export default function ContactsPage() {
           {contacts.map((contact) => (
             <div key={contact.id} className="card overflow-hidden">
               <div
+                onClick={() => toggleExpand(contact.phone)}
                 className="flex items-center justify-between cursor-pointer hover:bg-dark-hover/50 -m-4 p-4 transition-colors"
               >
                 <div className="flex items-center gap-3">
@@ -647,10 +648,7 @@ export default function ContactsPage() {
                     onClick={(e) => e.stopPropagation()}
                     className="w-4 h-4 rounded border-gray-600 bg-dark-surface focus:ring-neon-blue focus:ring-offset-0"
                   />
-                  <div 
-                    onClick={() => toggleExpand(contact.phone)}
-                    className="w-10 h-10 rounded-full bg-neon-blue/20 flex items-center justify-center text-lg flex-shrink-0 cursor-pointer"
-                  >
+                  <div className="w-10 h-10 rounded-full bg-neon-blue/20 flex items-center justify-center text-lg flex-shrink-0">
                     {contact.name ? contact.name.charAt(0).toUpperCase() : '👤'}
                   </div>
                   <div className="min-w-0">
