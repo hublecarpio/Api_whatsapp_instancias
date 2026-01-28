@@ -11,6 +11,23 @@ interface ContactStats {
   lastMessageAt: string | null;
 }
 
+interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  type: 'SYSTEM' | 'MANUAL';
+  description?: string;
+}
+
+interface TagAssignment {
+  id: string;
+  name: string;
+  color: string;
+  type?: 'SYSTEM' | 'MANUAL';
+  assignedAt: string;
+  source: string;
+}
+
 interface Contact {
   id: string;
   phone: string;
@@ -33,6 +50,7 @@ interface ContactDetail extends Contact {
   instancesUsed?: { id: string; name: string; provider: string }[];
   timeline?: { type: string; id: string; date: string; data: any }[];
   metadata?: Record<string, any>;
+  assignedTags?: TagAssignment[];
 }
 
 interface EditForm {
@@ -72,6 +90,9 @@ export default function ContactsPage() {
   const [deleteWithOrders, setDeleteWithOrders] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [orderFilter, setOrderFilter] = useState<string>('');
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [contactTags, setContactTags] = useState<TagAssignment[]>([]);
+  const [togglingTag, setTogglingTag] = useState<string | null>(null);
 
   const toggleSelectContact = (phone: string) => {
     setSelectedContacts(prev => {
@@ -164,6 +185,54 @@ export default function ContactsPage() {
     return { Authorization: `Bearer ${token}` };
   };
 
+  const loadAvailableTags = async () => {
+    if (!currentBusiness?.id) return;
+    try {
+      const response = await axios.get(
+        `${API_URL}/tags?business_id=${currentBusiness.id}`,
+        { headers: getAuthHeader() }
+      );
+      setAvailableTags(response.data);
+    } catch (error) {
+      console.error('Error loading tags:', error);
+    }
+  };
+
+  const loadContactTags = async (phone: string) => {
+    if (!currentBusiness?.id) return;
+    try {
+      const response = await axios.get(
+        `${API_URL}/tags/contact/${encodeURIComponent(phone)}/extracted-data?business_id=${currentBusiness.id}`,
+        { headers: getAuthHeader() }
+      );
+      setContactTags(response.data.tags || []);
+    } catch (error) {
+      console.error('Error loading contact tags:', error);
+    }
+  };
+
+  const toggleContactTag = async (tagId: string) => {
+    if (!currentBusiness?.id || !expandedPhone) return;
+    try {
+      setTogglingTag(tagId);
+      await axios.post(
+        `${API_URL}/tags/assign-toggle`,
+        {
+          business_id: currentBusiness.id,
+          contact_phone: expandedPhone,
+          tag_id: tagId
+        },
+        { headers: getAuthHeader() }
+      );
+      await loadContactTags(expandedPhone);
+    } catch (error: any) {
+      console.error('Error toggling tag:', error);
+      showError(error.response?.data?.error || 'Error al cambiar etiqueta');
+    } finally {
+      setTogglingTag(null);
+    }
+  };
+
   const loadContacts = async (pageNum = 1, search = '', filter = '') => {
     if (!currentBusiness?.id) return;
     
@@ -232,11 +301,15 @@ export default function ContactsPage() {
     if (expandedPhone === phone) {
       setExpandedPhone(null);
       setExpandedDetail(null);
+      setContactTags([]);
       setIsEditing(false);
     } else {
       setExpandedPhone(phone);
       setIsEditing(false);
-      await loadContactDetail(phone);
+      await Promise.all([
+        loadContactDetail(phone),
+        loadContactTags(phone)
+      ]);
     }
   };
 
@@ -452,6 +525,7 @@ export default function ContactsPage() {
 
   useEffect(() => {
     loadContacts(page, searchQuery, orderFilter);
+    loadAvailableTags();
   }, [currentBusiness?.id, page, orderFilter]);
 
   useEffect(() => {
@@ -878,18 +952,55 @@ export default function ContactsPage() {
                               <p className="text-sm text-white">{expandedDetail.email || '-'}</p>
                             </div>
                           </div>
-                          {expandedDetail.tags && expandedDetail.tags.length > 0 && (
-                            <div className="bg-dark-surface rounded p-3">
-                              <p className="text-xs text-gray-500 mb-2">Etiquetas</p>
-                              <div className="flex flex-wrap gap-2">
-                                {expandedDetail.tags.map(tag => (
-                                  <span key={tag} className="text-xs bg-neon-blue/20 text-neon-blue px-2 py-1 rounded-full">
-                                    {tag}
+                          <div className="bg-dark-surface rounded p-3">
+                            <p className="text-xs text-gray-500 mb-2">Etiquetas</p>
+                            {contactTags.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                {contactTags.map(tag => (
+                                  <span 
+                                    key={tag.id} 
+                                    className="text-xs px-2 py-1 rounded-full flex items-center gap-1"
+                                    style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
+                                  >
+                                    {tag.name}
+                                    {(tag.type === 'SYSTEM' || tag.source === 'ai_auto') && (
+                                      <span className="opacity-60 text-[10px] bg-white/10 px-1 rounded">IA</span>
+                                    )}
                                   </span>
                                 ))}
                               </div>
+                            )}
+                            <div className="border-t border-gray-700 pt-3">
+                              <p className="text-xs text-gray-500 mb-2">Agregar etiquetas:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {availableTags.filter(t => t.type === 'MANUAL').map(tag => {
+                                  const isAssigned = contactTags.some(ct => ct.id === tag.id);
+                                  return (
+                                    <button
+                                      key={tag.id}
+                                      onClick={() => toggleContactTag(tag.id)}
+                                      disabled={togglingTag === tag.id}
+                                      className={`text-xs px-2 py-1 rounded-full border transition-all ${
+                                        isAssigned 
+                                          ? 'border-transparent' 
+                                          : 'border-gray-600 opacity-60 hover:opacity-100'
+                                      } ${togglingTag === tag.id ? 'animate-pulse' : ''}`}
+                                      style={{ 
+                                        backgroundColor: isAssigned ? `${tag.color}30` : 'transparent',
+                                        color: tag.color,
+                                        borderColor: isAssigned ? tag.color : undefined
+                                      }}
+                                    >
+                                      {isAssigned ? '✓ ' : '+ '}{tag.name}
+                                    </button>
+                                  );
+                                })}
+                                {availableTags.filter(t => t.type === 'MANUAL').length === 0 && (
+                                  <span className="text-xs text-gray-500">No hay etiquetas manuales configuradas</span>
+                                )}
+                              </div>
                             </div>
-                          )}
+                          </div>
                           {expandedDetail.notes && (
                             <div className="bg-dark-surface rounded p-3">
                               <p className="text-xs text-gray-500 mb-1">Notas</p>

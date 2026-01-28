@@ -85,7 +85,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response): Promise
 
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { business_id, instance_id, name, color, description, order } = req.body;
+    const { business_id, instance_id, name, color, description, order, type } = req.body;
 
     if (!business_id || !name) {
       res.status(400).json({ error: 'business_id and name are required' });
@@ -120,7 +120,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response): Promis
         name,
         color: color || '#6B7280',
         description: description || '',
-        order: order ?? (maxOrder._max.order ?? -1) + 1
+        order: order ?? (maxOrder._max.order ?? -1) + 1,
+        type: type || 'MANUAL'
       }
     });
 
@@ -999,6 +1000,7 @@ router.get('/contact/:contact_phone/extracted-data', authMiddleware, async (req:
         id: ta.tag.id,
         name: ta.tag.name,
         color: ta.tag.color,
+        type: ta.tag.type,
         assignedAt: ta.assignedAt,
         source: ta.source
       })),
