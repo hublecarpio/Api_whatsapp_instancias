@@ -81,6 +81,13 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
     *   **Order Auto-Confirmation**: Status changes to PAID when paidAmount >= totalAmount
     *   **Zone Validation**: Enforces delivery zone requirement when business has zones configured
 *   **Enhanced Production Debugging**: Structured logging with [ORDER-CREATE], [ORDER-VOUCHER], [ORDER-PAYMENT], [AI-*] tags, environment detection (REPLIT vs PRODUCTION), Redis availability tracking
+*   **Intelligent Auto-Trigger System**: Pre-processing system that detects critical intents and executes required actions BEFORE the AI agent responds. Features:
+    *   **Trigger Types**: VOUCHER_RECEIVED (detects payment proof via Gemini), PURCHASE_CONFIRMED (detects explicit purchase intent in text)
+    *   **Pre-Execution Flow**: Trigger detection → action execution → context injection → AI response with accurate information
+    *   **Voucher Auto-Processing**: Any image is validated as potential voucher regardless of existing order; auto-creates order from extracted data if missing
+    *   **Context Injection**: Auto-trigger results are injected into AI agent context ensuring accurate responses about completed actions
+    *   **Design Principle**: Don't trust AI to remember to call tools; for critical actions (payment processing, order creation), use explicit triggers that force execution
+    *   **Files**: `autoTriggers.ts` (trigger detection/execution), `orderAutoCreator.ts` (order creation from extracted data)
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
