@@ -4,7 +4,7 @@ import { geminiService } from './gemini.js';
 import { assignNextRoundRobinAdvisor } from '../routes/advisor.js';
 import { cancelPendingFollowUps } from './followUpService.js';
 import { logTokenUsage } from './tokenLogger.js';
-import { registerVoucherPayment } from './orderService.js';
+import { processAutoTriggers, TriggerContext } from './autoTriggers.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
@@ -134,133 +134,143 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     }
   }
 
+  // ============================================
+  // AUTO-TRIGGER SYSTEM: Intelligent Voucher & Order Processing
+  // ============================================
+  // This system detects triggers (voucher received, purchase confirmed) 
+  // and executes required actions BEFORE the AI agent processes the message.
+  // This ensures the AI agent receives accurate context about completed actions.
+  
   let voucherContext = '';
   let voucherValidationData: any = null;
+  let autoTriggerContext = '';
+  
   if (type === 'image' && mediaUrl && geminiService.isConfigured()) {
     const normalizedOrderPhone = from.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
     
-    // Find orders that can still receive payments (not fully paid yet)
-    // This allows multiple partial payments even if a voucher was already received
-    const pendingVoucherOrder = await prisma.order.findFirst({
-      where: {
-        businessId,
-        contactPhone: normalizedOrderPhone,
-        status: { in: ['AWAITING_VOUCHER', 'PENDING_PAYMENT'] }
-        // Removed voucherImageUrl: null to allow multiple voucher uploads
-      },
-      orderBy: { createdAt: 'desc' },
-      include: { items: true }
-    });
+    logIngest('AUTO-TRIGGER', `Processing image - checking for voucher`, { phone: normalizedOrderPhone });
     
-    if (pendingVoucherOrder) {
-      console.log(`[VOUCHER] Validating potential voucher for order ${pendingVoucherOrder.id}, phone: ${normalizedOrderPhone}`);
+    try {
+      // Step 1: Always validate if image is a payment voucher (regardless of existing order)
+      const voucherValidation = await geminiService.validatePaymentVoucher(
+        mediaUrl,
+        { currency: business.currencyCode || 'PEN' }
+      );
       
-      try {
-        const voucherValidation = await geminiService.validatePaymentVoucher(
+      logIngest('AUTO-TRIGGER', `Gemini voucher validation result`, {
+        isPaymentProof: voucherValidation.isPaymentProof,
+        isValid: voucherValidation.isValid,
+        brand: voucherValidation.brand,
+        amount: voucherValidation.amount
+      });
+      
+      // Step 2: If it's a valid voucher, use auto-trigger system
+      if (voucherValidation.isPaymentProof && voucherValidation.isValid) {
+        const triggerContext: TriggerContext = {
+          businessId,
+          instanceId,
+          contactPhone: normalizedOrderPhone,
+          contactName: pushName,
+          messageText,
           mediaUrl,
-          {
-            amount: Number(pendingVoucherOrder.totalAmount),
-            currency: pendingVoucherOrder.currencyCode || 'PEN'
-          }
-        );
-        
-        if (voucherValidation.isPaymentProof && voucherValidation.isValid) {
-          const voucherAmount = voucherValidation.amount || 0;
-          
-          // Guard: Do not register payments with zero or very low amounts
-          if (voucherAmount <= 0) {
-            logIngest('VOUCHER-SKIP', `Voucher detected but amount is zero/invalid - skipping payment registration`, {
-              orderId: pendingVoucherOrder.id,
-              detectedAmount: voucherAmount,
-              brand: voucherValidation.brand,
-              reason: 'Zero or negative amount detected'
-            });
-            // Continue with regular message processing, don't register as payment
-          } else {
-          
-          logIngest('VOUCHER', `Valid voucher detected`, {
-            orderId: pendingVoucherOrder.id,
-            brand: voucherValidation.brand,
-            detectedAmount: voucherAmount,
-            orderTotal: pendingVoucherOrder.totalAmount,
-            currentPaidAmount: pendingVoucherOrder.paidAmount || 0,
-            operationCode: voucherValidation.operationCode
-          });
-          
-          // Register the voucher payment with partial payment tracking
-          const paymentResult = await registerVoucherPayment(
-            pendingVoucherOrder.id,
-            voucherAmount,
-            mediaUrl,
-            voucherValidation.brand || undefined,
-            voucherValidation.operationCode || undefined
-          );
-          
-          voucherValidationData = {
-            orderId: pendingVoucherOrder.id,
-            brand: voucherValidation.brand,
-            detectedAmount: voucherAmount,
-            currency: voucherValidation.currency,
-            operationCode: voucherValidation.operationCode,
-            confidence: voucherValidation.confidence,
-            reason: voucherValidation.reason,
-            validatedAt: new Date().toISOString(),
-            provider,
-            paymentResult: {
-              previousPaidAmount: paymentResult.previousPaidAmount,
-              newPaidAmount: paymentResult.newPaidAmount,
-              pendingAmount: paymentResult.pendingAmount,
-              isFullyPaid: paymentResult.isFullyPaid
-            }
-          };
-          
-          logIngest('VOUCHER-PAYMENT', `Payment registered`, {
-            orderId: pendingVoucherOrder.id,
-            previousPaid: paymentResult.previousPaidAmount,
-            voucherAmount,
-            newPaid: paymentResult.newPaidAmount,
-            total: paymentResult.totalAmount,
-            pending: paymentResult.pendingAmount,
-            isFullyPaid: paymentResult.isFullyPaid,
-            newStatus: paymentResult.newStatus
-          });
-          
-          // Build context message based on payment status
-          const currencySymbol = pendingVoucherOrder.currencySymbol || 'S/.';
-          if (paymentResult.isFullyPaid) {
-            voucherContext = `\n\n[COMPROBANTE DE PAGO RECIBIDO - PAGO COMPLETO] Se ha recibido un comprobante de pago para el pedido #${pendingVoucherOrder.id.slice(-6).toUpperCase()}. Banco/App: ${voucherValidation.brand || 'detectado'}, Monto: ${currencySymbol}${voucherAmount.toFixed(2)}. El pago está COMPLETO. Total pagado: ${currencySymbol}${paymentResult.newPaidAmount.toFixed(2)}. El pedido ha sido confirmado. Agradece al cliente y confirma que su pedido será procesado.`;
-          } else {
-            voucherContext = `\n\n[COMPROBANTE DE PAGO RECIBIDO - PAGO PARCIAL] Se ha recibido un comprobante de pago para el pedido #${pendingVoucherOrder.id.slice(-6).toUpperCase()}. Banco/App: ${voucherValidation.brand || 'detectado'}, Monto: ${currencySymbol}${voucherAmount.toFixed(2)}. Total pagado hasta ahora: ${currencySymbol}${paymentResult.newPaidAmount.toFixed(2)} de ${currencySymbol}${paymentResult.totalAmount.toFixed(2)}. Monto pendiente: ${currencySymbol}${paymentResult.pendingAmount.toFixed(2)}. Informa al cliente el monto que falta y pídele que envíe otro comprobante cuando complete el pago.`;
-          }
-          
-          mediaAnalysis = voucherContext;
-          mediaAnalysisRaw = `[VOUCHER ${paymentResult.isFullyPaid ? 'COMPLETO' : 'PARCIAL'}] ${voucherValidation.brand || 'Comprobante'} - ${currencySymbol}${voucherAmount.toFixed(2)} - Pagado: ${currencySymbol}${paymentResult.newPaidAmount.toFixed(2)}/${currencySymbol}${paymentResult.totalAmount.toFixed(2)} - Código: ${voucherValidation.operationCode || 'N/A'}`;
-          
-          await logTokenUsage({
-            userId: business.userId,
-            businessId,
-            feature: 'voucher_validation',
-            model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
-            promptTokens: 258,
-            completionTokens: 128,
-            provider: 'gemini'
-          });
-          } // Close the voucherAmount > 0 else block
-        } else {
-          logIngest('VOUCHER-INVALID', `Image not validated as voucher`, {
-            orderId: pendingVoucherOrder.id,
+          mediaType: type,
+          mediaAnalysis,
+          geminiVoucherResult: {
             isPaymentProof: voucherValidation.isPaymentProof,
             isValid: voucherValidation.isValid,
-            reason: voucherValidation.reason
-          });
+            brand: voucherValidation.brand,
+            amount: voucherValidation.amount,
+            currency: voucherValidation.currency,
+            operationCode: voucherValidation.operationCode,
+            confidence: voucherValidation.confidence
+          }
+        };
+        
+        const triggerResult = await processAutoTriggers(triggerContext);
+        
+        logIngest('AUTO-TRIGGER', `Trigger result`, {
+          trigger: triggerResult.trigger,
+          executed: triggerResult.executed,
+          error: triggerResult.error
+        });
+        
+        if (triggerResult.contextForAgent) {
+          autoTriggerContext = '\n\n' + triggerResult.contextForAgent;
+          // Append trigger context to existing media analysis instead of replacing
+          // This preserves the original Gemini image description if present
+          const originalMediaAnalysis = mediaAnalysis || '';
+          mediaAnalysis = originalMediaAnalysis + autoTriggerContext;
+          mediaAnalysisRaw = (mediaAnalysisRaw || '') + ` [AUTO-TRIGGER: ${triggerResult.trigger}] ${triggerResult.executed ? 'Executed' : 'Not executed'} - ${triggerResult.error || 'OK'}`;
+          
+          if (triggerResult.result) {
+            voucherValidationData = {
+              ...voucherValidation,
+              autoTrigger: {
+                type: triggerResult.trigger,
+                executed: triggerResult.executed,
+                result: triggerResult.result
+              }
+            };
+          }
         }
-      } catch (voucherError: any) {
-        console.error(`[VOUCHER] Error validating voucher:`, voucherError.message);
+        
+        await logTokenUsage({
+          userId: business.userId,
+          businessId,
+          feature: 'voucher_validation',
+          model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+          promptTokens: 258,
+          completionTokens: 128,
+          provider: 'gemini'
+        });
+        
+      } else {
+        logIngest('AUTO-TRIGGER', `Image is not a payment voucher`, {
+          isPaymentProof: voucherValidation.isPaymentProof,
+          isValid: voucherValidation.isValid,
+          reason: voucherValidation.reason
+        });
       }
+    } catch (voucherError: any) {
+      console.error(`[AUTO-TRIGGER] Error processing image trigger:`, voucherError.message);
+    }
+  }
+  
+  // Also check for text-based purchase confirmation triggers (even without images)
+  if (!autoTriggerContext && messageText) {
+    const normalizedOrderPhone = from.replace(/@s\.whatsapp\.net$/, '').replace(/@lid$/, '').replace(/\D/g, '');
+    
+    const triggerContext: TriggerContext = {
+      businessId,
+      instanceId,
+      contactPhone: normalizedOrderPhone,
+      contactName: pushName,
+      messageText,
+      mediaUrl,
+      mediaType: type
+    };
+    
+    try {
+      const triggerResult = await processAutoTriggers(triggerContext);
+      
+      // Always inject context when available, even if trigger was not executed
+      // (e.g., purchase confirmation with missing data needs guidance)
+      if (triggerResult.contextForAgent) {
+        autoTriggerContext = '\n\n' + triggerResult.contextForAgent;
+        
+        logIngest('AUTO-TRIGGER', `Text trigger processed`, {
+          trigger: triggerResult.trigger,
+          executed: triggerResult.executed,
+          hasContext: true
+        });
+      }
+    } catch (triggerError: any) {
+      console.error(`[AUTO-TRIGGER] Error processing text trigger:`, triggerError.message);
     }
   }
 
-  const fullMessageForAgent = messageText + mediaAnalysis;
+  // Build full message for AI agent, including auto-trigger context if available
+  const fullMessageForAgent = messageText + mediaAnalysis + (autoTriggerContext && !mediaAnalysis.includes(autoTriggerContext) ? autoTriggerContext : '');
 
   await prisma.messageLog.create({
     data: {
