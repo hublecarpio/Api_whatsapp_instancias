@@ -828,23 +828,70 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
         const args = JSON.parse(fn.arguments);
         const searchResult = await searchProductsIntelligent(business.id, args.consulta || '', 5);
         
-        const productResults = searchResult.products.map((p: any) => ({
-          id: p.id,
-          nombre: p.title,
-          precio: `${currencySymbol}${p.price}`,
-          stock: p.stock,
-          disponible: p.available,
-          descripcion: p.description?.substring(0, 100),
-          imagen_url: p.imageUrl || null
-        }));
+        const productResults = searchResult.products.map((p: any) => {
+          // If product has variations, include them with their specific prices
+          let variaciones = null;
+          if (p.variations && p.variations.length > 0) {
+            variaciones = p.variations.map((v: string, i: number) => ({
+              nombre: v,
+              precio: `${currencySymbol}${p.pricePerVariation?.[i] || p.price}`,
+              precio_numerico: p.pricePerVariation?.[i] || p.price,
+              stock: p.stockPerVariation?.[i] ?? p.stock
+            }));
+          }
+          
+          // Determine the price to show - if matched a variation, show that price
+          let precioMostrar = p.price;
+          if (p.matchedVariationIndex !== undefined && p.pricePerVariation?.[p.matchedVariationIndex]) {
+            precioMostrar = p.pricePerVariation[p.matchedVariationIndex];
+          }
+          
+          return {
+            id: p.id,
+            nombre: p.title,
+            precio: `${currencySymbol}${precioMostrar}`,
+            precio_numerico: precioMostrar,
+            variacion_encontrada: p.matchedVariation || null,
+            variaciones: variaciones,
+            stock: p.matchedVariationIndex !== undefined && p.stockPerVariation ? 
+              p.stockPerVariation[p.matchedVariationIndex] : p.stock,
+            disponible: p.available,
+            descripcion: p.description?.substring(0, 100),
+            imagen_url: p.imageUrl || null
+          };
+        });
+        
+        // Build mejor_coincidencia with proper price handling for variations
+        let mejorCoincidencia: any = null;
+        if (searchResult.bestMatch) {
+          const bm = searchResult.bestMatch;
+          // If matched a variation, use its specific price; otherwise use base price
+          let precioFinal = bm.price;
+          let variacionInfo = '';
+          if (bm.matchedVariation !== undefined && bm.matchedVariationIndex !== undefined) {
+            // Use variation-specific price if available
+            if (bm.pricePerVariation && bm.pricePerVariation[bm.matchedVariationIndex]) {
+              precioFinal = bm.pricePerVariation[bm.matchedVariationIndex];
+            }
+            variacionInfo = bm.matchedVariation;
+          }
+          mejorCoincidencia = {
+            id: bm.id,
+            nombre: bm.title,
+            precio: `${currencySymbol}${precioFinal}`,
+            precio_numerico: precioFinal,
+            variacion: variacionInfo || null,
+            stock: bm.matchedVariationIndex !== undefined && bm.stockPerVariation ? 
+              bm.stockPerVariation[bm.matchedVariationIndex] : bm.stock,
+            disponible: bm.available,
+            similitud: Math.round(bm.similarity * 100) + '%'
+          };
+        }
         
         const result: any = {
           productos_encontrados: productResults,
           coincidencia_exacta: searchResult.exactMatch,
-          mejor_coincidencia: searchResult.bestMatch ? {
-            nombre: searchResult.bestMatch.title,
-            similitud: Math.round(searchResult.bestMatch.similarity * 100) + '%'
-          } : null
+          mejor_coincidencia: mejorCoincidencia
         };
         
         // Add instruction for sending image if best match has image (same format as enviar_archivo)
