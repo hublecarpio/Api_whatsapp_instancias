@@ -21,12 +21,12 @@ async function checkBusinessAccess(userId: string, businessId: string, role?: st
 }
 
 const DEFAULT_TAGS = [
-  { name: 'Nuevo', color: '#22C55E', description: 'Cliente que acaba de contactar por primera vez', order: 0 },
-  { name: 'Interesado', color: '#3B82F6', description: 'Cliente que mostró interés en productos o servicios', order: 1 },
-  { name: 'Negociando', color: '#EAB308', description: 'Cliente en proceso de cotización o negociación', order: 2 },
-  { name: 'Pendiente', color: '#F97316', description: 'Esperando respuesta o acción del cliente', order: 3 },
-  { name: 'Cerrado', color: '#10B981', description: 'Venta completada exitosamente', order: 4 },
-  { name: 'Perdido', color: '#6B7280', description: 'Cliente que no concretó la compra', order: 5 },
+  { name: 'Nuevo', color: '#22C55E', description: 'Cliente que acaba de contactar por primera vez', order: 0, type: 'SYSTEM' },
+  { name: 'Interesado', color: '#3B82F6', description: 'Cliente que mostró interés en productos o servicios', order: 1, type: 'SYSTEM' },
+  { name: 'Negociando', color: '#EAB308', description: 'Cliente en proceso de cotización o negociación', order: 2, type: 'SYSTEM' },
+  { name: 'Pendiente', color: '#F97316', description: 'Esperando respuesta o acción del cliente', order: 3, type: 'SYSTEM' },
+  { name: 'Cerrado', color: '#10B981', description: 'Venta completada exitosamente', order: 4, type: 'SYSTEM' },
+  { name: 'Perdido', color: '#6B7280', description: 'Cliente que no concretó la compra', order: 5, type: 'SYSTEM' },
 ];
 
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
@@ -344,11 +344,19 @@ router.post('/assign', authMiddleware, async (req: AuthRequest, res: Response): 
       return;
     }
 
-    // Delete ALL existing tag assignments for this contact, then create new one
+    // Delete only tag assignments of the SAME TYPE as the tag being assigned
+    // This preserves MANUAL tags when assigning SYSTEM tags and vice versa
+    const tagsOfSameType = await prisma.tag.findMany({
+      where: { businessId: business_id, type: tag.type },
+      select: { id: true }
+    });
+    const tagIdsOfSameType = tagsOfSameType.map(t => t.id);
+
     await prisma.tagAssignment.deleteMany({
       where: {
         businessId: business_id,
-        contactPhone: contact_phone
+        contactPhone: contact_phone,
+        tagId: { in: tagIdsOfSameType }
       }
     });
 
@@ -376,6 +384,88 @@ router.post('/assign', authMiddleware, async (req: AuthRequest, res: Response): 
     res.json(assignment);
   } catch (error: any) {
     console.error('[Tags] Assignment error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/assign-toggle', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { business_id, contact_phone, tag_id } = req.body;
+
+    if (!business_id || !contact_phone || !tag_id) {
+      res.status(400).json({ error: 'business_id, contact_phone, and tag_id are required' });
+      return;
+    }
+
+    const user = await getUserWithRole(req.userId!);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    const business = await checkBusinessAccess(req.userId!, business_id, user.role, user.parentUserId);
+    if (!business) {
+      res.status(404).json({ error: 'Business not found' });
+      return;
+    }
+
+    const tag = await prisma.tag.findFirst({
+      where: { id: tag_id, businessId: business_id }
+    });
+
+    if (!tag) {
+      res.status(404).json({ error: 'Tag not found' });
+      return;
+    }
+
+    const existingAssignment = await prisma.tagAssignment.findFirst({
+      where: {
+        businessId: business_id,
+        contactPhone: contact_phone,
+        tagId: tag_id
+      }
+    });
+
+    if (existingAssignment) {
+      await prisma.tagHistory.updateMany({
+        where: {
+          businessId: business_id,
+          contactPhone: contact_phone,
+          tagId: tag_id,
+          removedAt: null
+        },
+        data: { removedAt: new Date() }
+      });
+
+      await prisma.tagAssignment.delete({
+        where: { id: existingAssignment.id }
+      });
+
+      res.json({ success: true, action: 'removed', tagId: tag_id });
+    } else {
+      const assignment = await prisma.tagAssignment.create({
+        data: {
+          tagId: tag_id,
+          businessId: business_id,
+          contactPhone: contact_phone,
+          assignedBy: req.userId,
+          source: 'manual'
+        }
+      });
+
+      await prisma.tagHistory.create({
+        data: {
+          tagId: tag_id,
+          businessId: business_id,
+          contactPhone: contact_phone,
+          source: 'manual'
+        }
+      });
+
+      res.json({ success: true, action: 'added', tagId: tag_id, assignment });
+    }
+  } catch (error: any) {
+    console.error('[Tags] Toggle assignment error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

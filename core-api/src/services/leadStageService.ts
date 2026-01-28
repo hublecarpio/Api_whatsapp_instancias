@@ -17,12 +17,12 @@ export async function analyzeAndUpdateLeadStage(
     }
 
     const tags = await prisma.tag.findMany({
-      where: { businessId },
+      where: { businessId, type: 'SYSTEM' },
       orderBy: { order: 'asc' }
     });
 
     if (tags.length === 0) {
-      return { success: false, error: 'No tags configured for this business' };
+      return { success: false, error: 'No SYSTEM tags configured for this business' };
     }
 
     const messages = await prisma.messageLog.findMany({
@@ -53,16 +53,17 @@ export async function analyzeAndUpdateLeadStage(
       description: tag.description || tag.name
     }));
 
-    // Get all tag assignments (now supports multiple tags per contact)
+    // Get only SYSTEM tag assignments for AI stage analysis (preserves MANUAL tags)
     const currentAssignments = await prisma.tagAssignment.findMany({
       where: {
         businessId,
-        contactPhone
+        contactPhone,
+        tag: { type: 'SYSTEM' }
       },
       include: { tag: true }
     });
 
-    // Use first tag for stage analysis (backward compatibility)
+    // Use first SYSTEM tag for stage analysis
     const currentStageName = currentAssignments.length > 0 ? currentAssignments[0].tag?.name : undefined;
 
     const analysis = await geminiService.analyzeLeadStage(
@@ -96,38 +97,38 @@ export async function analyzeAndUpdateLeadStage(
       };
     }
 
-    if (currentAssignment) {
+    // Remove only SYSTEM tag assignments for this contact (preserves MANUAL tags)
+    const systemTagIds = tags.map(t => t.id);
+    
+    if (currentAssignments.length > 0) {
+      await prisma.tagAssignment.deleteMany({
+        where: {
+          businessId,
+          contactPhone,
+          tagId: { in: systemTagIds }
+        }
+      });
+      
       await prisma.tagHistory.updateMany({
         where: {
           businessId,
           contactPhone,
+          tagId: { in: systemTagIds },
           removedAt: null
         },
         data: { removedAt: new Date() }
       });
     }
 
-    // NOTE: Automatic tag assignment is disabled. Tags are now manual-only.
-    // This code is kept for backward compatibility but should not be used.
-    // To assign a tag, use the tagId in the unique constraint:
-    const existingAssignment = await prisma.tagAssignment.findFirst({
-      where: {
+    // Create new SYSTEM tag assignment
+    await prisma.tagAssignment.create({
+      data: {
+        tagId: targetTag.id,
         businessId,
         contactPhone,
-        tagId: targetTag.id
+        source: 'ai_auto'
       }
     });
-    
-    if (!existingAssignment) {
-      await prisma.tagAssignment.create({
-        data: {
-          tagId: targetTag.id,
-          businessId,
-          contactPhone,
-          source: 'ai_auto'
-        }
-      });
-    }
 
     await prisma.tagHistory.create({
       data: {

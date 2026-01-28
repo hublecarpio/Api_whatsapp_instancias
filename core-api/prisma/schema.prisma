@@ -845,6 +845,7 @@ model Tag {
   description String?
   order       Int      @default(0)
   isDefault   Boolean  @default(false)
+  type        String   @default("SYSTEM")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -857,6 +858,7 @@ model Tag {
   @@unique([businessId, name, instanceId])
   @@index([businessId, order])
   @@index([businessId, instanceId])
+  @@index([businessId, type])
 }
 
 model TagAssignment {
