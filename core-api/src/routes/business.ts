@@ -394,7 +394,10 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
     }
     
     // Create automatic backup before clearing configuration
-    const instanceFilter = instanceId ? { instanceId } : {};
+    // Include BOTH instance-specific AND business-level (null instanceId) items
+    const instanceFilter = instanceId 
+      ? { OR: [{ instanceId }, { instanceId: null }] }
+      : {};
     
     const [prompt, sections, extractionFields, funnelStages, deliveryZones] = await Promise.all([
       prisma.agentPrompt.findFirst({

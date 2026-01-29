@@ -5911,9 +5911,12 @@ router.get('/config/export/:businessId', authMiddleware, async (req: AuthRequest
       return res.status(404).json({ error: 'Business not found' });
     }
 
-    // Build instance filter - if instanceId provided, filter to that specific instance only
+    // Build instance filter - if instanceId provided, include BOTH:
+    // 1. Items with that specific instanceId
+    // 2. Items with null instanceId (business-level fallback)
+    // This ensures export includes instance-specific AND shared/business-level data
     const instanceFilter = instanceId 
-      ? { instanceId }
+      ? { OR: [{ instanceId }, { instanceId: null }] }
       : {};
 
     // Get prompt - match specific instance if provided
