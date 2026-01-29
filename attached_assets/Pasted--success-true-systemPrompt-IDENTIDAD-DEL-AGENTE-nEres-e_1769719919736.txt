@@ -1,0 +1,205 @@
+[
+  {
+    "success": true,
+    "systemPrompt": "# IDENTIDAD DEL AGENTE\nEres el asistente virtual de \"duvon\".\n\nFecha actual: jueves, 29 de enero de 2026\nMoneda: S/. (PEN)\nObjetivo del negocio: SALES\n\n---\n\n# CATÁLOGO DE PRODUCTOS\nTotal de productos: 100\n\n- **Acqua di Gi� - Giorgio Armani**: S/.119.9 | Stock: 2000\n  Genero: Caballero ; Usos recomendados: Diario / Oficina / Verano ; Familia: Acu�tica / Marina ; Subf\n- **Oud for Greatness 50ml**: S/.64.9 | Stock: 20\n  ?? Oud for Greatness es potente y majestuosa: azafr�n y lavanda sobre un oud limpio y ambarado. Impa\n- **Bad Boy 50ml**: S/.64.9 | Stock: 20\n  ? Bad Boy combina dulzura, cacao y especias. Es moderno y seductor, ideal para noches o citas. Fraga\n- **Starwalker 50ml**: S/.64.9 | Stock: 20\n  ?? Starwalker es limpia y elegante. Su combinaci�n de bamb�, bergamota y jengibre crea un aroma mode\n- **Layton 50ml**: S/.64.9 | Stock: 20\n  ?? Layton es elegante y adictiva: manzana fresca con lavanda y vainilla ambarada. Vers�til y muy atr\n- **Paris Hilton Woman 50ml**: S/.64.9 | Stock: 20\n  ?? Paris Hilton Woman es floral, chispeante y moderna. Con manzana, mimosa y jazm�n, es dulce y eleg\n- **Khamrah - Lattafa**: S/.119.9 | Stock: 2000\n  Genero: Unisex ; Usos recomendados: Noche / Citas / Invierno ; Familia: Oriental / �mbar ; Subfamili\n- **Scandal Pour Homme - Jean Paul Gaultier**: S/.119.9 | Stock: 2000\n  Genero: Caballero ; Usos recomendados: Fiesta / Citas / Noche ; Familia: Oriental / �mbar ; Subfamil\n- **Layton - Parfums de Marly**: S/.119.9 | Stock: 2000\n  Genero: Unisex ; Usos recomendados: Noche / Citas / Invierno ; Familia: Oriental / �mbar ; Subfamili\n- **Baccarat Rouge 540 50ml**: S/.64.9 | Stock: 20\n  ? Baccarat Rouge 540 es cristalina y envolvente: �mbar aireado con jazm�n y madera dulce. Sofisticac\n- **Flower by Kenzo 100ml**: S/.109.9 | Stock: 20\n  ?? Flower by Kenzo es delicada, pura y po�tica. Con violeta, rosa y vainilla, irradia calma y elegan\n- **Oud Maracuj� 100ml**: S/.109.9 | Stock: 20\n  ?? Oud Maracuj� es ex�tica, tropical y lujosa. Con maracuy�, oud y azafr�n, es intensa y sofisticada\n- **Bade�e Al Oud Noble Blush - Lattafa**: S/.119.9 | Stock: 2000\n  Genero: Dama ; Usos recomendados: Noche / Invierno / Citas ; Familia: Oriental / �mbar ; Subfamilia(\n- **Eros - Versace**: S/.119.9 | Stock: 2000\n  Genero: Caballero ; Usos recomendados: Fiesta / Noche / Citas ; Familia: Oriental / �mbar ; Subfamil\n- **Acqua di Gi� 50ml**: S/.64.9 | Stock: 20\n  ?? Acqua di Gi� es sin�nimo de frescura y elegancia. Un aroma limpio con notas marinas y c�tricas, i\n- **Very Good Girl 100ml**: S/.109.9 | Stock: 20\n  ?? Very Good Girl es dulce, elegante y moderna. Con rosa, lichi y vainilla, combina sofisticaci�n y \n- **Blue Seduction 50ml**: S/.64.9 | Stock: 20\n  ?? Blue Seduction es fresca y luminosa, con acordes acu�ticos y toques frutales. Ideal para climas c\n- **Angel - Thierry Mugler**: S/.119.9 | Stock: 2000\n  Genero: Dama ; Usos recomendados: Noche / Invierno / Fiesta ; Familia: Gourmand ; Subfamilia(s): Ori\n- **Black Opium Over Red 100ml**: S/.109.9 | Stock: 20\n  ?? Black Opium Over Red es sensual, intensa y moderna. Con cereza, caf� y vainilla, es dulce, c�lida\n- **Olymp�a 50ml**: S/.64.9 | Stock: 20\n  ??? Olymp�a es dulce, salada y sofisticada. Con vainilla, flor de jengibre y �mbar gris, combina fue\n- **Qaed Al Fursan 100ml**: S/.109.9 | Stock: 20\n  ?? Qaed Al Fursan es amaderada, oriental y elegante. Con pi�a, vainilla y cuero, equilibra dulzura y\n- **Santal 33 - Le Labo**: S/.119.9 | Stock: 2000\n  Genero: Unisex ; Usos recomendados: Diario / Oficina / Formal ; Familia: Amaderada ; Subfamilia(s): \n- **Khamrah Qahwa - Lattafa**: S/.119.9 | Stock: 2000\n  Genero: Unisex ; Usos recomendados: Invierno / Noche / Citas ; Familia: Gourmand ; Subfamilia(s): Or\n- **9PM 50ml**: S/.64.9 | Stock: 20\n  ?? 9PM es dulce, moderna y adictiva. Combina vainilla, canela y manzana para un aroma juvenil y sedu\n- **Sauvage 50ml**: S/.64.9 | Stock: 20\n  ?? Sauvage es fresca, potente y magn�tica. Con bergamota, pimienta y ambroxan, combina elegancia con\n- **Le Beau - Jean Paul Gaultier**: S/.119.9 | Stock: 2000\n  Genero: Caballero ; Usos recomendados: Verano / Casual / Diario ; Familia: Oriental / �mbar ; Subfam\n- **Tobacco Vanille 50ml**: S/.64.9 | Stock: 20\n  ?? Tobacco Vanille es gourmand y lujosa: tabaco dulce con vainilla cremosa, especias y cacao. Abrazo\n- **Scandal Absolu (for her) 100ml**: S/.109.9 | Stock: 20\n  ?? Scandal Absolu es dulce, intensa y lujosa. Con miel, jazm�n y vainilla, deja una estela c�lida y \n- **Le Beau Paradise Garden 100ml**: S/.109.9 | Stock: 20\n  ?? Le Beau Paradise Garden es fresca, tropical y refinada. Con notas verdes, coco y lavanda, evoca u\n- **La Belle Flower Edition 50ml**: S/.64.9 | Stock: 20\n  ?? La Belle Flower Edition es dulce, floral y seductora. Con pera, bergamota y vainilla, deja una es\n- **One Million 100ml**: S/.109.9 | Stock: 20\n  ?? One Million es potente, dulce y seductor. Con canela, cuero y �mbar, transmite lujo, confianza y \n- **Lost Cherry 50ml**: S/.64.9 | Stock: 20\n  ?? Lost Cherry es intensa y seductora: una cereza jugosa y licorosa se funde con almendra amarga, va\n- **Valentino Uomo 100ml**: S/.109.9 | Stock: 20\n  ?? Valentino Uomo es cl�sica, c�lida y refinada. Con cuero, caf� y avellana, proyecta elegancia ital\n- **Eros Pour Femme 50ml**: S/.64.9 | Stock: 20\n  ?? Eros Pour Femme es sensual, elegante y poderosa. Con lim�n, jazm�n y almizcle, combina frescura y\n- **One Million 50ml**: S/.64.9 | Stock: 20\n  ?? One Million es potente, dulce y seductor. Con canela, cuero y �mbar, transmite lujo, confianza y \n- **Coconut Passion 50ml**: S/.64.9 | Stock: 20\n  ?? Coconut Passion es tropical, cremosa y adictiva. Con coco y vainilla, deja una sensaci�n veranieg\n- **Oud Maracuj� - Maison Crivelli**: S/.119.9 | Stock: 2000\n  Genero: Unisex ; Usos recomendados: Verano / Diario / Casual ; Familia: Frutal ; Subfamilia(s): Frut\n- **King 50ml**: S/.64.9 | Stock: 20\n  ?? King es elegante, dulce y poderosa. Con notas frutales, ambaradas y amaderadas, transmite lujo y \n- **Eros 50ml**: S/.64.9 | Stock: 20\n  ?? Eros es sensual, potente y adictiva. Combina menta, manzana verde y vainilla, ideal para noches o\n- **Very Good Girl Blush - Carolina Herrera**: S/.119.9 | Stock: 2000\n  Genero: Dama ; Usos recomendados: Verano / Casual / Diario ; Familia: Floral ; Subfamilia(s): Floral\n- **Scandal Woman - Jean Paul Gaultier**: S/.119.9 | Stock: 2000\n  Genero: Dama ; Usos recomendados: Fiesta / Noche / Citas ; Familia: Gourmand ; Subfamilia(s): Orient\n- **Invictus Platinum 50ml**: S/.64.9 | Stock: 20\n  ? Invictus Platinum es poderosa y fresca. Mezcla lavanda, pomelo y menta, proyectando fuerza y elega\n- **Tommy 50ml**: S/.64.9 | Stock: 20\n  ? Tommy es fresca, juvenil y libre. Con lavanda, menta y ar�ndano, transmite energ�a y optimismo, pe\n- **Hugo 100ml**: S/.109.9 | Stock: 20\n  ?? Hugo es natural y fresco. Con lavanda, menta y manzana verde, es ideal para el d�a o la oficina. \n- **Amber Oud - Al Haramain**: S/.119.9 | Stock: 2000\n  Genero: Unisex ; Usos recomendados: Noche / Invierno / Formal ; Familia: Oriental / �mbar ; Subfamil\n- **Yara - Lattafa**: S/.119.9 | Stock: 2000\n  Genero: Dama ; Usos recomendados: Diario / Casual / Verano ; Familia: Gourmand ; Subfamilia(s): Flor\n- **Invictus 100ml**: S/.109.9 | Stock: 20\n  ?? Invictus es fuerza y frescura. Combina notas marinas y amaderadas con un toque dulce que la hace \n- **Herod 100ml**: S/.109.9 | Stock: 20\n  ?? Herod es c�lida, dulce y seductora. Con tabaco, canela y vainilla, proyecta una elegancia adictiv\n- **Invictus Victory - Paco Rabanne**: S/.119.9 | Stock: 2000\n  Genero: Caballero ; Usos recomendados: Fiesta / Noche / Citas ; Familia: Gourmand ; Subfamilia(s): O\n- **Acqua di Gi� Profondo 100ml**: S/.109.9 | Stock: 20\n  ?? Acqua di Gi� Profondo es m�s intensa y elegante. Mantiene la frescura marina, pero con un fondo a\n\n(... y 50 productos más)\n\n---\n\n# ZONAS DE ENVÍO\n- **Lima**: Envío S/.0\n- **Provincia**: Envío S/.0\n\n⚠️ IMPORTANTE: Siempre usa la herramienta \"calcular_total_pedido\" para calcular el total exacto incluyendo envío.\n\n---\n\n# DIRECTRICES DE RESPUESTA\n\n1. Responde de forma natural, amigable y profesional\n2. Mantén las respuestas concisas (máximo 2-3 párrafos)\n3. Si el cliente pregunta precios, usa los del catálogo exactamente\n4. SIEMPRE usa \"calcular_total_pedido\" antes de confirmar totales con envío\n5. No inventes datos que no tengas\n6. Si no entiendes algo, pregunta para clarificar\n7. Evita usar emojis excesivos\n8. Cuando confirmes un pedido, usa la herramienta \"confirmar_pedido\"",
+    "conversationMessages": [
+      {
+        "role": "user",
+        "content": "hola"
+      }
+    ],
+    "availableTools": [
+      {
+        "name": "confirmar_pedido",
+        "description": "Registra un pedido nuevo cuando el cliente confirma su compra. Usa esta función SOLO cuando el cliente dice explícitamente \"sí lo quiero\", \"confirmo\", \"procede con el pedido\", etc. Zonas disponibles: Lima, Provincia",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "producto": {
+              "type": "string",
+              "description": "Nombre exacto del producto que el cliente quiere comprar"
+            },
+            "cantidad": {
+              "type": "number",
+              "description": "Cantidad de productos (default: 1)"
+            },
+            "nombre_cliente": {
+              "type": "string",
+              "description": "Nombre completo del cliente"
+            },
+            "direccion": {
+              "type": "string",
+              "description": "Dirección completa de envío"
+            },
+            "zona_envio": {
+              "type": "string",
+              "description": "Zona o distrito de envío para calcular costo"
+            },
+            "metodo_pago": {
+              "type": "string",
+              "enum": [
+                "YAPE",
+                "PLIN",
+                "TRANSFERENCIA",
+                "EFECTIVO",
+                "OTRO"
+              ],
+              "description": "Método de pago preferido por el cliente"
+            },
+            "notas": {
+              "type": "string",
+              "description": "Notas adicionales del pedido (opcional)"
+            }
+          },
+          "required": [
+            "producto",
+            "nombre_cliente",
+            "direccion"
+          ]
+        }
+      },
+      {
+        "name": "consultar_pedido",
+        "description": "Consulta el estado actual del pedido del cliente.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "confirmar_entrega",
+        "description": "Marca el pedido como entregado cuando el cliente confirma que recibió su pedido.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "notas": {
+              "type": "string",
+              "description": "Notas sobre la entrega (opcional)"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "calcular_total_pedido",
+        "description": "OBLIGATORIO: Usa esta herramienta SIEMPRE antes de confirmar un pedido. Calcula subtotal + envío = total exacto. Zonas: Lima, Provincia",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "productos": {
+              "type": "array",
+              "description": "Lista de productos con cantidad",
+              "items": {
+                "type": "object"
+              }
+            },
+            "zona_envio": {
+              "type": "string",
+              "description": "Nombre de la zona de envío"
+            }
+          },
+          "required": [
+            "productos",
+            "zona_envio"
+          ]
+        }
+      },
+      {
+        "name": "buscar_producto",
+        "description": "Busca productos en el catálogo por nombre, descripción o categoría. Usa esta función cuando el cliente pregunte por un producto específico o quiera ver opciones.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "busqueda": {
+              "type": "string",
+              "description": "Término de búsqueda (nombre, descripción, categoría)"
+            },
+            "limite": {
+              "type": "number",
+              "description": "Número máximo de resultados (default: 5)"
+            }
+          },
+          "required": [
+            "busqueda"
+          ]
+        }
+      },
+      {
+        "name": "consultar_stock",
+        "description": "Consulta el stock disponible de un producto específico.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "producto": {
+              "type": "string",
+              "description": "Nombre del producto a consultar"
+            }
+          },
+          "required": [
+            "producto"
+          ]
+        }
+      },
+      {
+        "name": "consultar_etapa_venta",
+        "description": "Consulta en qué etapa del flujo de venta se encuentra el cliente y qué datos faltan recopilar.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "name": "avanzar_etapa_venta",
+        "description": "Avanza al cliente a la siguiente etapa del flujo de venta. Solo usa esta función cuando hayas recopilado todos los datos requeridos de la etapa actual.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "etapa": {
+              "type": "string",
+              "description": "Nombre de la etapa a la que avanzar (opcional, por defecto la siguiente)"
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "delegate_tool_execution",
+        "description": "Delega la ejecución de herramientas a un modelo especializado en razonamiento. \nUsa esta función cuando necesites ejecutar acciones complejas como crear órdenes, buscar productos, o agendar citas.\nEl modelo especializado analizará la solicitud y ejecutará las herramientas necesarias automáticamente.\nRetorna el resultado de las herramientas ejecutadas y una respuesta sugerida.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "La solicitud o acción que se debe ejecutar (ej: \"crear orden de 2 pizzas para calle falsa 123\")"
+            },
+            "model": {
+              "type": "string",
+              "description": "Modelo a usar para el razonamiento (default: gpt-4o)"
+            },
+            "maxIterations": {
+              "type": "number",
+              "description": "Número máximo de iteraciones para completar la ejecución (default: 3)"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    ],
+    "metadata": {
+      "tokensEstimate": 2134,
+      "ragSectionsUsed": 0,
+      "coreSectionsUsed": 1,
+      "productsIncluded": 100,
+      "zonesIncluded": 2,
+      "businessName": "duvon",
+      "businessObjective": "SALES",
+      "contactName": "Iam Huble",
+      "hasExistingOrder": false,
+      "extractedDataCount": 0
+    }
+  }
+]
