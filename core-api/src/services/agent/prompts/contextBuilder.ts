@@ -1,6 +1,7 @@
 import prisma from '../../prisma.js';
 import { retrieveRelevantSections, formatSectionsForPrompt } from '../../ragService.js';
 import { replacePromptVariables } from '../../promptVariables.js';
+import { ChatMessage } from '../core/types.js';
 
 export interface BusinessContext {
   business: any;
@@ -15,11 +16,6 @@ export interface BusinessContext {
   currencyCode: string;
   businessObjective: 'SALES' | 'APPOINTMENTS';
   hasAppointments: boolean;
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
 }
 
 export interface ConversationContext {

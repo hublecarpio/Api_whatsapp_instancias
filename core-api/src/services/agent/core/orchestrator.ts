@@ -1,4 +1,4 @@
-import { ToolContext, ToolAvailabilityContext, ToolDefinitionContext, LLMMessage, LLMConfig, OpenAIToolFormat } from './types.js';
+import { ToolContext, ToolAvailabilityContext, ToolDefinitionContext, LLMMessage, LLMConfig, OpenAIToolFormat, ChatMessage } from './types.js';
 import { toolRegistry } from './toolRegistry.js';
 import { LLMFactory, ILLMProvider } from './llmAdapter.js';
 import { ContextBuilder, BusinessContext, ConversationContext, TriggerContext, loadBusinessContext, loadConversationContext } from '../prompts/contextBuilder.js';
@@ -11,11 +11,6 @@ export interface OrchestratorConfig {
   model?: string;
   temperature?: number;
   maxTokens?: number;
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
 }
 
 export interface OrchestratorInput {
