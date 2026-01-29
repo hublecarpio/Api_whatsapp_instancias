@@ -12,6 +12,7 @@ import { scheduleFollowUp } from '../followUpService.js';
 import axios from 'axios';
 import eventLogger from '../eventLogger.js';
 import { processWithOrchestrator, OrchestratorInput } from '../agent/index.js';
+import { queueAgentResponse, isQueueAvailable, sendAgentResponseDirect } from '../whatsappSender.js';
 
 const USE_V3_AGENT = process.env.USE_V3_AGENT === 'true';
 import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
@@ -254,7 +255,42 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
   
   let result: { response: string; tokensUsed?: number };
   
-  if (business.agentVersion === 'v2') {
+  const useV3 = USE_V3_AGENT || business.agentVersion === 'v3';
+  
+  if (useV3) {
+    try {
+      console.log(`[AI Worker] Using Agent V3 for business ${businessId}`);
+      const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+      
+      const v3Input: OrchestratorInput = {
+        businessId,
+        instanceId: targetInstanceId || null,
+        contactPhone: normalizedPhone,
+        contactName: contactName || 'Cliente',
+        messages: messages.map((m, i) => ({ role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant', content: m })),
+        config: {
+          model: 'gpt-4o-mini',
+          temperature: 0.7,
+          maxTokens: 2000,
+          maxToolCalls: 5
+        }
+      };
+      
+      const v3Result = await processWithOrchestrator(v3Input);
+      result = { response: v3Result.response, tokensUsed: v3Result.tokensUsed?.total };
+      
+      if (v3Result.toolsExecuted?.length) {
+        console.log(`[AI Worker V3] Tools executed: ${v3Result.toolsExecuted.map(t => t.name).join(', ')}`);
+      }
+      
+      if (targetInstanceId && result.response) {
+        await sendWhatsAppResponse(targetInstanceId, phone, result.response, business);
+      }
+    } catch (v3Error: any) {
+      console.error('[AI Worker] Agent V3 error, falling back to V1:', v3Error.message);
+      result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
+    }
+  } else if (business.agentVersion === 'v2') {
     try {
       const v2Available = await isAgentV2Available();
       if (v2Available) {
@@ -1824,221 +1860,46 @@ async function sendWhatsAppResponse(
   business: any
 ): Promise<void> {
   try {
-    const instance = business.instances?.find((i: any) => i.id === instanceId);
     const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
     
-    if (!instance) {
-      console.error(`[AI Worker] Instance ${instanceId} not found in business instances`);
-      return;
-    }
+    console.log(`[AI Worker] sendWhatsAppResponse called for ${cleanPhone} via instance ${instanceId}`);
     
-    const events = parseAgentOutputToWhatsAppEvents(message);
-    console.log(`[AI Worker] Parsed ${events.length} events for ${cleanPhone}:`, events.map(e => e.type));
-    
-    const sentMedia: Array<{ type: string; url?: string }> = [];
-    
-    const metaCredential = instance.metaCredential;
-    const coexistCredential = instance.metaCoexistCredential;
-    console.log(`[AI Worker] Instance ${instanceId}: provider=${instance.provider}, hasMetaCred=${!!metaCredential}, hasCoexistCred=${!!coexistCredential}`);
-    
-    if ((instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') && (metaCredential || coexistCredential)) {
-      // Map credential fields correctly - MetaCoexistCredential uses different field names
-      let accessToken: string;
-      let phoneNumberId: string;
-      let businessId: string;
+    if (isQueueAvailable()) {
+      console.log(`[AI Worker] Using unified queue (queueAgentResponse) for ${cleanPhone}`);
       
-      if (metaCredential) {
-        accessToken = metaCredential.accessToken;
-        phoneNumberId = metaCredential.phoneNumberId;
-        businessId = metaCredential.businessId;
-      } else if (coexistCredential) {
-        // MetaCoexistCredential uses systemAccessToken (preferred) or userAccessToken
-        accessToken = coexistCredential.systemAccessToken || coexistCredential.userAccessToken;
-        phoneNumberId = coexistCredential.phoneNumberId;
-        businessId = coexistCredential.metaBusinessId;
-      } else {
-        console.error(`[AI Worker] No valid credential found for instance ${instanceId}`);
-        return;
-      }
-      
-      console.log(`[AI Worker] Sending via Meta Cloud API (${instance.provider}) to ${cleanPhone}, phoneNumberId=${phoneNumberId}`);
-      const { MetaCloudService } = await import('../metaCloud.js');
-      const metaService = new MetaCloudService({
-        accessToken,
-        phoneNumberId,
-        businessId
+      const result = await queueAgentResponse({
+        businessId: business.id,
+        instanceId,
+        to: cleanPhone,
+        response: message,
+        splitMessages: true,
+        priority: 'high'
       });
       
-      let successCount = 0;
-      let failCount = 0;
-      
-      for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        
-        if (i > 0) {
-          const delay = event.type === 'text' ? calculateTypingDelay(event.text || '') : 500;
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-        
-        const messageLog = await prisma.messageLog.create({
-          data: {
-            businessId: business.id,
-            instanceId: instance.id,
-            direction: 'outbound',
-            sender: instance.phoneNumber || 'bot',
-            recipient: cleanPhone,
-            message: event.type === 'text' ? event.text : (event.caption || null),
-            mediaUrl: event.url || null,
-            deliveryStatus: 'pending',
-            deliveryAttempts: 0,
-            metadata: { 
-              source: 'ai_worker',
-              provider: instance.provider || 'BAILEYS',
-              agentVersion: business.agentVersion || 'v1',
-              type: event.type,
-              ...(event.type !== 'text' && { mediaType: event.type, filename: event.filename })
-            }
-          }
-        });
-        
-        console.log(`[AI Worker] Sending event ${i+1}/${events.length}: type=${event.type}, to=${cleanPhone}, logId=${messageLog.id}`);
-        
-        let sendResult: { success: boolean; result?: any; error?: string; attempts: number };
-        
-        if (event.type === 'text' && event.text) {
-          sendResult = await sendWithRetry(() => metaService.sendTextMessage(cleanPhone, event.text!), 3, 1000);
-        } else if (event.type === 'image' && event.url) {
-          sendResult = await sendWithRetry(() => metaService.sendImageMessage(cleanPhone, event.url!, event.caption), 3, 1000);
-          if (sendResult.success) sentMedia.push({ type: 'image', url: event.url });
-        } else if (event.type === 'video' && event.url) {
-          sendResult = await sendWithRetry(() => metaService.sendVideoMessage(cleanPhone, event.url!, event.caption), 3, 1000);
-          if (sendResult.success) sentMedia.push({ type: 'video', url: event.url });
-        } else if (event.type === 'audio' && event.url) {
-          sendResult = await sendWithRetry(() => metaService.sendAudioMessage(cleanPhone, event.url!), 3, 1000);
-          if (sendResult.success) sentMedia.push({ type: 'audio', url: event.url });
-        } else if (event.type === 'document' && event.url) {
-          sendResult = await sendWithRetry(() => metaService.sendDocumentMessage(cleanPhone, event.url!, event.filename, event.caption), 3, 1000);
-          if (sendResult.success) sentMedia.push({ type: 'document', url: event.url });
-        } else {
-          sendResult = { success: false, error: 'Unknown event type', attempts: 0 };
-        }
-        
-        const providerMessageId = sendResult.result?.messages?.[0]?.id;
-        await prisma.messageLog.update({
-          where: { id: messageLog.id },
-          data: {
-            deliveryStatus: sendResult.success ? 'sent' : 'failed',
-            deliveryError: sendResult.error || null,
-            deliveryAttempts: sendResult.attempts,
-            providerMessageId: providerMessageId || null
-          }
-        });
-        
-        if (sendResult.success) {
-          console.log(`[AI Worker] Event ${i+1} SUCCESS: messageId=${providerMessageId}, attempts=${sendResult.attempts}`);
-          successCount++;
-        } else {
-          console.error(`[AI Worker] Event ${i+1} FAILED (${event.type}): ${sendResult.error}, attempts=${sendResult.attempts}`);
-          failCount++;
-        }
+      if (result.success) {
+        console.log(`[AI Worker] Queued ${result.jobIds?.length || 1} jobs for ${cleanPhone}`);
+      } else {
+        console.error(`[AI Worker] Failed to queue agent response: ${result.error}`);
       }
-      
-      console.log(`[AI Worker] Meta Cloud COMPLETE: ${successCount}/${events.length} sent OK, ${failCount} failed, to=${cleanPhone}`);
-    } else if (instance.instanceBackendId) {
-      const backendId = instance.instanceBackendId;
-      
-      for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        
-        if (i > 0) {
-          const delay = event.type === 'text' ? calculateTypingDelay(event.text || '') : 500;
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-        
-        const messageLog = await prisma.messageLog.create({
-          data: {
-            businessId: business.id,
-            instanceId: instance.id,
-            direction: 'outbound',
-            sender: instance.phoneNumber || 'bot',
-            recipient: cleanPhone,
-            message: event.type === 'text' ? event.text : (event.caption || null),
-            mediaUrl: event.url || null,
-            deliveryStatus: 'pending',
-            deliveryAttempts: 0,
-            metadata: { 
-              source: 'ai_worker',
-              provider: 'BAILEYS',
-              agentVersion: business.agentVersion || 'v1',
-              type: event.type,
-              ...(event.type !== 'text' && { mediaType: event.type, filename: event.filename })
-            }
-          }
-        });
-        
-        let sendResult: { success: boolean; result?: any; error?: string; attempts: number };
-        
-        if (event.type === 'text' && event.text) {
-          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendMessage`, {
-            to: phone,
-            message: event.text
-          }, { timeout: 30000 }), 3, 1000);
-        } else if (event.type === 'image' && event.url) {
-          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendImage`, {
-            to: phone,
-            url: event.url,
-            caption: event.caption
-          }, { timeout: 30000 }), 3, 1000);
-          if (sendResult.success) sentMedia.push({ type: 'image', url: event.url });
-        } else if (event.type === 'video' && event.url) {
-          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendVideo`, {
-            to: phone,
-            url: event.url,
-            caption: event.caption
-          }, { timeout: 30000 }), 3, 1000);
-          if (sendResult.success) sentMedia.push({ type: 'video', url: event.url });
-        } else if (event.type === 'audio' && event.url) {
-          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendAudio`, {
-            to: phone,
-            url: event.url
-          }, { timeout: 30000 }), 3, 1000);
-          if (sendResult.success) sentMedia.push({ type: 'audio', url: event.url });
-        } else if (event.type === 'document' && event.url) {
-          sendResult = await sendWithRetry(() => axios.post(`${WA_API_URL}/instances/${backendId}/sendFile`, {
-            to: phone,
-            url: event.url,
-            caption: event.caption,
-            filename: event.filename
-          }, { timeout: 30000 }), 3, 1000);
-          if (sendResult.success) sentMedia.push({ type: 'document', url: event.url });
-        } else {
-          sendResult = { success: false, error: 'Unknown event type', attempts: 0 };
-        }
-        
-        await prisma.messageLog.update({
-          where: { id: messageLog.id },
-          data: {
-            deliveryStatus: sendResult.success ? 'sent' : 'failed',
-            deliveryError: sendResult.error || null,
-            deliveryAttempts: sendResult.attempts
-          }
-        });
-        
-        if (!sendResult.success) {
-          console.error(`[AI Worker] Baileys event FAILED (${event.type}): ${sendResult.error}`);
-        }
-      }
-      
-      console.log(`[AI Worker] Baileys: sent ${events.length} events to ${cleanPhone}`);
     } else {
-      console.error(`[AI Worker] No valid send method for instance ${instanceId}, provider=${instance.provider}, hasBackendId=${!!instance.instanceBackendId}, hasMetaCred=${!!metaCredential}, hasCoexistCred=${!!coexistCredential}`);
-      return;
+      console.log(`[AI Worker] Redis not available, using direct send for ${cleanPhone}`);
+      
+      const result = await sendAgentResponseDirect({
+        businessId: business.id,
+        instanceId,
+        to: cleanPhone,
+        response: message,
+        contactJid: phone
+      });
+      
+      if (!result.success) {
+        console.error(`[AI Worker] Direct send failed: ${result.error}`);
+      }
     }
     
-    // Schedule follow-up after sending response
-    await scheduleFollowUp(business.id, cleanPhone, 'ai', instance?.id);
+    await scheduleFollowUp(business.id, cleanPhone, 'ai', instanceId);
     
-    console.log(`[AI Worker] Response sent and logged to ${cleanPhone}`);
+    console.log(`[AI Worker] Response flow completed for ${cleanPhone}`);
   } catch (error: any) {
     const errorDetails = error.response?.data 
       ? JSON.stringify(error.response.data) 

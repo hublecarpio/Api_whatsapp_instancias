@@ -359,7 +359,11 @@ export async function loadBusinessContext(
   }
 
   const promptConfig = await (prisma as any).promptConfig?.findFirst?.({
-    where: { businessId }
+    where: { 
+      businessId,
+      ...(instanceId ? { OR: [{ instanceId }, { instanceId: null }] } : {})
+    },
+    orderBy: { instanceId: 'desc' }
   }).catch(() => null);
 
   const [products, deliveryZones, extractionFields, funnelStages] = await Promise.all([

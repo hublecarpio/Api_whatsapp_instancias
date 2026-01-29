@@ -436,4 +436,164 @@ export function isQueueAvailable(): boolean {
   return getOutboundMessageQueue() !== null;
 }
 
+export async function sendAgentResponseDirect(options: {
+  businessId: string;
+  instanceId: string;
+  to: string;
+  response: string;
+  contactName?: string;
+  contactJid?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const { businessId, instanceId, to, response, contactName, contactJid } = options;
+  
+  const instance = await prisma.whatsAppInstance.findUnique({
+    where: { id: instanceId },
+    include: {
+      metaCredential: true,
+      metaCoexistCredential: true
+    }
+  });
+  
+  if (!instance) {
+    console.error('[WhatsAppSender] Instance not found for direct send');
+    return { success: false, error: 'Instance not found' };
+  }
+  
+  const cleanTo = instance.provider === 'BAILEYS' 
+    ? to.replace(/\D/g, '') 
+    : to.replace(/^\+/, '');
+  
+  const { cleanedText, mediaItems } = extractMediaFromText(response);
+  const finalText = cleanMarkdownForWhatsApp(cleanedText);
+  
+  console.log(`[WhatsAppSender] Direct send (no Redis) to ${cleanTo} via ${instance.provider}, hasText=${!!finalText}, mediaCount=${mediaItems.length}`);
+  
+  try {
+    let metaService: any = null;
+    let axios: any = null;
+    const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+    
+    if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+      const { MetaCloudService } = await import('./metaCloud.js');
+      
+      const isCoexist = instance.provider === 'META_COEXIST';
+      const accessToken = isCoexist 
+        ? (instance.metaCoexistCredential?.systemAccessToken || instance.metaCoexistCredential?.userAccessToken)
+        : instance.metaCredential?.accessToken;
+      const phoneNumberId = isCoexist 
+        ? instance.metaCoexistCredential?.phoneNumberId 
+        : instance.metaCredential?.phoneNumberId;
+      const metaBusinessId = isCoexist
+        ? instance.metaCoexistCredential?.metaBusinessId
+        : instance.metaCredential?.businessId;
+      
+      if (!accessToken || !phoneNumberId) {
+        console.error('[WhatsAppSender] Missing Meta credentials for direct send');
+        return { success: false, error: 'Missing Meta credentials' };
+      }
+      
+      metaService = new MetaCloudService({
+        accessToken,
+        phoneNumberId,
+        businessId: metaBusinessId || businessId
+      });
+    } else if (instance.provider === 'BAILEYS' && instance.instanceBackendId) {
+      axios = (await import('axios')).default;
+    } else {
+      console.error('[WhatsAppSender] No valid send method for instance');
+      return { success: false, error: 'No valid send method' };
+    }
+    
+    const parts = finalText ? smartSplitMessage(finalText) : [];
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, Math.min(part.length * 30, 2000)));
+      }
+      
+      if (metaService) {
+        await metaService.sendTextMessage(cleanTo, part);
+      } else if (axios) {
+        await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/sendMessage`, {
+          to: cleanTo,
+          message: part
+        }, { timeout: 30000 });
+      }
+      
+      await prisma.messageLog.create({
+        data: {
+          businessId,
+          instanceId,
+          direction: 'outbound',
+          sender: instance.phoneNumber || 'bot',
+          recipient: cleanTo,
+          message: part,
+          deliveryStatus: 'sent',
+          deliveryAttempts: 1,
+          metadata: { 
+            source: 'agent_direct',
+            provider: instance.provider,
+            contactJid: contactJid || cleanTo,
+            contactName: contactName || 'Cliente',
+            partIndex: i,
+            totalParts: parts.length
+          }
+        }
+      });
+    }
+    
+    for (const media of mediaItems) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const mediaType = media.type === 'file' ? 'document' : media.type;
+      
+      if (metaService) {
+        if (media.type === 'image') {
+          await metaService.sendImageMessage(cleanTo, media.url);
+        } else if (media.type === 'video') {
+          await metaService.sendVideoMessage(cleanTo, media.url);
+        } else {
+          await metaService.sendDocumentMessage(cleanTo, media.url, media.fileName);
+        }
+      } else if (axios) {
+        const endpoint = media.type === 'image' ? 'sendImage' : media.type === 'video' ? 'sendVideo' : 'sendFile';
+        await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/${endpoint}`, {
+          to: cleanTo,
+          url: media.url,
+          filename: media.fileName
+        }, { timeout: 30000 });
+      }
+      
+      await prisma.messageLog.create({
+        data: {
+          businessId,
+          instanceId,
+          direction: 'outbound',
+          sender: instance.phoneNumber || 'bot',
+          recipient: cleanTo,
+          message: null,
+          mediaUrl: media.url,
+          deliveryStatus: 'sent',
+          deliveryAttempts: 1,
+          metadata: { 
+            source: 'agent_direct',
+            provider: instance.provider,
+            mediaType,
+            fileName: media.fileName
+          }
+        }
+      });
+    }
+    
+    console.log(`[WhatsAppSender] Direct send SUCCESS to ${cleanTo}: ${parts.length} text parts, ${mediaItems.length} media items`);
+    return { success: true };
+    
+  } catch (error: any) {
+    console.error('[WhatsAppSender] Direct send FAILED:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
 export { extractMediaFromText, cleanMarkdownForWhatsApp, smartSplitMessage };
