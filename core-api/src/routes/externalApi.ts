@@ -9,6 +9,8 @@ import { getOutboundMessageQueue, OutboundMessageJobData } from '../services/que
 
 const router = Router();
 
+console.log('[EXTERNAL-API] Routes module loaded - registering /api/v1/* endpoints');
+
 interface ApiKeyRequest extends Request {
   businessId?: string;
   business?: any;
@@ -2095,10 +2097,13 @@ router.get('/rag-sections', validateApiKey, async (req: ApiKeyRequest, res: Resp
 });
 
 const ragSectionSearchHandler = async (req: ApiKeyRequest, res: Response) => {
+  console.log('[API] rag-sections/search called:', { method: req.method, businessId: req.businessId });
   try {
     const instanceId = req.instanceId;
     const params = req.method === 'GET' ? req.query : req.body;
     const { query, limit = 5, includeCore = true } = params;
+    
+    console.log('[API] rag-sections/search params:', { query, limit, includeCore });
     
     if (!query) {
       return res.status(400).json({ error: 'Campo "query" es requerido' });
@@ -2249,6 +2254,7 @@ router.get('/funnel-stages/:id', validateApiKey, async (req: ApiKeyRequest, res:
 });
 
 router.get('/contact-funnel-state/:phone', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  console.log('[API] contact-funnel-state called:', { phone: req.params.phone, businessId: req.businessId });
   try {
     const phone = req.params.phone.replace(/\D/g, '');
     const instanceId = req.instanceId;
