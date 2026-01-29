@@ -2094,10 +2094,11 @@ router.get('/rag-sections', validateApiKey, async (req: ApiKeyRequest, res: Resp
   }
 });
 
-router.post('/rag-sections/search', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+const ragSectionSearchHandler = async (req: ApiKeyRequest, res: Response) => {
   try {
     const instanceId = req.instanceId;
-    const { query, limit = 5, includeCore = true } = req.body;
+    const params = req.method === 'GET' ? req.query : req.body;
+    const { query, limit = 5, includeCore = true } = params;
     
     if (!query) {
       return res.status(400).json({ error: 'Campo "query" es requerido' });
@@ -2165,7 +2166,10 @@ router.post('/rag-sections/search', validateApiKey, async (req: ApiKeyRequest, r
     console.error('API rag-sections/search error:', error);
     res.status(500).json({ error: error.message });
   }
-});
+};
+
+router.get('/rag-sections/search', validateApiKey, ragSectionSearchHandler);
+router.post('/rag-sections/search', validateApiKey, ragSectionSearchHandler);
 
 router.get('/rag-sections/:id', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
