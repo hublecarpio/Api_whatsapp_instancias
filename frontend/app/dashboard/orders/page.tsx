@@ -520,16 +520,27 @@ export default function OrdersPage() {
     if (!order.notes) return [];
     try {
       const parsed: OrderNotes = typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes;
-      return parsed.paymentHistory || [];
+      const history = parsed.paymentHistory || [];
+      return history.filter((p: any) => 
+        p && typeof p.amount === 'number' && p.timestamp
+      ).map((p: any) => ({
+        amount: Number(p.amount) || 0,
+        paymentMethod: p.paymentMethod || 'N/A',
+        operationCode: p.operationCode || null,
+        brand: p.brand || null,
+        imageUrl: p.imageUrl || null,
+        notes: p.notes || null,
+        timestamp: p.timestamp || new Date().toISOString()
+      }));
     } catch {
       return [];
     }
   };
 
   const getPaymentProgress = (order: Order) => {
-    const paid = order.paidAmount || 0;
-    const total = order.totalAmount || 0;
-    const pending = total - paid;
+    const paid = Number(order.paidAmount) || 0;
+    const total = Number(order.totalAmount) || 0;
+    const pending = order.pendingAmount != null ? Number(order.pendingAmount) : (total - paid);
     const percentage = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
     return { paid, total, pending, percentage, isFullyPaid: paid >= total };
   };
@@ -932,8 +943,8 @@ export default function OrdersPage() {
                             {/* Barra de progreso */}
                             <div className="mb-3">
                               <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-400">Pagado: {order.currencySymbol}{progress.paid.toFixed(2)}</span>
-                                <span className="text-gray-400">Total: {order.currencySymbol}{progress.total.toFixed(2)}</span>
+                                <span className="text-gray-400">Pagado: {order.currencySymbol || '$'}{progress.paid.toFixed(2)}</span>
+                                <span className="text-gray-400">Total: {order.currencySymbol || '$'}{progress.total.toFixed(2)}</span>
                               </div>
                               <div className="w-full bg-gray-700 rounded-full h-2.5">
                                 <div 
@@ -945,7 +956,7 @@ export default function OrdersPage() {
                               </div>
                               {!progress.isFullyPaid && progress.pending > 0 && (
                                 <p className="text-orange-400 text-xs mt-1">
-                                  Pendiente: {order.currencySymbol}{progress.pending.toFixed(2)}
+                                  Pendiente: {order.currencySymbol || '$'}{progress.pending.toFixed(2)}
                                 </p>
                               )}
                             </div>
@@ -973,7 +984,7 @@ export default function OrdersPage() {
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
                                           <span className="text-white text-sm font-medium">
-                                            {order.currencySymbol}{payment.amount.toFixed(2)}
+                                            {order.currencySymbol || '$'}{payment.amount.toFixed(2)}
                                           </span>
                                           <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
                                             {payment.paymentMethod}
