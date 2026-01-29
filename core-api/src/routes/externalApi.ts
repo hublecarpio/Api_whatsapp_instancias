@@ -6,6 +6,7 @@ import prisma from '../services/prisma';
 import eventLogger from '../services/eventLogger';
 import { dispatchAgentMessage } from '../services/webhookService';
 import { getOutboundMessageQueue, OutboundMessageJobData } from '../services/queues/index';
+import { processWithOrchestrator, OrchestratorInput } from '../services/agent/index.js';
 
 const router = Router();
 
@@ -2330,6 +2331,163 @@ router.get('/contact-funnel-state/:phone', validateApiKey, async (req: ApiKeyReq
   } catch (error: any) {
     console.error('API contact-funnel-state error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// AGENT V3 ENDPOINT - Invoke AI Agent with full context building
+// ============================================================================
+
+router.post('/agent/process', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  const startTime = Date.now();
+  console.log('[API-V3] Agent process called:', { businessId: req.businessId, instanceId: req.instanceId });
+  
+  try {
+    const { 
+      contactPhone, 
+      contactName = 'Cliente', 
+      messages, 
+      model = 'gpt-4o-mini',
+      temperature = 0.7,
+      maxTokens = 2000,
+      maxToolCalls = 5,
+      triggerContext
+    } = req.body;
+
+    if (!contactPhone) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campo "contactPhone" es requerido' 
+      });
+    }
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campo "messages" es requerido (array con al menos un mensaje)' 
+      });
+    }
+
+    // Validate and filter messages - only allow user/assistant roles
+    const validRoles = ['user', 'assistant'];
+    const validatedMessages = messages
+      .filter((m: any) => validRoles.includes(m.role) && typeof m.content === 'string' && m.content.trim())
+      .map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content.trim()
+      }));
+
+    if (validatedMessages.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Ningún mensaje válido encontrado. Formato requerido: [{role: "user"|"assistant", content: "texto"}]'
+      });
+    }
+
+    const phone = contactPhone.replace(/\D/g, '');
+    console.log('[API-V3] Processing:', { 
+      phone, 
+      contactName, 
+      messageCount: validatedMessages.length,
+      model,
+      lastMessage: validatedMessages[validatedMessages.length - 1]?.content?.substring(0, 100)
+    });
+
+    const input: OrchestratorInput = {
+      businessId: req.businessId!,
+      instanceId: req.instanceId || null,
+      contactPhone: phone,
+      contactName,
+      messages: validatedMessages,
+      triggerContext,
+      config: {
+        model,
+        temperature,
+        maxTokens,
+        maxToolCalls
+      }
+    };
+
+    console.log('[API-V3] Calling orchestrator...');
+    const result = await processWithOrchestrator(input);
+    const processingTime = Date.now() - startTime;
+
+    console.log('[API-V3] Orchestrator completed:', {
+      responseLength: result.response?.length,
+      toolsExecuted: result.toolsExecuted?.length || 0,
+      tokensUsed: result.tokensUsed?.total,
+      processingTimeMs: processingTime
+    });
+
+    return res.json({
+      success: true,
+      response: result.response,
+      toolsExecuted: result.toolsExecuted || [],
+      tokensUsed: result.tokensUsed || { prompt: 0, completion: 0, total: 0 },
+      metadata: {
+        ...result.metadata,
+        version: 'v3',
+        processingTimeMs: processingTime,
+        businessId: req.businessId,
+        instanceId: req.instanceId
+      }
+    });
+  } catch (error: any) {
+    const processingTime = Date.now() - startTime;
+    console.error('[API-V3] Error processing agent request:', {
+      error: error.message,
+      stack: error.stack?.substring(0, 500),
+      processingTimeMs: processingTime
+    });
+    
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Error interno del agente',
+      metadata: {
+        version: 'v3',
+        processingTimeMs: processingTime
+      }
+    });
+  }
+});
+
+router.get('/agent/status', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { toolRegistry } = await import('../services/agent/index.js');
+    const stats = toolRegistry.getStats();
+    
+    return res.json({
+      success: true,
+      version: 'v3',
+      enabled: process.env.USE_V3_AGENT === 'true',
+      businessId: req.businessId,
+      instanceId: req.instanceId,
+      toolRegistry: stats
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+router.get('/agent/tools', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { toolRegistry } = await import('../services/agent/index.js');
+    const allTools = toolRegistry.getAllToolNames();
+    
+    return res.json({
+      success: true,
+      tools: allTools,
+      count: allTools.length,
+      businessId: req.businessId
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 

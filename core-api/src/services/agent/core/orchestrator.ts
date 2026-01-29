@@ -261,6 +261,7 @@ export function getOrchestrator(config?: OrchestratorConfig): AgentOrchestrator 
 }
 
 export async function processWithOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
-  const orchestrator = getOrchestrator(input.config);
+  // Create a fresh orchestrator per request to respect per-request config (model, temperature, etc.)
+  const orchestrator = new AgentOrchestrator(input.config);
   return orchestrator.process(input);
 }
