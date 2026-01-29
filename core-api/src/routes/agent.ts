@@ -21,8 +21,11 @@ import { createOrder, findProductWithScope, formatAgentToolResponse, addItemToEx
 import { queueAgentResponse, markMessageAsRead as markMsgRead, isQueueAvailable, extractMediaFromText as extractMediaHelper } from '../services/whatsappSender.js';
 import { retrieveRelevantSections, formatSectionsForPrompt } from '../services/ragService.js';
 import { parseAgentOutputToWhatsAppEvents } from '../services/agentOutputParser.js';
+import { processWithOrchestrator, OrchestratorInput } from '../services/agent/index.js';
 
 const router = Router();
+
+const USE_V3_AGENT = process.env.USE_V3_AGENT === 'true';
 
 // Interfaces for layered context system
 interface LayeredContext {
@@ -151,14 +154,66 @@ async function processWithAgentQueuedWithIds(
   }
   
   // Fallback - use first message ID for single processing
-  console.log(`[Agent Processor] Falling back to direct processing for ${contactPhone}`);
+  console.log(`[Agent Processor] Falling back to direct processing for ${contactPhone}, USE_V3_AGENT=${USE_V3_AGENT}`);
   const firstMessageId = providerMessageIds?.[0];
+  
   try {
+    // Check if V3 agent should be used
+    if (USE_V3_AGENT) {
+      console.log(`[Agent Processor] Using V3 Orchestrator for ${contactPhone}`);
+      
+      // Convert messages to ChatMessage format
+      const chatMessages = messages.map((content: string, idx: number) => ({
+        role: idx === messages.length - 1 ? 'user' as const : 'user' as const,
+        content
+      }));
+      
+      const orchestratorInput: OrchestratorInput = {
+        businessId,
+        instanceId: instanceId || null,
+        contactPhone: phone,
+        contactName,
+        messages: chatMessages
+      };
+      
+      const v3Result = await processWithOrchestrator(orchestratorInput);
+      console.log(`[Agent Processor] V3 Orchestrator completed for ${contactPhone}: response length=${v3Result.response?.length || 0}`);
+      
+      // Send response via WhatsApp
+      if (v3Result.response && v3Result.response.length > 0) {
+        const business = await prisma.business.findUnique({
+          where: { id: businessId },
+          include: { instances: true }
+        });
+        
+        if (business) {
+          await sendWhatsAppResponseDirect(instanceId || '', phone, v3Result.response, business);
+        }
+      }
+      
+      return { response: v3Result.response, queued: false };
+    }
+    
+    // Fallback to V1
+    console.log(`[Agent Processor] Using V1 Agent for ${contactPhone}`);
     const result = await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId, firstMessageId, provider);
     console.log(`[Agent Processor] processWithAgent completed for ${contactPhone}: response length=${result.response?.length || 0}`);
     return result;
   } catch (error: any) {
-    console.error(`[Agent Processor] Error in processWithAgent for ${contactPhone}:`, error.message);
+    console.error(`[Agent Processor] Error in processing for ${contactPhone}:`, error.message);
+    
+    // If V3 fails, try V1 as fallback
+    if (USE_V3_AGENT) {
+      console.log(`[Agent Processor] V3 failed, falling back to V1 for ${contactPhone}`);
+      try {
+        const result = await processWithAgent(businessId, messages, phone, contactPhone, contactName, instanceId, instanceBackendId, firstMessageId, provider);
+        return result;
+      } catch (v1Error: any) {
+        console.error(`[Agent Processor] V1 fallback also failed for ${contactPhone}:`, v1Error.message);
+        throw v1Error;
+      }
+    }
+    
     throw error;
   }
 }
