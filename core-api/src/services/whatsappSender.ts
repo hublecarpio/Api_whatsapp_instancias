@@ -80,6 +80,7 @@ function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedT
   }
   
   const urlRegex = /(https?:\/\/[^\s<>\[\]()]+\.(jpg|jpeg|png|gif|webp|mp4|mov|pdf|doc|docx))/gi;
+  const urlsToRemove: Set<string> = new Set();
   while ((match = urlRegex.exec(text)) !== null) {
     const url = match[1];
     const ext = match[2].toLowerCase();
@@ -94,6 +95,16 @@ function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedT
         mediaItems.push({ type: 'file', url, fileName: `document.${ext}` });
       }
     }
+    urlsToRemove.add(url);
+  }
+  
+  for (const url of urlsToRemove) {
+    const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleanedText = cleanedText.replace(new RegExp(escapedUrl + '[.,;:!?]*', 'g'), '');
+  }
+  
+  if (urlsToRemove.size > 0) {
+    cleanedText = cleanedText.replace(/(?:Aquí puedes ver la presentación|Aquí puedes ver|Ver imagen|Mira la imagen|Ve la imagen|Revisa la imagen):\s*/gi, '');
   }
   
   cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
