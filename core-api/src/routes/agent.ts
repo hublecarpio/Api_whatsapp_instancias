@@ -183,7 +183,14 @@ async function processWithAgentQueuedWithIds(
       if (v3Result.response && v3Result.response.length > 0) {
         const business = await prisma.business.findUnique({
           where: { id: businessId },
-          include: { instances: true }
+          include: { 
+            instances: {
+              include: {
+                metaCredential: true,
+                metaCoexistCredential: true
+              }
+            }
+          }
         });
         
         if (business) {
