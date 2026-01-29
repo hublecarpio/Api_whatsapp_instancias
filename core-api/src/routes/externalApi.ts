@@ -2762,4 +2762,302 @@ router.get('/agent/tools-detailed', validateApiKey, async (req: ApiKeyRequest, r
   }
 });
 
+// ============================================================================
+// TOOL ORCHESTRATOR - LLM especializado decide y ejecuta tools
+// ============================================================================
+
+router.post('/agent/tool-orchestrator', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  console.log('[TOOL-ORCH] Tool orchestrator called:', { businessId: req.businessId });
+  const startTime = Date.now();
+  
+  try {
+    const { 
+      contactPhone, 
+      contactName = 'Cliente', 
+      query, 
+      messages = [],
+      model = 'gpt-4o',
+      maxIterations = 3
+    } = req.body;
+
+    if (!contactPhone) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campo "contactPhone" es requerido' 
+      });
+    }
+
+    if (!query) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campo "query" es requerido' 
+      });
+    }
+
+    const phone = contactPhone.replace(/\D/g, '');
+    const businessId = req.businessId!;
+    const instanceId = req.instanceId || null;
+
+    // Load custom tools for this business
+    await loadCustomToolsForBusiness(businessId);
+
+    // Load contexts
+    const businessContext = await loadBusinessContext(businessId, instanceId);
+    const convContext = await loadConversationContext(businessId, phone, instanceId);
+
+    // Build availability context for tools
+    const availabilityContext: ToolAvailabilityContext = {
+      businessId,
+      instanceId,
+      hasActiveOrder: !!convContext.existingOrder,
+      hasProducts: businessContext.products.length > 0,
+      hasZones: businessContext.deliveryZones.length > 0,
+      hasAppointments: businessContext.hasAppointments,
+      businessObjective: businessContext.businessObjective
+    };
+
+    const definitionContext: ToolDefinitionContext = {
+      hasActiveOrder: !!convContext.existingOrder,
+      hasProducts: businessContext.products.length > 0,
+      hasZones: businessContext.deliveryZones.length > 0,
+      hasAppointments: businessContext.hasAppointments,
+      zoneDescriptions: businessContext.deliveryZones.map((z: any) => z.name).join(', '),
+      businessObjective: businessContext.businessObjective
+    };
+
+    // Get available tools
+    const openaiTools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
+    console.log(`[TOOL-ORCH] Available tools: ${openaiTools.length} - ${openaiTools.map((t: any) => t.function?.name).join(', ')}`);
+
+    if (openaiTools.length === 0) {
+      return res.json({
+        success: true,
+        needsMoreData: false,
+        toolsExecuted: [],
+        suggestedResponse: 'No hay herramientas disponibles para este contexto.',
+        metadata: { model, iterations: 0, processingTimeMs: Date.now() - startTime }
+      });
+    }
+
+    // Build tool context for execution
+    const toolContext: ToolContext = {
+      businessId,
+      instanceId,
+      contactPhone: phone,
+      contactName: convContext.contact?.name || contactName,
+      currencySymbol: businessContext.currencySymbol,
+      currencyCode: businessContext.currencyCode,
+      business: businessContext.business,
+      contact: convContext.contact,
+      existingOrder: convContext.existingOrder,
+      extractedData: convContext.extractedData,
+      conversationMessages: messages.filter((m: any) => m.role === 'user' || m.role === 'assistant')
+    };
+
+    // Build context summary for the orchestrator
+    const contextSummary = buildToolOrchestratorContext(businessContext, convContext, query);
+
+    // System prompt for tool orchestrator - focused on deciding and executing tools
+    const systemPrompt = `Eres un orquestador de herramientas especializado. Tu único trabajo es:
+1. Analizar la query del usuario y el contexto disponible
+2. Decidir qué herramienta(s) usar para satisfacer la solicitud
+3. Ejecutar las herramientas con los parámetros correctos
+4. Si falta información necesaria, indicar qué datos se necesitan
+
+CONTEXTO DEL NEGOCIO Y CONVERSACIÓN:
+${contextSummary}
+
+REGLAS:
+- Solo usa herramientas cuando sea necesario para la query
+- Si no tienes todos los datos requeridos para una herramienta, NO la ejecutes
+- En su lugar, indica qué información falta
+- Si la query no requiere ninguna herramienta, responde indicándolo
+- Sé preciso con los parámetros de las herramientas`;
+
+    // Initialize LLM
+    const { LLMFactory } = await import('../services/agent/core/llmAdapter.js');
+    const llmProvider = LLMFactory.getProvider('openai');
+    
+    const llmMessages: any[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages.filter((m: any) => m.role === 'user' || m.role === 'assistant'),
+      { role: 'user', content: query }
+    ];
+
+    const llmConfig = {
+      model,
+      temperature: 0.3,
+      maxTokens: 2000
+    };
+
+    const toolsExecuted: Array<{ name: string; success: boolean; result: any }> = [];
+    let iterations = 0;
+    let response = await llmProvider.chat(llmMessages, llmConfig, openaiTools);
+    iterations++;
+
+    // Tool execution loop
+    while (response.finishReason === 'tool_calls' && response.toolCalls && iterations < maxIterations) {
+      console.log(`[TOOL-ORCH] Iteration ${iterations}: executing ${response.toolCalls.length} tools`);
+
+      const toolResults: any[] = [];
+
+      for (const toolCall of response.toolCalls) {
+        console.log(`[TOOL-ORCH] Executing: ${toolCall.name}`);
+        
+        const result = await toolRegistry.executeTool(
+          toolCall.name,
+          toolCall.arguments,
+          toolContext
+        );
+
+        toolsExecuted.push({
+          name: toolCall.name,
+          success: result.success,
+          result: result.data || result.content
+        });
+
+        toolResults.push({
+          role: 'tool',
+          content: result.content,
+          tool_call_id: toolCall.id
+        });
+      }
+
+      // Add assistant message with tool calls
+      llmMessages.push({
+        role: 'assistant',
+        content: response.content || '',
+        tool_calls: response.toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
+        }))
+      });
+      llmMessages.push(...toolResults);
+
+      // Continue loop
+      response = await llmProvider.chat(llmMessages, llmConfig, openaiTools);
+      iterations++;
+    }
+
+    const processingTimeMs = Date.now() - startTime;
+    console.log(`[TOOL-ORCH] Completed: ${iterations} iterations, ${toolsExecuted.length} tools executed, ${processingTimeMs}ms`);
+
+    // Analyze if we need more data
+    const finalContent = response.content || '';
+    const needsMoreData = detectMissingData(finalContent);
+
+    return res.json({
+      success: true,
+      needsMoreData: needsMoreData.missing,
+      missingFields: needsMoreData.fields,
+      toolsExecuted,
+      suggestedResponse: finalContent,
+      metadata: {
+        model,
+        iterations,
+        processingTimeMs,
+        tokensUsed: response.usage?.totalTokens || 0
+      }
+    });
+
+  } catch (error: any) {
+    console.error('[TOOL-ORCH] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Helper: Build context summary for tool orchestrator
+function buildToolOrchestratorContext(businessContext: any, convContext: any, query: string): string {
+  const parts: string[] = [];
+
+  // Business info
+  if (businessContext.business) {
+    parts.push(`Negocio: ${businessContext.business.name}`);
+    parts.push(`Objetivo: ${businessContext.businessObjective || 'SALES'}`);
+  }
+
+  // Products summary
+  if (businessContext.products.length > 0) {
+    const productList = businessContext.products.slice(0, 10).map((p: any) => 
+      `- ${p.title}: ${businessContext.currencySymbol}${p.price}${p.variations ? ` (${p.variations})` : ''}`
+    ).join('\n');
+    parts.push(`\nPRODUCTOS DISPONIBLES:\n${productList}`);
+    if (businessContext.products.length > 10) {
+      parts.push(`... y ${businessContext.products.length - 10} productos más`);
+    }
+  }
+
+  // Delivery zones
+  if (businessContext.deliveryZones.length > 0) {
+    const zones = businessContext.deliveryZones.map((z: any) => 
+      `- ${z.name}: ${businessContext.currencySymbol}${z.deliveryCost}`
+    ).join('\n');
+    parts.push(`\nZONAS DE ENTREGA:\n${zones}`);
+  }
+
+  // Existing order
+  if (convContext.existingOrder) {
+    const order = convContext.existingOrder;
+    parts.push(`\nORDEN EXISTENTE:`);
+    parts.push(`ID: ${order.id}, Estado: ${order.status}`);
+    parts.push(`Total: ${businessContext.currencySymbol}${order.totalAmount}`);
+    if (order.items) {
+      parts.push(`Items: ${order.items.map((i: any) => i.productName).join(', ')}`);
+    }
+  }
+
+  // Extracted data
+  if (convContext.extractedData && Object.keys(convContext.extractedData).length > 0) {
+    parts.push(`\nDATOS DEL CLIENTE:`);
+    for (const [key, value] of Object.entries(convContext.extractedData)) {
+      if (value) parts.push(`- ${key}: ${value}`);
+    }
+  }
+
+  // Contact info
+  if (convContext.contact) {
+    parts.push(`\nCONTACTO: ${convContext.contact.name || 'Sin nombre'}, Tel: ${convContext.contact.phone}`);
+  }
+
+  return parts.join('\n');
+}
+
+// Helper: Detect if response indicates missing data
+function detectMissingData(content: string): { missing: boolean; fields: string[] } {
+  const missingIndicators = [
+    /necesito\s+(saber|conocer|que me (digas|proporciones))/i,
+    /falta\s+(el|la|información)/i,
+    /cuál\s+es\s+(tu|su)/i,
+    /podrías\s+(indicarme|decirme)/i,
+    /requiero\s+(el|la|los|las)/i
+  ];
+
+  const fieldPatterns: { [key: string]: RegExp } = {
+    'direccion': /direcci[oó]n|domicilio|ubicaci[oó]n/i,
+    'telefono': /tel[eé]fono|n[uú]mero|celular/i,
+    'nombre': /nombre|c[oó]mo te llamas/i,
+    'metodoPago': /m[eé]todo de pago|forma de pago|c[oó]mo (pagar[aá]s|deseas pagar)/i,
+    'zona': /zona|sector|[aá]rea de entrega/i,
+    'producto': /producto|qu[eé] deseas|qu[eé] quieres/i,
+    'cantidad': /cantidad|cu[aá]ntos|cu[aá]ntas/i
+  };
+
+  const missing = missingIndicators.some(pattern => pattern.test(content));
+  const fields: string[] = [];
+
+  if (missing) {
+    for (const [field, pattern] of Object.entries(fieldPatterns)) {
+      if (pattern.test(content)) {
+        fields.push(field);
+      }
+    }
+  }
+
+  return { missing, fields };
+}
+
 export default router;
