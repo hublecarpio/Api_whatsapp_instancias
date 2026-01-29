@@ -1181,30 +1181,118 @@ router.get('/products', validateApiKey, async (req: ApiKeyRequest, res: Response
 
 router.get('/business-info', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
-    const business = await prisma.business.findUnique({
-      where: { id: req.businessId },
-      include: {
-        instances: {
-          select: {
-            id: true,
-            name: true,
-            phoneNumber: true,
-            provider: true,
-            status: true,
-            isActive: true
-          }
-        },
-        followUpConfigs: {
-          select: {
-            id: true,
-            instanceId: true,
-            enabled: true,
-            firstDelayMinutes: true,
-            triggerMode: true
+    const instanceId = req.instanceId;
+    
+const [business, deliveryZones, funnelStages, extractionFields, ragSections] = await Promise.all([
+      prisma.business.findUnique({
+        where: { id: req.businessId },
+        include: {
+          instances: {
+            select: {
+              id: true,
+              name: true,
+              phoneNumber: true,
+              provider: true,
+              status: true,
+              isActive: true
+            }
+          },
+          followUpConfigs: {
+            select: {
+              id: true,
+              instanceId: true,
+              enabled: true,
+              firstDelayMinutes: true,
+              triggerMode: true
+            }
           }
         }
-      }
-    });
+      }),
+      prisma.deliveryZone.findMany({
+        where: {
+          businessId: req.businessId,
+          OR: [
+            { instanceId: instanceId },
+            { instanceId: null }
+          ]
+        },
+        select: {
+          id: true,
+          name: true,
+          districts: true,
+          cost: true,
+          deliveryTime: true,
+          instanceId: true
+        },
+        orderBy: { name: 'asc' }
+      }),
+      prisma.funnelStage.findMany({
+        where: {
+          businessId: req.businessId,
+          OR: [
+            { instanceId: instanceId },
+            { instanceId: null }
+          ]
+        },
+        select: {
+          id: true,
+          name: true,
+          order: true,
+          requiredFieldKeys: true,
+          blockedTopics: true,
+          description: true,
+          promptContext: true,
+          toolsAllowed: true,
+          instanceId: true
+        },
+        orderBy: { order: 'asc' }
+      }),
+      prisma.extractionField.findMany({
+        where: {
+          businessId: req.businessId,
+          OR: [
+            { instanceId: instanceId },
+            { instanceId: null }
+          ]
+        },
+        select: {
+          id: true,
+          fieldKey: true,
+          fieldLabel: true,
+          fieldType: true,
+          description: true,
+          required: true,
+          order: true,
+          instanceId: true
+        },
+        orderBy: { order: 'asc' }
+      }),
+      prisma.promptSection.findMany({
+        where: {
+          businessId: req.businessId,
+          OR: [
+            { instanceId: instanceId },
+            { instanceId: null }
+          ],
+          enabled: true
+        },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          content: true,
+          priority: true,
+          isCore: true,
+          keywords: true,
+          instanceId: true
+        },
+        orderBy: [
+          { isCore: 'desc' },
+          { priority: 'desc' },
+          { type: 'asc' }
+        ]
+      })
+    ]);
     
     if (!business) {
       return res.status(404).json({ error: 'Negocio no encontrado' });
@@ -1218,7 +1306,11 @@ router.get('/business-info', validateApiKey, async (req: ApiKeyRequest, res: Res
       businessObjective: business.businessObjective,
       timezone: business.timezone,
       instances: business.instances,
-      followUpConfigs: business.followUpConfigs
+      followUpConfigs: business.followUpConfigs,
+      deliveryZones,
+      funnelStages,
+      extractionFields,
+      ragSections
     });
   } catch (error: any) {
     console.error('API business-info error:', error);
