@@ -1151,11 +1151,19 @@ router.put('/agent-config', validateApiKey, async (req: ApiKeyRequest, res: Resp
 
 router.get('/products', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
-    const { limit = 100, category, inStock } = req.query;
+    const { limit = 100, inStock, search } = req.query;
     
     const where: any = { businessId: req.businessId };
-    if (category) where.category = category;
     if (inStock === 'true') where.stock = { gt: 0 };
+    
+    if (search && typeof search === 'string' && search.trim()) {
+      const searchTerm = search.trim().toLowerCase();
+      where.OR = [
+        { title: { contains: searchTerm, mode: 'insensitive' } },
+        { description: { contains: searchTerm, mode: 'insensitive' } },
+        { variations: { hasSome: [searchTerm] } }
+      ];
+    }
     
     const products = await prisma.product.findMany({
       where,
@@ -1169,8 +1177,12 @@ router.get('/products', validateApiKey, async (req: ApiKeyRequest, res: Response
         title: p.title,
         description: p.description,
         price: p.price,
+        variations: p.variations,
+        pricePerVariation: p.pricePerVariation,
         stock: p.stock,
-        imageUrl: p.imageUrl
+        stockPerVariation: p.stockPerVariation,
+        imageUrl: p.imageUrl,
+        imageUrls: p.imageUrls
       }))
     });
   } catch (error: any) {
@@ -2033,6 +2045,281 @@ router.post('/chat', validateApiKey, async (req: ApiKeyRequest, res: Response) =
       error: 'Error al procesar mensaje',
       details: error.message
     });
+  }
+});
+
+// ============ RAG SECTIONS ENDPOINTS ============
+
+router.get('/rag-sections', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const instanceId = req.instanceId;
+    const { type, isCore } = req.query;
+    
+    const where: any = {
+      businessId: req.businessId,
+      OR: [
+        { instanceId: instanceId },
+        { instanceId: null }
+      ],
+      enabled: true
+    };
+    
+    if (type) where.type = type;
+    if (isCore === 'true') where.isCore = true;
+    if (isCore === 'false') where.isCore = false;
+    
+    const sections = await prisma.promptSection.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        content: true,
+        priority: true,
+        isCore: true,
+        keywords: true,
+        instanceId: true
+      },
+      orderBy: [
+        { isCore: 'desc' },
+        { priority: 'desc' },
+        { type: 'asc' }
+      ]
+    });
+    
+    res.json({ sections });
+  } catch (error: any) {
+    console.error('API rag-sections error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/rag-sections/search', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const instanceId = req.instanceId;
+    const { query, limit = 5, includeCore = true } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Campo "query" es requerido' });
+    }
+    
+    const where: any = {
+      businessId: req.businessId,
+      OR: [
+        { instanceId: instanceId },
+        { instanceId: null }
+      ],
+      enabled: true
+    };
+    
+    const allSections = await prisma.promptSection.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        content: true,
+        priority: true,
+        isCore: true,
+        keywords: true,
+        instanceId: true
+      },
+      orderBy: [
+        { isCore: 'desc' },
+        { priority: 'desc' }
+      ]
+    });
+    
+    const coreSections = includeCore ? allSections.filter(s => s.isCore) : [];
+    const searchableSections = allSections.filter(s => !s.isCore);
+    
+    const queryLower = query.toLowerCase();
+    const scored = searchableSections.map(section => {
+      let score = 0;
+      
+      if (section.title.toLowerCase().includes(queryLower)) score += 10;
+      if (section.content.toLowerCase().includes(queryLower)) score += 5;
+      
+      const keywords = section.keywords || [];
+      for (const kw of keywords) {
+        if (queryLower.includes(kw.toLowerCase()) || kw.toLowerCase().includes(queryLower)) {
+          score += 3;
+        }
+      }
+      
+      score += section.priority;
+      
+      return { ...section, score };
+    });
+    
+    scored.sort((a, b) => b.score - a.score);
+    const topMatches = scored.slice(0, Number(limit)).filter(s => s.score > 0);
+    
+    res.json({
+      coreSections,
+      matchedSections: topMatches,
+      totalCoreTokens: coreSections.reduce((acc, s) => acc + Math.ceil(s.content.length / 4), 0),
+      totalMatchedTokens: topMatches.reduce((acc, s) => acc + Math.ceil(s.content.length / 4), 0)
+    });
+  } catch (error: any) {
+    console.error('API rag-sections/search error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/rag-sections/:id', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const section = await prisma.promptSection.findFirst({
+      where: {
+        id: req.params.id,
+        businessId: req.businessId
+      }
+    });
+    
+    if (!section) {
+      return res.status(404).json({ error: 'Seccion no encontrada' });
+    }
+    
+    res.json({ section });
+  } catch (error: any) {
+    console.error('API rag-sections/:id error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ FUNNEL STAGES ENDPOINTS ============
+
+router.get('/funnel-stages', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const instanceId = req.instanceId;
+    
+    const stages = await prisma.funnelStage.findMany({
+      where: {
+        businessId: req.businessId,
+        OR: [
+          { instanceId: instanceId },
+          { instanceId: null }
+        ],
+        isActive: true
+      },
+      select: {
+        id: true,
+        name: true,
+        order: true,
+        description: true,
+        promptContext: true,
+        requiredFieldKeys: true,
+        blockedTopics: true,
+        toolsAllowed: true,
+        autoTransition: true,
+        instanceId: true
+      },
+      orderBy: { order: 'asc' }
+    });
+    
+    res.json({ stages });
+  } catch (error: any) {
+    console.error('API funnel-stages error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/funnel-stages/:id', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const stage = await prisma.funnelStage.findFirst({
+      where: {
+        id: req.params.id,
+        businessId: req.businessId
+      }
+    });
+    
+    if (!stage) {
+      return res.status(404).json({ error: 'Etapa no encontrada' });
+    }
+    
+    res.json({ stage });
+  } catch (error: any) {
+    console.error('API funnel-stages/:id error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/contact-funnel-state/:phone', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const phone = req.params.phone.replace(/\D/g, '');
+    const instanceId = req.instanceId;
+    const businessId = req.businessId!;
+    
+    const [contact, funnelState, extractedData, allStages] = await Promise.all([
+      prisma.contact.findFirst({
+        where: { businessId, phone }
+      }),
+      prisma.contactFunnelState.findFirst({
+        where: { businessId, contactPhone: phone },
+        include: { stage: true }
+      }),
+      prisma.contactExtractedData.findMany({
+        where: { businessId, contactPhone: phone }
+      }),
+      prisma.funnelStage.findMany({
+        where: {
+          businessId,
+          OR: [
+            { instanceId: instanceId },
+            { instanceId: null }
+          ],
+          isActive: true
+        },
+        orderBy: { order: 'asc' }
+      })
+    ]);
+    
+    if (!contact) {
+      return res.status(404).json({ error: 'Contacto no encontrado' });
+    }
+    
+    const currentStage = funnelState?.stage;
+    
+    const extractedFields: Record<string, any> = {};
+    for (const field of extractedData) {
+      extractedFields[field.fieldKey] = {
+        value: field.fieldValue,
+        confidence: field.confidence,
+        extractedAt: field.extractedAt
+      };
+    }
+    
+    const missingFields = currentStage?.requiredFieldKeys?.filter(
+      (key: string) => !extractedFields[key]?.value
+    ) || [];
+    
+    res.json({
+      contactId: contact.id,
+      contactName: contact.name,
+      phone: contact.phone,
+      currentStage: currentStage ? {
+        id: currentStage.id,
+        name: currentStage.name,
+        order: currentStage.order,
+        description: currentStage.description,
+        promptContext: currentStage.promptContext,
+        requiredFieldKeys: currentStage.requiredFieldKeys,
+        blockedTopics: currentStage.blockedTopics,
+        toolsAllowed: currentStage.toolsAllowed
+      } : null,
+      extractedFields,
+      missingFields,
+      canAdvance: missingFields.length === 0,
+      allStages: allStages.map(s => ({
+        id: s.id,
+        name: s.name,
+        order: s.order
+      })),
+      stateMetadata: funnelState?.metadata || {}
+    });
+  } catch (error: any) {
+    console.error('API contact-funnel-state error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
