@@ -1852,4 +1852,96 @@ router.post('/templates/create', validateApiKey, async (req: ApiKeyRequest, res:
   }
 });
 
+router.post('/chat', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { message, messages, contactPhone, contactName, useV3 } = req.body;
+    
+    if (!message && (!messages || !Array.isArray(messages))) {
+      return res.status(400).json({ 
+        error: 'Se requiere "message" (string) o "messages" (array)' 
+      });
+    }
+    
+    if (!contactPhone) {
+      return res.status(400).json({ error: 'Se requiere "contactPhone"' });
+    }
+    
+    const businessId = req.businessId!;
+    const instanceId = req.instanceId;
+    
+    const chatMessages: Array<{ role: 'user' | 'assistant'; content: string }> = messages 
+      ? messages.map((m: any) => ({ role: m.role || 'user', content: m.content || m }))
+      : [{ role: 'user' as const, content: message }];
+    
+    const USE_V3_AGENT = process.env.USE_V3_AGENT === 'true';
+    const shouldUseV3 = useV3 === true || USE_V3_AGENT;
+    
+    if (shouldUseV3) {
+      try {
+        const { processWithOrchestrator } = await import('../services/agent/index.js');
+        
+        const input = {
+          businessId,
+          instanceId: instanceId || null,
+          contactPhone: contactPhone.replace(/\D/g, ''),
+          contactName: contactName || 'API User',
+          messages: chatMessages,
+          config: {
+            model: req.body.model || 'gpt-4o-mini',
+            temperature: req.body.temperature || 0.7,
+            maxTokens: req.body.maxTokens || 2000,
+            maxToolCalls: req.body.maxToolCalls || 5
+          }
+        };
+        
+        const result = await processWithOrchestrator(input);
+        
+        return res.json({
+          success: true,
+          response: result.response,
+          toolsExecuted: result.toolsExecuted,
+          tokensUsed: result.tokensUsed,
+          metadata: {
+            ...result.metadata,
+            version: 'v3',
+            instanceId
+          }
+        });
+      } catch (v3Error: any) {
+        console.error('[API Chat] V3 error, falling back to V1:', v3Error.message);
+      }
+    }
+    
+    {
+      const { processAIResponseDirect } = await import('../services/queues/aiResponseProcessor.js');
+      
+      const msgStrings = chatMessages.map(m => m.content);
+      const result = await processAIResponseDirect({
+        businessId,
+        contactPhone: contactPhone.replace(/\D/g, ''),
+        contactName: contactName || 'API User',
+        messages: msgStrings,
+        phone: contactPhone,
+        instanceId
+      });
+      
+      return res.json({
+        success: true,
+        response: result.response,
+        tokensUsed: result.tokensUsed,
+        metadata: {
+          version: 'v1',
+          instanceId
+        }
+      });
+    }
+  } catch (error: any) {
+    console.error('[API Chat] Error:', error);
+    res.status(500).json({ 
+      error: 'Error al procesar mensaje',
+      details: error.message
+    });
+  }
+});
+
 export default router;

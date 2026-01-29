@@ -11,6 +11,9 @@ import { scheduleFollowUp } from '../followUpService.js';
 // import { analyzeAndUpdateLeadStage } from '../leadStageService.js'; // DISABLED: Tags are now manual-only
 import axios from 'axios';
 import eventLogger from '../eventLogger.js';
+import { processWithOrchestrator, OrchestratorInput } from '../agent/index.js';
+
+const USE_V3_AGENT = process.env.USE_V3_AGENT === 'true';
 import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
 import { retrieveRelevantSections, formatSectionsForPrompt } from '../ragService.js';
 import { processDataExtraction, getExtractedDataForContact, getAppointmentFieldsData } from '../dataExtractionService.js';
@@ -2234,7 +2237,36 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
   
   let result: { response: string; tokensUsed?: number };
   
-  if (business.agentVersion === 'v2') {
+  const useV3 = USE_V3_AGENT || business.agentVersion === 'v3';
+  
+  if (useV3) {
+    try {
+      console.log(`[AI Direct] Using Agent V3 for business ${businessId}`);
+      const v3Input: OrchestratorInput = {
+        businessId,
+        instanceId: targetInstanceId || null,
+        contactPhone: normalizedPhone,
+        contactName: contactName || 'Cliente',
+        messages: messages.map((m, i) => ({ role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant', content: m })),
+        config: {
+          model: 'gpt-4o-mini',
+          temperature: 0.7,
+          maxTokens: 2000,
+          maxToolCalls: 5
+        }
+      };
+      
+      const v3Result = await processWithOrchestrator(v3Input);
+      result = { response: v3Result.response, tokensUsed: v3Result.tokensUsed?.total };
+      
+      if (v3Result.toolsExecuted?.length) {
+        console.log(`[AI Direct V3] Tools executed: ${v3Result.toolsExecuted.map(t => t.name).join(', ')}`);
+      }
+    } catch (v3Error: any) {
+      console.error('[AI Direct] Agent V3 error, falling back to V1:', v3Error.message);
+      result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
+    }
+  } else if (business.agentVersion === 'v2') {
     try {
       const v2Available = await isAgentV2Available();
       if (v2Available) {

@@ -13,12 +13,17 @@ export interface OrchestratorConfig {
   maxTokens?: number;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
 export interface OrchestratorInput {
   businessId: string;
   instanceId: string | null;
   contactPhone: string;
   contactName: string;
-  messages: string[];
+  messages: ChatMessage[];
   triggerContext?: TriggerContext;
   config?: OrchestratorConfig;
 }

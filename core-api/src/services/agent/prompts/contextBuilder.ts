@@ -17,10 +17,15 @@ export interface BusinessContext {
   hasAppointments: boolean;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
 export interface ConversationContext {
   contactPhone: string;
   contactName: string;
-  messages: string[];
+  messages: ChatMessage[];
   existingOrder: any | null;
   extractedData: Record<string, any>;
   funnelStatus: any | null;
@@ -150,7 +155,7 @@ export class ContextBuilder {
     const { messages } = this.conversationContext;
     
     try {
-      const lastMessages = messages.slice(-3).join(' ');
+      const lastMessages = messages.slice(-3).map(m => m.content).join(' ');
       const result = await retrieveRelevantSections(
         business.id,
         lastMessages,
@@ -321,17 +326,12 @@ export class ContextBuilder {
   private buildConversationMessages(): { role: 'user' | 'assistant'; content: string }[] {
     const { messages } = this.conversationContext;
     
-    const result: { role: 'user' | 'assistant'; content: string }[] = [];
-    
-    for (let i = 0; i < messages.length; i++) {
-      const isUser = i % 2 === 0;
-      result.push({
-        role: isUser ? 'user' : 'assistant',
-        content: messages[i]
-      });
-    }
-    
-    return result;
+    return messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content
+      }));
   }
 }
 
