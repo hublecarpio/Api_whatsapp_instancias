@@ -922,36 +922,81 @@ router.post('/orders/:orderId/confirm', validateApiKey, async (req: ApiKeyReques
 router.post('/orders/:orderId/voucher', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
     const { orderId } = req.params;
-    const { voucherImageUrl, autoConfirm } = req.body;
+    const { 
+      voucherImageUrl, 
+      amount,
+      paymentMethod,
+      operationCode,
+      brand,
+      notes: voucherNotes
+    } = req.body;
     
-    if (!voucherImageUrl) {
-      return res.status(400).json({ error: 'voucherImageUrl es requerido' });
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return res.status(400).json({ 
+        error: 'amount es requerido (monto del voucher en numeros)',
+        hint: 'Ejemplo: { "amount": 50.00, "voucherImageUrl": "...", "paymentMethod": "YAPE" }'
+      });
     }
     
     const order = await prisma.order.findFirst({
       where: {
         id: orderId,
         businessId: req.businessId
-      }
+      },
+      include: { items: true }
     });
     
     if (!order) {
       return res.status(404).json({ error: 'Pedido no encontrado' });
     }
     
-    if (order.status !== 'AWAITING_VOUCHER') {
+    if (!['AWAITING_VOUCHER', 'PAID'].includes(order.status)) {
       return res.status(400).json({ 
-        error: 'Solo se pueden adjuntar vouchers a pedidos en estado AWAITING_VOUCHER',
+        error: 'Solo se pueden agregar vouchers a pedidos en estado AWAITING_VOUCHER o PAID (pago parcial)',
         currentStatus: order.status
       });
     }
     
-    const updateData: any = {
-      voucherImageUrl,
-      voucherReceivedAt: new Date()
+    const currentPaidAmount = order.paidAmount || 0;
+    const newPaidAmount = currentPaidAmount + amount;
+    const totalAmount = order.totalAmount || 0;
+    const newPendingAmount = Math.max(0, totalAmount - newPaidAmount);
+    
+    const paymentRecord = {
+      amount,
+      paymentMethod: paymentMethod || 'TRANSFERENCIA',
+      operationCode: operationCode || null,
+      brand: brand || null,
+      imageUrl: voucherImageUrl || null,
+      notes: voucherNotes || null,
+      timestamp: new Date().toISOString()
     };
     
-    if (autoConfirm === true) {
+    const existingNotes = order.notes ? (typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes) : {};
+    const paymentHistory = existingNotes.paymentHistory || [];
+    paymentHistory.push(paymentRecord);
+    
+    const updatedNotes = {
+      ...existingNotes,
+      paymentHistory,
+      lastVoucherAmount: amount,
+      lastPaymentMethod: paymentMethod || 'TRANSFERENCIA'
+    };
+    
+    const updateData: any = {
+      paidAmount: newPaidAmount,
+      pendingAmount: newPendingAmount,
+      lastVoucherAmount: amount,
+      voucherReceivedAt: new Date(),
+      notes: JSON.stringify(updatedNotes)
+    };
+    
+    if (voucherImageUrl) {
+      updateData.voucherImageUrl = voucherImageUrl;
+    }
+    
+    const isFullyPaid = newPaidAmount >= totalAmount;
+    if (isFullyPaid) {
       updateData.status = 'PAID';
       updateData.paidAt = new Date();
     }
@@ -962,17 +1007,69 @@ router.post('/orders/:orderId/voucher', validateApiKey, async (req: ApiKeyReques
       include: { items: true }
     });
     
-    console.log(`[EXTERNAL API] Voucher attached to order ${orderId}${autoConfirm ? ' (auto-confirmed)' : ''}`);
+    console.log(`[EXTERNAL API] Voucher added to order ${orderId}: ${order.currencySymbol}${amount} (${paymentMethod || 'TRANSFERENCIA'}). Total paid: ${order.currencySymbol}${newPaidAmount}/${totalAmount}`);
     
     res.json({
       success: true,
       order: updatedOrder,
-      message: autoConfirm 
-        ? 'Voucher adjuntado y pago confirmado automaticamente'
-        : 'Voucher adjuntado exitosamente. Pendiente de confirmacion.'
+      payment: {
+        voucherAmount: amount,
+        paymentMethod: paymentMethod || 'TRANSFERENCIA',
+        operationCode: operationCode || null,
+        previousPaidAmount: currentPaidAmount,
+        newPaidAmount,
+        totalAmount,
+        pendingAmount: newPendingAmount,
+        isFullyPaid,
+        paymentCount: paymentHistory.length
+      },
+      message: isFullyPaid 
+        ? `Pago completado! Total pagado: ${order.currencySymbol}${newPaidAmount}`
+        : `Pago parcial registrado. Pagado: ${order.currencySymbol}${newPaidAmount} de ${order.currencySymbol}${totalAmount}. Pendiente: ${order.currencySymbol}${newPendingAmount}`
     });
   } catch (error: any) {
     console.error('API attach voucher error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// HISTORIAL DE PAGOS
+// GET /orders/:orderId/payments - Ver todos los vouchers/pagos del pedido
+// ============================================================================
+router.get('/orders/:orderId/payments', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, businessId: req.businessId },
+      include: { items: true }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    const notes = order.notes ? (typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes) : {};
+    const paymentHistory = notes.paymentHistory || [];
+    
+    const totalPaid = paymentHistory.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    
+    res.json({
+      success: true,
+      orderId,
+      summary: {
+        totalAmount: order.totalAmount,
+        paidAmount: order.paidAmount || 0,
+        pendingAmount: order.pendingAmount || (order.totalAmount - (order.paidAmount || 0)),
+        paymentCount: paymentHistory.length,
+        isFullyPaid: (order.paidAmount || 0) >= order.totalAmount
+      },
+      payments: paymentHistory,
+      currencySymbol: order.currencySymbol
+    });
+  } catch (error: any) {
+    console.error('API get payments error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1015,6 +1112,354 @@ router.delete('/orders/:orderId', validateApiKey, async (req: ApiKeyRequest, res
     });
   } catch (error: any) {
     console.error('API delete order error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// MODIFICAR PRODUCTOS DEL PEDIDO
+// PUT /orders/:orderId/items - Reemplaza todos los items del pedido
+// ============================================================================
+router.put('/orders/:orderId/items', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { items } = req.body;
+    
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items es requerido (array de productos)' });
+    }
+    
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, businessId: req.businessId },
+      include: { items: true }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    if (!['AWAITING_VOUCHER', 'PAID'].includes(order.status)) {
+      return res.status(400).json({ 
+        error: 'Solo se pueden modificar pedidos en estado AWAITING_VOUCHER o PAID',
+        currentStatus: order.status
+      });
+    }
+    
+    const productIds = items.map((i: any) => i.productId).filter(Boolean);
+    const products = productIds.length > 0 
+      ? await prisma.product.findMany({
+          where: { id: { in: productIds }, businessId: req.businessId }
+        })
+      : [];
+    
+    const productMap = new Map(products.map(p => [p.id, p]));
+    let subtotalAmount = 0;
+    
+    const orderItems = items.map((item: any) => {
+      const product = item.productId ? productMap.get(item.productId) : null;
+      const unitPrice = item.unitPrice ?? product?.price ?? 0;
+      const quantity = item.quantity || 1;
+      subtotalAmount += unitPrice * quantity;
+      
+      return {
+        orderId,
+        productId: item.productId || null,
+        productTitle: item.productTitle || product?.title || 'Producto',
+        quantity,
+        unitPrice,
+        imageUrl: item.imageUrl || product?.imageUrl || null
+      };
+    });
+    
+    const shippingCost = order.shippingCost || 0;
+    const totalAmount = subtotalAmount + shippingCost;
+    const pendingAmount = totalAmount - (order.paidAmount || 0);
+    
+    await prisma.orderItem.deleteMany({ where: { orderId } });
+    
+    await prisma.orderItem.createMany({ data: orderItems });
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        subtotalAmount,
+        totalAmount,
+        pendingAmount: pendingAmount > 0 ? pendingAmount : 0
+      },
+      include: { items: true }
+    });
+    
+    console.log(`[EXTERNAL API] Order ${orderId} items updated, new total: ${totalAmount}`);
+    
+    res.json({
+      success: true,
+      order: updatedOrder,
+      summary: {
+        subtotal: subtotalAmount,
+        shippingCost,
+        total: totalAmount,
+        paidAmount: order.paidAmount || 0,
+        pendingAmount: pendingAmount > 0 ? pendingAmount : 0
+      },
+      message: 'Productos del pedido actualizados'
+    });
+  } catch (error: any) {
+    console.error('API update order items error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// AGREGAR PRODUCTO AL PEDIDO
+// POST /orders/:orderId/items - Agrega un producto sin eliminar los existentes
+// ============================================================================
+router.post('/orders/:orderId/items', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { productId, productTitle, quantity = 1, unitPrice, imageUrl } = req.body;
+    
+    if (!productId && !productTitle) {
+      return res.status(400).json({ error: 'productId o productTitle es requerido' });
+    }
+    
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, businessId: req.businessId },
+      include: { items: true }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    if (!['AWAITING_VOUCHER', 'PAID'].includes(order.status)) {
+      return res.status(400).json({ 
+        error: 'Solo se pueden modificar pedidos en estado AWAITING_VOUCHER o PAID',
+        currentStatus: order.status
+      });
+    }
+    
+    let product = null;
+    if (productId) {
+      product = await prisma.product.findFirst({
+        where: { id: productId, businessId: req.businessId }
+      });
+    }
+    
+    const finalUnitPrice = unitPrice ?? product?.price ?? 0;
+    const finalTitle = productTitle || product?.title || 'Producto';
+    const finalImageUrl = imageUrl || product?.imageUrl || null;
+    
+    const newItem = await prisma.orderItem.create({
+      data: {
+        orderId,
+        productId: productId || null,
+        productTitle: finalTitle,
+        quantity,
+        unitPrice: finalUnitPrice,
+        imageUrl: finalImageUrl
+      }
+    });
+    
+    const subtotalAmount = (order.subtotalAmount || order.totalAmount - (order.shippingCost || 0)) + (finalUnitPrice * quantity);
+    const shippingCost = order.shippingCost || 0;
+    const totalAmount = subtotalAmount + shippingCost;
+    const pendingAmount = totalAmount - (order.paidAmount || 0);
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        subtotalAmount,
+        totalAmount,
+        pendingAmount: pendingAmount > 0 ? pendingAmount : 0
+      },
+      include: { items: true }
+    });
+    
+    console.log(`[EXTERNAL API] Item added to order ${orderId}: ${finalTitle} x${quantity}`);
+    
+    res.json({
+      success: true,
+      order: updatedOrder,
+      addedItem: newItem,
+      summary: {
+        subtotal: subtotalAmount,
+        shippingCost,
+        total: totalAmount,
+        paidAmount: order.paidAmount || 0,
+        pendingAmount: pendingAmount > 0 ? pendingAmount : 0
+      },
+      message: 'Producto agregado al pedido'
+    });
+  } catch (error: any) {
+    console.error('API add order item error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// ELIMINAR PRODUCTO DEL PEDIDO
+// DELETE /orders/:orderId/items/:itemId
+// ============================================================================
+router.delete('/orders/:orderId/items/:itemId', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId, itemId } = req.params;
+    
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, businessId: req.businessId },
+      include: { items: true }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    if (!['AWAITING_VOUCHER', 'PAID'].includes(order.status)) {
+      return res.status(400).json({ 
+        error: 'Solo se pueden modificar pedidos en estado AWAITING_VOUCHER o PAID',
+        currentStatus: order.status
+      });
+    }
+    
+    const item = order.items.find(i => i.id === itemId);
+    if (!item) {
+      return res.status(404).json({ error: 'Item no encontrado en el pedido' });
+    }
+    
+    if (order.items.length === 1) {
+      return res.status(400).json({ 
+        error: 'No se puede eliminar el ultimo producto. Use DELETE /orders/:orderId para cancelar el pedido completo'
+      });
+    }
+    
+    await prisma.orderItem.delete({ where: { id: itemId } });
+    
+    const itemTotal = item.unitPrice * item.quantity;
+    const subtotalAmount = (order.subtotalAmount || order.totalAmount - (order.shippingCost || 0)) - itemTotal;
+    const shippingCost = order.shippingCost || 0;
+    const totalAmount = subtotalAmount + shippingCost;
+    const pendingAmount = totalAmount - (order.paidAmount || 0);
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        subtotalAmount,
+        totalAmount,
+        pendingAmount: pendingAmount > 0 ? pendingAmount : 0
+      },
+      include: { items: true }
+    });
+    
+    console.log(`[EXTERNAL API] Item ${itemId} removed from order ${orderId}`);
+    
+    res.json({
+      success: true,
+      order: updatedOrder,
+      removedItem: item,
+      summary: {
+        subtotal: subtotalAmount,
+        shippingCost,
+        total: totalAmount,
+        paidAmount: order.paidAmount || 0,
+        pendingAmount: pendingAmount > 0 ? pendingAmount : 0
+      },
+      message: 'Producto eliminado del pedido'
+    });
+  } catch (error: any) {
+    console.error('API remove order item error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// CAMBIAR ZONA DE ENVIO
+// PATCH /orders/:orderId/shipping
+// ============================================================================
+router.patch('/orders/:orderId/shipping', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { deliveryZoneId, shippingAddress, shippingCity, shippingCost: manualShippingCost } = req.body;
+    
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, businessId: req.businessId },
+      include: { items: true }
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    
+    if (!['AWAITING_VOUCHER', 'PAID'].includes(order.status)) {
+      return res.status(400).json({ 
+        error: 'Solo se pueden modificar pedidos en estado AWAITING_VOUCHER o PAID',
+        currentStatus: order.status
+      });
+    }
+    
+    const updateData: any = {};
+    let newShippingCost = order.shippingCost || 0;
+    let zoneName = null;
+    
+    if (deliveryZoneId) {
+      const zone = await prisma.deliveryZone.findFirst({
+        where: { id: deliveryZoneId, businessId: req.businessId }
+      });
+      
+      if (!zone) {
+        return res.status(404).json({ error: 'Zona de envio no encontrada' });
+      }
+      
+      const subtotal = order.subtotalAmount || (order.totalAmount - (order.shippingCost || 0));
+      
+      if (zone.freeAbove && zone.freeAbove > 0 && subtotal >= zone.freeAbove) {
+        newShippingCost = 0;
+      } else {
+        newShippingCost = zone.cost || 0;
+      }
+      
+      zoneName = zone.name;
+      updateData.deliveryZoneId = deliveryZoneId;
+      updateData.deliveryZoneName = zone.name;
+    } else if (manualShippingCost !== undefined) {
+      newShippingCost = manualShippingCost;
+    }
+    
+    if (shippingAddress) updateData.shippingAddress = shippingAddress;
+    if (shippingCity) updateData.shippingCity = shippingCity;
+    
+    const subtotalAmount = order.subtotalAmount || (order.totalAmount - (order.shippingCost || 0));
+    const totalAmount = subtotalAmount + newShippingCost;
+    const pendingAmount = totalAmount - (order.paidAmount || 0);
+    
+    updateData.shippingCost = newShippingCost;
+    updateData.subtotalAmount = subtotalAmount;
+    updateData.totalAmount = totalAmount;
+    updateData.pendingAmount = pendingAmount > 0 ? pendingAmount : 0;
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: updateData,
+      include: { items: true }
+    });
+    
+    console.log(`[EXTERNAL API] Order ${orderId} shipping updated to zone: ${zoneName || 'manual'}, cost: ${newShippingCost}`);
+    
+    res.json({
+      success: true,
+      order: updatedOrder,
+      summary: {
+        subtotal: subtotalAmount,
+        shippingCost: newShippingCost,
+        total: totalAmount,
+        paidAmount: order.paidAmount || 0,
+        pendingAmount: pendingAmount > 0 ? pendingAmount : 0,
+        zoneName
+      },
+      message: zoneName 
+        ? `Zona de envio actualizada a "${zoneName}" (${order.currencySymbol || 'S/.'}${newShippingCost})`
+        : 'Costo de envio actualizado'
+    });
+  } catch (error: any) {
+    console.error('API update order shipping error:', error);
     res.status(500).json({ error: error.message });
   }
 });
