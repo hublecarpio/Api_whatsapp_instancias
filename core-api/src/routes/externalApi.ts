@@ -1642,20 +1642,70 @@ router.get('/products', validateApiKey, async (req: ApiKeyRequest, res: Response
     const where: any = { businessId: req.businessId };
     if (inStock === 'true') where.stock = { gt: 0 };
     
+    let products;
+    
     if (search && typeof search === 'string' && search.trim()) {
       const searchTerm = search.trim().toLowerCase();
-      where.OR = [
+      const words = searchTerm.split(/\s+/).filter(w => w.length >= 2);
+      
+      const orConditions: any[] = [];
+      
+      orConditions.push(
         { title: { contains: searchTerm, mode: 'insensitive' } },
-        { description: { contains: searchTerm, mode: 'insensitive' } },
-        { variations: { hasSome: [searchTerm] } }
-      ];
+        { description: { contains: searchTerm, mode: 'insensitive' } }
+      );
+      
+      for (const word of words) {
+        orConditions.push(
+          { title: { contains: word, mode: 'insensitive' } },
+          { description: { contains: word, mode: 'insensitive' } }
+        );
+      }
+      
+      const variationMatches = words.length > 0 ? words : [searchTerm];
+      for (const term of variationMatches) {
+        orConditions.push({ variations: { has: term } });
+      }
+      
+      where.OR = orConditions;
+      
+      const allProducts = await prisma.product.findMany({
+        where,
+        take: Math.min(Number(limit) * 3, 500)
+      });
+      
+      const scored = allProducts.map(p => {
+        let score = 0;
+        const titleLower = (p.title || '').toLowerCase();
+        const descLower = (p.description || '').toLowerCase();
+        const allText = `${titleLower} ${descLower}`;
+        
+        if (titleLower === searchTerm) score += 100;
+        if (titleLower.includes(searchTerm)) score += 50;
+        if (descLower.includes(searchTerm)) score += 20;
+        
+        for (const word of words) {
+          if (titleLower.includes(word)) score += 10;
+          if (descLower.includes(word)) score += 5;
+        }
+        
+        const variationsLower = (p.variations || []).map((v: string) => v.toLowerCase());
+        for (const word of words) {
+          if (variationsLower.some((v: string) => v.includes(word))) score += 8;
+        }
+        
+        return { product: p, score };
+      });
+      
+      scored.sort((a, b) => b.score - a.score);
+      products = scored.slice(0, Math.min(Number(limit), 500)).map(s => s.product);
+    } else {
+      products = await prisma.product.findMany({
+        where,
+        take: Math.min(Number(limit), 500),
+        orderBy: { title: 'asc' }
+      });
     }
-    
-    const products = await prisma.product.findMany({
-      where,
-      take: Math.min(Number(limit), 500),
-      orderBy: { title: 'asc' }
-    });
     
     res.json({ 
       products: products.map(p => ({
