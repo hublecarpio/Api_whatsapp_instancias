@@ -19,6 +19,14 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
 *   **AI Pipeline**: Processes WhatsApp messages using business context, conversation history, and OpenAI API.
 *   **Multi-Provider WhatsApp**: Supports Baileys (WhatsApp Web), Meta Cloud API, and Meta Coexistence (Embedded Signup + Coexistence flow) for connecting WhatsApp numbers.
 *   **AI Agent System**:
+    *   **Agent V3 (Modular TypeScript)**: Production-grade modular architecture with:
+        *   **Tool Registry**: Singleton pattern with ITool interface, BaseTool abstract class, dynamic tool registration per business
+        *   **LLM Adapter**: ILLMProvider interface with OpenAI and OpenRouter adapters, configurable model/temperature/tokens
+        *   **Context Builder**: Modular prompt construction with RAG integration, business context, and conversation history
+        *   **Agent Orchestrator**: Main pipeline (triggers → context build → LLM → tool execution loop → response)
+        *   **Native Tools**: Order, Appointment, Product, Funnel tools as independent testable modules
+        *   **Custom Tools Adapter**: Dynamic loading from DB with 60s TTL cache, proper lifecycle management
+        *   **Feature Flag**: `USE_V3_AGENT=true` environment variable, routes at `/agent-v3/*`
     *   **Agent V2 (Python/LangGraph)**: Advanced multi-agent system with a 3-brain architecture (Vendor → Observer → Refiner), 5 executable tools, Redis-backed memory, OpenAI embeddings for semantic product search, and dynamic learning. Features a state-governed architecture and ReAct retry mechanism.
     *   **Custom Tools Support**: Allows AI agents to call external POST endpoints and utilize native OpenAI function calling.
 *   **Reminder/Follow-up System**: Event-driven scheduling of follow-ups via BullMQ or polling, with AI-enriched message generation and Meta Cloud Template Configuration.
