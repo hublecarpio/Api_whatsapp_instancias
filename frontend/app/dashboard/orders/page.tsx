@@ -917,112 +917,69 @@ export default function OrdersPage() {
                         const hasPayments = paymentHistory.length > 0 || progress.paid > 0;
                         
                         return (
-                          <div className={`rounded-lg p-3 sm:p-4 ${
+                          <div className={`rounded-lg p-2.5 ${
                             progress.isFullyPaid 
                               ? 'bg-green-500/10 border border-green-500/30' 
                               : progress.paid > 0 
                                 ? 'bg-yellow-500/10 border border-yellow-500/30'
                                 : 'bg-orange-500/10 border border-orange-500/30'
                           }`}>
-                            <div className="flex items-center justify-between mb-3">
-                              <p className={`font-medium text-sm ${
+                            {/* Header con estado y barra en una fila */}
+                            <div className="flex items-center gap-3 mb-1.5">
+                              <span className={`text-xs font-medium whitespace-nowrap ${
                                 progress.isFullyPaid ? 'text-green-400' : progress.paid > 0 ? 'text-yellow-400' : 'text-orange-400'
                               }`}>
-                                {progress.isFullyPaid ? 'Pago Completado' : progress.paid > 0 ? 'Pago Parcial' : 'Esperando Pago'}
-                              </p>
-                              {progress.isFullyPaid && (
-                                <span className="text-green-400 text-xs">
-                                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  100%
-                                </span>
-                              )}
-                            </div>
-                            
-                            {/* Barra de progreso */}
-                            <div className="mb-3">
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-400">Pagado: {order.currencySymbol || '$'}{progress.paid.toFixed(2)}</span>
-                                <span className="text-gray-400">Total: {order.currencySymbol || '$'}{progress.total.toFixed(2)}</span>
-                              </div>
-                              <div className="w-full bg-gray-700 rounded-full h-2.5">
-                                <div 
-                                  className={`h-2.5 rounded-full transition-all ${
-                                    progress.isFullyPaid ? 'bg-green-500' : 'bg-yellow-500'
-                                  }`}
-                                  style={{ width: `${progress.percentage}%` }}
-                                ></div>
-                              </div>
-                              {!progress.isFullyPaid && progress.pending > 0 && (
-                                <p className="text-orange-400 text-xs mt-1">
-                                  Pendiente: {order.currencySymbol || '$'}{progress.pending.toFixed(2)}
-                                </p>
-                              )}
-                            </div>
-                            
-                            {/* Historial de vouchers/pagos */}
-                            {paymentHistory.length > 0 && (
-                              <div className="mt-3 pt-3 border-t border-gray-600/50">
-                                <p className="text-gray-400 text-xs uppercase mb-2">
-                                  Historial de Pagos ({paymentHistory.length})
-                                </p>
-                                <div className="space-y-2 max-h-48 overflow-y-auto">
-                                  {paymentHistory.map((payment, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 bg-[#1a1a1a] rounded-lg p-2">
-                                      {payment.imageUrl && (
-                                        <img
-                                          src={payment.imageUrl}
-                                          alt={`Voucher ${idx + 1}`}
-                                          className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setVoucherModalUrl(payment.imageUrl);
-                                          }}
-                                        />
-                                      )}
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-white text-sm font-medium">
-                                            {order.currencySymbol || '$'}{payment.amount.toFixed(2)}
-                                          </span>
-                                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
-                                            {payment.paymentMethod}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-gray-500 text-[10px] mt-0.5">
-                                          <span>{formatDate(payment.timestamp)}</span>
-                                          {payment.operationCode && (
-                                            <span>Op: {payment.operationCode}</span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
+                                {progress.isFullyPaid ? '✓ Pagado' : progress.paid > 0 ? '◐ Parcial' : '○ Pendiente'}
+                              </span>
+                              <div className="flex-1">
+                                <div className="w-full bg-gray-700 rounded-full h-1.5">
+                                  <div 
+                                    className={`h-1.5 rounded-full transition-all ${progress.isFullyPaid ? 'bg-green-500' : 'bg-yellow-500'}`}
+                                    style={{ width: `${progress.percentage}%` }}
+                                  ></div>
                                 </div>
+                              </div>
+                              <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                                {order.currencySymbol || '$'}{progress.paid.toFixed(2)} / {order.currencySymbol || '$'}{progress.total.toFixed(2)}
+                                {!progress.isFullyPaid && progress.pending > 0 && (
+                                  <span className="text-orange-400 ml-1">(−{progress.pending.toFixed(2)})</span>
+                                )}
+                              </span>
+                            </div>
+                            
+                            {/* Historial de pagos compacto */}
+                            {paymentHistory.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {paymentHistory.map((payment, idx) => (
+                                  <div key={idx} className="flex items-center gap-1.5 bg-[#1a1a1a] rounded px-2 py-1">
+                                    {payment.imageUrl && (
+                                      <img
+                                        src={payment.imageUrl}
+                                        alt={`V${idx + 1}`}
+                                        className="w-6 h-6 object-cover rounded cursor-pointer hover:opacity-80"
+                                        onClick={(e) => { e.stopPropagation(); setVoucherModalUrl(payment.imageUrl); }}
+                                      />
+                                    )}
+                                    <span className="text-white text-xs font-medium">{order.currencySymbol || '$'}{payment.amount.toFixed(2)}</span>
+                                    <span className="text-[10px] text-gray-500">{payment.paymentMethod}</span>
+                                  </div>
+                                ))}
                               </div>
                             )}
                             
-                            {/* Voucher unico si no hay historial pero hay imagen */}
+                            {/* Voucher único compacto */}
                             {paymentHistory.length === 0 && order.voucherImageUrl && (
-                              <div className="flex items-center gap-3 mt-2">
+                              <div className="flex items-center gap-2 mt-1.5">
                                 <img
                                   src={order.voucherImageUrl}
-                                  alt="Comprobante de pago"
-                                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setVoucherModalUrl(order.voucherImageUrl);
-                                  }}
+                                  alt="Comprobante"
+                                  className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-80"
+                                  onClick={(e) => { e.stopPropagation(); setVoucherModalUrl(order.voucherImageUrl); }}
                                 />
-                                <div className="flex-1">
-                                  <p className="text-green-400 text-xs sm:text-sm">Comprobante recibido</p>
-                                  {order.voucherReceivedAt && (
-                                    <p className="text-gray-500 text-[10px] sm:text-xs">
-                                      {formatDate(order.voucherReceivedAt)}
-                                    </p>
-                                  )}
-                                </div>
+                                <span className="text-green-400 text-xs">Comprobante recibido</span>
+                                {order.voucherReceivedAt && (
+                                  <span className="text-gray-500 text-[10px]">{formatDate(order.voucherReceivedAt)}</span>
+                                )}
                               </div>
                             )}
                             
