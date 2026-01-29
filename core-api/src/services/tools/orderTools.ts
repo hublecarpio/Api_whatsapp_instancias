@@ -131,6 +131,36 @@ export function getOrderToolDefinitions(
     }
   });
 
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'calcular_total_pedido',
+      description: `OBLIGATORIO: Usa esta herramienta SIEMPRE antes de confirmar un pedido o cuando necesites dar el precio total al cliente. Calcula automáticamente: subtotal de productos + costo de envío = total. NO hagas cálculos mentales, SIEMPRE usa esta herramienta para obtener el precio exacto. Zonas disponibles: ${zoneDescriptions}`,
+      parameters: {
+        type: 'object',
+        properties: {
+          productos: {
+            type: 'array',
+            description: 'Lista de productos con cantidad',
+            items: {
+              type: 'object',
+              properties: {
+                nombre: { type: 'string', description: 'Nombre del producto' },
+                cantidad: { type: 'number', description: 'Cantidad (default: 1)' }
+              },
+              required: ['nombre']
+            }
+          },
+          zona_envio: {
+            type: 'string',
+            description: 'Nombre de la zona de envío (distrito, ciudad, etc.)'
+          }
+        },
+        required: ['productos', 'zona_envio']
+      }
+    }
+  });
+
   return tools;
 }
 
@@ -398,6 +428,118 @@ Gracias por confirmar la recepción. ¡Esperamos que disfrutes tu compra!`,
     return {
       success: false,
       content: `Error al confirmar entrega: ${err.message}`
+    };
+  }
+}
+
+export interface CalcularTotalContext extends OrderToolContext {
+  deliveryZones: Array<{ name: string; cost: number; freeAbove: number | null }>;
+}
+
+export async function handleCalcularTotal(
+  args: { productos: Array<{ nombre: string; cantidad?: number }>; zona_envio: string },
+  ctx: CalcularTotalContext
+): Promise<ToolResult> {
+  const { businessId, instanceId, currencySymbol, deliveryZones } = ctx;
+  
+  console.log(`[OrderTools] calcular_total_pedido called:`, JSON.stringify(args));
+  
+  try {
+    if (!args.productos || args.productos.length === 0) {
+      return {
+        success: false,
+        content: 'Error: No se especificaron productos. Pregunta qué productos desea el cliente.'
+      };
+    }
+    
+    if (!args.zona_envio || args.zona_envio.trim() === '') {
+      return {
+        success: false,
+        content: 'Error: No se especificó la zona de envío. Pregunta al cliente su distrito o zona.'
+      };
+    }
+    
+    // Find matching delivery zone (fuzzy match)
+    const zonaNormalizada = args.zona_envio.toLowerCase().trim();
+    let matchedZone: { name: string; cost: number; freeAbove: number | null } | null = null;
+    
+    for (const zone of deliveryZones) {
+      const zoneName = zone.name.toLowerCase().trim();
+      if (zoneName === zonaNormalizada || 
+          zoneName.includes(zonaNormalizada) || 
+          zonaNormalizada.includes(zoneName)) {
+        matchedZone = zone;
+        break;
+      }
+    }
+    
+    if (!matchedZone) {
+      const availableZones = deliveryZones.map(z => z.name).join(', ');
+      return {
+        success: false,
+        content: `Error: No se encontró la zona "${args.zona_envio}". Zonas disponibles: ${availableZones}. Pregunta al cliente qué zona aplica.`
+      };
+    }
+    
+    // Calculate product subtotal
+    let subtotal = 0;
+    const productDetails: string[] = [];
+    const notFoundProducts: string[] = [];
+    
+    for (const item of args.productos) {
+      const product = await findProductWithScope(businessId, item.nombre, instanceId);
+      const cantidad = Math.max(1, item.cantidad || 1);
+      
+      if (product) {
+        const itemTotal = product.price * cantidad;
+        subtotal += itemTotal;
+        const variationInfo = product.variation ? ` (${product.variation})` : '';
+        productDetails.push(`• ${product.title}${variationInfo} x${cantidad} = ${currencySymbol}${itemTotal.toFixed(2)}`);
+      } else {
+        notFoundProducts.push(item.nombre);
+      }
+    }
+    
+    if (productDetails.length === 0) {
+      return {
+        success: false,
+        content: `Error: No se encontraron los productos: ${notFoundProducts.join(', ')}. Verifica los nombres exactos del catálogo.`
+      };
+    }
+    
+    // Check if subtotal qualifies for free shipping
+    const freeShippingThreshold = matchedZone.freeAbove;
+    const qualifiesForFreeShipping = freeShippingThreshold !== null && subtotal >= freeShippingThreshold;
+    const shippingCost = qualifiesForFreeShipping ? 0 : (matchedZone.cost || 0);
+    const total = subtotal + shippingCost;
+    
+    let response = `CÁLCULO DE PEDIDO:
+${productDetails.join('\n')}
+
+📦 Subtotal productos: ${currencySymbol}${subtotal.toFixed(2)}
+🚚 Envío a ${matchedZone.name}: ${currencySymbol}${shippingCost.toFixed(2)}${qualifiesForFreeShipping ? ' (GRATIS)' : ''}
+━━━━━━━━━━━━━━━━━━━━
+💰 TOTAL A PAGAR: ${currencySymbol}${total.toFixed(2)}`;
+    
+    if (notFoundProducts.length > 0) {
+      response += `\n\n⚠️ Productos no encontrados: ${notFoundProducts.join(', ')}`;
+    }
+    
+    if (freeShippingThreshold && !qualifiesForFreeShipping) {
+      const remaining = freeShippingThreshold - subtotal;
+      response += `\n\n💡 Envío gratis desde ${currencySymbol}${freeShippingThreshold.toFixed(2)} (te faltan ${currencySymbol}${remaining.toFixed(2)})`;
+    }
+    
+    return {
+      success: true,
+      content: response,
+      toolExecuted: 'calcular_total_pedido'
+    };
+  } catch (err: any) {
+    console.error('[OrderTools] calcular_total_pedido error:', err.message);
+    return {
+      success: false,
+      content: `Error al calcular total: ${err.message}`
     };
   }
 }

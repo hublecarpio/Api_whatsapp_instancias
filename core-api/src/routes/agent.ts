@@ -1989,6 +1989,145 @@ async function processWithAgent(
         continue;
       }
       
+      // CRITICAL TOOL: Calculate order total (products + shipping)
+      if (toolName === 'calcular_total_pedido') {
+        const args = JSON.parse(fn.arguments);
+        console.log(`[Agent V1] Calculating order total:`, JSON.stringify(args));
+        
+        try {
+          // Note: deliveryZones is already loaded at the start of the handler from prisma
+          // DeliveryZone uses 'cost' for shipping price and 'freeAbove' for free shipping threshold
+          const currencySymbol = business.currencySymbol || 'S/.';
+          
+          // Validate inputs
+          if (!args.productos || args.productos.length === 0) {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                exito: false,
+                error: 'No se especificaron productos. Pregunta qué productos desea el cliente.'
+              })
+            });
+            continue;
+          }
+          
+          if (!args.zona_envio || args.zona_envio.trim() === '') {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                exito: false,
+                error: 'No se especificó la zona de envío. Pregunta al cliente su distrito o zona.'
+              })
+            });
+            continue;
+          }
+          
+          // Find matching delivery zone (fuzzy match)
+          const zonaNormalizada = args.zona_envio.toLowerCase().trim();
+          let matchedZone: typeof deliveryZones[0] | null = null;
+          
+          for (const zone of deliveryZones) {
+            const zoneName = zone.name.toLowerCase().trim();
+            if (zoneName === zonaNormalizada || 
+                zoneName.includes(zonaNormalizada) || 
+                zonaNormalizada.includes(zoneName)) {
+              matchedZone = zone;
+              break;
+            }
+          }
+          
+          if (!matchedZone) {
+            const availableZones = deliveryZones.map(z => z.name).join(', ');
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                exito: false,
+                error: `Zona "${args.zona_envio}" no encontrada. Zonas disponibles: ${availableZones || 'No hay zonas configuradas'}`
+              })
+            });
+            continue;
+          }
+          
+          // Calculate product subtotal
+          let subtotal = 0;
+          const productDetails: Array<{ nombre: string; cantidad: number; precio_unitario: number; subtotal: number }> = [];
+          const notFoundProducts: string[] = [];
+          
+          for (const item of args.productos) {
+            const product = await findProductWithScope(businessId, item.nombre, instanceId);
+            const cantidad = Math.max(1, item.cantidad || 1);
+            
+            if (product) {
+              const itemTotal = product.price * cantidad;
+              subtotal += itemTotal;
+              productDetails.push({
+                nombre: product.title + (product.variation ? ` (${product.variation})` : ''),
+                cantidad,
+                precio_unitario: product.price,
+                subtotal: itemTotal
+              });
+            } else {
+              notFoundProducts.push(item.nombre);
+            }
+          }
+          
+          if (productDetails.length === 0) {
+            toolMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                exito: false,
+                error: `Productos no encontrados: ${notFoundProducts.join(', ')}. Verifica los nombres.`
+              })
+            });
+            continue;
+          }
+          
+          // Check if subtotal qualifies for free shipping
+          const freeShippingThreshold = matchedZone.freeAbove || null;
+          const qualifiesForFreeShipping = freeShippingThreshold !== null && subtotal >= freeShippingThreshold;
+          const shippingCost = qualifiesForFreeShipping ? 0 : (matchedZone.cost || 0);
+          const total = subtotal + shippingCost;
+          
+          const result = {
+            exito: true,
+            productos: productDetails,
+            subtotal_productos: subtotal,
+            zona_envio: matchedZone.name,
+            costo_envio: shippingCost,
+            total: total,
+            moneda: currencySymbol,
+            resumen: `Subtotal: ${currencySymbol}${subtotal.toFixed(2)} + Envío (${matchedZone.name}): ${currencySymbol}${shippingCost.toFixed(2)} = TOTAL: ${currencySymbol}${total.toFixed(2)}`,
+            productos_no_encontrados: notFoundProducts.length > 0 ? notFoundProducts : undefined,
+            envio_gratis: qualifiesForFreeShipping 
+              ? `Envío GRATIS por compras mayores a ${currencySymbol}${freeShippingThreshold}` 
+              : (freeShippingThreshold ? `Envío gratis desde ${currencySymbol}${freeShippingThreshold}` : undefined)
+          };
+          
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result)
+          });
+          
+          console.log(`[Agent V1] Order total calculated: ${currencySymbol}${total.toFixed(2)} (${productDetails.length} products + shipping to ${matchedZone.name})`);
+        } catch (error: any) {
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({
+              exito: false,
+              error: `Error al calcular: ${error.message}`
+            })
+          });
+          console.error(`[Agent V1] Error calculating total:`, error.message);
+        }
+        continue;
+      }
+      
       if (toolName === 'consultar_disponibilidad') {
         const args = JSON.parse(fn.arguments);
         const fecha = args.fecha;
