@@ -706,13 +706,25 @@ router.post('/orders', validateApiKey, async (req: ApiKeyRequest, res: Response)
     
     const orderItems = items.map((item: any) => {
       const product = item.productId ? productMap.get(item.productId) : null;
-      const unitPrice = item.unitPrice ?? product?.price ?? 0;
+      let unitPrice = item.unitPrice ?? product?.price ?? 0;
       const quantity = item.quantity || 1;
+      const variation = item.variation || null;
+      
+      if (product && variation && product.variations?.length > 0) {
+        const varIndex = product.variations.findIndex(
+          (v: string) => v.toLowerCase() === variation.toLowerCase()
+        );
+        if (varIndex !== -1 && product.pricePerVariation?.[varIndex] != null) {
+          unitPrice = product.pricePerVariation[varIndex];
+        }
+      }
+      
       totalAmount += unitPrice * quantity;
       
       return {
         productId: item.productId || null,
         productTitle: item.productTitle || product?.title || 'Producto',
+        variation,
         quantity,
         unitPrice,
         imageUrl: item.imageUrl || product?.imageUrl || null
@@ -1157,14 +1169,26 @@ router.put('/orders/:orderId/items', validateApiKey, async (req: ApiKeyRequest, 
     
     const orderItems = items.map((item: any) => {
       const product = item.productId ? productMap.get(item.productId) : null;
-      const unitPrice = item.unitPrice ?? product?.price ?? 0;
+      let unitPrice = item.unitPrice ?? product?.price ?? 0;
       const quantity = item.quantity || 1;
+      const variation = item.variation || null;
+      
+      if (product && variation && product.variations?.length > 0) {
+        const varIndex = product.variations.findIndex(
+          (v: string) => v.toLowerCase() === variation.toLowerCase()
+        );
+        if (varIndex !== -1 && product.pricePerVariation?.[varIndex] != null) {
+          unitPrice = product.pricePerVariation[varIndex];
+        }
+      }
+      
       subtotalAmount += unitPrice * quantity;
       
       return {
         orderId,
         productId: item.productId || null,
         productTitle: item.productTitle || product?.title || 'Producto',
+        variation,
         quantity,
         unitPrice,
         imageUrl: item.imageUrl || product?.imageUrl || null
@@ -1216,7 +1240,7 @@ router.put('/orders/:orderId/items', validateApiKey, async (req: ApiKeyRequest, 
 router.post('/orders/:orderId/items', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   try {
     const { orderId } = req.params;
-    const { productId, productTitle, quantity = 1, unitPrice, imageUrl } = req.body;
+    const { productId, productTitle, variation, quantity = 1, unitPrice, imageUrl } = req.body;
     
     if (!productId && !productTitle) {
       return res.status(400).json({ error: 'productId o productTitle es requerido' });
@@ -1238,22 +1262,33 @@ router.post('/orders/:orderId/items', validateApiKey, async (req: ApiKeyRequest,
       });
     }
     
-    let product = null;
+    let product: any = null;
     if (productId) {
       product = await prisma.product.findFirst({
         where: { id: productId, businessId: req.businessId }
       });
     }
     
-    const finalUnitPrice = unitPrice ?? product?.price ?? 0;
+    let finalUnitPrice = unitPrice ?? product?.price ?? 0;
     const finalTitle = productTitle || product?.title || 'Producto';
     const finalImageUrl = imageUrl || product?.imageUrl || null;
+    const finalVariation = variation || null;
+    
+    if (product && finalVariation && product.variations?.length > 0) {
+      const varIndex = product.variations.findIndex(
+        (v: string) => v.toLowerCase() === finalVariation.toLowerCase()
+      );
+      if (varIndex !== -1 && product.pricePerVariation?.[varIndex] != null) {
+        finalUnitPrice = product.pricePerVariation[varIndex];
+      }
+    }
     
     const newItem = await prisma.orderItem.create({
       data: {
         orderId,
         productId: productId || null,
         productTitle: finalTitle,
+        variation: finalVariation,
         quantity,
         unitPrice: finalUnitPrice,
         imageUrl: finalImageUrl

@@ -1101,6 +1101,7 @@ model OrderItem {
   orderId      String
   productId    String?
   productTitle String
+  variation    String?
   quantity     Int     @default(1)
   unitPrice    Float
   imageUrl     String?
