@@ -474,7 +474,9 @@ export const ordersApi = {
   exportCSV: (businessId: string, status?: string, instanceId?: string) =>
     api.get(`/orders/export/csv?businessId=${businessId}${status ? `&status=${status}` : ''}${instanceId ? `&instanceId=${instanceId}` : ''}`, { responseType: 'blob' }),
   delete: (orderId: string) =>
-    api.delete(`/orders/${orderId}`)
+    api.delete(`/orders/${orderId}`),
+  updateNotes: (orderId: string, internalNotes: string) =>
+    api.patch(`/orders/${orderId}/notes`, { internalNotes })
 };
 
 export const contactsApi = {

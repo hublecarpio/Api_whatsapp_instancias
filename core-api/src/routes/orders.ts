@@ -912,6 +912,54 @@ router.patch('/:orderId/status', authMiddleware, async (req: any, res) => {
   }
 });
 
+router.patch('/:orderId/notes', authMiddleware, async (req: any, res) => {
+  try {
+    const { orderId } = req.params;
+    const { internalNotes } = req.body;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: order.businessId,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
+    let existingNotes: any = {};
+    if (order.notes) {
+      try {
+        existingNotes = typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes;
+      } catch {
+        existingNotes = { originalNote: order.notes };
+      }
+    }
+
+    existingNotes.internalNotes = internalNotes || null;
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: { notes: JSON.stringify(existingNotes) },
+      include: { items: true }
+    });
+
+    res.json(updatedOrder);
+  } catch (error: any) {
+    console.error('[ORDERS] Error updating order notes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.delete('/:orderId', authMiddleware, async (req: any, res) => {
   try {
     const { orderId } = req.params;

@@ -205,6 +205,9 @@ export default function OrdersPage() {
   const [exporting, setExporting] = useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [confirmDeleteOrderId, setConfirmDeleteOrderId] = useState<string | null>(null);
+  const [editingNotesOrderId, setEditingNotesOrderId] = useState<string | null>(null);
+  const [editingNotesValue, setEditingNotesValue] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const deleteOrder = async (orderId: string) => {
     try {
@@ -216,6 +219,19 @@ export default function OrdersPage() {
       console.error('Error deleting order:', error);
     } finally {
       setDeletingOrderId(null);
+    }
+  };
+
+  const saveOrderNotes = async (orderId: string) => {
+    try {
+      setSavingNotes(true);
+      await ordersApi.updateNotes(orderId, editingNotesValue);
+      setEditingNotesOrderId(null);
+      await loadOrders();
+    } catch (error) {
+      console.error('Error saving notes:', error);
+    } finally {
+      setSavingNotes(false);
     }
   };
 
@@ -543,6 +559,16 @@ export default function OrdersPage() {
     const pending = order.pendingAmount != null ? Number(order.pendingAmount) : (total - paid);
     const percentage = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
     return { paid, total, pending, percentage, isFullyPaid: paid >= total };
+  };
+
+  const getInternalNotes = (order: Order): string => {
+    if (!order.notes) return '';
+    try {
+      const parsed = typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes;
+      return parsed.internalNotes || parsed.originalNote || '';
+    } catch {
+      return typeof order.notes === 'string' ? order.notes : '';
+    }
   };
 
   const isExpired = (expiresAt: string) => {
@@ -909,6 +935,64 @@ export default function OrdersPage() {
                           )}
                         </div>
                       )}
+
+                      {/* Seccion de Notas Internas */}
+                      <div className="bg-[#1a1a1a]/50 rounded-lg p-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-gray-500 text-[10px] uppercase">Notas Internas</p>
+                          {editingNotesOrderId !== order.id && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingNotesOrderId(order.id);
+                                setEditingNotesValue(getInternalNotes(order));
+                              }}
+                              className="text-gray-500 hover:text-gray-300 transition-colors"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                        {editingNotesOrderId === order.id ? (
+                          <div className="space-y-1.5">
+                            <textarea
+                              value={editingNotesValue}
+                              onChange={(e) => setEditingNotesValue(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Agregar nota interna..."
+                              className="w-full bg-[#0a0a0a] text-white text-xs rounded px-2 py-1.5 resize-none border border-gray-700 focus:border-gray-500 focus:outline-none"
+                              rows={2}
+                            />
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  saveOrderNotes(order.id);
+                                }}
+                                disabled={savingNotes}
+                                className="flex-1 px-2 py-1 bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white text-[10px] rounded transition-colors"
+                              >
+                                {savingNotes ? 'Guardando...' : 'Guardar'}
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingNotesOrderId(null);
+                                }}
+                                className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-[10px] rounded transition-colors"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-gray-400 text-xs italic">
+                            {getInternalNotes(order) || 'Sin notas'}
+                          </p>
+                        )}
+                      </div>
 
                       {/* Seccion de Estado de Pagos - Siempre visible */}
                       {(() => {
