@@ -22,6 +22,7 @@ interface OrderItem {
   id: string;
   productId: string | null;
   productTitle: string;
+  variation?: string | null;
   quantity: number;
   unitPrice: number;
   imageUrl: string | null;
@@ -1125,7 +1126,7 @@ export default function OrdersPage() {
                                     <img src={item.imageUrl} alt={item.productTitle} className="w-8 h-8 object-cover rounded flex-shrink-0" />
                                   )}
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-white text-xs truncate">{item.productTitle}</p>
+                                    <p className="text-white text-xs truncate">{item.productTitle}{item.variation && <span className="text-gray-400"> ({item.variation})</span>}</p>
                                     <p className="text-gray-400 text-[10px]">{order.currencySymbol}{item.unitPrice.toFixed(2)}</p>
                                   </div>
                                   <div className="flex items-center gap-1">
@@ -1223,7 +1224,7 @@ export default function OrdersPage() {
                                   <img src={item.imageUrl} alt={item.productTitle} className="w-8 h-8 sm:w-10 sm:h-10 object-cover rounded flex-shrink-0" />
                                 )}
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}</p>
+                                  <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}{item.variation && <span className="text-gray-400"> ({item.variation})</span>}</p>
                                   <p className="text-gray-400 text-[10px] sm:text-xs">{item.quantity} x {order.currencySymbol}{item.unitPrice.toFixed(2)}</p>
                                 </div>
                                 <p className="text-white text-xs sm:text-sm font-medium flex-shrink-0">{order.currencySymbol}{(item.quantity * item.unitPrice).toFixed(2)}</p>
@@ -1444,7 +1445,7 @@ export default function OrdersPage() {
                                 />
                               )}
                               <div className="flex-1 min-w-0">
-                                <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}</p>
+                                <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}{item.variation && <span className="text-gray-400"> ({item.variation})</span>}</p>
                                 <p className="text-gray-400 text-[10px] sm:text-xs">
                                   {item.quantity} x {currentBusiness.currencySymbol}{item.unitPrice.toFixed(2)}
                                 </p>
