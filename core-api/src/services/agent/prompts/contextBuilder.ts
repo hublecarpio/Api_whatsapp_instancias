@@ -432,8 +432,7 @@ export async function loadConversationContext(
     prisma.contactExtractedData.findMany({
       where: {
         businessId,
-        contactPhone,
-        ...(instanceId ? { instanceId } : {})
+        contactPhone
       }
     })
   ]);
