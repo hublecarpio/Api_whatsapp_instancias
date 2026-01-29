@@ -2343,7 +2343,6 @@ router.get('/contact-funnel-state/:phone', validateApiKey, async (req: ApiKeyReq
 
 router.post('/agent/process', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
   const startTime = Date.now();
-  console.log('[API-V3] Agent process called:', { businessId: req.businessId, instanceId: req.instanceId });
   
   try {
     const { 
@@ -2388,6 +2387,27 @@ router.post('/agent/process', validateApiKey, async (req: ApiKeyRequest, res: Re
     }
 
     const phone = contactPhone.replace(/\D/g, '');
+    
+    let instanceId = req.instanceId || null;
+    
+    if (!instanceId && req.business?.instances?.length > 0) {
+      instanceId = req.business.instances[0].id;
+    }
+    
+    if (!instanceId) {
+      const activeInstance = await prisma.whatsAppInstance.findFirst({
+        where: { 
+          businessId: req.businessId!,
+          isActive: true,
+          status: { in: ['open', 'CONNECTED', 'connected'] }
+        }
+      });
+      if (activeInstance) {
+        instanceId = activeInstance.id;
+      }
+    }
+    
+    console.log('[API-V3] Agent process called:', { businessId: req.businessId, instanceId });
     console.log('[API-V3] Processing:', { 
       phone, 
       contactName, 
@@ -2398,7 +2418,7 @@ router.post('/agent/process', validateApiKey, async (req: ApiKeyRequest, res: Re
 
     const input: OrchestratorInput = {
       businessId: req.businessId!,
-      instanceId: req.instanceId || null,
+      instanceId,
       contactPhone: phone,
       contactName,
       messages: validatedMessages,
@@ -2499,8 +2519,6 @@ router.get('/agent/tools', validateApiKey, async (req: ApiKeyRequest, res: Respo
 // ============================================================================
 
 router.post('/agent/context-preview', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
-  console.log('[API-V3] Context preview called:', { businessId: req.businessId });
-  
   try {
     const { contactPhone, contactName = 'Cliente', messages = [] } = req.body;
 
@@ -2513,7 +2531,27 @@ router.post('/agent/context-preview', validateApiKey, async (req: ApiKeyRequest,
 
     const phone = contactPhone.replace(/\D/g, '');
     const businessId = req.businessId!;
-    const instanceId = req.instanceId || null;
+    
+    let instanceId = req.instanceId || null;
+    
+    if (!instanceId && req.business?.instances?.length > 0) {
+      instanceId = req.business.instances[0].id;
+    }
+    
+    if (!instanceId) {
+      const activeInstance = await prisma.whatsAppInstance.findFirst({
+        where: { 
+          businessId,
+          isActive: true,
+          status: { in: ['open', 'CONNECTED', 'connected'] }
+        }
+      });
+      if (activeInstance) {
+        instanceId = activeInstance.id;
+      }
+    }
+    
+    console.log('[API-V3] Context preview called:', { businessId, instanceId });
 
     // Load custom tools for this business first
     await loadCustomToolsForBusiness(businessId);

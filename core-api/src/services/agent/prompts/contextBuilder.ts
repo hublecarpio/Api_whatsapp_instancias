@@ -87,10 +87,6 @@ export class ContextBuilder {
       ragSectionsUsed = ragSection.count;
     }
 
-    if (this.businessContext.products.length > 0) {
-      sections.push(this.buildProductCatalog());
-    }
-
     if (this.businessContext.deliveryZones.length > 0) {
       sections.push(this.buildDeliveryZones());
     }
@@ -127,7 +123,7 @@ export class ContextBuilder {
         tokensEstimate,
         ragSectionsUsed,
         coreSectionsUsed,
-        productsIncluded: this.businessContext.products.length,
+        productsIncluded: 0,
         zonesIncluded: this.businessContext.deliveryZones.length
       }
     };
