@@ -154,6 +154,7 @@ export async function executeTrigger(
 
 /**
  * Handles voucher received trigger - creates order if needed, then processes payment
+ * CRITICAL: When a valid voucher is received, ALWAYS create an order to avoid losing sales
  */
 async function handleVoucherTrigger(
   businessId: string,
@@ -165,10 +166,12 @@ async function handleVoucherTrigger(
   currencySymbol: string
 ): Promise<TriggerResult> {
   
-  logTrigger('VOUCHER', `Processing voucher trigger`, { 
+  logTrigger('VOUCHER', `[CRITICAL] Processing voucher trigger - MUST CREATE ORDER`, { 
     contactPhone, 
     amount: voucherResult.amount,
-    brand: voucherResult.brand 
+    brand: voucherResult.brand,
+    businessId,
+    instanceId
   });
   
   try {
@@ -182,6 +185,11 @@ async function handleVoucherTrigger(
       },
       orderBy: { createdAt: 'desc' },
       include: { items: true }
+    });
+    
+    logTrigger('VOUCHER', `Existing order check`, { 
+      found: !!existingOrder, 
+      orderId: existingOrder?.id 
     });
     
     // Step 2: If no order, try to create one automatically
@@ -203,35 +211,107 @@ async function handleVoucherTrigger(
             include: { items: true }
           });
         } else {
-          logTrigger('VOUCHER', `Auto-order creation failed`, { reason: autoOrderResult.reason });
-          
-          return {
-            trigger: 'VOUCHER_RECEIVED',
-            executed: false,
-            contextForAgent: `[SISTEMA - VOUCHER RECIBIDO PERO SIN PEDIDO] Se detectó un comprobante de pago (${voucherResult.brand || 'Banco/App'}, ${currencySymbol}${voucherResult.amount || '?'}), pero no hay un pedido activo para este cliente. Por favor, primero confirma los datos del pedido (producto, nombre, dirección) y usa la función confirmar_pedido para registrar el pedido. Luego el cliente puede reenviar el comprobante.`,
-            error: autoOrderResult.reason
-          };
+          logTrigger('VOUCHER', `Auto-order creation failed, will create minimal order`, { reason: autoOrderResult.reason });
         }
       } else {
-        logTrigger('VOUCHER', `Cannot create order - missing data`, { 
+        logTrigger('VOUCHER', `Missing data for full order, will create minimal order`, { 
           missingFields: orderCheck.missingFields 
         });
+      }
+      
+      // CRITICAL FIX: If we still don't have an order, create a MINIMAL order to capture the voucher
+      // This prevents losing sales when data extraction didn't capture all fields
+      if (!existingOrder && voucherResult.amount && voucherResult.amount > 0) {
+        logTrigger('VOUCHER', `[FALLBACK] Creating minimal order to capture voucher payment`);
         
-        const missingFieldsText = orderCheck.missingFields.join(', ');
+        const voucherAmount = voucherResult.amount;
+        
+        // Create minimal order with voucher as proof
+        const minimalOrder = await prisma.order.create({
+          data: {
+            businessId,
+            instanceId: instanceId || undefined,
+            contactPhone,
+            contactName: contactName || 'Cliente',
+            shippingAddress: 'PENDIENTE - Solicitar al cliente',
+            totalAmount: voucherAmount,
+            paidAmount: voucherAmount,
+            pendingAmount: 0,
+            lastVoucherAmount: voucherAmount,
+            voucherImageUrl: mediaUrl,
+            voucherReceivedAt: new Date(),
+            status: 'PAID',
+            paidAt: new Date(),
+            notes: JSON.stringify({
+              autoCreated: true,
+              reason: 'Voucher received before order confirmation',
+              voucherDetails: {
+                brand: voucherResult.brand,
+                amount: voucherAmount,
+                currency: voucherResult.currency,
+                operationCode: voucherResult.operationCode,
+                confidence: voucherResult.confidence
+              },
+              paymentHistory: [{
+                timestamp: new Date().toISOString(),
+                amount: voucherAmount,
+                brand: voucherResult.brand || 'unknown',
+                operationCode: voucherResult.operationCode || null,
+                imageUrl: mediaUrl
+              }],
+              needsDataCompletion: true,
+              missingFields: ['productos', 'direccion_completa']
+            })
+          },
+          include: { items: true }
+        });
+        
+        logTrigger('VOUCHER', `[SUCCESS] Minimal order created`, { 
+          orderId: minimalOrder.id,
+          amount: voucherAmount
+        });
+        
+        const orderShortId = minimalOrder.id.slice(-6).toUpperCase();
+        
         return {
           trigger: 'VOUCHER_RECEIVED',
-          executed: false,
-          contextForAgent: `[SISTEMA - VOUCHER RECIBIDO PERO DATOS INCOMPLETOS] Se detectó un comprobante de pago (${voucherResult.brand || 'Banco/App'}, ${currencySymbol}${voucherResult.amount || '?'}), pero faltan datos para crear el pedido: ${missingFieldsText}. Por favor, solicita estos datos al cliente primero, confirma el pedido, y luego el cliente puede reenviar el comprobante.`,
-          error: `Missing fields: ${missingFieldsText}`
+          executed: true,
+          result: {
+            orderId: minimalOrder.id,
+            orderShortId,
+            voucherAmount,
+            paymentResult: {
+              newPaidAmount: voucherAmount,
+              totalAmount: voucherAmount,
+              pendingAmount: 0,
+              isFullyPaid: true
+            },
+            isMinimalOrder: true
+          },
+          contextForAgent: `[SISTEMA - PAGO REGISTRADO - COMPLETAR DATOS DEL PEDIDO]
+Pedido: #${orderShortId}
+Pago recibido: ${currencySymbol}${voucherAmount.toFixed(2)} vía ${voucherResult.brand || 'transferencia'}
+Código operación: ${voucherResult.operationCode || 'N/A'}
+Estado: ✅ PAGADO
+
+IMPORTANTE: El pago se ha registrado exitosamente, pero NECESITAS completar los datos del pedido:
+1. Confirma qué productos exactos desea el cliente
+2. Solicita la dirección de envío completa
+3. Confirma el nombre del destinatario
+
+Informa al cliente que su pago fue recibido y que necesitas estos datos para procesar el envío.`
         };
       }
     }
     
     if (!existingOrder) {
+      logTrigger('VOUCHER', `[ERROR] Could not create any order`, { 
+        voucherAmount: voucherResult.amount 
+      });
       return {
         trigger: 'VOUCHER_RECEIVED',
         executed: false,
-        contextForAgent: `[SISTEMA - ERROR] No se pudo encontrar o crear un pedido para procesar el comprobante.`,
+        contextForAgent: `[SISTEMA - ERROR CRÍTICO] No se pudo crear el pedido. El comprobante de pago (${voucherResult.brand || 'Banco/App'}, ${currencySymbol}${voucherResult.amount || '?'}) fue detectado pero hubo un error guardándolo. Informa al cliente que hubo un problema técnico y que reintente o contacte soporte.`,
         error: 'No order found or created'
       };
     }

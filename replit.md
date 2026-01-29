@@ -87,6 +87,7 @@ The platform utilizes a microservices-like architecture comprising a **Frontend 
     *   **Voucher Auto-Processing**: Any image is validated as potential voucher regardless of existing order; auto-creates order from extracted data if missing
     *   **Context Injection**: Auto-trigger results are injected into AI agent context ensuring accurate responses about completed actions
     *   **Design Principle**: Don't trust AI to remember to call tools; for critical actions (payment processing, order creation), use explicit triggers that force execution
+    *   **Fallback Minimal Order Creation**: When valid voucher received but extracted data incomplete (missing productos, direccion, nombre), system ALWAYS creates a minimal order with voucher amount, status PAID, and `needsDataCompletion: true` flag - prevents lost sales when AI agent fails to extract all fields
     *   **Files**: `autoTriggers.ts` (trigger detection/execution), `orderAutoCreator.ts` (order creation from extracted data)
 
 **System Design Choices**:
