@@ -43,6 +43,23 @@ interface Product {
   imageUrl: string | null;
 }
 
+interface PaymentRecord {
+  amount: number;
+  paymentMethod: string;
+  operationCode: string | null;
+  brand: string | null;
+  imageUrl: string | null;
+  notes: string | null;
+  timestamp: string;
+}
+
+interface OrderNotes {
+  paymentHistory?: PaymentRecord[];
+  lastVoucherAmount?: number;
+  lastPaymentMethod?: string;
+  [key: string]: any;
+}
+
 interface Order {
   id: string;
   businessId: string;
@@ -59,6 +76,8 @@ interface Order {
   totalAmount: number;
   subtotalAmount: number | null;
   shippingCost: number | null;
+  paidAmount: number;
+  pendingAmount: number | null;
   currencyCode: string;
   currencySymbol: string;
   status: string;
@@ -497,6 +516,24 @@ export default function OrdersPage() {
     return phone.replace('@s.whatsapp.net', '').replace(/(\d{2})(\d{3})(\d{3})(\d{3})/, '+$1 $2 $3 $4');
   };
 
+  const getPaymentHistory = (order: Order): PaymentRecord[] => {
+    if (!order.notes) return [];
+    try {
+      const parsed: OrderNotes = typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes;
+      return parsed.paymentHistory || [];
+    } catch {
+      return [];
+    }
+  };
+
+  const getPaymentProgress = (order: Order) => {
+    const paid = order.paidAmount || 0;
+    const total = order.totalAmount || 0;
+    const pending = total - paid;
+    const percentage = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
+    return { paid, total, pending, percentage, isFullyPaid: paid >= total };
+  };
+
   const isExpired = (expiresAt: string) => {
     return new Date() > new Date(expiresAt);
   };
@@ -862,63 +899,157 @@ export default function OrdersPage() {
                         </div>
                       )}
 
-                      {order.status === 'AWAITING_VOUCHER' && (
-                        <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 sm:p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <p className="text-orange-400 font-medium text-sm mb-1">Comprobante de Pago</p>
-                              {order.voucherImageUrl ? (
-                                <div className="flex items-center gap-3">
-                                  <img
-                                    src={order.voucherImageUrl}
-                                    alt="Comprobante de pago"
-                                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setVoucherModalUrl(order.voucherImageUrl);
-                                    }}
-                                  />
-                                  <div className="flex-1">
-                                    <p className="text-green-400 text-xs sm:text-sm">Comprobante recibido</p>
-                                    {order.voucherReceivedAt && (
-                                      <p className="text-gray-500 text-[10px] sm:text-xs">
-                                        {formatDate(order.voucherReceivedAt)}
-                                      </p>
-                                    )}
-                                    <p className="text-gray-400 text-[10px] sm:text-xs mt-1">
-                                      Click en la imagen para ampliar
-                                    </p>
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className="text-gray-400 text-xs sm:text-sm">
-                                  El cliente aun no ha enviado el comprobante de pago
+                      {/* Seccion de Estado de Pagos - Siempre visible */}
+                      {(() => {
+                        const progress = getPaymentProgress(order);
+                        const paymentHistory = getPaymentHistory(order);
+                        const hasPayments = paymentHistory.length > 0 || progress.paid > 0;
+                        
+                        return (
+                          <div className={`rounded-lg p-3 sm:p-4 ${
+                            progress.isFullyPaid 
+                              ? 'bg-green-500/10 border border-green-500/30' 
+                              : progress.paid > 0 
+                                ? 'bg-yellow-500/10 border border-yellow-500/30'
+                                : 'bg-orange-500/10 border border-orange-500/30'
+                          }`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <p className={`font-medium text-sm ${
+                                progress.isFullyPaid ? 'text-green-400' : progress.paid > 0 ? 'text-yellow-400' : 'text-orange-400'
+                              }`}>
+                                {progress.isFullyPaid ? 'Pago Completado' : progress.paid > 0 ? 'Pago Parcial' : 'Esperando Pago'}
+                              </p>
+                              {progress.isFullyPaid && (
+                                <span className="text-green-400 text-xs">
+                                  <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  100%
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Barra de progreso */}
+                            <div className="mb-3">
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-400">Pagado: {order.currencySymbol}{progress.paid.toFixed(2)}</span>
+                                <span className="text-gray-400">Total: {order.currencySymbol}{progress.total.toFixed(2)}</span>
+                              </div>
+                              <div className="w-full bg-gray-700 rounded-full h-2.5">
+                                <div 
+                                  className={`h-2.5 rounded-full transition-all ${
+                                    progress.isFullyPaid ? 'bg-green-500' : 'bg-yellow-500'
+                                  }`}
+                                  style={{ width: `${progress.percentage}%` }}
+                                ></div>
+                              </div>
+                              {!progress.isFullyPaid && progress.pending > 0 && (
+                                <p className="text-orange-400 text-xs mt-1">
+                                  Pendiente: {order.currencySymbol}{progress.pending.toFixed(2)}
                                 </p>
                               )}
                             </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                confirmPayment(order.id);
-                              }}
-                              disabled={confirmingPayment === order.id}
-                              className="px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:opacity-50 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors flex-shrink-0"
-                            >
-                              {confirmingPayment === order.id ? (
-                                <span className="flex items-center gap-2">
-                                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                  </svg>
-                                  Confirmando...
-                                </span>
-                              ) : (
-                                'Confirmar Pago'
-                              )}
-                            </button>
+                            
+                            {/* Historial de vouchers/pagos */}
+                            {paymentHistory.length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-gray-600/50">
+                                <p className="text-gray-400 text-xs uppercase mb-2">
+                                  Historial de Pagos ({paymentHistory.length})
+                                </p>
+                                <div className="space-y-2 max-h-48 overflow-y-auto">
+                                  {paymentHistory.map((payment, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 bg-[#1a1a1a] rounded-lg p-2">
+                                      {payment.imageUrl && (
+                                        <img
+                                          src={payment.imageUrl}
+                                          alt={`Voucher ${idx + 1}`}
+                                          className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setVoucherModalUrl(payment.imageUrl);
+                                          }}
+                                        />
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-white text-sm font-medium">
+                                            {order.currencySymbol}{payment.amount.toFixed(2)}
+                                          </span>
+                                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
+                                            {payment.paymentMethod}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-gray-500 text-[10px] mt-0.5">
+                                          <span>{formatDate(payment.timestamp)}</span>
+                                          {payment.operationCode && (
+                                            <span>Op: {payment.operationCode}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Voucher unico si no hay historial pero hay imagen */}
+                            {paymentHistory.length === 0 && order.voucherImageUrl && (
+                              <div className="flex items-center gap-3 mt-2">
+                                <img
+                                  src={order.voucherImageUrl}
+                                  alt="Comprobante de pago"
+                                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setVoucherModalUrl(order.voucherImageUrl);
+                                  }}
+                                />
+                                <div className="flex-1">
+                                  <p className="text-green-400 text-xs sm:text-sm">Comprobante recibido</p>
+                                  {order.voucherReceivedAt && (
+                                    <p className="text-gray-500 text-[10px] sm:text-xs">
+                                      {formatDate(order.voucherReceivedAt)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Sin pagos aun */}
+                            {!hasPayments && !order.voucherImageUrl && (
+                              <p className="text-gray-400 text-xs sm:text-sm">
+                                El cliente aun no ha enviado comprobante de pago
+                              </p>
+                            )}
+                            
+                            {/* Boton confirmar pago manual - solo para AWAITING_VOUCHER */}
+                            {order.status === 'AWAITING_VOUCHER' && (
+                              <div className="mt-3 pt-3 border-t border-gray-600/50">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    confirmPayment(order.id);
+                                  }}
+                                  disabled={confirmingPayment === order.id}
+                                  className="w-full px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:opacity-50 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors"
+                                >
+                                  {confirmingPayment === order.id ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                      </svg>
+                                      Confirmando...
+                                    </span>
+                                  ) : (
+                                    'Confirmar Pago Manualmente'
+                                  )}
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       <div>
                         <div className="flex items-center justify-between mb-2">

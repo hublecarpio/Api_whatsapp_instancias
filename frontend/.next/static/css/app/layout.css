@@ -1122,6 +1122,9 @@ body.glass-mode .mobile-drawer {
 .inline-block {
   display: inline-block;
 }
+.inline {
+  display: inline;
+}
 .flex {
   display: flex;
 }
@@ -1226,6 +1229,9 @@ body.glass-mode .mobile-drawer {
 }
 .h-screen {
   height: 100vh;
+}
+.h-2\.5 {
+  height: 0.625rem;
 }
 .max-h-20 {
   max-height: 5rem;
