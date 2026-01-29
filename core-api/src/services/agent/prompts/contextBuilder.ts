@@ -350,39 +350,44 @@ export async function loadBusinessContext(
     throw new Error(`Business not found: ${businessId}`);
   }
 
-  const promptConfig = await (prisma as any).promptConfig?.findFirst?.({
+  const instanceCondition = instanceId 
+    ? { OR: [{ instanceId }, { instanceId: null }] }
+    : { instanceId: null };
+
+  const agentPrompt = await prisma.agentPrompt.findFirst({
     where: { 
       businessId,
-      ...(instanceId ? { OR: [{ instanceId }, { instanceId: null }] } : {})
+      ...instanceCondition
     },
     orderBy: { instanceId: 'desc' }
-  }).catch(() => null);
+  });
+  
+  const promptConfig = agentPrompt ? {
+    systemPrompt: agentPrompt.prompt,
+    bufferSeconds: agentPrompt.bufferSeconds,
+    historyLimit: agentPrompt.historyLimit
+  } : null;
+  
+  console.log('[LoadBusinessContext] AgentPrompt:', {
+    businessId,
+    instanceId,
+    hasPrompt: !!agentPrompt,
+    promptLength: agentPrompt?.prompt?.length || 0
+  });
 
   const [products, deliveryZones, extractionFields, funnelStages] = await Promise.all([
     prisma.product.findMany({
-      where: { 
-        businessId,
-        ...(instanceId ? { OR: [{ instanceId }, { instanceId: null }] } : {})
-      },
+      where: { businessId, ...instanceCondition },
       take: 100
     }),
     prisma.deliveryZone.findMany({
-      where: { 
-        businessId,
-        ...(instanceId ? { OR: [{ instanceId }, { instanceId: null }] } : {})
-      }
+      where: { businessId, ...instanceCondition }
     }),
     prisma.extractionField.findMany({
-      where: { 
-        businessId,
-        ...(instanceId ? { OR: [{ instanceId }, { instanceId: null }] } : {})
-      }
+      where: { businessId, ...instanceCondition }
     }),
     prisma.funnelStage.findMany({
-      where: { 
-        businessId,
-        ...(instanceId ? { OR: [{ instanceId }, { instanceId: null }] } : {})
-      },
+      where: { businessId, ...instanceCondition },
       orderBy: { order: 'asc' }
     })
   ]);

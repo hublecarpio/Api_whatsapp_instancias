@@ -85,14 +85,15 @@ export async function retrieveRelevantSections(
 ): Promise<RAGResult> {
   const startTime = Date.now();
   
+  const instanceCondition = instanceId 
+    ? { OR: [{ instanceId }, { instanceId: null }] }
+    : { instanceId: null };
+  
   const sections = await prisma.promptSection.findMany({
     where: { 
       businessId, 
       enabled: true,
-      OR: [
-        { instanceId: instanceId || null },
-        { instanceId: null }
-      ]
+      ...instanceCondition
     },
     select: {
       id: true,
@@ -104,6 +105,8 @@ export async function retrieveRelevantSections(
       instanceId: true
     }
   });
+  
+  console.log(`[RAG] Retrieved ${sections.length} sections for businessId=${businessId}, instanceId=${instanceId || 'null'}`);
 
   const coreSections: RetrievedSection[] = [];
   const candidateSections: (RetrievedSection & { similarity: number })[] = [];
