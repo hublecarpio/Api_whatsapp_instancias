@@ -63,23 +63,35 @@ export class AgentOrchestrator {
 
   async process(input: OrchestratorInput): Promise<OrchestratorOutput> {
     const startTime = Date.now();
-    console.log(`[Orchestrator] Processing message for ${input.contactPhone}`);
+    console.log(`[Orchestrator] Processing message for ${input.contactPhone}, businessId=${input.businessId}, instanceId=${input.instanceId}`);
 
     const toolsExecuted: OrchestratorOutput['toolsExecuted'] = [];
     let totalTokens = { prompt: 0, completion: 0, total: 0 };
     let llmCalls = 0;
+    let currentStep = 'init';
 
     try {
+      currentStep = 'loadCustomTools';
+      console.log(`[Orchestrator] Step: ${currentStep}`);
       await loadCustomToolsForBusiness(input.businessId);
 
+      currentStep = 'loadBusinessContext';
+      console.log(`[Orchestrator] Step: ${currentStep}`);
       const businessContext = await loadBusinessContext(input.businessId, input.instanceId);
+      console.log(`[Orchestrator] BusinessContext loaded: business=${businessContext.business?.name}, products=${businessContext.products.length}, zones=${businessContext.deliveryZones.length}`);
+
+      currentStep = 'loadConversationContext';
+      console.log(`[Orchestrator] Step: ${currentStep}`);
       const convContextPartial = await loadConversationContext(input.businessId, input.contactPhone, input.instanceId);
+      console.log(`[Orchestrator] ConversationContext loaded: contact=${convContextPartial.contact?.name || 'none'}, order=${convContextPartial.existingOrder?.id || 'none'}`);
       
       const conversationContext: ConversationContext = {
         ...convContextPartial,
         messages: input.messages
       };
 
+      currentStep = 'buildContext';
+      console.log(`[Orchestrator] Step: ${currentStep}`);
       const contextBuilder = new ContextBuilder(
         businessContext,
         conversationContext,
@@ -87,6 +99,7 @@ export class AgentOrchestrator {
       );
       
       const builtContext = await contextBuilder.build();
+      console.log(`[Orchestrator] Context built: systemPrompt=${builtContext.systemPrompt?.length || 0} chars, messages=${builtContext.conversationMessages?.length || 0}`);
 
       const availabilityContext: ToolAvailabilityContext = {
         businessId: input.businessId,
@@ -107,8 +120,9 @@ export class AgentOrchestrator {
         businessObjective: businessContext.businessObjective
       };
 
+      currentStep = 'getTools';
       const openaiTools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
-      console.log(`[Orchestrator] Available tools: ${openaiTools.length}`);
+      console.log(`[Orchestrator] Available tools: ${openaiTools.length} - ${openaiTools.map((t: any) => t.function?.name).join(', ')}`);
 
       const toolContext: ToolContext = {
         businessId: input.businessId,
@@ -139,8 +153,11 @@ export class AgentOrchestrator {
         maxTokens: this.config.maxTokens
       };
 
+      currentStep = 'llmCall';
+      console.log(`[Orchestrator] Step: ${currentStep} - model=${llmConfig.model}, messages=${llmMessages.length}`);
       let response = await this.llmProvider.chat(llmMessages, llmConfig, openaiTools);
       llmCalls++;
+      console.log(`[Orchestrator] LLM response: finishReason=${response.finishReason}, hasContent=${!!response.content}, toolCalls=${response.toolCalls?.length || 0}`);
       
       if (response.usage) {
         totalTokens.prompt += response.usage.promptTokens;
@@ -150,12 +167,13 @@ export class AgentOrchestrator {
 
       let toolCallCount = 0;
       while (response.finishReason === 'tool_calls' && response.toolCalls && toolCallCount < this.config.maxToolCalls!) {
-        console.log(`[Orchestrator] Processing ${response.toolCalls.length} tool calls`);
+        currentStep = `toolExecution_${toolCallCount}`;
+        console.log(`[Orchestrator] Step: ${currentStep} - Processing ${response.toolCalls.length} tool calls`);
 
         const toolResults: LLMMessage[] = [];
 
         for (const toolCall of response.toolCalls) {
-          console.log(`[Orchestrator] Executing tool: ${toolCall.name}`);
+          console.log(`[Orchestrator] Executing tool: ${toolCall.name} with args: ${JSON.stringify(toolCall.arguments).substring(0, 200)}`);
           
           const result = await toolRegistry.executeTool(
             toolCall.name,
@@ -215,7 +233,9 @@ export class AgentOrchestrator {
         }
       };
     } catch (error: any) {
-      console.error('[Orchestrator] Error:', error);
+      console.error(`[Orchestrator] ERROR at step "${currentStep}":`, error.message);
+      console.error(`[Orchestrator] Stack trace:`, error.stack);
+      console.error(`[Orchestrator] Input context: businessId=${input.businessId}, instanceId=${input.instanceId}, phone=${input.contactPhone}`);
       
       return {
         response: 'Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo.',
