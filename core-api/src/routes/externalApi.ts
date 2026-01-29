@@ -6,7 +6,10 @@ import prisma from '../services/prisma';
 import eventLogger from '../services/eventLogger';
 import { dispatchAgentMessage } from '../services/webhookService';
 import { getOutboundMessageQueue, OutboundMessageJobData } from '../services/queues/index';
-import { processWithOrchestrator, OrchestratorInput } from '../services/agent/index.js';
+import { processWithOrchestrator, OrchestratorInput, toolRegistry } from '../services/agent/index.js';
+import { ContextBuilder, loadBusinessContext, loadConversationContext } from '../services/agent/prompts/contextBuilder.js';
+import { ToolContext, ToolAvailabilityContext, ToolDefinitionContext } from '../services/agent/core/types.js';
+import { loadCustomToolsForBusiness } from '../services/agent/tools/customToolAdapter.js';
 
 const router = Router();
 
@@ -2482,6 +2485,274 @@ router.get('/agent/tools', validateApiKey, async (req: ApiKeyRequest, res: Respo
       tools: allTools,
       count: allTools.length,
       businessId: req.businessId
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// CONTEXT PREVIEW - Ver el prompt construido sin ejecutar LLM
+// ============================================================================
+
+router.post('/agent/context-preview', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  console.log('[API-V3] Context preview called:', { businessId: req.businessId });
+  
+  try {
+    const { contactPhone, contactName = 'Cliente', messages = [] } = req.body;
+
+    if (!contactPhone) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campo "contactPhone" es requerido' 
+      });
+    }
+
+    const phone = contactPhone.replace(/\D/g, '');
+    const businessId = req.businessId!;
+    const instanceId = req.instanceId || null;
+
+    // Load custom tools for this business first
+    await loadCustomToolsForBusiness(businessId);
+
+    // Load contexts
+    const businessContext = await loadBusinessContext(businessId, instanceId);
+    const convContextPartial = await loadConversationContext(businessId, phone, instanceId);
+    
+    const conversationContext = {
+      ...convContextPartial,
+      messages: messages.length > 0 ? messages : [{ role: 'user', content: '(preview sin mensajes)' }]
+    };
+
+    // Build context
+    const contextBuilder = new ContextBuilder(
+      businessContext,
+      conversationContext,
+      {}
+    );
+    
+    const builtContext = await contextBuilder.build();
+
+    // Get available tools
+    const availabilityContext: ToolAvailabilityContext = {
+      businessId,
+      instanceId,
+      hasActiveOrder: !!conversationContext.existingOrder,
+      hasProducts: businessContext.products.length > 0,
+      hasZones: businessContext.deliveryZones.length > 0,
+      hasAppointments: businessContext.hasAppointments,
+      businessObjective: businessContext.businessObjective
+    };
+
+    const definitionContext: ToolDefinitionContext = {
+      hasActiveOrder: !!conversationContext.existingOrder,
+      hasProducts: businessContext.products.length > 0,
+      hasZones: businessContext.deliveryZones.length > 0,
+      hasAppointments: businessContext.hasAppointments,
+      zoneDescriptions: businessContext.deliveryZones.map((z: any) => z.name).join(', '),
+      businessObjective: businessContext.businessObjective
+    };
+
+    const availableTools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
+
+    return res.json({
+      success: true,
+      systemPrompt: builtContext.systemPrompt,
+      conversationMessages: builtContext.conversationMessages,
+      availableTools: availableTools.map((t: any) => ({
+        name: t.function?.name,
+        description: t.function?.description,
+        parameters: t.function?.parameters
+      })),
+      metadata: {
+        ...builtContext.metadata,
+        businessName: businessContext.business?.name,
+        businessObjective: businessContext.businessObjective,
+        contactName: conversationContext.contact?.name || contactName,
+        hasExistingOrder: !!conversationContext.existingOrder,
+        orderId: conversationContext.existingOrder?.id,
+        extractedDataCount: Object.keys(conversationContext.extractedData || {}).length,
+        funnelStage: conversationContext.funnelStatus?.stage?.name
+      }
+    });
+  } catch (error: any) {
+    console.error('[API-V3] Error in context preview:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// EXECUTE TOOL - Ejecutar una herramienta directamente desde n8n
+// ============================================================================
+
+router.post('/agent/execute-tool', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  console.log('[API-V3] Execute tool called:', { businessId: req.businessId });
+  
+  try {
+    const { toolName, args = {}, contactPhone, contactName = 'Cliente', bypassAvailabilityCheck = false } = req.body;
+
+    if (!toolName) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campo "toolName" es requerido' 
+      });
+    }
+
+    if (!contactPhone) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campo "contactPhone" es requerido' 
+      });
+    }
+
+    const phone = contactPhone.replace(/\D/g, '');
+    const businessId = req.businessId!;
+    const instanceId = req.instanceId || null;
+
+    // Load custom tools for this business
+    await loadCustomToolsForBusiness(businessId);
+
+    // Load context for tool execution
+    const businessContext = await loadBusinessContext(businessId, instanceId);
+    const convContext = await loadConversationContext(businessId, phone, instanceId);
+
+    // Check tool availability (unless bypassed)
+    if (!bypassAvailabilityCheck) {
+      const availabilityContext: ToolAvailabilityContext = {
+        businessId,
+        instanceId,
+        hasActiveOrder: !!convContext.existingOrder,
+        hasProducts: businessContext.products.length > 0,
+        hasZones: businessContext.deliveryZones.length > 0,
+        hasAppointments: businessContext.hasAppointments,
+        businessObjective: businessContext.businessObjective
+      };
+      
+      const availableTools = toolRegistry.getAvailableTools(availabilityContext);
+      const toolAvailable = availableTools.some(t => t.name === toolName);
+      
+      if (!toolAvailable) {
+        return res.status(400).json({
+          success: false,
+          error: `Herramienta "${toolName}" no está disponible para este contexto`,
+          hint: 'Usa bypassAvailabilityCheck: true para forzar ejecución',
+          availableTools: availableTools.map(t => t.name)
+        });
+      }
+    }
+
+    // Build tool context
+    const toolContext: ToolContext = {
+      businessId,
+      instanceId,
+      contactPhone: phone,
+      contactName: convContext.contact?.name || contactName,
+      currencySymbol: businessContext.currencySymbol,
+      currencyCode: businessContext.currencyCode,
+      business: businessContext.business,
+      contact: convContext.contact,
+      existingOrder: convContext.existingOrder,
+      extractedData: convContext.extractedData || {},
+      conversationMessages: []
+    };
+
+    console.log('[API-V3] Executing tool:', { toolName, args, phone });
+
+    // Execute the tool
+    const result = await toolRegistry.executeTool(toolName, args, toolContext);
+
+    console.log('[API-V3] Tool execution result:', { toolName, success: result.success });
+
+    return res.json({
+      success: true,
+      toolName,
+      result: {
+        success: result.success,
+        content: result.content,
+        data: result.data
+      },
+      context: {
+        businessId,
+        instanceId,
+        contactPhone: phone,
+        hasExistingOrder: !!convContext.existingOrder,
+        orderId: convContext.existingOrder?.id
+      }
+    });
+  } catch (error: any) {
+    console.error('[API-V3] Error executing tool:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// LIST TOOLS WITH DETAILS - Lista las tools con sus parámetros
+// ============================================================================
+
+router.get('/agent/tools-detailed', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { contactPhone } = req.query;
+    const businessId = req.businessId!;
+    const instanceId = req.instanceId || null;
+
+    // Load custom tools for this business first
+    await loadCustomToolsForBusiness(businessId);
+
+    // Load business context to determine available tools
+    const businessContext = await loadBusinessContext(businessId, instanceId);
+    
+    let hasActiveOrder = false;
+    if (contactPhone && typeof contactPhone === 'string') {
+      const phone = contactPhone.replace(/\D/g, '');
+      const convContext = await loadConversationContext(businessId, phone, instanceId);
+      hasActiveOrder = !!convContext.existingOrder;
+    }
+
+    const availabilityContext: ToolAvailabilityContext = {
+      businessId,
+      instanceId,
+      hasActiveOrder,
+      hasProducts: businessContext.products.length > 0,
+      hasZones: businessContext.deliveryZones.length > 0,
+      hasAppointments: businessContext.hasAppointments,
+      businessObjective: businessContext.businessObjective
+    };
+
+    const definitionContext: ToolDefinitionContext = {
+      hasActiveOrder,
+      hasProducts: businessContext.products.length > 0,
+      hasZones: businessContext.deliveryZones.length > 0,
+      hasAppointments: businessContext.hasAppointments,
+      zoneDescriptions: businessContext.deliveryZones.map((z: any) => z.name).join(', '),
+      businessObjective: businessContext.businessObjective
+    };
+
+    const tools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
+
+    return res.json({
+      success: true,
+      tools: tools.map((t: any) => ({
+        name: t.function?.name,
+        description: t.function?.description,
+        parameters: t.function?.parameters
+      })),
+      count: tools.length,
+      context: {
+        businessId,
+        hasProducts: businessContext.products.length > 0,
+        hasZones: businessContext.deliveryZones.length > 0,
+        hasAppointments: businessContext.hasAppointments,
+        businessObjective: businessContext.businessObjective
+      }
     });
   } catch (error: any) {
     return res.status(500).json({
