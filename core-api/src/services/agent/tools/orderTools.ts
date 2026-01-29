@@ -52,15 +52,60 @@ export class ConfirmarPedidoTool extends BaseTool {
     };
   }
 
+  private validateProductMentionedInConversation(productName: string, messages?: { role: string; content: string }[]): { valid: boolean; reason?: string } {
+    if (!messages || messages.length === 0) {
+      this.log('No conversation messages available, allowing product');
+      return { valid: true };
+    }
+
+    const userMessages = messages.filter(m => m.role === 'user').map(m => m.content.toLowerCase());
+    const allConversation = userMessages.join(' ');
+    
+    const productLower = productName.toLowerCase().trim();
+    const productWords = productLower.split(/\s+/).filter(w => w.length > 2);
+    
+    if (allConversation.includes(productLower)) {
+      return { valid: true };
+    }
+    
+    if (productWords.length <= 2) {
+      const anyWordMatched = productWords.some(word => allConversation.includes(word));
+      if (anyWordMatched) {
+        this.log(`Product "${productName}" matched (short product name, any word match)`);
+        return { valid: true };
+      }
+    }
+    
+    const matchedWords = productWords.filter(word => allConversation.includes(word));
+    const matchRatio = matchedWords.length / productWords.length;
+    
+    if (matchRatio >= 0.5 && matchedWords.length >= 1) {
+      this.log(`Product "${productName}" partially matched (${matchRatio * 100}% words): ${matchedWords.join(', ')}`);
+      return { valid: true };
+    }
+    
+    this.log(`[ORDER-VALIDATION] Product "${productName}" NOT found in conversation. User messages: ${userMessages.slice(-3).join(' | ')}`);
+    return { 
+      valid: false, 
+      reason: `El cliente NO mencionó el producto "${productName}" en la conversación. Solo confirma pedidos de productos que el cliente haya solicitado explícitamente.` 
+    };
+  }
+
   async execute(args: Record<string, any>, context: ToolContext): Promise<ToolResult> {
     this.log('Execute called', args);
     
-    const { businessId, instanceId, contactPhone, contactName, currencySymbol } = context;
+    const { businessId, instanceId, contactPhone, contactName, currencySymbol, conversationMessages } = context;
     const normalizedPhone = contactPhone.replace(/\D/g, '');
     
     try {
       if (!args.producto || !args.nombre_cliente || !args.direccion) {
         return this.error('Faltan datos requeridos: producto, nombre_cliente y direccion son obligatorios.');
+      }
+
+      const productValidation = this.validateProductMentionedInConversation(args.producto, conversationMessages);
+      if (!productValidation.valid) {
+        this.log(`[ORDER-BLOCKED] Rejecting order for product not mentioned: ${args.producto}`);
+        return this.error(productValidation.reason || 'Producto no mencionado en la conversación.');
       }
 
       const product = await findProductWithScope(businessId, args.producto, instanceId);
@@ -458,12 +503,195 @@ ${details.join('\n')}
   }
 }
 
+export class RegistrarVoucherTool extends BaseTool {
+  readonly name = 'registrar_voucher_pago';
+  readonly category: ToolCategory = 'PAYMENT';
+
+  protected buildDefinition(context: ToolDefinitionContext): ToolDefinition {
+    return {
+      name: this.name,
+      description: `HERRAMIENTA DE RAZONAMIENTO para procesar comprobantes de pago. Cuando Gemini detecta un voucher válido, usa esta herramienta para:
+1. Verificar si hay un pedido activo
+2. Validar el monto contra el total pendiente
+3. Registrar el pago (acepta pagos parciales y acumulativos)
+4. Actualizar el estado del pedido automáticamente
+
+LÓGICA DE DECISIÓN:
+- Si paidAmount + nuevo_voucher >= totalAmount → Estado = PAID
+- Si paidAmount + nuevo_voucher < totalAmount → Solicitar pago restante
+- Siempre acumular pagos en paymentHistory[]`,
+      category: this.category,
+      parameters: {
+        type: 'object',
+        properties: {
+          monto_detectado: {
+            type: 'number',
+            description: 'Monto del voucher detectado por Gemini'
+          },
+          banco: {
+            type: 'string',
+            description: 'Banco o método de pago (Yape, Plin, BCP, etc.)'
+          },
+          codigo_operacion: {
+            type: 'string',
+            description: 'Código de operación del comprobante (opcional)'
+          },
+          imagen_url: {
+            type: 'string',
+            description: 'URL de la imagen del voucher'
+          }
+        },
+        required: ['monto_detectado']
+      },
+      requiresActiveOrder: true
+    };
+  }
+
+  isAvailable(context: ToolAvailabilityContext): boolean {
+    return context.hasActiveOrder;
+  }
+
+  async execute(args: Record<string, any>, context: ToolContext): Promise<ToolResult> {
+    this.log('[VOUCHER-TOOL] Execute called', args);
+    
+    const { businessId, instanceId, contactPhone, currencySymbol, geminiVoucherResult } = context;
+    const normalizedPhone = contactPhone.replace(/\D/g, '');
+    
+    try {
+      const order = await prisma.order.findFirst({
+        where: {
+          businessId,
+          contactPhone: normalizedPhone,
+          status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] },
+          ...(instanceId ? { instanceId } : {})
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { items: true }
+      });
+
+      if (!order) {
+        this.log('[VOUCHER-TOOL] No active order found');
+        return this.error('No hay un pedido activo esperando pago. Primero necesito confirmar el pedido del cliente.');
+      }
+
+      const voucherAmount = args.monto_detectado || geminiVoucherResult?.amount || 0;
+      const bank = args.banco || geminiVoucherResult?.brand || 'Desconocido';
+      const operationCode = args.codigo_operacion || geminiVoucherResult?.operationCode || null;
+      const imageUrl = args.imagen_url || geminiVoucherResult?.imageUrl || null;
+
+      if (voucherAmount <= 0) {
+        this.log('[VOUCHER-TOOL] Invalid voucher amount', { voucherAmount });
+        return this.error('No se detectó un monto válido en el comprobante. Por favor pide al cliente que envíe una imagen más clara.');
+      }
+
+      const currentPaid = order.paidAmount || 0;
+      const pendingBefore = order.totalAmount - currentPaid;
+      const newPaidAmount = currentPaid + voucherAmount;
+      const pendingAfter = Math.max(0, order.totalAmount - newPaidAmount);
+
+      this.log('[VOUCHER-REASONING]', {
+        orderId: order.id.slice(-6),
+        totalAmount: order.totalAmount,
+        previousPaid: currentPaid,
+        voucherAmount,
+        newPaidAmount,
+        pendingAfter,
+        decision: newPaidAmount >= order.totalAmount ? 'FULLY_PAID' : 'PARTIAL_PAYMENT'
+      });
+
+      const paymentEntry = {
+        amount: voucherAmount,
+        brand: bank,
+        operationCode,
+        imageUrl,
+        timestamp: new Date().toISOString(),
+        type: 'VOUCHER'
+      };
+
+      let existingNotes: any = {};
+      try {
+        existingNotes = order.notes ? JSON.parse(order.notes) : {};
+      } catch (e) {
+        this.log('[VOUCHER-TOOL] Could not parse existing notes, using empty object');
+        existingNotes = { legacyNotes: order.notes };
+      }
+      const paymentHistory = existingNotes.paymentHistory || [];
+      paymentHistory.push(paymentEntry);
+
+      const isFullyPaid = newPaidAmount >= order.totalAmount;
+      const newStatus = isFullyPaid ? OrderStatus.PAID : OrderStatus.AWAITING_VOUCHER;
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          paidAmount: newPaidAmount,
+          pendingAmount: pendingAfter,
+          lastVoucherAmount: voucherAmount,
+          status: newStatus,
+          paidAt: isFullyPaid ? new Date() : null,
+          notes: JSON.stringify({
+            ...existingNotes,
+            paymentHistory,
+            lastVoucherBank: bank,
+            lastVoucherCode: operationCode
+          })
+        }
+      });
+
+      const orderId = order.id.slice(-6).toUpperCase();
+
+      if (isFullyPaid) {
+        this.log(`[VOUCHER-TOOL] Order ${orderId} FULLY PAID`);
+        return this.success(`✅ PAGO COMPLETO REGISTRADO
+
+Pedido #${orderId}
+Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${bank})
+${operationCode ? `Código: ${operationCode}` : ''}
+
+Total pagado: ${currencySymbol}${newPaidAmount.toFixed(2)}
+Total del pedido: ${currencySymbol}${order.totalAmount.toFixed(2)}
+━━━━━━━━━━━━━━━━━━━━
+Estado: PAGADO ✓
+
+El pedido está listo para ser procesado.`, { 
+          orderId: order.id, 
+          status: 'PAID', 
+          fullyPaid: true 
+        });
+      } else {
+        this.log(`[VOUCHER-TOOL] Order ${orderId} PARTIAL PAYMENT, pending: ${pendingAfter}`);
+        return this.success(`💳 PAGO PARCIAL REGISTRADO
+
+Pedido #${orderId}
+Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${bank})
+${operationCode ? `Código: ${operationCode}` : ''}
+
+Resumen de pagos:
+• Total del pedido: ${currencySymbol}${order.totalAmount.toFixed(2)}
+• Pagado hasta ahora: ${currencySymbol}${newPaidAmount.toFixed(2)}
+• PENDIENTE: ${currencySymbol}${pendingAfter.toFixed(2)}
+━━━━━━━━━━━━━━━━━━━━
+Por favor solicita al cliente el pago del monto pendiente.`, { 
+          orderId: order.id, 
+          status: 'AWAITING_VOUCHER', 
+          fullyPaid: false,
+          pendingAmount: pendingAfter 
+        });
+      }
+    } catch (error: any) {
+      this.logError('[VOUCHER-TOOL] Error processing voucher', error);
+      return this.error(`Error al procesar voucher: ${error.message}`);
+    }
+  }
+}
+
 export function registerOrderTools(): void {
   toolRegistry.registerTool(new ConfirmarPedidoTool());
   toolRegistry.registerTool(new AgregarProductoTool());
   toolRegistry.registerTool(new ConsultarPedidoTool());
   toolRegistry.registerTool(new ConfirmarEntregaTool());
   toolRegistry.registerTool(new CalcularTotalTool());
+  toolRegistry.registerTool(new RegistrarVoucherTool());
   
   console.log('[OrderTools] All order tools registered');
 }

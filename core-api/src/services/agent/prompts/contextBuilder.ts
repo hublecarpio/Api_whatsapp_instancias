@@ -37,6 +37,17 @@ export interface TriggerContext {
   autoTriggerResult?: any;
   mediaAnalysis?: string;
   voucherInfo?: any;
+  geminiVoucherResult?: {
+    isValid: boolean;
+    isPaymentProof: boolean;
+    brand?: string;
+    amount?: number;
+    currency?: string;
+    operationCode?: string;
+    confidence: number;
+    reason: string;
+    imageUrl?: string;
+  };
 }
 
 export interface BuiltContext {

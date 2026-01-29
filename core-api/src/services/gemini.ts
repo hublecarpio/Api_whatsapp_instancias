@@ -189,8 +189,28 @@ export class GeminiService {
       const base64Data = buffer.toString('base64');
 
       const prompt = context 
-        ? `Describe brevemente esta imagen en español (máximo 2 oraciones). Contexto: "${context}".`
-        : 'Describe brevemente esta imagen en español, máximo 2 oraciones. Sé conciso.';
+        ? `Analiza esta imagen en el contexto de una conversación de ventas/atención al cliente.
+
+Contexto: "${context}"
+
+INSTRUCCIONES:
+1. Describe el contenido específico de la imagen (qué se ve exactamente)
+2. Si es un comprobante de pago/transferencia: menciona el banco, monto, código de operación si es visible
+3. Si es un producto: describe el producto, marca, características visibles
+4. Si es una captura de pantalla: describe qué app/página y qué información contiene
+5. Si es un documento: indica qué tipo de documento y datos relevantes
+
+Responde en español, máximo 3 oraciones, siendo específico sobre los detalles visibles.`
+        : `Analiza esta imagen detalladamente en español.
+
+INSTRUCCIONES:
+1. Describe el contenido específico (qué se ve exactamente)
+2. Si parece un comprobante de pago: indica banco/app, monto visible, código de operación
+3. Si es un producto: describe marca, características, estado
+4. Si es un documento: indica tipo y datos relevantes visibles
+5. Si es una foto personal o general: describe brevemente el contenido
+
+Responde en español, máximo 3 oraciones, siendo específico y útil.`;
 
       const response = await axios.post(
         `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
@@ -208,7 +228,7 @@ export class GeminiService {
           }],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 128
+            maxOutputTokens: 256
           }
         },
         {

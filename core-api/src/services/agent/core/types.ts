@@ -1,5 +1,10 @@
 import OpenAI from 'openai';
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface ToolContext {
   businessId: string;
   instanceId: string | null;
@@ -11,6 +16,18 @@ export interface ToolContext {
   contact?: any;
   existingOrder?: any;
   extractedData?: Record<string, any>;
+  conversationMessages?: ChatMessage[];
+  geminiVoucherResult?: {
+    isValid: boolean;
+    isPaymentProof: boolean;
+    brand?: string;
+    amount?: number;
+    currency?: string;
+    operationCode?: string;
+    confidence: number;
+    reason: string;
+    imageUrl?: string;
+  };
 }
 
 export interface ToolResult {
