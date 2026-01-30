@@ -747,6 +747,14 @@ function validateAgentResponse(
     }
   }
   
+  // Convert Markdown links to plain URLs (WhatsApp doesn't support Markdown links)
+  sanitizedResponse = sanitizedResponse.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+    // If text and URL are the same, just return the URL
+    if (text === url) return url;
+    // If text is different, return "text: url" format
+    return `${text}: ${url}`;
+  });
+  
   // Check if response mentions competitor products or services
   const competitorPatterns = [
     /amazon/gi, /mercadolibre/gi, /aliexpress/gi,

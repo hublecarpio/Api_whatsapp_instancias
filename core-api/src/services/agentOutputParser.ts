@@ -245,6 +245,13 @@ export function parseAgentOutputToWhatsAppEvents(raw: string, options: ParseOpti
   // Convert markdown link syntax [text](url) to just the URL for media files
   text = text.replace(/\[[^\]]*\]\((https?:\/\/[^)]+\.(?:png|jpg|jpeg|gif|webp|pdf|doc|docx|mp4|mp3|ogg))\)/gi, '$1');
   
+  // Convert ALL remaining markdown links [text](url) to plain format
+  // If text equals URL, just show URL. Otherwise show "text: URL"
+  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (match, linkText, url) => {
+    if (linkText === url) return url;
+    return `${linkText}: ${url}`;
+  });
+  
   const urlRegex = /(https?:\/\/[^\s)]+)(?=\s|$)/g;
 
   interface Token { type: 'text' | 'url'; value: string }
