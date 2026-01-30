@@ -458,8 +458,73 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
         iterations++;
       }
 
-      const finalContent = response.content || 'No se pudo completar la acción.';
+      let finalContent = response.content || 'No se pudo completar la acción.';
       const totalDuration = Date.now() - startTime;
+
+      // GOAL VALIDATION: Check if objective was explicitly to create order but no orderId was produced
+      // Use strict pattern to avoid false positives
+      const isOrderCreationObjective = /(?:crear|confirmar|procesar|generar|registrar)\s+(?:el\s+)?(?:pedido|orden)/i.test(objetivo);
+      const orderWasCreated = !!memory.orderId || toolsExecuted.some(t => t.name === 'confirmar_pedido' && t.success);
+      const hasProductsAndZone = memory.productData.length > 0 && !!memory.calculatedTotals.zoneId;
+      const hasValidProductIds = memory.productData.every(p => p.productId && !p.productId.startsWith('found_'));
+      const hasRequiredData = !!(convContext.extractedData?.direccion || convContext.extractedData?.direccion_entrega);
+      
+      if (isOrderCreationObjective && !orderWasCreated && !convContext.existingOrder) {
+        console.log(`[LLM2-Delegate] ⚠️ GOAL VALIDATION FAILED: Order creation objective but no order created`);
+        console.log(`[LLM2-Delegate]   Products in memory: ${memory.productData.length}`);
+        console.log(`[LLM2-Delegate]   Valid productIds: ${hasValidProductIds}`);
+        console.log(`[LLM2-Delegate]   ZoneId in memory: ${memory.calculatedTotals.zoneId || 'NONE'}`);
+        console.log(`[LLM2-Delegate]   Has required data (address): ${hasRequiredData}`);
+        console.log(`[LLM2-Delegate]   Extracted data: ${JSON.stringify(convContext.extractedData || {})}`);
+        
+        // FALLBACK: Only auto-execute if we have VALID productIds (not fallback ones) and all required data
+        const canFallback = hasProductsAndZone && hasValidProductIds && hasRequiredData && iterations < maxIterations;
+        
+        if (canFallback) {
+          console.log(`[LLM2-Delegate] 🔄 FALLBACK: Auto-executing confirmar_pedido with validated memory data`);
+          
+          const fallbackItems = memory.productData.map(p => ({
+            productId: p.productId,
+            quantity: 1,
+            variation: p.variation || undefined
+          }));
+          
+          const fallbackArgs = {
+            items: fallbackItems,
+            deliveryZoneId: memory.calculatedTotals.zoneId,
+            nombre_cliente: convContext.extractedData?.nombre || contactName || 'Cliente',
+            direccion: convContext.extractedData?.direccion || convContext.extractedData?.direccion_entrega,
+            metodo_pago: convContext.extractedData?.metodo_pago || 'YAPE'
+          };
+          
+          console.log(`[LLM2-Delegate] 🔧 Fallback confirmar_pedido args:`, JSON.stringify(fallbackArgs, null, 2));
+          
+          const fallbackResult = await toolRegistry.executeTool('confirmar_pedido', fallbackArgs, toolContext);
+          
+          if (fallbackResult.success) {
+            console.log(`[LLM2-Delegate] ✅ FALLBACK SUCCESS: Order created via auto-execution`);
+            if (fallbackResult.data?.orderId) {
+              memory.orderId = fallbackResult.data.orderId;
+            }
+            toolsExecuted.push({
+              name: 'confirmar_pedido',
+              success: true,
+              result: fallbackResult.content,
+              data: fallbackResult.data
+            });
+            finalContent = fallbackResult.content;
+          } else {
+            console.log(`[LLM2-Delegate] ⚠️ FALLBACK FAILED: ${fallbackResult.content}`);
+          }
+        } else {
+          // Log detailed reason why fallback was not attempted
+          const reasons: string[] = [];
+          if (!hasProductsAndZone) reasons.push(`products=${memory.productData.length}, zoneId=${memory.calculatedTotals.zoneId || 'none'}`);
+          if (!hasValidProductIds) reasons.push('invalid productIds (regex fallback)');
+          if (!hasRequiredData) reasons.push('missing address in extracted data');
+          console.log(`[LLM2-Delegate] ⚠️ Cannot fallback: ${reasons.join(', ')}`);
+        }
+      }
 
       const resultData = {
         toolsExecuted: toolsExecuted.map(t => ({ name: t.name, success: t.success })),
@@ -468,6 +533,11 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
           productsFound: memory.productData.length,
           calculatedTotal: memory.calculatedTotals.total,
           orderId: memory.orderId
+        },
+        goalValidation: {
+          wasOrderObjective: isOrderCreationObjective,
+          orderCreated: !!memory.orderId,
+          fallbackAttempted: isOrderCreationObjective && !orderWasCreated && hasProductsAndZone
         }
       };
 
@@ -480,6 +550,7 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
       console.log(`[LLM2-Delegate] Iterations: ${iterations}, Tools: ${toolsExecuted.length}`);
       console.log(`[LLM2-Delegate] Flow: ${summary || 'no tools executed'}`);
       console.log(`[LLM2-Delegate] Memory: products=${memory.productData.length}, total=${memory.calculatedTotals.total || 'N/A'}, orderId=${memory.orderId?.slice(0, 8) || 'none'}`);
+      console.log(`[LLM2-Delegate] Goal validation: orderObjective=${isOrderCreationObjective}, created=${!!memory.orderId}`);
       if (DEBUG_AGENT) {
         console.log(`[LLM2-Delegate] Response preview: ${redactForLog(finalContent, 100)}`);
       }
@@ -516,11 +587,13 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
   }
 
   private updateMemory(memory: ToolMemory, toolName: string, result: any, iteration: number): void {
+    console.log(`[LLM2-Memory] Updating memory from ${toolName}, success=${result.success}, hasData=${!!result.data}`);
+    
     if (toolName === 'buscar_producto' && result.success) {
-      // Usar result.data.products si está disponible (datos estructurados)
       const products = result.data?.products;
       
       if (products && Array.isArray(products)) {
+        console.log(`[LLM2-Memory] Found ${products.length} products in structured data`);
         for (const product of products) {
           const existing = memory.productData.find(p => 
             p.productId === product.id || 
@@ -528,21 +601,23 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
           );
           
           if (!existing) {
-            memory.productData.push({
+            const newProduct = {
               productId: product.id || `found_${memory.productData.length}`,
               title: product.title,
               variation: product.variation || undefined,
               price: product.price,
               stock: product.stock ?? undefined,
               imageUrl: product.imageUrl || undefined
-            });
+            };
+            memory.productData.push(newProduct);
+            console.log(`[LLM2-Memory] Added product: ${newProduct.title} (${newProduct.productId?.slice(0, 8)}...) ${newProduct.variation || ''}`);
           }
         }
       } else {
-        // Fallback a regex si no hay datos estructurados
         const content = result.content;
         const productMatches = content.matchAll(/• ([^:]+)(?:\s*\(([^)]+)\))?:\s*S\/(\d+(?:\.\d+)?)/g);
         
+        let fallbackCount = 0;
         for (const match of productMatches) {
           const existing = memory.productData.find(p => 
             p.title.toLowerCase() === match[1].trim().toLowerCase()
@@ -555,9 +630,14 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
               variation: match[2]?.trim(),
               price: parseFloat(match[3])
             });
+            fallbackCount++;
           }
         }
+        if (fallbackCount > 0) {
+          console.log(`[LLM2-Memory] Fallback regex found ${fallbackCount} products from content`);
+        }
       }
+      console.log(`[LLM2-Memory] Total products in memory: ${memory.productData.length}`);
     }
 
     if (toolName === 'calcular_total_pedido' && result.success) {
@@ -570,6 +650,9 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
           zone: data.zone,
           zoneId: data.zoneId
         };
+        console.log(`[LLM2-Memory] Stored calculation: total=${data.total}, zone=${data.zone}, zoneId=${data.zoneId?.slice(0, 8) || 'NONE'}`);
+      } else {
+        console.log(`[LLM2-Memory] ⚠️ calcular_total_pedido success but no data returned`);
       }
     }
 
@@ -578,13 +661,25 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
       if (data?.orderId) {
         memory.orderId = data.orderId;
         memory.orderStatus = data.status || 'CREATED';
+        console.log(`[LLM2-Memory] Order created: ${memory.orderId?.slice(0, 8)}... status=${memory.orderStatus}`);
       } else {
-        // Fallback a regex
         const orderMatch = result.content.match(/ID[:\s]*([a-f0-9-]+)/i);
         if (orderMatch) {
           memory.orderId = orderMatch[1];
           memory.orderStatus = 'CREATED';
+          console.log(`[LLM2-Memory] Order ID extracted via regex: ${memory.orderId?.slice(0, 8)}...`);
+        } else {
+          console.log(`[LLM2-Memory] ⚠️ confirmar_pedido success but could not extract orderId`);
         }
+      }
+    }
+    
+    if (toolName === 'agregar_producto_orden' && result.success) {
+      const data = result.data;
+      if (data?.orderId) {
+        memory.orderId = data.orderId;
+        memory.orderStatus = data.status || 'UPDATED';
+        console.log(`[LLM2-Memory] Product added to order: ${memory.orderId?.slice(0, 8)}...`);
       }
     }
   }
