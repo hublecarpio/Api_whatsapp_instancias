@@ -10,6 +10,7 @@ interface ToolMemory {
     variation?: string;
     price: number;
     stock?: number;
+    imageUrl?: string;
   }>;
   calculatedTotals: {
     subtotal?: number;
@@ -380,7 +381,8 @@ IMPORTANTE: Usa el nombre del producto TAL CUAL lo retornó buscar_producto.`;
               title: product.title,
               variation: product.variation || undefined,
               price: product.price,
-              stock: product.stock ?? undefined
+              stock: product.stock ?? undefined,
+              imageUrl: product.imageUrl || undefined
             });
           }
         }
@@ -481,7 +483,11 @@ IMPORTANTE: Usa el nombre del producto TAL CUAL lo retornó buscar_producto.`;
       parts.push('\nPRODUCTOS YA ENCONTRADOS:');
       memory.productData.forEach(p => {
         const variation = p.variation ? ` (${p.variation})` : '';
-        parts.push(`  • "${p.title}${variation}" - S/${p.price}`);
+        let productLine = `  • "${p.title}${variation}" - S/${p.price}`;
+        if (p.imageUrl) {
+          productLine += ` | Imagen: ${p.imageUrl}`;
+        }
+        parts.push(productLine);
       });
       
       // Dar ejemplo concreto de cómo usarlos

@@ -66,6 +66,9 @@ export class BuscarProductoTool extends BaseTool {
         if ((product as any).stock !== undefined && (product as any).stock !== null) {
           response += ` | Stock: ${(product as any).stock}`;
         }
+        if (product.imageUrl) {
+          response += `\n  Imagen: ${product.imageUrl}`;
+        }
         if (product.description) {
           response += `\n  ${product.description.slice(0, 80)}...`;
         }
@@ -79,7 +82,8 @@ export class BuscarProductoTool extends BaseTool {
         variation: product.variation || null,
         price: product.price,
         stock: product.stock ?? null,
-        description: product.description?.slice(0, 100) || null
+        description: product.description?.slice(0, 100) || null,
+        imageUrl: product.imageUrl || null
       }));
       
       return this.success(response, { count: products.length, products: productData });
