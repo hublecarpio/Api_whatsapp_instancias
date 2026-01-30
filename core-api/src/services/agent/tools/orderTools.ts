@@ -23,7 +23,7 @@ export class ConfirmarPedidoTool extends BaseTool {
               properties: {
                 productId: { type: 'string', description: 'UUID del producto (obtenido de buscar_producto)' },
                 quantity: { type: 'number', description: 'Cantidad (default: 1)' },
-                variation: { type: 'string', description: 'Variación del producto (ej: "100ml", "Azul")' }
+                variation: { type: 'string', description: 'Variación EXACTA del producto como viene de buscar_producto (ej: "100 ml", "Azul", "50 ml")' }
               },
               required: ['productId']
             }

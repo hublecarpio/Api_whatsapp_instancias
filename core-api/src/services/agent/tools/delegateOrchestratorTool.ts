@@ -226,20 +226,39 @@ ${zoneCatalog}
 
 ${convContext.existingOrder ? `ORDEN ACTIVA: ID=${convContext.existingOrder.id}, Estado=${convContext.existingOrder.status}` : 'Sin orden activa'}
 
-SECUENCIA OBLIGATORIA PARA CALCULAR TOTAL:
-1. PRIMERO: buscar_producto({ busqueda: "nombre del producto" })
-2. SEGUNDO: calcular_total_pedido({ productos: [{ nombre: "NOMBRE EXACTO del producto encontrado", cantidad: N }], zona_envio: "zona" })
+SECUENCIA OBLIGATORIA PARA CREAR PEDIDO:
+1. buscar_producto({ busqueda: "producto" }) → Guarda el productId (UUID) y variation EXACTA
+2. calcular_total_pedido({ productos: [...], zona_envio: "zona" }) → Confirma total y obtén zoneId
+3. confirmar_pedido({ items: [...], deliveryZoneId: "uuid", ... })
+
+⚠️ FORMATO ITEMS[] PARA CONFIRMAR_PEDIDO (OBLIGATORIO):
+{
+  "items": [
+    {"productId": "UUID-EXACTO", "quantity": 1, "variation": "NOMBRE-EXACTO-DE-VARIATION"}
+  ],
+  "deliveryZoneId": "UUID-DE-ZONA"
+}
+
+REGLAS CRÍTICAS:
+✅ productId: Usa el UUID EXACTO retornado por buscar_producto (ej: "0ca83c5c-dd8f-4ab1-ae78-066173ada2c6")
+✅ variation: Usa el nombre EXACTO como viene de la DB (ej: "100 ml", NO "100ml", NO "100ML")
+✅ deliveryZoneId: Usa el UUID de la zona retornado por calcular_total_pedido
 
 EJEMPLO CORRECTO:
-- buscar_producto({ busqueda: "Erba Pura 100ml" }) → Retorna: "Erba Pura (100ml): S/109.90"
-- calcular_total_pedido({ productos: [{ nombre: "Erba Pura", cantidad: 1 }], zona_envio: "Lima" }) → Retorna: Total con envío
+1. buscar_producto({ busqueda: "Blue Seduction" }) 
+   → productId: "5c644d16-175c-4f72-9a64-9dfb73f7a5dd", variation: "100 ml", price: 109.90
+2. confirmar_pedido({ 
+     items: [{"productId": "5c644d16-175c-4f72-9a64-9dfb73f7a5dd", "quantity": 1, "variation": "100 ml"}],
+     deliveryZoneId: "uuid-zona",
+     nombre_cliente: "Juan",
+     direccion: "Av Lima 123"
+   })
 
 ERRORES A EVITAR:
-❌ calcular_total_pedido({ zona_envio: "Lima" }) - FALTA productos[]!
-❌ Inventar precios sin usar las herramientas
-❌ Responder sin haber calculado el total
-
-IMPORTANTE: Usa el nombre del producto TAL CUAL lo retornó buscar_producto.`;
+❌ Inventar UUIDs - Usa SOLO los que retorna buscar_producto
+❌ Modificar el nombre de variation - "100 ml" ≠ "100ml" ≠ "100ML"
+❌ Usar productId genérico tipo "found_0" - Espera el UUID real
+❌ Omitir deliveryZoneId cuando usas items[]`;
 
       const llmProvider = LLMFactory.getProvider('openai');
       const llmMessages: any[] = [
@@ -456,9 +475,11 @@ IMPORTANTE: Usa el nombre del producto TAL CUAL lo retornó buscar_producto.`;
     const parts: string[] = [];
     
     if (memory.productData.length > 0) {
-      parts.push(`PRODUCTOS ENCONTRADOS:`);
+      parts.push(`PRODUCTOS ENCONTRADOS (usa productId y variation EXACTOS para crear pedido):`);
       memory.productData.forEach(p => {
-        parts.push(`  - ${p.title}${p.variation ? ` (${p.variation})` : ''}: S/${p.price}`);
+        const variationStr = p.variation ? `, "variation": "${p.variation}"` : '';
+        parts.push(`  • productId: "${p.productId}" → ${p.title}${p.variation ? ` (${p.variation})` : ''}: S/${p.price}`);
+        parts.push(`    Para items[]: {"productId": "${p.productId}", "quantity": 1${variationStr}}`);
       });
     }
     
