@@ -303,7 +303,18 @@ REGLA CRÍTICA - BÚSQUEDA OBLIGATORIA:
 IMPORTANTE: 
 - NO inventes precios ni totales - SIEMPRE usa ejecutar_accion para obtenerlos
 - La herramienta te retornará datos exactos del catálogo y cálculos reales
-- Si la herramienta indica que falta información, pregunta al cliente`;
+- Si la herramienta indica que falta información, pregunta al cliente
+
+ENVÍO DE IMÁGENES DE PRODUCTOS:
+- Cuando ejecutar_accion retorne productos con URL de imagen, puedes incluir la URL en tu respuesta para mostrar la foto al cliente
+- Simplemente incluye la URL de la imagen en una línea separada de tu mensaje
+- Ejemplo de respuesta con imagen:
+  "¡Tenemos el Blue Seduction! Es una fragancia fresca ideal para el verano.
+  
+  https://ejemplo.com/blue-seduction.png
+  
+  ¿Te gustaría saber el precio con envío?"
+- El sistema automáticamente enviará la imagen al cliente junto con tu texto`;
   }
 
   private buildFinalInstruction(): string {
