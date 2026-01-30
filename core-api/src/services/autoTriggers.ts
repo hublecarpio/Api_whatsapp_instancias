@@ -35,6 +35,7 @@ export interface TriggerContext {
     currency?: string;
     operationCode?: string;
     confidence: number;
+    imageUrl?: string;
   };
 }
 

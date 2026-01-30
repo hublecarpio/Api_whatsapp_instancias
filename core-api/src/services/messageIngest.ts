@@ -182,7 +182,8 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
             amount: voucherValidation.amount,
             currency: voucherValidation.currency,
             operationCode: voucherValidation.operationCode,
-            confidence: voucherValidation.confidence
+            confidence: voucherValidation.confidence,
+            imageUrl: mediaUrl
           }
         };
         
