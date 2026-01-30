@@ -1041,6 +1041,7 @@ model Order {
   voucherImageUrl       String?
   voucherReceivedAt     DateTime?
   lastVoucherAmount     Float?
+  lastVoucherBank       String?
   deliveryAgentName     String?
   deliveryAgentPhone    String?
   deliveryNotes         String?
