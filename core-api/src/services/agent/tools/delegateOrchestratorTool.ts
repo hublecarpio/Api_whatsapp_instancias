@@ -293,7 +293,13 @@ ${convContext.existingOrder ? `✅ Orden activa: Usa agregar_producto_orden, NUN
 ERRORES A EVITAR:
 ❌ Inventar UUIDs - Usa SOLO los que retorna buscar_producto
 ❌ Modificar el nombre de variation - "100 ml" ≠ "100ml" ≠ "100ML"
-${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden activa - usa agregar_producto_orden` : `❌ Omitir deliveryZoneId cuando usas items[] en confirmar_pedido`}`;
+${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden activa - usa agregar_producto_orden` : `❌ Omitir deliveryZoneId cuando usas items[] en confirmar_pedido`}
+
+REGISTRO DE VOUCHER/PAGO:
+Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
+1. Extrae del CONTEXTO ADICIONAL: voucherImageUrl, amount, brand, operationCode
+2. Usa registrar_voucher_pago({ orderId: "${convContext.existingOrder?.id || 'ID_ORDEN'}", voucherImageUrl: "URL", amount: MONTO, paymentMethod: "YAPE/PLIN", autoConfirm: true })
+3. OBLIGATORIO: siempre incluye voucherImageUrl si está disponible`;
 
       const llmProvider = LLMFactory.getProvider('openai');
       const llmMessages: any[] = [

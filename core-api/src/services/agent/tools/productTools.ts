@@ -20,7 +20,7 @@ export class BuscarProductoTool extends BaseTool {
           },
           limite: {
             type: 'number',
-            description: 'Número máximo de resultados (default: 5)'
+            description: 'Número máximo de resultados (default: 3, máximo: 10)'
           }
         },
         required: ['busqueda']
@@ -46,7 +46,8 @@ export class BuscarProductoTool extends BaseTool {
         return this.error('Debes especificar qué producto buscar.');
       }
 
-      const limit = Math.min(Math.max(1, args.limite || 5), 10);
+      // Default a 3 resultados para respuestas más concisas, máximo 10 si se especifica
+      const limit = Math.min(Math.max(1, args.limite || 3), 10);
       
       console.log(`[buscar_producto] 🔄 Calling searchProductsIntelligent(businessId=${businessId?.slice(0, 8)}, query="${args.busqueda}", limit=${limit}, instanceId=${instanceId?.slice(0, 8) || 'NONE'})`);
       

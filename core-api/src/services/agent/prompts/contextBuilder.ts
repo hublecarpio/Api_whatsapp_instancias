@@ -314,7 +314,21 @@ ENVÍO DE IMÁGENES DE PRODUCTOS:
   https://ejemplo.com/blue-seduction.png
   
   ¿Te gustaría saber el precio con envío?"
-- El sistema automáticamente enviará la imagen al cliente junto con tu texto`;
+- El sistema automáticamente enviará la imagen al cliente junto con tu texto
+
+REGISTRO DE PAGOS CON VOUCHER:
+- Si el sistema detectó un voucher de pago (ver sección "DATOS DEL VOUCHER DETECTADO"), DEBES registrar el pago
+- Usa ejecutar_accion con el objetivo: "registrar pago de voucher"
+- OBLIGATORIO incluir en contexto_adicional:
+  - voucherImageUrl: la URL de la imagen del voucher
+  - amount: el monto detectado
+  - brand: el método de pago (YAPE, PLIN, etc.)
+  - operationCode: el código de operación (si está disponible)
+- Ejemplo:
+  ejecutar_accion({
+    objetivo: "registrar pago de voucher por S/20 en pedido activo",
+    contexto_adicional: "voucherImageUrl: https://..., amount: 20, brand: YAPE, operationCode: 123456"
+  })`;
   }
 
   private buildFinalInstruction(): string {
@@ -565,7 +579,7 @@ ENVÍO DE IMÁGENES DE PRODUCTOS:
   }
 
   private buildTriggerContext(): string {
-    const { autoTriggerResult, mediaAnalysis } = this.triggerContext;
+    const { autoTriggerResult, mediaAnalysis, geminiVoucherResult } = this.triggerContext;
     
     let context = `# ACCIONES AUTOMÁTICAS EJECUTADAS\n`;
     
@@ -575,6 +589,18 @@ ENVÍO DE IMÁGENES DE PRODUCTOS:
     
     if (mediaAnalysis) {
       context += `\nAnálisis de multimedia: ${mediaAnalysis}\n`;
+    }
+    
+    // Incluir datos estructurados del voucher para que el agente pueda registrar el pago
+    if (geminiVoucherResult?.isPaymentProof) {
+      context += `\n## DATOS DEL VOUCHER DETECTADO\n`;
+      context += `- Método de pago: ${geminiVoucherResult.brand || 'No identificado'}\n`;
+      context += `- Monto: ${geminiVoucherResult.amount || 'No identificado'}\n`;
+      context += `- Código de operación: ${geminiVoucherResult.operationCode || 'No identificado'}\n`;
+      if (geminiVoucherResult.imageUrl) {
+        context += `- URL de imagen del voucher: ${geminiVoucherResult.imageUrl}\n`;
+      }
+      context += `\nIMPORTANTE: Cuando uses ejecutar_accion para registrar este pago, DEBES incluir la URL de la imagen en el contexto_adicional.\n`;
     }
     
     return context;
