@@ -298,12 +298,18 @@ export class ContextBuilder {
     const older = filtered.slice(0, -MEMORY_RECENT_FULL);
     const recent = filtered.slice(-MEMORY_RECENT_FULL);
     
-    const compactedOlder = older.map(m => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content.length > MEMORY_OLDER_TRUNCATE 
-        ? m.content.slice(0, MEMORY_OLDER_TRUNCATE).replace(/\s+/g, ' ').trim() + '...'
-        : m.content.replace(/\s+/g, ' ').trim()
-    }));
+    const compactedOlder = older.map(m => {
+      const isAlreadyTruncated = m.content.endsWith('...');
+      if (isAlreadyTruncated) {
+        return { role: m.role as 'user' | 'assistant', content: m.content };
+      }
+      return {
+        role: m.role as 'user' | 'assistant',
+        content: m.content.length > MEMORY_OLDER_TRUNCATE 
+          ? m.content.slice(0, MEMORY_OLDER_TRUNCATE).replace(/\s+/g, ' ').trim() + '...'
+          : m.content.replace(/\s+/g, ' ').trim()
+      };
+    });
     
     const fullRecent = recent.map(m => ({
       role: m.role as 'user' | 'assistant',
@@ -616,6 +622,62 @@ export async function loadBusinessContext(
     businessObjective: (business as any).businessObjective || 'SALES',
     hasAppointments: (business as any).businessObjective === 'APPOINTMENTS'
   };
+}
+
+export async function loadConversationHistory(
+  businessId: string,
+  contactPhone: string,
+  instanceId: string | null,
+  limit: number = 20
+): Promise<ChatMessage[]> {
+  const phone = contactPhone.replace(/\D/g, '');
+  
+  const messageFilter: any = {
+    businessId,
+    direction: { in: ['inbound', 'outbound'] },
+    OR: [
+      { sender: { endsWith: phone } },
+      { recipient: { endsWith: phone } }
+    ]
+  };
+  
+  if (instanceId) {
+    messageFilter.instanceId = instanceId;
+  }
+
+  const recentMessages = await prisma.messageLog.findMany({
+    where: messageFilter,
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: {
+      direction: true,
+      message: true,
+      createdAt: true
+    }
+  });
+
+  const messages = recentMessages.reverse().map(msg => ({
+    role: (msg.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
+    content: msg.message || ''
+  }));
+
+  return applyMemoryCompaction(messages);
+}
+
+function applyMemoryCompaction(messages: Array<ChatMessage & { timestamp?: Date }>): ChatMessage[] {
+  if (messages.length <= 5) {
+    return messages.map(m => ({ role: m.role, content: m.content }));
+  }
+  
+  const olderMessages = messages.slice(0, -5);
+  const recentMessages = messages.slice(-5);
+  
+  const compactedOlder = olderMessages.map(msg => ({
+    role: msg.role,
+    content: msg.content.length > 150 ? msg.content.substring(0, 150) + '...' : msg.content
+  }));
+  
+  return [...compactedOlder, ...recentMessages.map(m => ({ role: m.role, content: m.content }))];
 }
 
 export async function loadConversationContext(

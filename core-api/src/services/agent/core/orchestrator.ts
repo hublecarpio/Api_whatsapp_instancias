@@ -1,7 +1,7 @@
 import { ToolContext, ToolAvailabilityContext, ToolDefinitionContext, LLMMessage, LLMConfig, OpenAIToolFormat, ChatMessage } from './types.js';
 import { toolRegistry } from './toolRegistry.js';
 import { LLMFactory, ILLMProvider } from './llmAdapter.js';
-import { ContextBuilder, BusinessContext, ConversationContext, TriggerContext, loadBusinessContext, loadConversationContext } from '../prompts/contextBuilder.js';
+import { ContextBuilder, BusinessContext, ConversationContext, TriggerContext, loadBusinessContext, loadConversationContext, loadConversationHistory } from '../prompts/contextBuilder.js';
 import { loadCustomToolsForBusiness } from '../tools/customToolAdapter.js';
 import { registerAllNativeTools } from '../tools/index.js';
 import { triggerFunnelEvaluation } from '../funnelStageEvaluator.js';
@@ -84,12 +84,18 @@ export class AgentOrchestrator {
 
       currentStep = 'loadConversationContext';
       console.log(`[Orchestrator] Step: ${currentStep}`);
-      const convContextPartial = await loadConversationContext(input.businessId, input.contactPhone, input.instanceId);
-      console.log(`[Orchestrator] ConversationContext loaded: contact=${convContextPartial.contact?.name || 'none'}, order=${convContextPartial.existingOrder?.id || 'none'}`);
+      const [convContextPartial, historyMessages] = await Promise.all([
+        loadConversationContext(input.businessId, input.contactPhone, input.instanceId),
+        loadConversationHistory(input.businessId, input.contactPhone, input.instanceId, 20)
+      ]);
+      console.log(`[Orchestrator] ConversationContext loaded: contact=${convContextPartial.contact?.name || 'none'}, order=${convContextPartial.existingOrder?.id || 'none'}, history=${historyMessages.length} msgs`);
+      
+      const allMessages = combineMessages(historyMessages, input.messages);
+      console.log(`[Orchestrator] Messages: history=${historyMessages.length}, new=${input.messages.length}, combined=${allMessages.length}`);
       
       const conversationContext: ConversationContext = {
         ...convContextPartial,
-        messages: input.messages
+        messages: allMessages
       };
 
       currentStep = 'buildContext';
@@ -287,4 +293,23 @@ export async function processWithOrchestrator(input: OrchestratorInput): Promise
   // Create a fresh orchestrator per request to respect per-request config (model, temperature, etc.)
   const orchestrator = new AgentOrchestrator(input.config);
   return orchestrator.process(input);
+}
+
+function combineMessages(history: ChatMessage[], newMessages: ChatMessage[]): ChatMessage[] {
+  if (history.length === 0) {
+    return newMessages;
+  }
+  
+  if (newMessages.length === 0) {
+    return history;
+  }
+  
+  const lastHistoryContent = history[history.length - 1]?.content?.trim() || '';
+  const firstNewContent = newMessages[0]?.content?.trim() || '';
+  
+  if (lastHistoryContent === firstNewContent) {
+    return [...history, ...newMessages.slice(1)];
+  }
+  
+  return [...history, ...newMessages];
 }
