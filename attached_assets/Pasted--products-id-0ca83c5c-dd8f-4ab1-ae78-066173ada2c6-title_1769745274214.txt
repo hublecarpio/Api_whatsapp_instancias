@@ -1,0 +1,90 @@
+[
+  {
+    "products": [
+      {
+        "id": "0ca83c5c-dd8f-4ab1-ae78-066173ada2c6",
+        "title": "Blue Seduction 50ml",
+        "description": "?? Blue Seduction es fresca y luminosa, con acordes acu锟絫icos y toques frutales. Ideal para climas c锟絣idos y uso diario. Fragancia acu锟絫ica-arom锟絫ica con mel锟絥, bergamota, menta y almizcle. Transmite limpieza y naturalidad, perfecta para verano, oficina o actividades al aire libre. Su aroma es juvenil y f锟絚il de usar. Palabras clave: blue seduction, antonio banderas, acu锟絫ico, frutal, fresco, verano, diario, ligero, masculino, DUVON.LCDP",
+        "price": 64.9,
+        "variations": [],
+        "pricePerVariation": [],
+        "stock": 20,
+        "stockPerVariation": [],
+        "imageUrl": null,
+        "imageUrls": []
+      },
+      {
+        "id": "2ac174d1-776f-4071-bade-749acf7ea969",
+        "title": "Blue Seduction - Antonio Banderas",
+        "description": "Genero: Caballero ; Usos recomendados: Diario / Casual / Verano ; Familia: Acu锟絫ica / Marina ; Subfamilia(s): Acu锟絫ico arom锟絫ico ; Descripci锟絥: ?? Blue Seduction es fresca y luminosa, con acordes acu锟絫icos y toques frutales. Ideal para climas c锟絣idos y uso diario. ; Metadata: Fragancia acu锟絫ica-arom锟絫ica con mel锟絥, bergamota, menta y almizcle. Transmite limpieza y naturalidad, perfecta para verano, oficina o actividades al aire libre. Su aroma es juvenil y f锟絚il de usar. Palabras clave: blue seduction, antonio banderas, acu锟絫ico, frutal, fresco, verano, diario, ligero, masculino, DUVON.",
+        "price": 119.9,
+        "variations": [
+          "100 ml",
+          "50 ml"
+        ],
+        "pricePerVariation": [
+          119.9,
+          74.9
+        ],
+        "stock": 2000,
+        "stockPerVariation": [
+          1000,
+          1000
+        ],
+        "imageUrl": "https://memoriaback.iamhuble.space/n8nback/MKMU2VDCY17ADD.png",
+        "imageUrls": [
+          "https://memoriaback.iamhuble.space/n8nback/MKMU2VDCY17ADD.png",
+          "https://memoriaback.iamhuble.space/n8nback/MKMU2VDCY17ADD.png"
+        ]
+      },
+      {
+        "id": "365045f8-0007-4df6-8653-2406185c9112",
+        "title": "Polo Blue 50ml",
+        "description": "?? Polo Blue es fresca, limpia y elegante. Su mezcla de mel锟絥, pepino y almizcle proyecta una sensaci锟絥 de pureza y equilibrio ideal para el d锟絘. Polo Blue es una fragancia acu锟絫ica锟絘rom锟絫ica con mel锟絥, pepino, albahaca, almizcle y musgo de roble. Transmite libertad, serenidad y frescura cl锟絪ica, perfecta para uso diario, oficina o climas c锟絣idos. Palabras clave: polo blue, ralph lauren, fresco, acu锟絫ico, almizcle, mel锟絥, limpio, diario, elegante, DUVON.LCDP",
+        "price": 64.9,
+        "variations": [],
+        "pricePerVariation": [],
+        "stock": 20,
+        "stockPerVariation": [],
+        "imageUrl": null,
+        "imageUrls": []
+      },
+      {
+        "id": "5977cacc-3872-4fc5-9e87-2762deb5e4fa",
+        "title": "Hugo Dark Blue 100ml",
+        "description": "?? Hugo Dark Blue es audaz y moderna. Su combinaci锟絥 de jengibre, cardamomo y naranja le da un toque c锟絣ido y atrevido. Perfume oriental锟絜speciado con jengibre, pomelo, cardamomo y cedro. Transmite energ锟絘 y sensualidad, ideal para citas o salidas nocturnas. Palabras clave: hugo dark blue, hugo boss, jengibre, cardamomo, c锟絫rico, c锟絣ido, moderno, noche, DUVON.LCDP",
+        "price": 109.9,
+        "variations": [],
+        "pricePerVariation": [],
+        "stock": 20,
+        "stockPerVariation": [],
+        "imageUrl": null,
+        "imageUrls": []
+      },
+      {
+        "id": "5c644d16-175c-4f72-9a64-9dfb73f7a5dd",
+        "title": "Hugo Dark Blue - Hugo Boss",
+        "description": "Genero: Caballero ; Usos recomendados: Noche / Citas / Invierno ; Familia: Oriental / 锟絤bar ; Subfamilia(s): Oriental especiado ; Descripci锟絥: ?? Hugo Dark Blue es audaz y moderna. Su combinaci锟絥 de jengibre, cardamomo y naranja le da un toque c锟絣ido y atrevido. ; Metadata: Perfume oriental锟絜speciado con jengibre, pomelo, cardamomo y cedro. Transmite energ锟絘 y sensualidad, ideal para citas o salidas nocturnas. Palabras clave: hugo dark blue, hugo boss, jengibre, cardamomo, c锟絫rico, c锟絣ido, moderno, noche, DUVON.",
+        "price": 119.9,
+        "variations": [
+          "100 ml",
+          "50 ml"
+        ],
+        "pricePerVariation": [
+          119.9,
+          74.9
+        ],
+        "stock": 2000,
+        "stockPerVariation": [
+          1000,
+          1000
+        ],
+        "imageUrl": "https://memoriaback.iamhuble.space/n8nback/MKMUT4NVYDOLNA.png",
+        "imageUrls": [
+          "https://memoriaback.iamhuble.space/n8nback/MKMUT4NVYDOLNA.png",
+          "https://memoriaback.iamhuble.space/n8nback/MKMUT4NVYDOLNA.png"
+        ]
+      }
+    ]
+  }
+]
