@@ -224,45 +224,37 @@ ${productCatalog}
 ZONAS DE ENVÍO:
 ${zoneCatalog}
 
-${convContext.existingOrder ? `ORDEN ACTIVA: ID=${convContext.existingOrder.id}, Estado=${convContext.existingOrder.status}` : 'Sin orden activa'}
+${convContext.existingOrder ? `⚠️ ORDEN ACTIVA DETECTADA:
+   orderId: "${convContext.existingOrder.id}"
+   Estado: ${convContext.existingOrder.status}
+   
+   🚨 IMPORTANTE: Si el cliente quiere agregar productos, USA agregar_producto_orden (NO confirmar_pedido)
+   NUNCA uses confirmar_pedido cuando hay orden activa - siempre usa agregar_producto_orden para añadir productos.` : 'Sin orden activa - puedes crear nueva orden con confirmar_pedido'}
 
-SECUENCIA OBLIGATORIA PARA CREAR PEDIDO:
-1. buscar_producto({ busqueda: "producto" }) → Guarda el productId (UUID) y variation EXACTA
+${!convContext.existingOrder ? `SECUENCIA PARA NUEVA ORDEN:
+1. buscar_producto({ busqueda: "producto" }) → Guarda productId (UUID) y variation EXACTA
 2. calcular_total_pedido({ productos: [...], zona_envio: "zona" }) → Confirma total y obtén zoneId
 3. confirmar_pedido({ items: [...], deliveryZoneId: "uuid", ... })
 
-⚠️ FORMATO ITEMS[] PARA CONFIRMAR_PEDIDO (OBLIGATORIO):
+⚠️ FORMATO ITEMS[] PARA CONFIRMAR_PEDIDO:
 {
-  "items": [
-    {"productId": "UUID-EXACTO", "quantity": 1, "variation": "NOMBRE-EXACTO-DE-VARIATION"}
-  ],
+  "items": [{"productId": "UUID-EXACTO", "quantity": 1, "variation": "NOMBRE-EXACTO"}],
   "deliveryZoneId": "UUID-DE-ZONA"
-}
+}` : `SECUENCIA PARA AGREGAR PRODUCTOS (UPSELLING):
+1. buscar_producto({ busqueda: "producto" }) → Guarda productId (UUID) y variation EXACTA
+2. agregar_producto_orden({ productId: "UUID", variation: "EXACTA", quantity: 1 })
+
+⚠️ NO uses confirmar_pedido - la orden ya existe. Solo agrega productos con agregar_producto_orden.`}
 
 REGLAS CRÍTICAS:
-✅ productId: Usa el UUID EXACTO retornado por buscar_producto (ej: "0ca83c5c-dd8f-4ab1-ae78-066173ada2c6")
-✅ variation: Usa el nombre EXACTO como viene de la DB (ej: "100 ml", NO "100ml", NO "100ML")
-✅ deliveryZoneId: Usa el UUID de la zona retornado por calcular_total_pedido
-
-EJEMPLO CORRECTO:
-1. buscar_producto({ busqueda: "Blue Seduction" }) 
-   → productId: "5c644d16-175c-4f72-9a64-9dfb73f7a5dd", variation: "100 ml", price: 109.90
-2. confirmar_pedido({ 
-     items: [{"productId": "5c644d16-175c-4f72-9a64-9dfb73f7a5dd", "quantity": 1, "variation": "100 ml"}],
-     deliveryZoneId: "uuid-zona",
-     nombre_cliente: "Juan",
-     direccion: "Av Lima 123"
-   })
-
-UPSELLING (AGREGAR PRODUCTO A ORDEN EXISTENTE):
-Cuando el cliente ya tiene un pedido y quiere agregar más productos:
-agregar_producto_orden({ productId: "UUID", variation: "EXACTA", quantity: 1 })
+✅ productId: Usa el UUID EXACTO retornado por buscar_producto
+✅ variation: Usa el nombre EXACTO como viene de la DB (ej: "100 ml", NO "100ml")
+${convContext.existingOrder ? `✅ Orden activa: Usa agregar_producto_orden, NUNCA confirmar_pedido` : `✅ deliveryZoneId: Requerido para confirmar_pedido`}
 
 ERRORES A EVITAR:
 ❌ Inventar UUIDs - Usa SOLO los que retorna buscar_producto
 ❌ Modificar el nombre de variation - "100 ml" ≠ "100ml" ≠ "100ML"
-❌ Usar productId genérico tipo "found_0" - Espera el UUID real
-❌ Omitir deliveryZoneId cuando usas items[] en confirmar_pedido`;
+${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden activa - usa agregar_producto_orden` : `❌ Omitir deliveryZoneId cuando usas items[] en confirmar_pedido`}`;
 
       const llmProvider = LLMFactory.getProvider('openai');
       const llmMessages: any[] = [
@@ -282,30 +274,97 @@ ERRORES A EVITAR:
         const toolResults: any[] = [];
 
         for (const toolCall of response.toolCalls) {
-          this.log(`[ejecutar_accion] Executing: ${toolCall.name}`, toolCall.arguments);
+          let actualToolName = toolCall.name;
+          let actualArgs = toolCall.arguments;
           
-          const result = await toolRegistry.executeTool(
-            toolCall.name,
-            toolCall.arguments,
+          // GUARD: If LLM2 tries to use confirmar_pedido when there's an active order, redirect to agregar_producto_orden
+          if (toolCall.name === 'confirmar_pedido' && convContext.existingOrder) {
+            this.log(`[ejecutar_accion] GUARD: Active order detected, blocking confirmar_pedido and redirecting to agregar_producto_orden`);
+            
+            // Extract ALL items from items[] to add via agregar_producto_orden
+            const items = actualArgs.items || [];
+            if (items.length > 0) {
+              // Add all items one by one to the existing order
+              for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const addArgs = {
+                  productId: item.productId,
+                  variation: item.variation,
+                  quantity: item.quantity || 1
+                };
+                
+                this.log(`[ejecutar_accion] Redirecting item ${i + 1}/${items.length} to agregar_producto_orden:`, addArgs);
+                
+                const addResult = await toolRegistry.executeTool('agregar_producto_orden', addArgs, toolContext);
+                
+                if (i === items.length - 1) {
+                  // Use the last result as the main result
+                  actualToolName = 'agregar_producto_orden';
+                  actualArgs = addArgs;
+                }
+                
+                toolsExecuted.push({
+                  name: 'agregar_producto_orden',
+                  success: addResult.success,
+                  result: addResult.content,
+                  data: addResult.data
+                });
+              }
+              
+              // Skip normal execution since we already processed all items
+              continue;
+            }
+          }
+          
+          this.log(`[ejecutar_accion] Executing: ${actualToolName}`, actualArgs);
+          
+          let result = await toolRegistry.executeTool(
+            actualToolName,
+            actualArgs,
             toolContext
           );
+          
+          // GUARD: If result contains _action: USE_AGREGAR_PRODUCTO_ORDEN, auto-redirect
+          if (result.data?._action === 'USE_AGREGAR_PRODUCTO_ORDEN') {
+            this.log(`[ejecutar_accion] Received internal redirect instruction, extracting items and calling agregar_producto_orden`);
+            
+            // Extract first item from original args to use in agregar_producto_orden
+            const items = toolCall.arguments.items || [];
+            if (items.length > 0) {
+              const firstItem = items[0];
+              const redirectArgs = {
+                productId: firstItem.productId,
+                variation: firstItem.variation,
+                quantity: firstItem.quantity || 1
+              };
+              
+              result = await toolRegistry.executeTool('agregar_producto_orden', redirectArgs, toolContext);
+              this.log(`[ejecutar_accion] Auto-redirected to agregar_producto_orden, result:`, result.success);
+            }
+          }
+          
+          // Filter out internal messages so they never reach the customer
+          let displayContent = result.content;
+          if (result.data?._internal) {
+            displayContent = ''; // Don't show internal instructions to LLM for final response
+          }
 
-          this.updateMemory(memory, toolCall.name, result, iterations);
+          this.updateMemory(memory, actualToolName, result, iterations);
 
           toolsExecuted.push({
-            name: toolCall.name,
+            name: actualToolName,
             success: result.success,
-            result: result.content,
+            result: displayContent,
             data: result.data
           });
 
           memory.toolHistory.push({
-            name: toolCall.name,
+            name: actualToolName,
             success: result.success,
             iteration: iterations
           });
 
-          const enrichedContent = this.enrichResultWithMemory(result.content, memory);
+          const enrichedContent = this.enrichResultWithMemory(displayContent || result.content, memory);
 
           toolResults.push({
             role: 'tool',

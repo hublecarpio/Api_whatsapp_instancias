@@ -68,6 +68,36 @@ export class ConfirmarPedidoTool extends BaseTool {
     const normalizedPhone = contactPhone.replace(/\D/g, '');
     
     try {
+      // Check if there's already an active order for this contact
+      const existingActiveOrder = await prisma.order.findFirst({
+        where: {
+          businessId,
+          contactPhone: normalizedPhone,
+          status: { in: ['AWAITING_VOUCHER', 'PENDING_PAYMENT', 'PAID', 'PROCESSING', 'SHIPPED'] },
+          ...(instanceId ? { instanceId } : {})
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      
+      if (existingActiveOrder) {
+        this.log('[CONFIRMAR_PEDIDO] Active order detected, redirecting to upselling', { 
+          orderId: existingActiveOrder.id, 
+          status: existingActiveOrder.status 
+        });
+        
+        // Return a silent instruction for LLM2 to use agregar_producto_orden instead
+        // This is NOT shown to the customer - it's internal LLM communication
+        return this.success(`[INSTRUCCIÓN INTERNA - NO MOSTRAR AL CLIENTE]
+Ya existe una orden activa (ID: ${existingActiveOrder.id}, Estado: ${existingActiveOrder.status}).
+Para agregar productos a esta orden, usa: agregar_producto_orden({ productId: "UUID", variation: "EXACTA", quantity: 1 })
+NO crees otra orden. Usa agregar_producto_orden para añadir los productos solicitados.`, {
+          _internal: true,
+          _action: 'USE_AGREGAR_PRODUCTO_ORDEN',
+          existingOrderId: existingActiveOrder.id,
+          existingOrderStatus: existingActiveOrder.status
+        });
+      }
+      
       if (!args.nombre_cliente || !args.direccion) {
         return this.error('Faltan datos requeridos: nombre_cliente y direccion son obligatorios.');
       }
