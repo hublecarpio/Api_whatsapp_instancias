@@ -239,16 +239,37 @@ export class AgentOrchestrator {
       };
 
       currentStep = 'llmCall';
-      console.log(`[Orchestrator] [6/7] ${currentStep}`);
-      console.log(`[Orchestrator]   → Model: ${llmConfig.model}, Messages: ${llmMessages.length}, Tools available: ${openaiTools.length}`);
+      console.log(`[Orchestrator] ═══════════════════════════════════════════════════════`);
+      console.log(`[Orchestrator] [6/7] LLM1 CALL SETUP`);
+      console.log(`[Orchestrator]   📋 Context: businessId=${input.businessId?.slice(0, 8)}..., instanceId=${input.instanceId?.slice(0, 8) || 'NONE'}`);
+      console.log(`[Orchestrator]   📦 Products loaded: ${businessContext.products.length}, Zones: ${businessContext.deliveryZones.length}`);
+      console.log(`[Orchestrator]   💬 Conversation messages: ${builtContext.conversationMessages.length}`);
+      console.log(`[Orchestrator]   🔧 Tools for LLM1: ${openaiTools.map((t: any) => t.function?.name).join(', ') || 'NONE'}`);
+      console.log(`[Orchestrator]   📝 System prompt length: ${builtContext.systemPrompt.length} chars`);
+      if (DEBUG_AGENT) {
+        const lastUserMsg = builtContext.conversationMessages.filter(m => m.role === 'user').pop();
+        console.log(`[Orchestrator]   💬 Last user message: "${redactForLog(lastUserMsg?.content, 100)}"`);
+      }
+      console.log(`[Orchestrator]   🤖 Model: ${llmConfig.model}, Temp: ${llmConfig.temperature}`);
       
       const llm1StartTime = Date.now();
       let response = await this.llmProvider.chat(llmMessages, llmConfig, openaiTools);
       llmCalls++;
       
-      console.log(`[Orchestrator]   → LLM1 response (${Date.now() - llm1StartTime}ms): finish=${response.finishReason}, toolCalls=${response.toolCalls?.length || 0}`);
-      if (response.content) {
-        console.log(`[Orchestrator]   → LLM1 content preview: "${response.content.substring(0, 80)}..."`);
+      const llm1Duration = Date.now() - llm1StartTime;
+      console.log(`[Orchestrator] ───────────────────────────────────────────────────`);
+      console.log(`[Orchestrator]   ⚡ LLM1 RESPONSE (${llm1Duration}ms)`);
+      console.log(`[Orchestrator]   📤 Finish reason: ${response.finishReason}`);
+      console.log(`[Orchestrator]   🔧 Tool calls requested: ${response.toolCalls?.length || 0}`);
+      if (response.toolCalls?.length) {
+        console.log(`[Orchestrator]   📌 Tools: ${response.toolCalls.map(t => t.name).join(', ')}`);
+        for (const tc of response.toolCalls) {
+          console.log(`[Orchestrator]   └─ ${tc.name}: ${redactForLog(tc.arguments, 200)}`);
+        }
+      }
+      if (response.content && !response.toolCalls?.length) {
+        console.log(`[Orchestrator]   💬 LLM1 decided to respond directly (no tool call)`);
+        console.log(`[Orchestrator]   📝 Response preview: "${redactForLog(response.content, 100)}"`);
       }
       
       if (response.usage) {

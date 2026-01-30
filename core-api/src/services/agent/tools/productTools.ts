@@ -34,16 +34,21 @@ export class BuscarProductoTool extends BaseTool {
   }
 
   async execute(args: Record<string, any>, context: ToolContext): Promise<ToolResult> {
-    this.log('Execute called', args);
-    
     const { businessId, instanceId, currencySymbol } = context;
+    
+    console.log(`[buscar_producto] ═══════════════════════════════════════════════════════`);
+    console.log(`[buscar_producto] 🔍 Search query: "${args.busqueda}"`);
+    console.log(`[buscar_producto] 📋 Context: businessId=${businessId?.slice(0, 8)}..., instanceId=${instanceId?.slice(0, 8) || 'NONE'}`);
     
     try {
       if (!args.busqueda) {
+        console.log(`[buscar_producto] ❌ ERROR: No search term provided`);
         return this.error('Debes especificar qué producto buscar.');
       }
 
       const limit = Math.min(Math.max(1, args.limite || 5), 10);
+      
+      console.log(`[buscar_producto] 🔄 Calling searchProductsIntelligent(businessId=${businessId?.slice(0, 8)}, query="${args.busqueda}", limit=${limit}, instanceId=${instanceId?.slice(0, 8) || 'NONE'})`);
       
       const searchResult = await searchProductsIntelligent(
         businessId,
@@ -53,6 +58,13 @@ export class BuscarProductoTool extends BaseTool {
       );
       
       const products = searchResult?.products || [];
+      
+      console.log(`[buscar_producto] 📦 Results: ${products.length} products found`);
+      if (products.length > 0) {
+        console.log(`[buscar_producto] 📋 Top results: ${products.slice(0, 3).map((p: any) => `${p.title} (${p.id?.slice(0, 8)}...)`).join(', ')}`);
+      } else {
+        console.log(`[buscar_producto] ⚠️ NO PRODUCTS FOUND for "${args.busqueda}"`);
+      }
 
       if (!products || products.length === 0) {
         return this.success(`No se encontraron productos para "${args.busqueda}". Pregunta si desea buscar algo diferente.`);
@@ -88,6 +100,8 @@ export class BuscarProductoTool extends BaseTool {
       
       return this.success(response, { count: products.length, products: productData });
     } catch (error: any) {
+      console.log(`[buscar_producto] ❌ EXCEPTION: ${error.message}`);
+      console.log(`[buscar_producto] Stack: ${error.stack?.substring(0, 300)}`);
       this.logError('Error searching products', error);
       return this.error(`Error al buscar productos: ${error.message}`);
     }

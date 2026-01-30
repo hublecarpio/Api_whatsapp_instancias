@@ -239,6 +239,19 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
       const productCatalog = this.buildProductCatalog(businessContext.products);
       const zoneCatalog = this.buildZoneCatalog(businessContext.deliveryZones);
 
+      console.log(`[LLM2-Delegate] ═══════════════════════════════════════════════════════`);
+      console.log(`[LLM2-Delegate] 🎯 OBJECTIVE: ${objetivo}`);
+      console.log(`[LLM2-Delegate] 📋 Context:`);
+      console.log(`[LLM2-Delegate]   └─ businessId: ${businessId?.slice(0, 8)}...`);
+      console.log(`[LLM2-Delegate]   └─ instanceId: ${instanceId?.slice(0, 8) || 'NONE'}`);
+      console.log(`[LLM2-Delegate]   └─ phone: ${contactPhone?.slice(-4) ? '***' + contactPhone.slice(-4) : 'NONE'}`);
+      console.log(`[LLM2-Delegate]   └─ existingOrder: ${convContext.existingOrder?.id?.slice(0, 8) || 'NONE'}`);
+      console.log(`[LLM2-Delegate] 📦 Products in catalog: ${businessContext.products.length}`);
+      console.log(`[LLM2-Delegate] 🌍 Zones in catalog: ${businessContext.deliveryZones.length}`);
+      if (DEBUG_AGENT) {
+        console.log(`[LLM2-Delegate] 📖 Product catalog preview: ${productCatalog.substring(0, 200)}...`);
+      }
+
       const systemPrompt = `Eres un ejecutor de acciones. Tu trabajo es completar el OBJETIVO usando las herramientas en el orden correcto.
 
 OBJETIVO: ${objetivo}

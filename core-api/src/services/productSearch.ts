@@ -113,6 +113,10 @@ export async function searchProductsIntelligent(
   exactMatch: boolean;
   bestMatch: SearchResult | null;
 }> {
+  console.log(`[productSearch] ─────────────────────────────────────────────`);
+  console.log(`[productSearch] 🔍 Query: "${query}"`);
+  console.log(`[productSearch] 📋 Filters: businessId=${businessId?.slice(0, 8)}..., instanceId=${instanceId?.slice(0, 8) || 'ANY'}`);
+  
   const whereClause: any = { businessId };
   // Filter by instanceId if provided, or include products with null instanceId (shared products)
   if (instanceId) {
@@ -122,9 +126,13 @@ export async function searchProductsIntelligent(
     ];
   }
   
+  console.log(`[productSearch] 📝 WHERE clause: ${JSON.stringify(whereClause).substring(0, 150)}`);
+  
   const allProducts = await prisma.product.findMany({
     where: whereClause
   });
+  
+  console.log(`[productSearch] 📦 DB returned: ${allProducts.length} products total`);
 
   const normalizedQuery = normalizeText(query);
 
