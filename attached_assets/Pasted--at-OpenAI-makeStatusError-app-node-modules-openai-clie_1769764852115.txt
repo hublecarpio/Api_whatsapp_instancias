@@ -1,0 +1,100 @@
+    at OpenAI.makeStatusError (/app/node_modules/openai/client.js:165:32)
+    at OpenAI.makeRequest (/app/node_modules/openai/client.js:333:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async OpenAIAdapter.chat (/app/dist/services/agent/core/llmAdapter.js:37:26)
+    at async DelegateToolExecutionTool.execute (/app/dist/services/agent/tools/delegateOrchestratorTool.js:263:28)
+    at async ToolRegistry.executeTool (/app/dist/services/agent/core/toolRegistry.js:82:28)
+    at async AgentOrchestrator.process (/app/dist/services/agent/core/orchestrator.js:220:36)
+    at async processAIResponse (/app/dist/services/queues/aiResponseProcessor.js:246:30)
+    at async bullmq_1.Worker.connection.connection [as processFn] (/app/dist/services/queues/aiResponseProcessor.js:1697:20)
+[LLM2-Delegate] ═══════════════════════════════════════════════════════
+[Orchestrator]   → Calling LLM again after tool results...
+[OpenAIAdapter] Calling gpt-4o-mini with 14 messages, 1 tools
+[OpenAIAdapter] Response: tool_calls, tools: 1, tokens: 2624
+[Orchestrator]   → LLM response (1589ms): finish=tool_calls, moreTools=1
+[Orchestrator] [7/7] TOOL LOOP iteration 2/5
+[Orchestrator]   → Processing 1 tool call(s)
+[Orchestrator]   🔧 TOOL: ejecutar_accion
+[ToolRegistry] Executing tool: ejecutar_accion {
+  args: { objetivo: 'buscar_producto', contexto_adicional: '' },
+  contactPhone: '51992544801'
+}
+[LLM2-Delegate] ═══════════════════════════════════════════════════════
+[LLM2-Delegate] ▶ STARTING ejecutar_accion
+[LLM2-Delegate] Phone: ***4801, Business: abeb9f70...
+[LLM2-Delegate] Objetivo: "buscar_producto..."
+[LLM2-Delegate] Contexto adicional: "none"
+[LLM2-Delegate] ═══════════════════════════════════════════════════════
+[LoadBusinessContext] AgentPrompt: {
+  businessId: 'abeb9f70-3ecb-4b80-9285-1f8a43452633',
+  instanceId: '7f0d921a-ed1a-40f7-b9de-602825b9aa51',
+  hasPrompt: true,
+  promptLength: 3460
+}
+[LLM2-Delegate] Context loaded: products=100, zones=9
+[LLM2-Delegate] Existing order: NONE
+[LLM2-Delegate] ═══════════════════════════════════════════════════════
+[LLM2-Delegate] 🎯 OBJECTIVE: buscar_producto
+[LLM2-Delegate] 📋 Context:
+[LLM2-Delegate]   └─ businessId: abeb9f70...
+[LLM2-Delegate]   └─ instanceId: 7f0d921a
+[LLM2-Delegate]   └─ phone: ***4801
+[LLM2-Delegate]   └─ existingOrder: NONE
+[LLM2-Delegate] 📦 Products in catalog: 100
+[LLM2-Delegate] 🌍 Zones in catalog: 9
+[LLM2-Delegate] Tools available for LLM2: confirmar_pedido, consultar_pedido, confirmar_entrega, calcular_total_pedido, buscar_producto, consultar_stock, consultar_etapa_venta, avanzar_etapa_venta
+[LLM2-Delegate] Calling LLM2 (gpt-4o)...
+[OpenAIAdapter] Calling gpt-4o with 2 messages, 8 tools
+[ToolRegistry] Tool ejecutar_accion result: { success: false }
+[Orchestrator]   📤 Result (247ms): ✗ FAILED
+[Orchestrator]   → Calling LLM again after tool results...
+[OpenAIAdapter] Calling gpt-4o-mini with 16 messages, 1 tools
+[LLM2-Delegate] ═══════════════════════════════════════════════════════
+[LLM2-Delegate] ✗ ERROR in ejecutar_accion: 400 Invalid schema for function 'confirmar_pedido': In context=('properties', 'items'), array schema missing items.
+[LLM2-Delegate] Stack: Error: 400 Invalid schema for function 'confirmar_pedido': In context=('properties', 'items'), array schema missing items.
+    at APIError.generate (/app/node_modules/openai/core/error.js:45:20)
+    at OpenAI.makeStatusError (/app/node_modules/openai/client.js:165:32)
+    at OpenAI.makeRequest (/app/node_modules/openai/client.js:333:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async OpenAIAdapter.chat (/app/dist/services/agent/core/llmAdapter.js:37:26)
+    at async DelegateToolExecutionTool.execute (/app/dist/services/agent/tools/delegateOrchestratorTool.js:263:28)
+    at async ToolRegistry.executeTool (/app/dist/services/agent/core/toolRegistry.js:82:28)
+    at async AgentOrchestrator.process (/app/dist/services/agent/core/orchestrator.js:220:36)
+    at async processAIResponse (/app/dist/services/queues/aiResponseProcessor.js:246:30)
+    at async bullmq_1.Worker.connection.connection [as processFn] (/app/dist/services/queues/aiResponseProcessor.js:1697:20)
+[LLM2-Delegate] ═══════════════════════════════════════════════════════
+[OpenAIAdapter] Response: stop, tools: 0, tokens: 2713
+[Orchestrator]   → LLM response (1162ms): finish=stop, moreTools=0
+[Orchestrator] ═══════════════════════════════════════════════════════
+[Orchestrator] ✓ V3 PROCESS COMPLETED
+[Orchestrator]   → Duration: 4846ms
+[Orchestrator]   → LLM calls: 3
+[Orchestrator]   → Tools executed: 2 - ejecutar_accion, ejecutar_accion
+[Orchestrator]   → Tokens: prompt=7724, completion=136
+[Orchestrator] ═══════════════════════════════════════════════════════
+[Orchestrator] Triggered async evaluations for 51992544801
+[AI Worker V3] ═══════════════════════════════════════════════════════
+[AI Worker V3] ✓ V3 COMPLETED in 4847ms
+[AI Worker V3] Tools executed: 2 - ejecutar_accion(FAIL), ejecutar_accion(FAIL)
+[AI Worker V3] Tokens: prompt=7724, completion=136
+[AI Worker V3] LLM calls: 3, model: gpt-4o-mini
+[AI Worker V3] Response length: 207 chars
+[AI Worker V3] ═══════════════════════════════════════════════════════
+[AI Worker] sendWhatsAppResponse called for 51992544801 via instance 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[AI Worker] Using unified queue (queueAgentResponse) for 51992544801
+[FunnelEvaluator] Starting async evaluation for 51992544801
+[WhatsAppSender] Agent response queued: 1 jobs to 51992544801 via META_CLOUD
+[OUTBOUND_WORKER] Processing job msg_d7c59999-2fc6-47bc-acc5-22f3d3142d04 for 51992544801 via META_CLOUD (realFailures: 0, rateLimits: 0)
+[AI Worker] Queued 1 jobs for 51992544801
+[FOLLOW-UP] scheduleFollowUp called - business: abeb9f70-3ecb-4b80-9285-1f8a43452633, phone: 51992544801, source: ai, instanceId: 7f0d921a-ed1a-40f7-b9de-602825b9aa51
+[FOLLOW-UP] Config disabled for business abeb9f70-3ecb-4b80-9285-1f8a43452633
+[AI Worker] Response flow completed for 51992544801
+[AI Worker] Extracting custom data for 51992544801
+2026-01-30T09:20:44.421Z [PRODUCTION] [REDIS] [AI-JOB-COMPLETE] Job completed {
+  "jobId": "ai-abeb9f70-3ecb-4b80-9285-1f8a43452633-51992544801-1769764838652",
+  "responseLength": 207,
+  "businessId": "abeb9f70-3ecb-4b80-9285-1f8a43452633",
+  "contactPhone": "51992544801",
+  "tokensUsed": 7860
+}
+[AI] callOpenAI rawModel="gpt-4.1-nano" model="gpt-4.1-nano" useOpenRouter=false

@@ -17,7 +17,16 @@ export class ConfirmarPedidoTool extends BaseTool {
         properties: {
           items: {
             type: 'array',
-            description: 'Lista de productos. Cada item es un objeto con: productId (UUID requerido), quantity (número, default 1), variation (string EXACTO como viene de buscar_producto ej: "100 ml", "Azul")'
+            description: 'Lista de productos a ordenar',
+            items: {
+              type: 'object',
+              properties: {
+                productId: { type: 'string', description: 'UUID del producto' },
+                quantity: { type: 'number', description: 'Cantidad (default: 1)' },
+                variation: { type: 'string', description: 'Nombre EXACTO de variación' }
+              },
+              required: ['productId']
+            } as any
           },
           deliveryZoneId: { 
             type: 'string', 
@@ -559,7 +568,14 @@ export class CalcularTotalTool extends BaseTool {
           productos: {
             type: 'array',
             description: 'Lista de productos con cantidad',
-            items: { type: 'object' }
+            items: {
+              type: 'object',
+              properties: {
+                nombre: { type: 'string', description: 'Nombre del producto' },
+                cantidad: { type: 'number', description: 'Cantidad' }
+              },
+              required: ['nombre']
+            } as any
           },
           zona_envio: {
             type: 'string',
