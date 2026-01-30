@@ -286,8 +286,10 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       if (targetInstanceId && result.response) {
         await sendWhatsAppResponse(targetInstanceId, phone, result.response, business);
       }
+      console.log(`[AI Worker V3] Success! Response length: ${result.response?.length || 0} chars`);
     } catch (v3Error: any) {
       console.error('[AI Worker] Agent V3 error, falling back to V1:', v3Error.message);
+      console.error('[AI Worker] V3 Error stack:', v3Error.stack);
       result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
     }
   } else if (business.agentVersion === 'v2') {

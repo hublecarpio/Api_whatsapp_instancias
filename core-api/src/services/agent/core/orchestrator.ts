@@ -84,11 +84,18 @@ export class AgentOrchestrator {
 
       currentStep = 'loadConversationContext';
       console.log(`[Orchestrator] Step: ${currentStep}`);
+      const phoneMask = input.contactPhone.length > 4 ? `***${input.contactPhone.slice(-4)}` : '****';
+      console.log(`[Orchestrator] Loading context for: business=${input.businessId.slice(0, 8)}..., phone=${phoneMask}, instanceId=${input.instanceId?.slice(0, 8) || 'null'}`);
       const [convContextPartial, historyMessages] = await Promise.all([
         loadConversationContext(input.businessId, input.contactPhone, input.instanceId),
         loadConversationHistory(input.businessId, input.contactPhone, input.instanceId, 20)
       ]);
-      console.log(`[Orchestrator] ConversationContext loaded: contact=${convContextPartial.contact?.name || 'none'}, order=${convContextPartial.existingOrder?.id || 'none'}, history=${historyMessages.length} msgs`);
+      console.log(`[Orchestrator] ConversationContext loaded: contact=${convContextPartial.contact?.name ? 'found' : 'none'}, order=${convContextPartial.existingOrder?.id?.slice(0, 8) || 'none'}, history=${historyMessages.length} msgs`);
+      
+      // Log history summary for debugging (no PII)
+      if (historyMessages.length === 0) {
+        console.log(`[Orchestrator] WARNING: No history messages found - agent will treat as new conversation`);
+      }
       
       const allMessages = combineMessages(historyMessages, input.messages);
       console.log(`[Orchestrator] Messages: history=${historyMessages.length}, new=${input.messages.length}, combined=${allMessages.length}`);

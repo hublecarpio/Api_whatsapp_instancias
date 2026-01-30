@@ -682,6 +682,9 @@ export async function loadConversationHistory(
   limit: number = 20
 ): Promise<ChatMessage[]> {
   const phone = contactPhone.replace(/\D/g, '');
+  const phoneMask = phone.length > 4 ? `***${phone.slice(-4)}` : '****';
+  
+  console.log(`[ConversationHistory] Loading: business=${businessId.slice(0, 8)}..., phone=${phoneMask}, instanceId=${instanceId?.slice(0, 8) || 'null'}, limit=${limit}`);
   
   const messageFilter: any = {
     businessId,
@@ -703,16 +706,39 @@ export async function loadConversationHistory(
     select: {
       direction: true,
       message: true,
-      createdAt: true
+      createdAt: true,
+      instanceId: true
     }
   });
+  
+  console.log(`[ConversationHistory] Found ${recentMessages.length} messages (instanceFilter=${instanceId ? 'yes' : 'no'})`);
+  
+  // If no messages found with instanceId filter, try without it as fallback diagnostic
+  if (recentMessages.length === 0 && instanceId) {
+    const countWithoutInstance = await prisma.messageLog.count({
+      where: {
+        businessId,
+        direction: { in: ['inbound', 'outbound'] },
+        OR: [
+          { sender: { endsWith: phone } },
+          { recipient: { endsWith: phone } }
+        ]
+      }
+    });
+    if (countWithoutInstance > 0) {
+      console.log(`[ConversationHistory] WARNING: 0 msgs with instanceId=${instanceId?.slice(0, 8)}, but ${countWithoutInstance} msgs exist WITHOUT instance filter - possible instanceId mismatch!`);
+    }
+  }
 
   const messages = recentMessages.reverse().map(msg => ({
     role: (msg.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
     content: msg.message || ''
   }));
+  
+  const compacted = applyMemoryCompaction(messages);
+  console.log(`[ConversationHistory] Returning ${compacted.length} messages after compaction`);
 
-  return applyMemoryCompaction(messages);
+  return compacted;
 }
 
 function applyMemoryCompaction(messages: Array<ChatMessage & { timestamp?: Date }>): ChatMessage[] {
