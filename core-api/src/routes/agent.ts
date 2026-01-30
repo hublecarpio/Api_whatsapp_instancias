@@ -22,6 +22,8 @@ import { queueAgentResponse, markMessageAsRead as markMsgRead, isQueueAvailable,
 import { retrieveRelevantSections, formatSectionsForPrompt } from '../services/ragService.js';
 import { parseAgentOutputToWhatsAppEvents } from '../services/agentOutputParser.js';
 import { processWithOrchestrator, OrchestratorInput } from '../services/agent/index.js';
+import { toolRegistry } from '../services/agent/core/toolRegistry.js';
+import { registerAllNativeTools } from '../services/agent/tools/index.js';
 
 const router = Router();
 
@@ -4729,6 +4731,48 @@ router.get('/extraction-fields/:businessId', authMiddleware, async (req: AuthReq
     res.json(fields);
   } catch (error: any) {
     console.error('Get extraction fields error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get available tools for funnel stage configuration
+router.get('/available-tools/:businessId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    
+    const business = await prisma.business.findFirst({
+      where: { id: businessId, userId: req.userId }
+    });
+    
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    // Ensure native tools are registered
+    registerAllNativeTools();
+    
+    // Get native tool names
+    const nativeTools = toolRegistry.getAllToolNames();
+    
+    // Get custom tools for this business (from prompts)
+    const businessPrompts = await prisma.agentPrompt.findMany({
+      where: { businessId },
+      select: { id: true }
+    });
+    
+    const customToolsDb = await prisma.agentTool.findMany({
+      where: { promptId: { in: businessPrompts.map(p => p.id) } },
+      select: { name: true, description: true }
+    });
+    
+    const tools = [
+      ...nativeTools.map(name => ({ name, type: 'native' as const })),
+      ...customToolsDb.map((t: { name: string; description: string }) => ({ name: t.name, type: 'custom' as const, description: t.description }))
+    ];
+    
+    res.json(tools);
+  } catch (error: any) {
+    console.error('Get available tools error:', error);
     res.status(500).json({ error: error.message });
   }
 });

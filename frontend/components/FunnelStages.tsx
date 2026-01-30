@@ -10,6 +10,12 @@ interface ExtractionField {
   fieldType: string;
 }
 
+interface AvailableTool {
+  name: string;
+  type: 'native' | 'custom';
+  description?: string;
+}
+
 interface FunnelStage {
   id: string;
   name: string;
@@ -17,6 +23,7 @@ interface FunnelStage {
   promptContext: string | null;
   requiredFieldKeys: string[];
   blockedTopics: string[];
+  toolsAllowed: string[];
   isActive: boolean;
   order: number;
 }
@@ -29,6 +36,7 @@ interface FunnelStagesProps {
 export default function FunnelStages({ businessId, instanceId }: FunnelStagesProps) {
   const [stages, setStages] = useState<FunnelStage[]>([]);
   const [fields, setFields] = useState<ExtractionField[]>([]);
+  const [availableTools, setAvailableTools] = useState<AvailableTool[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -42,7 +50,8 @@ export default function FunnelStages({ businessId, instanceId }: FunnelStagesPro
     description: '',
     promptContext: '',
     requiredFieldKeys: [] as string[],
-    blockedTopics: [] as string[]
+    blockedTopics: [] as string[],
+    toolsAllowed: [] as string[]
   });
 
   useEffect(() => {
@@ -52,12 +61,14 @@ export default function FunnelStages({ businessId, instanceId }: FunnelStagesPro
   const loadData = async () => {
     try {
       setLoading(true);
-      const [stagesRes, fieldsRes] = await Promise.all([
+      const [stagesRes, fieldsRes, toolsRes] = await Promise.all([
         funnelStagesApi.list(businessId, instanceId || undefined),
-        funnelStagesApi.getExtractionFields(businessId)
+        funnelStagesApi.getExtractionFields(businessId),
+        funnelStagesApi.getAvailableTools(businessId)
       ]);
       setStages(stagesRes.data);
       setFields(fieldsRes.data);
+      setAvailableTools(toolsRes.data);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error cargando datos');
     } finally {
@@ -82,6 +93,7 @@ export default function FunnelStages({ businessId, instanceId }: FunnelStagesPro
         promptContext: form.promptContext || undefined,
         requiredFieldKeys: form.requiredFieldKeys,
         blockedTopics: form.blockedTopics,
+        toolsAllowed: form.toolsAllowed,
         instanceId: instanceId || undefined
       };
 
@@ -109,7 +121,8 @@ export default function FunnelStages({ businessId, instanceId }: FunnelStagesPro
       description: stage.description || '',
       promptContext: stage.promptContext || '',
       requiredFieldKeys: stage.requiredFieldKeys || [],
-      blockedTopics: stage.blockedTopics || []
+      blockedTopics: stage.blockedTopics || [],
+      toolsAllowed: stage.toolsAllowed || []
     });
     setShowForm(true);
   };
@@ -136,10 +149,19 @@ export default function FunnelStages({ businessId, instanceId }: FunnelStagesPro
   };
 
   const resetForm = () => {
-    setForm({ name: '', description: '', promptContext: '', requiredFieldKeys: [], blockedTopics: [] });
+    setForm({ name: '', description: '', promptContext: '', requiredFieldKeys: [], blockedTopics: [], toolsAllowed: [] });
     setEditingStage(null);
     setShowForm(false);
     setNewTopic('');
+  };
+
+  const handleToolToggle = (toolName: string) => {
+    setForm(prev => ({
+      ...prev,
+      toolsAllowed: prev.toolsAllowed.includes(toolName)
+        ? prev.toolsAllowed.filter(t => t !== toolName)
+        : [...prev.toolsAllowed, toolName]
+    }));
   };
 
   const handleFieldToggle = (fieldKey: string) => {
@@ -328,6 +350,42 @@ export default function FunnelStages({ businessId, instanceId }: FunnelStagesPro
                   </span>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">
+                Herramientas permitidas en esta etapa
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                Solo estas herramientas estaran disponibles para el agente. Si no seleccionas ninguna, todas estaran habilitadas.
+              </p>
+              <div className="flex flex-wrap gap-2 p-3 bg-gray-900 border border-gray-700 rounded-lg min-h-[60px]">
+                {availableTools.length === 0 ? (
+                  <span className="text-gray-500 text-sm">No hay herramientas disponibles</span>
+                ) : (
+                  availableTools.map(tool => (
+                    <button
+                      key={tool.name}
+                      type="button"
+                      onClick={() => handleToolToggle(tool.name)}
+                      title={tool.description || tool.name}
+                      className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                        form.toolsAllowed.includes(tool.name)
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {tool.name}
+                      {tool.type === 'custom' && <span className="ml-1 text-xs opacity-60">(custom)</span>}
+                    </button>
+                  ))
+                )}
+              </div>
+              {form.toolsAllowed.length > 0 && (
+                <p className="text-xs text-blue-400 mt-1">
+                  {form.toolsAllowed.length} herramienta(s) seleccionada(s)
+                </p>
+              )}
             </div>
 
             <div>

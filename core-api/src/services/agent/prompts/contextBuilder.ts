@@ -106,8 +106,12 @@ export class ContextBuilder {
       ragSectionsUsed = ragSection.count;
     }
 
-    // BLOQUE 5: ZONAS DE ENVÍO (si aplica y no está bloqueado)
-    if (this.businessContext.deliveryZones.length > 0 && !this.isTopicBlocked('envio', blockedTopics)) {
+    // BLOQUE 5: ZONAS DE ENVÍO (si aplica y no está bloqueado, o si el mensaje habla de ubicaciones)
+    const shouldIncludeZones = this.businessContext.deliveryZones.length > 0 && (
+      !this.isTopicBlocked('envio', blockedTopics) ||
+      this.messagesMentionLocation()
+    );
+    if (shouldIncludeZones) {
       sections.push(this.buildDeliveryZones());
     }
 
@@ -149,6 +153,20 @@ export class ContextBuilder {
     const normalizedTopic = topic.toLowerCase();
     return blockedTopics.some(bt => bt.toLowerCase().includes(normalizedTopic) || 
                                      normalizedTopic.includes(bt.toLowerCase()));
+  }
+
+  private messagesMentionLocation(): boolean {
+    const locationKeywords = [
+      'ubicacion', 'ubicación', 'direccion', 'dirección', 'zona', 'envio', 'envío',
+      'delivery', 'enviar', 'entregar', 'despacho', 'lima', 'provincia', 'distrito',
+      'departamento', 'donde', 'dónde', 'lugar', 'domicilio', 'casa', 'oficina',
+      'trabajo', 'llegue', 'llegar', 'entregan', 'dejan', 'reparto', 'cobertura'
+    ];
+    
+    const lastMessages = this.conversationContext.messages.slice(-3);
+    const combinedText = lastMessages.map(m => m.content.toLowerCase()).join(' ');
+    
+    return locationKeywords.some(keyword => combinedText.includes(keyword));
   }
 
   private buildStageRules(currentStage: any, blockedTopics: string[]): string {

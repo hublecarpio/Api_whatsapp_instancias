@@ -689,9 +689,9 @@ export const deliveryZonesApi = {
 export const funnelStagesApi = {
   list: (businessId: string, instanceId?: string) =>
     api.get(`/agent/funnel-stages/${businessId}${instanceId ? `?instance_id=${instanceId}` : ''}`),
-  create: (businessId: string, data: { name: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[]; instanceId?: string }) =>
+  create: (businessId: string, data: { name: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[]; toolsAllowed?: string[]; instanceId?: string }) =>
     api.post(`/agent/funnel-stages/${businessId}`, data),
-  update: (businessId: string, stageId: string, data: { name?: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[]; isActive?: boolean }) =>
+  update: (businessId: string, stageId: string, data: { name?: string; description?: string; promptContext?: string; requiredFieldKeys?: string[]; blockedTopics?: string[]; toolsAllowed?: string[]; isActive?: boolean }) =>
     api.put(`/agent/funnel-stages/${businessId}/${stageId}`, data),
   delete: (businessId: string, stageId: string) =>
     api.delete(`/agent/funnel-stages/${businessId}/${stageId}`),
@@ -699,6 +699,8 @@ export const funnelStagesApi = {
     api.put(`/agent/funnel-stages/${businessId}/reorder`, { stageIds }),
   getExtractionFields: (businessId: string) =>
     api.get(`/agent/extraction-fields/${businessId}`),
+  getAvailableTools: (businessId: string) =>
+    api.get(`/agent/available-tools/${businessId}`),
   setContactStage: (businessId: string, contactPhone: string, stageId: string | null, instanceId?: string) =>
     api.put(`/agent/funnel-stages/${businessId}/contact/${contactPhone}`, { stageId, instanceId })
 };
