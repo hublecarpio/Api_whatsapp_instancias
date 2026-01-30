@@ -7,6 +7,26 @@ import { registerAllNativeTools } from '../tools/index.js';
 import { triggerFunnelEvaluation } from '../funnelStageEvaluator.js';
 import { analyzeAndUpdateLeadStage } from '../../leadStageService.js';
 
+// Debug flag for verbose logging - set to true for detailed debugging
+const DEBUG_AGENT = process.env.DEBUG_AGENT_V3 === 'true';
+
+// Helper to redact PII from log outputs
+function redactForLog(obj: any, maxLen: number = 150): string {
+  if (!obj) return 'null';
+  let str = typeof obj === 'string' ? obj : JSON.stringify(obj);
+  // Redact phone numbers (9+ digits)
+  str = str.replace(/\b\d{9,15}\b/g, '***PHONE***');
+  // Redact email addresses
+  str = str.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '***EMAIL***');
+  // Truncate UUIDs to first 8 chars
+  str = str.replace(/([a-f0-9]{8})-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '$1...');
+  // Truncate to max length
+  if (str.length > maxLen) {
+    str = str.substring(0, maxLen) + '...';
+  }
+  return str;
+}
+
 export interface OrchestratorConfig {
   maxToolCalls?: number;
   llmProvider?: 'openai' | 'openrouter';
@@ -65,7 +85,14 @@ export class AgentOrchestrator {
 
   async process(input: OrchestratorInput): Promise<OrchestratorOutput> {
     const startTime = Date.now();
-    console.log(`[Orchestrator] Processing message for ${input.contactPhone}, businessId=${input.businessId}, instanceId=${input.instanceId}`);
+    const phoneMask = input.contactPhone.length > 4 ? `***${input.contactPhone.slice(-4)}` : '****';
+    
+    console.log(`[Orchestrator] ═══════════════════════════════════════════════════════`);
+    console.log(`[Orchestrator] ▶ STARTING V3 PROCESS`);
+    console.log(`[Orchestrator] Phone: ${phoneMask}, Business: ${input.businessId.slice(0, 8)}...`);
+    console.log(`[Orchestrator] InstanceId: ${input.instanceId?.slice(0, 8) || 'NULL'}`);
+    console.log(`[Orchestrator] Config: model=${this.config.model}, temp=${this.config.temperature}, maxTools=${this.config.maxToolCalls}`);
+    console.log(`[Orchestrator] ═══════════════════════════════════════════════════════`);
 
     const toolsExecuted: OrchestratorOutput['toolsExecuted'] = [];
     let totalTokens = { prompt: 0, completion: 0, total: 0 };
@@ -74,31 +101,32 @@ export class AgentOrchestrator {
 
     try {
       currentStep = 'loadCustomTools';
-      console.log(`[Orchestrator] Step: ${currentStep}`);
+      console.log(`[Orchestrator] [1/7] ${currentStep}`);
       await loadCustomToolsForBusiness(input.businessId);
 
       currentStep = 'loadBusinessContext';
-      console.log(`[Orchestrator] Step: ${currentStep}`);
+      console.log(`[Orchestrator] [2/7] ${currentStep}`);
       const businessContext = await loadBusinessContext(input.businessId, input.instanceId);
-      console.log(`[Orchestrator] BusinessContext loaded: business=${businessContext.business?.name}, products=${businessContext.products.length}, zones=${businessContext.deliveryZones.length}`);
+      console.log(`[Orchestrator]   → Business: ${businessContext.business?.name || 'unknown'}`);
+      console.log(`[Orchestrator]   → Products: ${businessContext.products.length}, Zones: ${businessContext.deliveryZones.length}`);
+      console.log(`[Orchestrator]   → Objective: ${businessContext.businessObjective}, HasAppointments: ${businessContext.hasAppointments}`);
 
       currentStep = 'loadConversationContext';
-      console.log(`[Orchestrator] Step: ${currentStep}`);
-      const phoneMask = input.contactPhone.length > 4 ? `***${input.contactPhone.slice(-4)}` : '****';
-      console.log(`[Orchestrator] Loading context for: business=${input.businessId.slice(0, 8)}..., phone=${phoneMask}, instanceId=${input.instanceId?.slice(0, 8) || 'null'}`);
+      console.log(`[Orchestrator] [3/7] ${currentStep}`);
       const [convContextPartial, historyMessages] = await Promise.all([
         loadConversationContext(input.businessId, input.contactPhone, input.instanceId),
         loadConversationHistory(input.businessId, input.contactPhone, input.instanceId, 20)
       ]);
-      console.log(`[Orchestrator] ConversationContext loaded: contact=${convContextPartial.contact?.name ? 'found' : 'none'}, order=${convContextPartial.existingOrder?.id?.slice(0, 8) || 'none'}, history=${historyMessages.length} msgs`);
+      console.log(`[Orchestrator]   → Contact: ${convContextPartial.contact?.name ? 'found' : 'NEW CONTACT'}`);
+      console.log(`[Orchestrator]   → Active Order: ${convContextPartial.existingOrder?.id?.slice(0, 8) || 'NONE'}`);
+      console.log(`[Orchestrator]   → History from DB: ${historyMessages.length} messages`);
       
-      // Log history summary for debugging (no PII)
       if (historyMessages.length === 0) {
-        console.log(`[Orchestrator] WARNING: No history messages found - agent will treat as new conversation`);
+        console.log(`[Orchestrator]   ⚠ WARNING: No history - treating as NEW conversation`);
       }
       
       const allMessages = combineMessages(historyMessages, input.messages);
-      console.log(`[Orchestrator] Messages: history=${historyMessages.length}, new=${input.messages.length}, combined=${allMessages.length}`);
+      console.log(`[Orchestrator]   → Combined messages: history(${historyMessages.length}) + new(${input.messages.length}) = ${allMessages.length}`);
       
       const conversationContext: ConversationContext = {
         ...convContextPartial,
@@ -106,7 +134,7 @@ export class AgentOrchestrator {
       };
 
       currentStep = 'buildContext';
-      console.log(`[Orchestrator] Step: ${currentStep}`);
+      console.log(`[Orchestrator] [4/7] ${currentStep}`);
       const contextBuilder = new ContextBuilder(
         businessContext,
         conversationContext,
@@ -114,7 +142,10 @@ export class AgentOrchestrator {
       );
       
       const builtContext = await contextBuilder.build();
-      console.log(`[Orchestrator] Context built: systemPrompt=${builtContext.systemPrompt?.length || 0} chars, messages=${builtContext.conversationMessages?.length || 0}, stage=${builtContext.metadata.currentStage}, allowedTools=${builtContext.allowedTools.length}`);
+      console.log(`[Orchestrator]   → System prompt: ${builtContext.systemPrompt?.length || 0} chars`);
+      console.log(`[Orchestrator]   → Conversation messages: ${builtContext.conversationMessages?.length || 0}`);
+      console.log(`[Orchestrator]   → Current funnel stage: ${builtContext.metadata.currentStage || 'NONE'}`);
+      console.log(`[Orchestrator]   → Allowed tools by stage: ${builtContext.allowedTools.length > 0 ? builtContext.allowedTools.join(', ') : 'ALL (no restriction)'}`);
 
       // Usar allowedTools del builder (filtradas por etapa del funnel)
       const hasToolRestriction = builtContext.allowedTools.length > 0;
@@ -140,6 +171,7 @@ export class AgentOrchestrator {
       };
 
       currentStep = 'getTools';
+      console.log(`[Orchestrator] [5/7] ${currentStep}`);
       const allOpenaiTools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
       
       // LLM1 solo recibe ejecutar_accion como tool principal
@@ -159,6 +191,8 @@ export class AgentOrchestrator {
            'ejecutar_accion'].includes(tool)
         );
         
+        console.log(`[Orchestrator]   → Stage allows actions: ${stageAllowsActions}`);
+        
         if (stageAllowsActions) {
           openaiTools = allOpenaiTools.filter((t: any) => 
             t.function?.name === LLM1_DELEGATE_TOOL
@@ -172,9 +206,8 @@ export class AgentOrchestrator {
         );
       }
       
-      console.log(`[Orchestrator] Stage restrictions: ${hasToolRestriction ? builtContext.allowedTools.join(', ') : 'none'}`);
-      console.log(`[Orchestrator] LLM1 tools: ${openaiTools.length} - ${openaiTools.map((t: any) => t.function?.name).join(', ')}`);
-      console.log(`[Orchestrator] All registered tools (for delegate): ${allOpenaiTools.length}`);
+      console.log(`[Orchestrator]   → LLM1 receives tools: ${openaiTools.length > 0 ? openaiTools.map((t: any) => t.function?.name).join(', ') : 'NONE (conversation only)'}`);
+      console.log(`[Orchestrator]   → Total registered tools for LLM2 delegate: ${allOpenaiTools.length}`);
 
       const toolContext: ToolContext = {
         businessId: input.businessId,
@@ -206,10 +239,17 @@ export class AgentOrchestrator {
       };
 
       currentStep = 'llmCall';
-      console.log(`[Orchestrator] Step: ${currentStep} - model=${llmConfig.model}, messages=${llmMessages.length}`);
+      console.log(`[Orchestrator] [6/7] ${currentStep}`);
+      console.log(`[Orchestrator]   → Model: ${llmConfig.model}, Messages: ${llmMessages.length}, Tools available: ${openaiTools.length}`);
+      
+      const llm1StartTime = Date.now();
       let response = await this.llmProvider.chat(llmMessages, llmConfig, openaiTools);
       llmCalls++;
-      console.log(`[Orchestrator] LLM response: finishReason=${response.finishReason}, hasContent=${!!response.content}, toolCalls=${response.toolCalls?.length || 0}`);
+      
+      console.log(`[Orchestrator]   → LLM1 response (${Date.now() - llm1StartTime}ms): finish=${response.finishReason}, toolCalls=${response.toolCalls?.length || 0}`);
+      if (response.content) {
+        console.log(`[Orchestrator]   → LLM1 content preview: "${response.content.substring(0, 80)}..."`);
+      }
       
       if (response.usage) {
         totalTokens.prompt += response.usage.promptTokens;
@@ -220,18 +260,29 @@ export class AgentOrchestrator {
       let toolCallCount = 0;
       while (response.finishReason === 'tool_calls' && response.toolCalls && toolCallCount < this.config.maxToolCalls!) {
         currentStep = `toolExecution_${toolCallCount}`;
-        console.log(`[Orchestrator] Step: ${currentStep} - Processing ${response.toolCalls.length} tool calls`);
+        console.log(`[Orchestrator] [7/7] TOOL LOOP iteration ${toolCallCount + 1}/${this.config.maxToolCalls}`);
+        console.log(`[Orchestrator]   → Processing ${response.toolCalls.length} tool call(s)`);
 
         const toolResults: LLMMessage[] = [];
 
         for (const toolCall of response.toolCalls) {
-          console.log(`[Orchestrator] Executing tool: ${toolCall.name} with args: ${JSON.stringify(toolCall.arguments).substring(0, 200)}`);
+          console.log(`[Orchestrator]   🔧 TOOL: ${toolCall.name}`);
+          if (DEBUG_AGENT) {
+            console.log(`[Orchestrator]   📥 Args: ${redactForLog(toolCall.arguments)}`);
+          }
           
+          const toolStartTime = Date.now();
           const result = await toolRegistry.executeTool(
             toolCall.name,
             toolCall.arguments,
             toolContext
           );
+          const toolDuration = Date.now() - toolStartTime;
+          
+          console.log(`[Orchestrator]   📤 Result (${toolDuration}ms): ${result.success ? '✓ SUCCESS' : '✗ FAILED'}`);
+          if (DEBUG_AGENT) {
+            console.log(`[Orchestrator]   📄 Output: ${redactForLog(result.content)}`);
+          }
           
           toolsExecuted.push({
             name: toolCall.name,
@@ -257,8 +308,11 @@ export class AgentOrchestrator {
         });
         llmMessages.push(...toolResults);
 
+        console.log(`[Orchestrator]   → Calling LLM again after tool results...`);
+        const llmLoopStart = Date.now();
         response = await this.llmProvider.chat(llmMessages, llmConfig, openaiTools);
         llmCalls++;
+        console.log(`[Orchestrator]   → LLM response (${Date.now() - llmLoopStart}ms): finish=${response.finishReason}, moreTools=${response.toolCalls?.length || 0}`);
         
         if (response.usage) {
           totalTokens.prompt += response.usage.promptTokens;
@@ -272,7 +326,13 @@ export class AgentOrchestrator {
       const finalResponse = response.content || 'Lo siento, no pude generar una respuesta.';
 
       const processingTimeMs = Date.now() - startTime;
-      console.log(`[Orchestrator] Completed in ${processingTimeMs}ms, ${llmCalls} LLM calls, ${toolsExecuted.length} tools executed`);
+      console.log(`[Orchestrator] ═══════════════════════════════════════════════════════`);
+      console.log(`[Orchestrator] ✓ V3 PROCESS COMPLETED`);
+      console.log(`[Orchestrator]   → Duration: ${processingTimeMs}ms`);
+      console.log(`[Orchestrator]   → LLM calls: ${llmCalls}`);
+      console.log(`[Orchestrator]   → Tools executed: ${toolsExecuted.length} - ${toolsExecuted.map(t => t.name).join(', ') || 'none'}`);
+      console.log(`[Orchestrator]   → Tokens: prompt=${totalTokens.prompt}, completion=${totalTokens.completion}`);
+      console.log(`[Orchestrator] ═══════════════════════════════════════════════════════`);
 
       const updatedConversation = [
         ...input.messages.filter(m => m.role !== 'system').map(m => ({

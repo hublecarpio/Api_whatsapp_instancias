@@ -3,6 +3,20 @@ import { LLMFactory } from '../core/llmAdapter.js';
 import { loadBusinessContext, loadConversationContext } from '../prompts/contextBuilder.js';
 import { loadCustomToolsForBusiness } from './customToolAdapter.js';
 
+// Debug flag for verbose logging
+const DEBUG_AGENT = process.env.DEBUG_AGENT_V3 === 'true';
+
+// Helper to redact PII from log outputs
+function redactForLog(obj: any, maxLen: number = 150): string {
+  if (!obj) return 'null';
+  let str = typeof obj === 'string' ? obj : JSON.stringify(obj);
+  str = str.replace(/\b\d{9,15}\b/g, '***PHONE***');
+  str = str.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '***EMAIL***');
+  str = str.replace(/([a-f0-9]{8})-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '$1...');
+  if (str.length > maxLen) str = str.substring(0, maxLen) + '...';
+  return str;
+}
+
 interface ToolMemory {
   productData: Array<{
     productId: string;
@@ -147,7 +161,15 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
   }
 
   async execute(args: Record<string, any>, context: ToolContext): Promise<ToolResult> {
-    this.log('Executing action delegation', args);
+    const startTime = Date.now();
+    const phoneMask = context.contactPhone?.length > 4 ? `***${context.contactPhone.slice(-4)}` : '****';
+    
+    console.log(`[LLM2-Delegate] ═══════════════════════════════════════════════════════`);
+    console.log(`[LLM2-Delegate] ▶ STARTING ejecutar_accion`);
+    console.log(`[LLM2-Delegate] Phone: ${phoneMask}, Business: ${context.businessId?.slice(0, 8)}...`);
+    console.log(`[LLM2-Delegate] Objetivo: "${args.objetivo?.substring(0, 100)}..."`);
+    console.log(`[LLM2-Delegate] Contexto adicional: "${args.contexto_adicional?.substring(0, 50) || 'none'}"`);
+    console.log(`[LLM2-Delegate] ═══════════════════════════════════════════════════════`);
 
     const { businessId, instanceId, contactPhone, contactName, conversationMessages } = context;
     const objetivo = args.objetivo;
@@ -155,6 +177,7 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
     const maxIterations = 5;
 
     if (!objetivo) {
+      console.log(`[LLM2-Delegate] ✗ ERROR: No objetivo specified`);
       return this.error('Debes especificar el objetivo de la acción.');
     }
 
@@ -163,6 +186,9 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
 
       const businessContext = await loadBusinessContext(businessId, instanceId);
       const convContext = await loadConversationContext(businessId, contactPhone, instanceId);
+      
+      console.log(`[LLM2-Delegate] Context loaded: products=${businessContext.products.length}, zones=${businessContext.deliveryZones.length}`);
+      console.log(`[LLM2-Delegate] Existing order: ${convContext.existingOrder?.id?.slice(0, 8) || 'NONE'}`);
 
       const availabilityContext: ToolAvailabilityContext = {
         businessId,
@@ -265,11 +291,18 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
       const llmConfig = { model: 'gpt-4o', temperature: 0.2, maxTokens: 2000 };
       const toolsExecuted: Array<{ name: string; success: boolean; result: string; data?: any }> = [];
       
+      console.log(`[LLM2-Delegate] Tools available for LLM2: ${filteredTools.map((t: any) => t.function?.name).join(', ')}`);
+      console.log(`[LLM2-Delegate] Calling LLM2 (${llmConfig.model})...`);
+      
+      const llm2StartTime = Date.now();
       let response = await llmProvider.chat(llmMessages, llmConfig, filteredTools);
+      console.log(`[LLM2-Delegate] LLM2 initial response (${Date.now() - llm2StartTime}ms): finish=${response.finishReason}, toolCalls=${response.toolCalls?.length || 0}`);
+      
       let iterations = 0;
 
       while (response.finishReason === 'tool_calls' && response.toolCalls && iterations < maxIterations) {
-        this.log(`[ejecutar_accion] Iteration ${iterations + 1}: executing ${response.toolCalls.length} tools`);
+        console.log(`[LLM2-Delegate] ─── ITERATION ${iterations + 1}/${maxIterations} ───`);
+        console.log(`[LLM2-Delegate] Processing ${response.toolCalls.length} tool call(s)`);
 
         const toolResults: any[] = [];
 
@@ -277,9 +310,14 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
           let actualToolName = toolCall.name;
           let actualArgs = toolCall.arguments;
           
+          console.log(`[LLM2-Delegate]   🔧 Tool requested: ${toolCall.name}`);
+          if (DEBUG_AGENT) {
+            console.log(`[LLM2-Delegate]   📥 Args: ${redactForLog(toolCall.arguments)}`);
+          }
+          
           // GUARD: If LLM2 tries to use confirmar_pedido when there's an active order, redirect to agregar_producto_orden
           if (toolCall.name === 'confirmar_pedido' && convContext.existingOrder) {
-            this.log(`[ejecutar_accion] GUARD: Active order detected, blocking confirmar_pedido and redirecting to agregar_producto_orden`);
+            console.log(`[LLM2-Delegate]   ⚠️ GUARD TRIGGERED: Active order exists, redirecting to agregar_producto_orden`);
             
             // Extract ALL items from items[] to add via agregar_producto_orden
             const items = actualArgs.items || [];
@@ -316,17 +354,24 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
             }
           }
           
-          this.log(`[ejecutar_accion] Executing: ${actualToolName}`, actualArgs);
+          console.log(`[LLM2-Delegate]   → Executing: ${actualToolName}`);
           
+          const toolExecStart = Date.now();
           let result = await toolRegistry.executeTool(
             actualToolName,
             actualArgs,
             toolContext
           );
+          const toolExecDuration = Date.now() - toolExecStart;
+          
+          console.log(`[LLM2-Delegate]   📤 Result (${toolExecDuration}ms): ${result.success ? '✓ SUCCESS' : '✗ FAILED'}`);
+          if (DEBUG_AGENT) {
+            console.log(`[LLM2-Delegate]   📄 Output: ${redactForLog(result.content)}`);
+          }
           
           // GUARD: If result contains _action: USE_AGREGAR_PRODUCTO_ORDEN, auto-redirect
           if (result.data?._action === 'USE_AGREGAR_PRODUCTO_ORDEN') {
-            this.log(`[ejecutar_accion] Received internal redirect instruction, extracting items and calling agregar_producto_orden`);
+            console.log(`[LLM2-Delegate]   ⚠️ POST-GUARD: _action redirect to agregar_producto_orden`);
             
             // Extract first item from original args to use in agregar_producto_orden
             const items = toolCall.arguments.items || [];
@@ -393,11 +438,15 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
           });
         }
 
+        console.log(`[LLM2-Delegate] Calling LLM2 again after tool results...`);
+        const llmLoopStart = Date.now();
         response = await llmProvider.chat(llmMessages, llmConfig, filteredTools);
+        console.log(`[LLM2-Delegate] LLM2 response (${Date.now() - llmLoopStart}ms): finish=${response.finishReason}, moreTools=${response.toolCalls?.length || 0}`);
         iterations++;
       }
 
       const finalContent = response.content || 'No se pudo completar la acción.';
+      const totalDuration = Date.now() - startTime;
 
       const resultData = {
         toolsExecuted: toolsExecuted.map(t => ({ name: t.name, success: t.success })),
@@ -409,20 +458,27 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
         }
       };
 
-      if (toolsExecuted.length === 0) {
-        return this.success(finalContent, resultData);
-      }
-
       const summary = toolsExecuted.map(t => 
         `${t.success ? '✓' : '✗'} ${t.name}`
       ).join(' → ');
 
-      this.log(`[ejecutar_accion] Completed: ${summary}, iterations=${iterations}`);
+      console.log(`[LLM2-Delegate] ═══════════════════════════════════════════════════════`);
+      console.log(`[LLM2-Delegate] ✓ ejecutar_accion COMPLETED in ${totalDuration}ms`);
+      console.log(`[LLM2-Delegate] Iterations: ${iterations}, Tools: ${toolsExecuted.length}`);
+      console.log(`[LLM2-Delegate] Flow: ${summary || 'no tools executed'}`);
+      console.log(`[LLM2-Delegate] Memory: products=${memory.productData.length}, total=${memory.calculatedTotals.total || 'N/A'}, orderId=${memory.orderId?.slice(0, 8) || 'none'}`);
+      if (DEBUG_AGENT) {
+        console.log(`[LLM2-Delegate] Response preview: ${redactForLog(finalContent, 100)}`);
+      }
+      console.log(`[LLM2-Delegate] ═══════════════════════════════════════════════════════`);
 
       return this.success(finalContent, resultData);
 
     } catch (error: any) {
-      this.logError('Error in ejecutar_accion', error);
+      console.error(`[LLM2-Delegate] ═══════════════════════════════════════════════════════`);
+      console.error(`[LLM2-Delegate] ✗ ERROR in ejecutar_accion: ${error.message}`);
+      console.error(`[LLM2-Delegate] Stack: ${error.stack}`);
+      console.error(`[LLM2-Delegate] ═══════════════════════════════════════════════════════`);
       return this.error(`Error al ejecutar acción: ${error.message}`);
     }
   }

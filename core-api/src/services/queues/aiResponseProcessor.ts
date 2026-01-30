@@ -256,10 +256,18 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
   let result: { response: string; tokensUsed?: number };
   
   const useV3 = USE_V3_AGENT || business.agentVersion === 'v3';
+  const phoneMask = contactPhone.length > 4 ? `***${contactPhone.slice(-4)}` : '****';
+  const DEBUG_AGENT = process.env.DEBUG_AGENT_V3 === 'true';
+  
+  console.log(`[AI Worker] ═══════════════════════════════════════════════════════`);
+  console.log(`[AI Worker] AGENT DECISION: USE_V3_AGENT=${USE_V3_AGENT}, agentVersion=${business.agentVersion}, useV3=${useV3}`);
+  console.log(`[AI Worker] Context: business=${business.name}, phone=${phoneMask}, instanceId=${targetInstanceId?.slice(0, 8) || 'none'}`);
+  console.log(`[AI Worker] Messages: ${messages.length}`);
+  console.log(`[AI Worker] ═══════════════════════════════════════════════════════`);
   
   if (useV3) {
     try {
-      console.log(`[AI Worker] Using Agent V3 for business ${businessId}`);
+      console.log(`[AI Worker V3] ▶ Starting V3 processing...`);
       const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
       
       const v3Input: OrchestratorInput = {
@@ -276,20 +284,31 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
         }
       };
       
+      console.log(`[AI Worker V3] Input: phone=${phoneMask}, instanceId=${v3Input.instanceId?.slice(0, 8) || 'null'}, msgCount=${v3Input.messages.length}`);
+      
+      const v3StartTime = Date.now();
       const v3Result = await processWithOrchestrator(v3Input);
+      const v3Duration = Date.now() - v3StartTime;
+      
       result = { response: v3Result.response, tokensUsed: v3Result.tokensUsed?.total };
       
-      if (v3Result.toolsExecuted?.length) {
-        console.log(`[AI Worker V3] Tools executed: ${v3Result.toolsExecuted.map(t => t.name).join(', ')}`);
-      }
+      console.log(`[AI Worker V3] ═══════════════════════════════════════════════════════`);
+      console.log(`[AI Worker V3] ✓ V3 COMPLETED in ${v3Duration}ms`);
+      console.log(`[AI Worker V3] Tools executed: ${v3Result.toolsExecuted?.length || 0} - ${v3Result.toolsExecuted?.map(t => `${t.name}(${t.success ? 'OK' : 'FAIL'})`).join(', ') || 'none'}`);
+      console.log(`[AI Worker V3] Tokens: prompt=${v3Result.tokensUsed?.prompt || 0}, completion=${v3Result.tokensUsed?.completion || 0}`);
+      console.log(`[AI Worker V3] LLM calls: ${v3Result.metadata?.llmCalls || 0}, model: ${v3Result.metadata?.model || 'unknown'}`);
+      console.log(`[AI Worker V3] Response length: ${result.response?.length || 0} chars`);
+      console.log(`[AI Worker V3] ═══════════════════════════════════════════════════════`);
       
       if (targetInstanceId && result.response) {
         await sendWhatsAppResponse(targetInstanceId, phone, result.response, business);
       }
-      console.log(`[AI Worker V3] Success! Response length: ${result.response?.length || 0} chars`);
     } catch (v3Error: any) {
-      console.error('[AI Worker] Agent V3 error, falling back to V1:', v3Error.message);
-      console.error('[AI Worker] V3 Error stack:', v3Error.stack);
+      console.error(`[AI Worker V3] ═══════════════════════════════════════════════════════`);
+      console.error(`[AI Worker V3] ✗ V3 FAILED - Falling back to V1`);
+      console.error(`[AI Worker V3] Error: ${v3Error.message}`);
+      console.error(`[AI Worker V3] Stack: ${v3Error.stack}`);
+      console.error(`[AI Worker V3] ═══════════════════════════════════════════════════════`);
       result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
     }
   } else if (business.agentVersion === 'v2') {
