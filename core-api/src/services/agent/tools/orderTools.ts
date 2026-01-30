@@ -622,59 +622,43 @@ Estructura requerida: { orderId, voucherImageUrl, amount, paymentMethod, autoCon
   async execute(args: Record<string, any>, context: ToolContext): Promise<ToolResult> {
     this.log('[VOUCHER-TOOL] Execute called', args);
     
-    const { businessId, instanceId, contactPhone, currencySymbol, geminiVoucherResult } = context;
-    const normalizedPhone = contactPhone.replace(/\D/g, '');
+    const { businessId, currencySymbol, geminiVoucherResult } = context;
     
     try {
-      let order: any = null;
-      
-      // First try to find by orderId if provided
-      if (args.orderId) {
-        this.log('[VOUCHER-TOOL] Looking up order by UUID:', args.orderId);
-        order = await prisma.order.findFirst({
-          where: {
-            id: args.orderId,
-            businessId,
-            status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] }
-          },
-          include: { items: true }
-        });
+      // Validate required parameters - matching endpoint structure
+      if (!args.orderId) {
+        return this.error('Falta el orderId. Usa el orderId de la memoria (obtenido de confirmar_pedido).');
       }
       
-      // Fallback to finding by contactPhone
-      if (!order) {
-        this.log('[VOUCHER-TOOL] Looking up order by contactPhone');
-        order = await prisma.order.findFirst({
-          where: {
-            businessId,
-            contactPhone: normalizedPhone,
-            status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] },
-            ...(instanceId ? { instanceId } : {})
-          },
-          orderBy: { createdAt: 'desc' },
-          include: { items: true }
-        });
-      }
-
-      if (!order) {
-        this.log('[VOUCHER-TOOL] No active order found');
-        return this.error('No hay un pedido activo esperando pago. Primero necesito confirmar el pedido del cliente.');
-      }
-
-      const voucherAmount = args.monto_detectado || geminiVoucherResult?.amount || 0;
-      const bank = args.banco || geminiVoucherResult?.brand || 'Desconocido';
-      const operationCode = args.codigo_operacion || geminiVoucherResult?.operationCode || null;
-      const imageUrl = args.imagen_url || geminiVoucherResult?.imageUrl || null;
-
+      // Parameter names matching endpoint: { orderId, voucherImageUrl, amount, paymentMethod, autoConfirm }
+      const voucherAmount = args.amount || geminiVoucherResult?.amount || 0;
+      const paymentMethod = args.paymentMethod || geminiVoucherResult?.brand || 'Desconocido';
+      const voucherImageUrl = args.voucherImageUrl || geminiVoucherResult?.imageUrl || null;
+      const autoConfirm = args.autoConfirm ?? false;
+      
       if (voucherAmount <= 0) {
-        this.log('[VOUCHER-TOOL] Invalid voucher amount', { voucherAmount });
-        return this.error('No se detectó un monto válido en el comprobante. Por favor pide al cliente que envíe una imagen más clara.');
+        return this.error('Falta el monto (amount). Especifica el monto del voucher detectado.');
+      }
+      
+      this.log('[VOUCHER-TOOL] Looking up order by UUID:', args.orderId);
+      const order = await prisma.order.findFirst({
+        where: {
+          id: args.orderId,
+          businessId,
+          status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] }
+        },
+        include: { items: true }
+      });
+
+      if (!order) {
+        this.log('[VOUCHER-TOOL] No active order found for orderId:', args.orderId);
+        return this.error(`No se encontró un pedido activo con id ${args.orderId}. Verifica el orderId de la memoria.`);
       }
 
       const currentPaid = order.paidAmount || 0;
-      const pendingBefore = order.totalAmount - currentPaid;
       const newPaidAmount = currentPaid + voucherAmount;
       const pendingAfter = Math.max(0, order.totalAmount - newPaidAmount);
+      const isFullyPaid = newPaidAmount >= order.totalAmount;
 
       this.log('[VOUCHER-REASONING]', {
         orderId: order.id.slice(-6),
@@ -683,14 +667,15 @@ Estructura requerida: { orderId, voucherImageUrl, amount, paymentMethod, autoCon
         voucherAmount,
         newPaidAmount,
         pendingAfter,
-        decision: newPaidAmount >= order.totalAmount ? 'FULLY_PAID' : 'PARTIAL_PAYMENT'
+        autoConfirm,
+        decision: isFullyPaid ? 'FULLY_PAID' : 'PARTIAL_PAYMENT'
       });
 
+      // Build payment history entry matching endpoint structure
       const paymentEntry = {
         amount: voucherAmount,
-        brand: bank,
-        operationCode,
-        imageUrl,
+        brand: paymentMethod,
+        imageUrl: voucherImageUrl,
         timestamp: new Date().toISOString(),
         type: 'VOUCHER'
       };
@@ -705,35 +690,41 @@ Estructura requerida: { orderId, voucherImageUrl, amount, paymentMethod, autoCon
       const paymentHistory = existingNotes.paymentHistory || [];
       paymentHistory.push(paymentEntry);
 
-      const isFullyPaid = newPaidAmount >= order.totalAmount;
-      const newStatus = isFullyPaid ? OrderStatus.PAID : OrderStatus.AWAITING_VOUCHER;
+      // Determine new status - matching endpoint logic with autoConfirm support
+      let newStatus = order.status;
+      if (autoConfirm && isFullyPaid) {
+        newStatus = OrderStatus.PAID;
+      } else if (voucherAmount > 0) {
+        newStatus = isFullyPaid ? OrderStatus.PAID : OrderStatus.AWAITING_VOUCHER;
+      }
 
+      // Update order matching endpoint structure
       await prisma.order.update({
         where: { id: order.id },
         data: {
+          voucherImageUrl: voucherImageUrl,
+          voucherReceivedAt: new Date(),
           paidAmount: newPaidAmount,
           pendingAmount: pendingAfter,
           lastVoucherAmount: voucherAmount,
           status: newStatus,
-          paidAt: isFullyPaid ? new Date() : null,
+          paidAt: newStatus === OrderStatus.PAID ? new Date() : order.paidAt,
           notes: JSON.stringify({
             ...existingNotes,
             paymentHistory,
-            lastVoucherBank: bank,
-            lastVoucherCode: operationCode
+            lastVoucherBank: paymentMethod
           })
         }
       });
 
-      const orderId = order.id.slice(-6).toUpperCase();
+      const orderIdShort = order.id.slice(-6).toUpperCase();
 
       if (isFullyPaid) {
-        this.log(`[VOUCHER-TOOL] Order ${orderId} FULLY PAID`);
+        this.log(`[VOUCHER-TOOL] Order ${orderIdShort} FULLY PAID`);
         return this.success(`✅ PAGO COMPLETO REGISTRADO
 
-Pedido #${orderId}
-Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${bank})
-${operationCode ? `Código: ${operationCode}` : ''}
+Pedido #${orderIdShort}
+Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${paymentMethod})
 
 Total pagado: ${currencySymbol}${newPaidAmount.toFixed(2)}
 Total del pedido: ${currencySymbol}${order.totalAmount.toFixed(2)}
@@ -746,12 +737,11 @@ El pedido está listo para ser procesado.`, {
           fullyPaid: true 
         });
       } else {
-        this.log(`[VOUCHER-TOOL] Order ${orderId} PARTIAL PAYMENT, pending: ${pendingAfter}`);
+        this.log(`[VOUCHER-TOOL] Order ${orderIdShort} PARTIAL PAYMENT, pending: ${pendingAfter}`);
         return this.success(`💳 PAGO PARCIAL REGISTRADO
 
-Pedido #${orderId}
-Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${bank})
-${operationCode ? `Código: ${operationCode}` : ''}
+Pedido #${orderIdShort}
+Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${paymentMethod})
 
 Resumen de pagos:
 • Total del pedido: ${currencySymbol}${order.totalAmount.toFixed(2)}

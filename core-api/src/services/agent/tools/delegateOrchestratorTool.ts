@@ -514,8 +514,8 @@ IMPORTANTE: Usa el nombre del producto TAL CUAL lo retornó buscar_producto.`;
     
     if (memory.orderId) {
       parts.push(`\n📦 ORDEN CREADA: orderId="${memory.orderId}"`);
-      parts.push(`Para agregar voucher usa:`);
-      parts.push(`registrar_voucher_pago({ orderId: "${memory.orderId}", monto_detectado: MONTO, banco: "YAPE" })`);
+      parts.push(`Para agregar voucher usa esta estructura exacta:`);
+      parts.push(`registrar_voucher_pago({ orderId: "${memory.orderId}", voucherImageUrl: "URL_DEL_VOUCHER", amount: MONTO, paymentMethod: "YAPE", autoConfirm: false })`);
     }
     
     return parts.join('\n');
