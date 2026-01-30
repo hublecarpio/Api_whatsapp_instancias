@@ -4535,7 +4535,7 @@ router.get('/funnel-stages/:businessId', authMiddleware, async (req: AuthRequest
       orderBy: { order: 'asc' }
     });
     
-    console.log(`[FUNNEL-STAGES-GET] Found ${stages.length} stages`);
+    console.log(`[FUNNEL-STAGES-GET] Found ${stages.length} stages:`, stages.map(s => ({ id: s.id, name: s.name, instanceId: s.instanceId, order: s.order })));
     
     res.json(stages);
   } catch (error: any) {
