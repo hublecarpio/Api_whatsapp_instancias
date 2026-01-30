@@ -133,8 +133,41 @@ export class AgentOrchestrator {
       };
 
       currentStep = 'getTools';
-      const openaiTools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
-      console.log(`[Orchestrator] Available tools: ${openaiTools.length} - ${openaiTools.map((t: any) => t.function?.name).join(', ')}`);
+      const allOpenaiTools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
+      
+      // LLM1 solo recibe ejecutar_accion como tool principal
+      // Las demás tools son manejadas internamente por el delegate (LLM2)
+      // PERO respetamos las restricciones de etapa del funnel
+      const LLM1_DELEGATE_TOOL = 'ejecutar_accion';
+      
+      let openaiTools: typeof allOpenaiTools = [];
+      
+      // Si hay restricciones de etapa, verificar si ejecutar_accion está permitida
+      if (hasToolRestriction) {
+        // Solo incluir ejecutar_accion si las tools permitidas por etapa lo incluyen
+        // O si alguna de las tools permitidas requiere acciones (productos, orders, citas)
+        const stageAllowsActions = builtContext.allowedTools.some(tool => 
+          ['buscar_producto', 'calcular_total_pedido', 'confirmar_pedido', 
+           'agregar_producto_orden', 'consultar_pedido', 'agendar_cita',
+           'ejecutar_accion'].includes(tool)
+        );
+        
+        if (stageAllowsActions) {
+          openaiTools = allOpenaiTools.filter((t: any) => 
+            t.function?.name === LLM1_DELEGATE_TOOL
+          );
+        }
+        // Si no hay acciones permitidas, openaiTools queda vacío (solo conversación)
+      } else {
+        // Sin restricciones de etapa, dar acceso a ejecutar_accion
+        openaiTools = allOpenaiTools.filter((t: any) => 
+          t.function?.name === LLM1_DELEGATE_TOOL
+        );
+      }
+      
+      console.log(`[Orchestrator] Stage restrictions: ${hasToolRestriction ? builtContext.allowedTools.join(', ') : 'none'}`);
+      console.log(`[Orchestrator] LLM1 tools: ${openaiTools.length} - ${openaiTools.map((t: any) => t.function?.name).join(', ')}`);
+      console.log(`[Orchestrator] All registered tools (for delegate): ${allOpenaiTools.length}`);
 
       const toolContext: ToolContext = {
         businessId: input.businessId,

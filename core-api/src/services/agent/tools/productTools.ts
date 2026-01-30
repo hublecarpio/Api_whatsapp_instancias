@@ -72,7 +72,17 @@ export class BuscarProductoTool extends BaseTool {
         response += '\n';
       }
 
-      return this.success(response, { count: products.length });
+      // Incluir datos estructurados de productos para el ToolMemory
+      const productData = products.map((product: any) => ({
+        id: product.id,
+        title: product.title,
+        variation: product.variation || null,
+        price: product.price,
+        stock: product.stock ?? null,
+        description: product.description?.slice(0, 100) || null
+      }));
+      
+      return this.success(response, { count: products.length, products: productData });
     } catch (error: any) {
       this.logError('Error searching products', error);
       return this.error(`Error al buscar productos: ${error.message}`);

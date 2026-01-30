@@ -259,11 +259,44 @@ export class ContextBuilder {
   }
 
   private buildToolsSection(allowedTools: string[]): string {
-    if (allowedTools.length === 0) {
-      return `## HERRAMIENTAS\nNo tienes herramientas disponibles en esta etapa. Solo conversa.`;
+    // Verificar si la etapa permite acciones (tools de productos, orders, citas)
+    const actionTools = ['buscar_producto', 'calcular_total_pedido', 'confirmar_pedido', 
+                         'agregar_producto_orden', 'consultar_pedido', 'agendar_cita', 'ejecutar_accion'];
+    
+    const hasToolRestriction = allowedTools.length > 0;
+    const stageAllowsActions = !hasToolRestriction || allowedTools.some(tool => actionTools.includes(tool));
+    
+    if (!stageAllowsActions) {
+      return `## HERRAMIENTAS
+No tienes herramientas disponibles en esta etapa. Solo conversa con el cliente.
+NO intentes buscar productos, calcular precios ni crear órdenes hasta avanzar de etapa.`;
     }
     
-    return `## HERRAMIENTAS DISPONIBLES\nPuedes usar SOLO estas herramientas: ${allowedTools.join(', ')}.\nNo intentes usar otras herramientas aunque las conozcas.`;
+    // LLM1 tiene acceso a ejecutar_accion para manejar todas las acciones
+    return `## HERRAMIENTA PRINCIPAL: ejecutar_accion
+
+DEBES usar "ejecutar_accion" para TODAS las siguientes situaciones:
+- Cliente pregunta por un producto o precio → objetivo: "buscar [producto] y obtener precio"
+- Cliente confirma producto + variación + zona → objetivo: "calcular total de [producto] [variación] para [zona]"
+- Cliente quiere hacer un pedido → objetivo: "crear orden con [productos] para [zona] con pago [método]"
+- Consultar stock o disponibilidad → objetivo: "verificar stock de [producto]"
+- Agendar citas (si aplica) → objetivo: "agendar cita para [fecha] [servicio]"
+
+FORMATO DE USO:
+ejecutar_accion({
+  objetivo: "descripción clara de qué hacer",
+  contexto_adicional: "datos del cliente ya recopilados"
+})
+
+EJEMPLOS:
+- Cliente dice "quiero Erba Pura 100ml" + "Lima" → ejecutar_accion({ objetivo: "calcular total de 1 Erba Pura 100ml con envío a Lima" })
+- Cliente pregunta "cuánto cuesta el perfume X?" → ejecutar_accion({ objetivo: "buscar perfume X y obtener precio" })
+- Cliente confirma "sí, lo quiero" → ejecutar_accion({ objetivo: "crear orden con los productos seleccionados" })
+
+IMPORTANTE: 
+- NO inventes precios ni totales - SIEMPRE usa ejecutar_accion para obtenerlos
+- La herramienta te retornará datos exactos del catálogo y cálculos reales
+- Si la herramienta indica que falta información, pregunta al cliente`;
   }
 
   private buildFinalInstruction(): string {
