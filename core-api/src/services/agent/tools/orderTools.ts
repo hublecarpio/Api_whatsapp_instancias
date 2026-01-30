@@ -10,18 +10,27 @@ export class ConfirmarPedidoTool extends BaseTool {
   protected buildDefinition(context: ToolDefinitionContext): ToolDefinition {
     return {
       name: this.name,
-      description: `Registra un pedido nuevo cuando el cliente confirma su compra. Usa esta función SOLO cuando el cliente dice explícitamente "sí lo quiero", "confirmo", "procede con el pedido", etc. ${context.zoneDescriptions ? `Zonas disponibles: ${context.zoneDescriptions}` : ''}`,
+      description: `Crea un pedido usando los UUIDs exactos de productos y zona. IMPORTANTE: Usa los productId y deliveryZoneId que obtuviste de buscar_producto y business-info. ${context.zoneDescriptions ? `Zonas: ${context.zoneDescriptions}` : ''}`,
       category: this.category,
       parameters: {
         type: 'object',
         properties: {
-          producto: { 
-            type: 'string', 
-            description: 'Nombre exacto del producto que el cliente quiere comprar' 
+          items: {
+            type: 'array',
+            description: 'Lista de productos con sus UUIDs. Cada item: {productId: "uuid", quantity: 1, variation: ""}',
+            items: {
+              type: 'object',
+              properties: {
+                productId: { type: 'string', description: 'UUID del producto (obtenido de buscar_producto)' },
+                quantity: { type: 'number', description: 'Cantidad (default: 1)' },
+                variation: { type: 'string', description: 'Variación del producto (ej: "100ml", "Azul")' }
+              },
+              required: ['productId']
+            }
           },
-          cantidad: { 
-            type: 'number', 
-            description: 'Cantidad de productos (default: 1)' 
+          deliveryZoneId: { 
+            type: 'string', 
+            description: 'UUID de la zona de envío (obtenido de business-info)' 
           },
           nombre_cliente: { 
             type: 'string', 
@@ -31,114 +40,154 @@ export class ConfirmarPedidoTool extends BaseTool {
             type: 'string', 
             description: 'Dirección completa de envío' 
           },
-          zona_envio: { 
-            type: 'string', 
-            description: 'Zona o distrito de envío para calcular costo' 
-          },
           metodo_pago: { 
             type: 'string', 
             enum: ['YAPE', 'PLIN', 'TRANSFERENCIA', 'EFECTIVO', 'OTRO'],
-            description: 'Método de pago preferido por el cliente' 
+            description: 'Método de pago preferido' 
           },
           notas: { 
             type: 'string', 
-            description: 'Notas adicionales del pedido (opcional)' 
-          }
+            description: 'Notas adicionales (opcional)' 
+          },
+          // Legacy support
+          producto: { type: 'string', description: '[LEGACY] Nombre del producto - usa items[] en su lugar' },
+          cantidad: { type: 'number', description: '[LEGACY] Cantidad - usa items[] en su lugar' },
+          zona_envio: { type: 'string', description: '[LEGACY] Nombre de zona - usa deliveryZoneId en su lugar' }
         },
-        required: ['producto', 'nombre_cliente', 'direccion']
+        required: ['nombre_cliente', 'direccion']
       },
       requiresProducts: true,
       requiresZones: true
     };
   }
 
-  private validateProductMentionedInConversation(productName: string, messages?: { role: string; content: string }[]): { valid: boolean; reason?: string } {
-    if (!messages || messages.length === 0) {
-      this.log('No conversation messages available, allowing product');
-      return { valid: true };
-    }
-
-    const userMessages = messages.filter(m => m.role === 'user').map(m => m.content.toLowerCase());
-    const allConversation = userMessages.join(' ');
-    
-    const productLower = productName.toLowerCase().trim();
-    const productWords = productLower.split(/\s+/).filter(w => w.length > 2);
-    
-    if (allConversation.includes(productLower)) {
-      return { valid: true };
-    }
-    
-    if (productWords.length <= 2) {
-      const anyWordMatched = productWords.some(word => allConversation.includes(word));
-      if (anyWordMatched) {
-        this.log(`Product "${productName}" matched (short product name, any word match)`);
-        return { valid: true };
-      }
-    }
-    
-    const matchedWords = productWords.filter(word => allConversation.includes(word));
-    const matchRatio = matchedWords.length / productWords.length;
-    
-    if (matchRatio >= 0.5 && matchedWords.length >= 1) {
-      this.log(`Product "${productName}" partially matched (${matchRatio * 100}% words): ${matchedWords.join(', ')}`);
-      return { valid: true };
-    }
-    
-    this.log(`[ORDER-VALIDATION] Product "${productName}" NOT found in conversation. User messages: ${userMessages.slice(-3).join(' | ')}`);
-    return { 
-      valid: false, 
-      reason: `El cliente NO mencionó el producto "${productName}" en la conversación. Solo confirma pedidos de productos que el cliente haya solicitado explícitamente.` 
-    };
-  }
-
   async execute(args: Record<string, any>, context: ToolContext): Promise<ToolResult> {
-    this.log('Execute called', args);
+    this.log('[CONFIRMAR_PEDIDO] Execute called', args);
     
-    const { businessId, instanceId, contactPhone, contactName, currencySymbol, conversationMessages } = context;
+    const { businessId, instanceId, contactPhone, contactName, currencySymbol } = context;
     const normalizedPhone = contactPhone.replace(/\D/g, '');
     
     try {
-      if (!args.producto || !args.nombre_cliente || !args.direccion) {
-        return this.error('Faltan datos requeridos: producto, nombre_cliente y direccion son obligatorios.');
+      if (!args.nombre_cliente || !args.direccion) {
+        return this.error('Faltan datos requeridos: nombre_cliente y direccion son obligatorios.');
       }
 
-      const productValidation = this.validateProductMentionedInConversation(args.producto, conversationMessages);
-      if (!productValidation.valid) {
-        this.log(`[ORDER-BLOCKED] Rejecting order for product not mentioned: ${args.producto}`);
-        return this.error(productValidation.reason || 'Producto no mencionado en la conversación.');
-      }
+      // Determine items to add - support both new format (items[]) and legacy format (producto)
+      const itemsToCreate: Array<{
+        productId: string;
+        productTitle: string;
+        quantity: number;
+        unitPrice: number;
+        variation?: string;
+        imageUrl?: string | null;
+      }> = [];
 
-      const product = await findProductWithScope(businessId, args.producto, instanceId);
-      if (!product) {
-        return this.error(`No se encontró el producto "${args.producto}" en el catálogo.`);
+      // NEW FORMAT: items array with productId UUIDs
+      if (args.items && Array.isArray(args.items) && args.items.length > 0) {
+        this.log('[CONFIRMAR_PEDIDO] Using new items[] format with UUIDs');
+        
+        // Validate deliveryZoneId is provided when using new format
+        if (!args.deliveryZoneId && !args.zona_envio) {
+          return this.error('Falta la zona de envío. Usa deliveryZoneId (UUID) o zona_envio (nombre). Obtén el zoneId de calcular_total_pedido.');
+        }
+        
+        for (const item of args.items) {
+          if (!item.productId) {
+            this.log('[CONFIRMAR_PEDIDO] Item missing productId, skipping', item);
+            continue;
+          }
+          
+          // Fetch product by UUID directly
+          const product = await prisma.product.findFirst({
+            where: {
+              id: item.productId,
+              businessId
+            }
+          });
+          
+          if (!product) {
+            this.log(`[CONFIRMAR_PEDIDO] Product not found by UUID: ${item.productId}`);
+            return this.error(`Producto con ID "${item.productId}" no encontrado. Verifica el UUID.`);
+          }
+          
+          itemsToCreate.push({
+            productId: product.id,
+            productTitle: product.title,
+            quantity: Math.max(1, parseInt(item.quantity) || 1),
+            unitPrice: product.price,
+            variation: item.variation || (product.variations?.[0]) || undefined,
+            imageUrl: product.imageUrl
+          });
+        }
       }
-
-      const quantity = Math.max(1, parseInt(args.cantidad) || 1);
+      // LEGACY FORMAT: single producto string
+      else if (args.producto) {
+        this.log('[CONFIRMAR_PEDIDO] Using legacy producto format');
+        
+        const product = await findProductWithScope(businessId, args.producto, instanceId);
+        if (!product) {
+          return this.error(`No se encontró el producto "${args.producto}" en el catálogo.`);
+        }
+        
+        itemsToCreate.push({
+          productId: product.id,
+          productTitle: product.title,
+          quantity: Math.max(1, parseInt(args.cantidad) || 1),
+          unitPrice: product.price,
+          variation: (product as any).variation || undefined,
+          imageUrl: product.imageUrl
+        });
+      }
       
+      if (itemsToCreate.length === 0) {
+        return this.error('No se especificaron productos. Usa items: [{productId: "uuid", quantity: 1}] o producto: "nombre"');
+      }
+
+      // Determine zone - support both UUID (deliveryZoneId) and name (zona_envio)
       let zone = null;
-      let shippingCost = 0;
       
-      if (args.zona_envio) {
+      if (args.deliveryZoneId) {
+        this.log('[CONFIRMAR_PEDIDO] Looking up zone by UUID:', args.deliveryZoneId);
+        zone = await prisma.deliveryZone.findFirst({
+          where: {
+            id: args.deliveryZoneId,
+            businessId
+          }
+        });
+        if (!zone) {
+          this.log(`[CONFIRMAR_PEDIDO] Zone not found by UUID: ${args.deliveryZoneId}`);
+        }
+      }
+      
+      if (!zone && args.zona_envio) {
+        this.log('[CONFIRMAR_PEDIDO] Falling back to zone name search:', args.zona_envio);
         zone = await prisma.deliveryZone.findFirst({
           where: {
             businessId,
             name: { contains: args.zona_envio, mode: 'insensitive' }
           }
         });
-        
-        if (zone) {
-          const subtotal = product.price * quantity;
-          if (zone.freeAbove && subtotal >= zone.freeAbove) {
-            shippingCost = 0;
-          } else {
-            shippingCost = zone.cost || 0;
-          }
-        }
       }
 
-      const subtotal = product.price * quantity;
+      // Calculate totals
+      const subtotal = itemsToCreate.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+      let shippingCost = 0;
+      
+      if (zone) {
+        if (zone.freeAbove && subtotal >= zone.freeAbove) {
+          shippingCost = 0;
+        } else {
+          shippingCost = zone.cost || 0;
+        }
+      }
+      
       const total = subtotal + shippingCost;
 
+      // Create order with items
+      const notesWithPayment = args.metodo_pago 
+        ? JSON.stringify({ paymentMethod: args.metodo_pago, userNotes: args.notas || '' })
+        : args.notas || undefined;
+        
       const order = await prisma.order.create({
         data: {
           businessId,
@@ -150,36 +199,56 @@ export class ConfirmarPedidoTool extends BaseTool {
           subtotalAmount: subtotal,
           shippingCost,
           totalAmount: total,
+          pendingAmount: total,
           currencySymbol,
-          notes: args.notas || undefined,
+          notes: notesWithPayment,
           status: 'AWAITING_VOUCHER',
           items: {
-            create: [{
-              productId: product.id,
-              productTitle: product.title,
-              quantity,
-              unitPrice: product.price,
-              imageUrl: product.imageUrl
-            }]
+            create: itemsToCreate.map(item => ({
+              productId: item.productId,
+              productTitle: item.productTitle,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              variation: item.variation,
+              imageUrl: item.imageUrl
+            }))
           }
         },
         include: { items: true }
-      });
+      }) as any;
 
-      const orderId = order.id.slice(-6).toUpperCase();
-      const variationInfo = product.variation ? ` (${product.variation})` : '';
+      const orderIdShort = order.id.slice(-6).toUpperCase();
       
-      return this.success(`PEDIDO CONFIRMADO #${orderId}
+      // Build items summary
+      const itemsSummary = itemsToCreate.map(item => {
+        const variation = item.variation ? ` (${item.variation})` : '';
+        return `• ${item.productTitle}${variation} x${item.quantity} = ${currencySymbol}${(item.unitPrice * item.quantity).toFixed(2)}`;
+      }).join('\n');
+      
+      this.log('[CONFIRMAR_PEDIDO] Order created successfully', { 
+        orderId: order.id, 
+        itemsCount: order.items?.length || itemsToCreate.length,
+        total 
+      });
+      
+      return this.success(`PEDIDO CONFIRMADO #${orderIdShort}
 
-Producto: ${product.title}${variationInfo} x${quantity} = ${currencySymbol}${subtotal.toFixed(2)}
-Envío: ${currencySymbol}${shippingCost.toFixed(2)}${zone ? ` (${zone.name})` : ''}
+${itemsSummary}
 ━━━━━━━━━━━━━━━━━━━━
+Subtotal: ${currencySymbol}${subtotal.toFixed(2)}
+Envío${zone ? ` (${zone.name})` : ''}: ${currencySymbol}${shippingCost.toFixed(2)}
 TOTAL: ${currencySymbol}${total.toFixed(2)}
 
 Cliente: ${args.nombre_cliente}
 Dirección: ${args.direccion}
+${args.metodo_pago ? `Pago: ${args.metodo_pago}` : ''}
 
-Estado: Esperando comprobante de pago`, { orderId: order.id });
+Estado: Esperando comprobante de pago`, { 
+        orderId: order.id,
+        orderIdShort,
+        total,
+        itemsCount: order.items?.length || itemsToCreate.length
+      });
     } catch (error: any) {
       this.logError('Error creating order', error);
       return this.error(`Error al crear pedido: ${error.message}`);
@@ -495,7 +564,7 @@ ${details.join('\n')}
         response += `\n\n💡 Envío gratis desde ${currencySymbol}${freeAbove.toFixed(2)}`;
       }
 
-      return this.success(response, { subtotal, shipping, total, zone: matchedZone.name });
+      return this.success(response, { subtotal, shipping, total, zone: matchedZone.name, zoneId: matchedZone.id });
     } catch (error: any) {
       this.logError('Error calculating total', error);
       return this.error(`Error al calcular total: ${error.message}`);
@@ -510,27 +579,25 @@ export class RegistrarVoucherTool extends BaseTool {
   protected buildDefinition(context: ToolDefinitionContext): ToolDefinition {
     return {
       name: this.name,
-      description: `HERRAMIENTA DE RAZONAMIENTO para procesar comprobantes de pago. Cuando Gemini detecta un voucher válido, usa esta herramienta para:
-1. Verificar si hay un pedido activo
-2. Validar el monto contra el total pendiente
-3. Registrar el pago (acepta pagos parciales y acumulativos)
-4. Actualizar el estado del pedido automáticamente
-
-LÓGICA DE DECISIÓN:
+      description: `Registra un voucher de pago para una orden. Acepta pagos parciales y acumulativos.
+IMPORTANTE: Si tienes el orderId de la memoria, úsalo directamente.
 - Si paidAmount + nuevo_voucher >= totalAmount → Estado = PAID
-- Si paidAmount + nuevo_voucher < totalAmount → Solicitar pago restante
-- Siempre acumular pagos en paymentHistory[]`,
+- Si paidAmount + nuevo_voucher < totalAmount → Solicitar pago restante`,
       category: this.category,
       parameters: {
         type: 'object',
         properties: {
+          orderId: {
+            type: 'string',
+            description: 'UUID de la orden (obtenido de confirmar_pedido). Si tienes este ID, úsalo para especificar la orden exacta.'
+          },
           monto_detectado: {
             type: 'number',
-            description: 'Monto del voucher detectado por Gemini'
+            description: 'Monto del voucher detectado'
           },
           banco: {
             type: 'string',
-            description: 'Banco o método de pago (Yape, Plin, BCP, etc.)'
+            description: 'Método de pago: YAPE, PLIN, TRANSFERENCIA, etc.'
           },
           codigo_operacion: {
             type: 'string',
@@ -558,16 +625,35 @@ LÓGICA DE DECISIÓN:
     const normalizedPhone = contactPhone.replace(/\D/g, '');
     
     try {
-      const order = await prisma.order.findFirst({
-        where: {
-          businessId,
-          contactPhone: normalizedPhone,
-          status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] },
-          ...(instanceId ? { instanceId } : {})
-        },
-        orderBy: { createdAt: 'desc' },
-        include: { items: true }
-      });
+      let order: any = null;
+      
+      // First try to find by orderId if provided
+      if (args.orderId) {
+        this.log('[VOUCHER-TOOL] Looking up order by UUID:', args.orderId);
+        order = await prisma.order.findFirst({
+          where: {
+            id: args.orderId,
+            businessId,
+            status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] }
+          },
+          include: { items: true }
+        });
+      }
+      
+      // Fallback to finding by contactPhone
+      if (!order) {
+        this.log('[VOUCHER-TOOL] Looking up order by contactPhone');
+        order = await prisma.order.findFirst({
+          where: {
+            businessId,
+            contactPhone: normalizedPhone,
+            status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] },
+            ...(instanceId ? { instanceId } : {})
+          },
+          orderBy: { createdAt: 'desc' },
+          include: { items: true }
+        });
+      }
 
       if (!order) {
         this.log('[VOUCHER-TOOL] No active order found');

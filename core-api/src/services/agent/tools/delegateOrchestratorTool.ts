@@ -17,6 +17,7 @@ interface ToolMemory {
     shipping?: number;
     total?: number;
     zone?: string;
+    zoneId?: string;
   };
   orderId?: string;
   orderStatus?: string;
@@ -415,7 +416,8 @@ IMPORTANTE: Usa el nombre del producto TAL CUAL lo retornó buscar_producto.`;
           subtotal: data.subtotal,
           shipping: data.shipping,
           total: data.total,
-          zone: data.zone
+          zone: data.zone,
+          zoneId: data.zoneId
         };
       }
     }
@@ -480,25 +482,40 @@ IMPORTANTE: Usa el nombre del producto TAL CUAL lo retornó buscar_producto.`;
     const parts: string[] = ['⚠️ RECORDATORIO: Usa estos datos de la memoria para tu siguiente llamada:'];
     
     if (memory.productData.length > 0) {
-      parts.push('\nPRODUCTOS YA ENCONTRADOS:');
+      parts.push('\nPRODUCTOS YA ENCONTRADOS (usa estos UUIDs para crear pedido):');
       memory.productData.forEach(p => {
         const variation = p.variation ? ` (${p.variation})` : '';
-        let productLine = `  • "${p.title}${variation}" - S/${p.price}`;
+        let productLine = `  • productId: "${p.productId}" → "${p.title}${variation}" S/${p.price}`;
         if (p.imageUrl) {
-          productLine += ` | Imagen: ${p.imageUrl}`;
+          productLine += ` | img: ${p.imageUrl}`;
         }
         parts.push(productLine);
       });
       
-      // Dar ejemplo concreto de cómo usarlos
+      // Ejemplo de cómo crear pedido con UUIDs
       const firstProduct = memory.productData[0];
-      parts.push(`\nPARA CALCULAR TOTAL, USA:`);
-      parts.push(`calcular_total_pedido({ productos: [{ nombre: "${firstProduct.title}", cantidad: 1 }], zona_envio: "ZONA" })`);
+      parts.push(`\nPARA CREAR PEDIDO, USA LOS productId ASÍ:`);
+      parts.push(`confirmar_pedido({
+  items: [{ productId: "${firstProduct.productId}", quantity: 1, variation: "${firstProduct.variation || ''}" }],
+  deliveryZoneId: "UUID_DE_ZONA",
+  nombre_cliente: "Nombre",
+  direccion: "Dirección",
+  metodo_pago: "YAPE"
+})`);
     }
     
     if (memory.calculatedTotals.total) {
       parts.push(`\n✅ TOTAL YA CALCULADO: S/${memory.calculatedTotals.total} (envío a ${memory.calculatedTotals.zone})`);
+      if (memory.calculatedTotals.zoneId) {
+        parts.push(`   deliveryZoneId: "${memory.calculatedTotals.zoneId}"`);
+      }
       parts.push(`Ya puedes responder con este total, no necesitas calcularlo de nuevo.`);
+    }
+    
+    if (memory.orderId) {
+      parts.push(`\n📦 ORDEN CREADA: orderId="${memory.orderId}"`);
+      parts.push(`Para agregar voucher usa:`);
+      parts.push(`registrar_voucher_pago({ orderId: "${memory.orderId}", monto_detectado: MONTO, banco: "YAPE" })`);
     }
     
     return parts.join('\n');
