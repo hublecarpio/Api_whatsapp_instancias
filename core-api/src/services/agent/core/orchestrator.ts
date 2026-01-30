@@ -237,16 +237,8 @@ export class AgentOrchestrator {
       console.error(`[Orchestrator] Stack trace:`, error.stack);
       console.error(`[Orchestrator] Input context: businessId=${input.businessId}, instanceId=${input.instanceId}, phone=${input.contactPhone}`);
       
-      return {
-        response: 'Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo.',
-        toolsExecuted,
-        tokensUsed: totalTokens,
-        metadata: {
-          model: this.config.model!,
-          llmCalls,
-          processingTimeMs: Date.now() - startTime
-        }
-      };
+      // Re-throw the error so callers can handle fallback to V1
+      throw error;
     }
   }
 }
