@@ -1,10 +1,38 @@
 import prisma from './prisma.js';
 import { geminiService } from './gemini.js';
 import { dispatchStageChange } from './webhookService.js';
+import { getRedisConnection, isRedisAvailable } from './redis.js';
+
+const LEAD_STAGE_COOLDOWN_MS = 30000;
+const MAX_MESSAGES = 50;
+const MAX_CONTENT_LENGTH = 200;
 
 interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+function compactMessages(messages: Array<{ direction: string; message: string | null }>): ConversationMessage[] {
+  return messages.map(msg => ({
+    role: msg.direction === 'incoming' ? 'user' as const : 'assistant' as const,
+    content: (msg.message || '[Media]').replace(/\s+/g, ' ').trim().slice(0, MAX_CONTENT_LENGTH)
+  }));
+}
+
+async function checkLeadStageCooldown(businessId: string, contactPhone: string): Promise<boolean> {
+  if (!isRedisAvailable()) return true;
+  try {
+    const redis = getRedisConnection();
+    const key = `lead_stage_cooldown:${businessId}:${contactPhone}`;
+    const lastRun = await redis.get(key);
+    if (lastRun && Date.now() - parseInt(lastRun) < LEAD_STAGE_COOLDOWN_MS) {
+      return false;
+    }
+    await redis.set(key, Date.now().toString(), 'EX', Math.ceil(LEAD_STAGE_COOLDOWN_MS / 1000));
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 export async function analyzeAndUpdateLeadStage(
@@ -12,6 +40,13 @@ export async function analyzeAndUpdateLeadStage(
   contactPhone: string
 ): Promise<{ success: boolean; newStage?: string; confidence?: number; reasoning?: string; error?: string }> {
   try {
+    const normalizedPhone = contactPhone.replace(/\D/g, '');
+    
+    const canProceed = await checkLeadStageCooldown(businessId, normalizedPhone);
+    if (!canProceed) {
+      return { success: false, error: 'Cooldown active' };
+    }
+    
     if (!geminiService.isConfigured()) {
       return { success: false, error: 'Gemini API not configured' };
     }
@@ -29,24 +64,21 @@ export async function analyzeAndUpdateLeadStage(
       where: {
         businessId,
         OR: [
-          { sender: contactPhone },
-          { recipient: contactPhone }
+          { sender: normalizedPhone },
+          { recipient: normalizedPhone },
+          { sender: { contains: normalizedPhone } },
+          { recipient: { contains: normalizedPhone } }
         ]
       },
       orderBy: { createdAt: 'desc' },
-      take: 30
+      take: MAX_MESSAGES
     });
 
     if (messages.length === 0) {
       return { success: false, error: 'No messages found for this contact' };
     }
 
-    const conversationHistory: ConversationMessage[] = messages
-      .reverse()
-      .map(msg => ({
-        role: msg.direction === 'incoming' ? 'user' as const : 'assistant' as const,
-        content: msg.message || '[Media]'
-      }));
+    const conversationHistory = compactMessages(messages.reverse());
 
     const availableStages = tags.map(tag => ({
       name: tag.name,

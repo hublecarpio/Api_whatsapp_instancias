@@ -5,6 +5,7 @@ import { ContextBuilder, BusinessContext, ConversationContext, TriggerContext, l
 import { loadCustomToolsForBusiness } from '../tools/customToolAdapter.js';
 import { registerAllNativeTools } from '../tools/index.js';
 import { triggerFunnelEvaluation } from '../funnelStageEvaluator.js';
+import { analyzeAndUpdateLeadStage } from '../../leadStageService.js';
 
 export interface OrchestratorConfig {
   maxToolCalls?: number;
@@ -237,7 +238,16 @@ export class AgentOrchestrator {
         contactPhone: input.contactPhone,
         conversationHistory: updatedConversation
       });
-      console.log(`[Orchestrator] Triggered async funnel evaluation for ${input.contactPhone}`);
+      
+      analyzeAndUpdateLeadStage(input.businessId, input.contactPhone)
+        .then(result => {
+          if (result.success && result.newStage) {
+            console.log(`[Orchestrator] Lead stage updated to: ${result.newStage}`);
+          }
+        })
+        .catch(err => console.error(`[Orchestrator] Lead stage error:`, err.message));
+      
+      console.log(`[Orchestrator] Triggered async evaluations for ${input.contactPhone}`);
 
       return {
         response: finalResponse,

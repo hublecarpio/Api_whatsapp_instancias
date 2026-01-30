@@ -8,7 +8,7 @@ import { searchProductsIntelligent } from '../productSearch.js';
 import { parseAgentOutputToWhatsAppEvents, calculateTypingDelay, WhatsAppEvent } from '../agentOutputParser.js';
 import { MetaCloudService } from '../metaCloud.js';
 import { scheduleFollowUp } from '../followUpService.js';
-// import { analyzeAndUpdateLeadStage } from '../leadStageService.js'; // DISABLED: Tags are now manual-only
+import { analyzeAndUpdateLeadStage } from '../leadStageService.js';
 import axios from 'axios';
 import eventLogger from '../eventLogger.js';
 import { processWithOrchestrator, OrchestratorInput } from '../agent/index.js';
