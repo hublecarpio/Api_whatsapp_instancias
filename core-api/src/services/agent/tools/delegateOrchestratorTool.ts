@@ -211,12 +211,12 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
       const productCatalog = this.buildProductCatalog(businessContext.products);
       const zoneCatalog = this.buildZoneCatalog(businessContext.deliveryZones);
 
-      const systemPrompt = `Eres un ejecutor de acciones especializado. Tu trabajo es completar el OBJETIVO usando las herramientas disponibles.
+      const systemPrompt = `Eres un ejecutor de acciones. Tu trabajo es completar el OBJETIVO usando las herramientas en el orden correcto.
 
 OBJETIVO: ${objetivo}
 ${contextoAdicional ? `CONTEXTO ADICIONAL: ${contextoAdicional}` : ''}
 
-CATÁLOGO DE PRODUCTOS:
+CATÁLOGO DE PRODUCTOS (muestra):
 ${productCatalog}
 
 ZONAS DE ENVÍO:
@@ -224,18 +224,20 @@ ${zoneCatalog}
 
 ${convContext.existingOrder ? `ORDEN ACTIVA: ID=${convContext.existingOrder.id}, Estado=${convContext.existingOrder.status}` : 'Sin orden activa'}
 
-REGLAS CRÍTICAS:
-1. SIEMPRE usa buscar_producto para obtener el ID y precio exacto antes de cualquier cálculo
-2. SIEMPRE usa calcular_total_pedido antes de dar un precio total (incluye envío)
-3. Guarda los datos de productos encontrados (id, título, variación, precio) para usarlos después
-4. Si el cliente ya dijo la variación, busca CON la variación incluida (ej: "Erba Pura 100ml")
-5. NO inventes precios - usa los datos reales de las herramientas
-6. Si falta información crítica (zona de envío, dirección), indícalo claramente
+SECUENCIA OBLIGATORIA PARA CALCULAR TOTAL:
+1. PRIMERO: buscar_producto({ busqueda: "nombre del producto" })
+2. SEGUNDO: calcular_total_pedido({ productos: [{ nombre: "NOMBRE EXACTO del producto encontrado", cantidad: N }], zona_envio: "zona" })
 
-SECUENCIA TÍPICA:
-- Buscar producto → Obtener precio/variación → Calcular total con zona → Confirmar
+EJEMPLO CORRECTO:
+- buscar_producto({ busqueda: "Erba Pura 100ml" }) → Retorna: "Erba Pura (100ml): S/109.90"
+- calcular_total_pedido({ productos: [{ nombre: "Erba Pura", cantidad: 1 }], zona_envio: "Lima" }) → Retorna: Total con envío
 
-Responde SOLO con los datos obtenidos de las herramientas, sin inventar información.`;
+ERRORES A EVITAR:
+❌ calcular_total_pedido({ zona_envio: "Lima" }) - FALTA productos[]!
+❌ Inventar precios sin usar las herramientas
+❌ Responder sin haber calculado el total
+
+IMPORTANTE: Usa el nombre del producto TAL CUAL lo retornó buscar_producto.`;
 
       const llmProvider = LLMFactory.getProvider('openai');
       const llmMessages: any[] = [
@@ -298,10 +300,12 @@ Responde SOLO con los datos obtenidos de las herramientas, sin inventar informac
         });
         llmMessages.push(...toolResults);
 
-        if (iterations > 0) {
+        // Siempre agregar la memoria si hay productos encontrados
+        if (memory.productData.length > 0) {
+          const memoryReminder = this.buildMemoryReminder(memory);
           llmMessages.push({
             role: 'system',
-            content: `MEMORIA ACUMULADA:\n${this.formatMemory(memory)}\n\nUsa estos datos para completar el objetivo.`
+            content: memoryReminder
           });
         }
 
@@ -466,6 +470,30 @@ Responde SOLO con los datos obtenidos de las herramientas, sin inventar informac
     }
     
     parts.push(`\nHERRAMIENTAS USADAS: ${memory.toolHistory.map(t => t.name).join(' → ')}`);
+    
+    return parts.join('\n');
+  }
+
+  private buildMemoryReminder(memory: ToolMemory): string {
+    const parts: string[] = ['⚠️ RECORDATORIO: Usa estos datos de la memoria para tu siguiente llamada:'];
+    
+    if (memory.productData.length > 0) {
+      parts.push('\nPRODUCTOS YA ENCONTRADOS:');
+      memory.productData.forEach(p => {
+        const variation = p.variation ? ` (${p.variation})` : '';
+        parts.push(`  • "${p.title}${variation}" - S/${p.price}`);
+      });
+      
+      // Dar ejemplo concreto de cómo usarlos
+      const firstProduct = memory.productData[0];
+      parts.push(`\nPARA CALCULAR TOTAL, USA:`);
+      parts.push(`calcular_total_pedido({ productos: [{ nombre: "${firstProduct.title}", cantidad: 1 }], zona_envio: "ZONA" })`);
+    }
+    
+    if (memory.calculatedTotals.total) {
+      parts.push(`\n✅ TOTAL YA CALCULADO: S/${memory.calculatedTotals.total} (envío a ${memory.calculatedTotals.zone})`);
+      parts.push(`Ya puedes responder con este total, no necesitas calcularlo de nuevo.`);
+    }
     
     return parts.join('\n');
   }
