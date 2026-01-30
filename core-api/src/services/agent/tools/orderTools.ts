@@ -263,21 +263,29 @@ export class AgregarProductoTool extends BaseTool {
   protected buildDefinition(context: ToolDefinitionContext): ToolDefinition {
     return {
       name: this.name,
-      description: 'Agrega un producto adicional a la orden activa del cliente. Usa esta función cuando el cliente ya tiene un pedido y quiere agregar más productos.',
+      description: 'Agrega un producto adicional a la orden activa del cliente. IMPORTANTE: Usa productId UUID y variation EXACTA de buscar_producto.',
       category: this.category,
       parameters: {
         type: 'object',
         properties: {
-          producto: { 
+          productId: { 
             type: 'string', 
-            description: 'Nombre del producto a agregar' 
+            description: 'UUID del producto (obtenido de buscar_producto)' 
           },
-          cantidad: { 
+          variation: { 
+            type: 'string', 
+            description: 'Variación EXACTA del producto como viene de buscar_producto (ej: "100 ml", "50 ml")' 
+          },
+          quantity: { 
             type: 'number', 
             description: 'Cantidad a agregar (default: 1)' 
+          },
+          producto: { 
+            type: 'string', 
+            description: '[DEPRECATED] Nombre del producto - usar productId en su lugar' 
           }
         },
-        required: ['producto']
+        required: []
       },
       requiresActiveOrder: true
     };
@@ -294,16 +302,61 @@ export class AgregarProductoTool extends BaseTool {
     const normalizedPhone = contactPhone.replace(/\D/g, '');
     
     try {
-      if (!args.producto) {
-        return this.error('Falta el nombre del producto a agregar.');
+      let product: any = null;
+      
+      // NEW FORMAT: Use productId UUID directly
+      if (args.productId) {
+        this.log('[AGREGAR_PRODUCTO] Using productId UUID:', args.productId);
+        
+        // Find product by UUID
+        product = await prisma.product.findFirst({
+          where: {
+            id: args.productId,
+            businessId
+          }
+        });
+        
+        if (!product) {
+          return this.error(`No se encontró el producto con ID "${args.productId}".`);
+        }
+        
+        // If variation specified, find matching variation in arrays for correct price
+        if (args.variation && product.variations && product.variations.length > 0) {
+          const variationIndex = product.variations.findIndex(
+            (v: string) => v === args.variation // EXACT match required
+          );
+          
+          if (variationIndex !== -1) {
+            const variationPrice = product.pricePerVariation?.[variationIndex] ?? product.price;
+            const variationStock = product.stockPerVariation?.[variationIndex] ?? product.stock;
+            this.log('[AGREGAR_PRODUCTO] Found variation:', { 
+              name: args.variation, 
+              price: variationPrice,
+              index: variationIndex 
+            });
+            product = {
+              ...product,
+              price: variationPrice,
+              variation: args.variation,
+              stock: variationStock
+            };
+          } else {
+            this.log('[AGREGAR_PRODUCTO] Variation not found in array, using base product');
+          }
+        }
+      } 
+      // FALLBACK: Legacy format with producto name
+      else if (args.producto) {
+        this.log('[AGREGAR_PRODUCTO] Using legacy producto name:', args.producto);
+        product = await findProductWithScope(businessId, args.producto, instanceId);
+        if (!product) {
+          return this.error(`No se encontró el producto "${args.producto}" en el catálogo.`);
+        }
+      } else {
+        return this.error('Falta productId (UUID del producto). Usa buscar_producto primero para obtener el UUID.');
       }
 
-      const product = await findProductWithScope(businessId, args.producto, instanceId);
-      if (!product) {
-        return this.error(`No se encontró el producto "${args.producto}" en el catálogo.`);
-      }
-
-      const quantity = Math.max(1, parseInt(args.cantidad) || 1);
+      const quantity = Math.max(1, parseInt(args.quantity || args.cantidad) || 1);
       
       const result = await addItemToExistingOrder(
         businessId,
@@ -313,7 +366,8 @@ export class AgregarProductoTool extends BaseTool {
           productTitle: product.title,
           quantity,
           unitPrice: product.price,
-          imageUrl: product.imageUrl
+          imageUrl: product.imageUrl,
+          variation: product.variation || null
         },
         instanceId || undefined
       );
@@ -327,7 +381,13 @@ export class AgregarProductoTool extends BaseTool {
 
       return this.success(`Producto agregado exitosamente.
 - ${product.title}${variationInfo} x${quantity} = ${currencySymbol}${itemTotal.toFixed(2)}
-- Nuevo total del pedido: ${currencySymbol}${result.newTotal?.toFixed(2) || 'N/A'}`);
+- Nuevo total del pedido: ${currencySymbol}${result.newTotal?.toFixed(2) || 'N/A'}`, {
+        productId: product.id,
+        variation: product.variation,
+        quantity,
+        unitPrice: product.price,
+        newTotal: result.newTotal
+      });
     } catch (error: any) {
       this.logError('Error adding product', error);
       return this.error(`Error al agregar producto: ${error.message}`);

@@ -106,8 +106,8 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
       {
         name: 'agregar_producto_orden',
         available: context.hasActiveOrder,
-        description: 'Agrega producto a orden existente',
-        payload: '{ producto: "nombre", cantidad: 1 }',
+        description: 'Agrega producto a orden existente (usa productId UUID y variation exacta)',
+        payload: '{ productId: "UUID", variation: "100 ml", quantity: 1 }',
         returns: 'Nuevo total de orden'
       },
       {
@@ -254,11 +254,15 @@ EJEMPLO CORRECTO:
      direccion: "Av Lima 123"
    })
 
+UPSELLING (AGREGAR PRODUCTO A ORDEN EXISTENTE):
+Cuando el cliente ya tiene un pedido y quiere agregar más productos:
+agregar_producto_orden({ productId: "UUID", variation: "EXACTA", quantity: 1 })
+
 ERRORES A EVITAR:
 ❌ Inventar UUIDs - Usa SOLO los que retorna buscar_producto
 ❌ Modificar el nombre de variation - "100 ml" ≠ "100ml" ≠ "100ML"
 ❌ Usar productId genérico tipo "found_0" - Espera el UUID real
-❌ Omitir deliveryZoneId cuando usas items[]`;
+❌ Omitir deliveryZoneId cuando usas items[] en confirmar_pedido`;
 
       const llmProvider = LLMFactory.getProvider('openai');
       const llmMessages: any[] = [

@@ -27,6 +27,7 @@ export interface OrderItem {
   quantity: number;
   unitPrice: number;
   imageUrl?: string | null;
+  variation?: string | null;
 }
 
 export interface CreateOrderParams {
@@ -600,7 +601,8 @@ export async function addItemToExistingOrder(
         where: { id: existingItem.id },
         data: {
           quantity: existingItem.quantity + item.quantity,
-          unitPrice: item.unitPrice || existingItem.unitPrice
+          unitPrice: item.unitPrice || existingItem.unitPrice,
+          variation: item.variation || existingItem.variation
         }
       });
       console.log(`[ORDER-SERVICE] Updated existing item quantity in order ${existingOrder.id}`);
@@ -612,7 +614,8 @@ export async function addItemToExistingOrder(
           productTitle: item.productTitle,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          imageUrl: item.imageUrl
+          imageUrl: item.imageUrl,
+          variation: item.variation || null
         }
       });
       console.log(`[ORDER-SERVICE] Added new item to order ${existingOrder.id}`);
