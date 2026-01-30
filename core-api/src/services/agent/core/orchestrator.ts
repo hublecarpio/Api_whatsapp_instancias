@@ -4,6 +4,7 @@ import { LLMFactory, ILLMProvider } from './llmAdapter.js';
 import { ContextBuilder, BusinessContext, ConversationContext, TriggerContext, loadBusinessContext, loadConversationContext } from '../prompts/contextBuilder.js';
 import { loadCustomToolsForBusiness } from '../tools/customToolAdapter.js';
 import { registerAllNativeTools } from '../tools/index.js';
+import { triggerFunnelEvaluation } from '../funnelStageEvaluator.js';
 
 export interface OrchestratorConfig {
   maxToolCalls?: number;
@@ -221,6 +222,22 @@ export class AgentOrchestrator {
 
       const processingTimeMs = Date.now() - startTime;
       console.log(`[Orchestrator] Completed in ${processingTimeMs}ms, ${llmCalls} LLM calls, ${toolsExecuted.length} tools executed`);
+
+      const updatedConversation = [
+        ...input.messages.filter(m => m.role !== 'system').map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content
+        })),
+        { role: 'assistant' as const, content: finalResponse }
+      ];
+      
+      triggerFunnelEvaluation({
+        businessId: input.businessId,
+        instanceId: input.instanceId,
+        contactPhone: input.contactPhone,
+        conversationHistory: updatedConversation
+      });
+      console.log(`[Orchestrator] Triggered async funnel evaluation for ${input.contactPhone}`);
 
       return {
         response: finalResponse,
