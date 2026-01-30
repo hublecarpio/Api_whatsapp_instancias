@@ -101,8 +101,11 @@ export class AgentOrchestrator {
       );
       
       const builtContext = await contextBuilder.build();
-      console.log(`[Orchestrator] Context built: systemPrompt=${builtContext.systemPrompt?.length || 0} chars, messages=${builtContext.conversationMessages?.length || 0}`);
+      console.log(`[Orchestrator] Context built: systemPrompt=${builtContext.systemPrompt?.length || 0} chars, messages=${builtContext.conversationMessages?.length || 0}, stage=${builtContext.metadata.currentStage}, allowedTools=${builtContext.allowedTools.length}`);
 
+      // Usar allowedTools del builder (filtradas por etapa del funnel)
+      const hasToolRestriction = builtContext.allowedTools.length > 0;
+      
       const availabilityContext: ToolAvailabilityContext = {
         businessId: input.businessId,
         instanceId: input.instanceId,
@@ -110,7 +113,8 @@ export class AgentOrchestrator {
         hasProducts: businessContext.products.length > 0,
         hasZones: businessContext.deliveryZones.length > 0,
         hasAppointments: businessContext.hasAppointments,
-        businessObjective: businessContext.businessObjective
+        businessObjective: businessContext.businessObjective,
+        enabledToolNames: hasToolRestriction ? builtContext.allowedTools : undefined
       };
 
       const definitionContext: ToolDefinitionContext = {

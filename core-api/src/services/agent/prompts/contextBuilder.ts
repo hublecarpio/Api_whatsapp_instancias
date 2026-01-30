@@ -3,6 +3,10 @@ import { retrieveRelevantSections, formatSectionsForPrompt } from '../../ragServ
 import { replacePromptVariables } from '../../promptVariables.js';
 import { ChatMessage } from '../core/types.js';
 
+const MEMORY_RECENT_FULL = 5;
+const MEMORY_OLDER_TRUNCATE = 150;
+const MEMORY_MAX_MESSAGES = 30;
+
 export interface BusinessContext {
   business: any;
   instanceId: string | null;
@@ -49,12 +53,16 @@ export interface TriggerContext {
 export interface BuiltContext {
   systemPrompt: string;
   conversationMessages: { role: 'user' | 'assistant'; content: string }[];
+  allowedTools: string[];
   metadata: {
     tokensEstimate: number;
     ragSectionsUsed: number;
     coreSectionsUsed: number;
     productsIncluded: number;
     zonesIncluded: number;
+    currentStage: string | null;
+    blockedTopics: string[];
+    allowedToolNames: string[];
   };
 }
 
@@ -74,44 +82,48 @@ export class ContextBuilder {
   }
 
   async build(): Promise<BuiltContext> {
+    const funnelStatus = this.conversationContext.funnelStatus;
+    const currentStage = funnelStatus?.currentStage || null;
+    const blockedTopics: string[] = currentStage?.blockedTopics || [];
+    const allowedTools: string[] = currentStage?.toolsAllowed || [];
+    
     const sections: string[] = [];
     let ragSectionsUsed = 0;
-    let coreSectionsUsed = 0;
 
+    // BLOQUE 1: IDENTIDAD (prioridad máxima - siempre primero)
     sections.push(await this.buildCoreIdentity());
-    coreSectionsUsed++;
 
-    const ragSection = await this.buildRAGContext();
+    // BLOQUE 2: REGLAS DE ETAPA (obligatorias - definen qué puede/no puede hacer)
+    sections.push(this.buildStageRules(currentStage, blockedTopics));
+
+    // BLOQUE 3: CONTEXTO OPERATIVO (datos del cliente + pedido activo)
+    sections.push(this.buildOperativeContext());
+
+    // BLOQUE 4: CONOCIMIENTO DEL NEGOCIO (RAG filtrado por blockedTopics)
+    const ragSection = await this.buildRAGContext(blockedTopics);
     if (ragSection.content) {
       sections.push(ragSection.content);
       ragSectionsUsed = ragSection.count;
     }
 
-    if (this.businessContext.deliveryZones.length > 0) {
+    // BLOQUE 5: ZONAS DE ENVÍO (si aplica y no está bloqueado)
+    if (this.businessContext.deliveryZones.length > 0 && !this.isTopicBlocked('envio', blockedTopics)) {
       sections.push(this.buildDeliveryZones());
     }
 
-    if (this.conversationContext.existingOrder) {
-      sections.push(this.buildOrderContext());
-    }
-
-    if (Object.keys(this.conversationContext.extractedData).length > 0) {
-      sections.push(this.buildExtractedDataContext());
-    }
-
-    if (this.conversationContext.funnelStatus) {
-      sections.push(this.buildFunnelContext());
-    }
-
+    // BLOQUE 6: ACCIONES AUTOMÁTICAS (si hubo triggers)
     if (this.triggerContext.autoTriggerResult) {
       sections.push(this.buildTriggerContext());
     }
 
-    sections.push(this.buildResponseGuidelines());
+    // BLOQUE 7: HERRAMIENTAS DISPONIBLES (filtradas por etapa)
+    sections.push(this.buildToolsSection(allowedTools));
+
+    // BLOQUE 8: INSTRUCCIÓN FINAL (siempre al final)
+    sections.push(this.buildFinalInstruction());
 
     const systemPrompt = sections.filter(Boolean).join('\n\n---\n\n');
-
-    const conversationMessages = this.buildConversationMessages();
+    const conversationMessages = this.buildCompactedMemory();
 
     const tokensEstimate = Math.ceil((systemPrompt.length + 
       conversationMessages.reduce((acc, m) => acc + m.content.length, 0)) / 4);
@@ -119,14 +131,168 @@ export class ContextBuilder {
     return {
       systemPrompt,
       conversationMessages,
+      allowedTools,
       metadata: {
         tokensEstimate,
         ragSectionsUsed,
-        coreSectionsUsed,
+        coreSectionsUsed: 1,
         productsIncluded: 0,
-        zonesIncluded: this.businessContext.deliveryZones.length
+        zonesIncluded: this.businessContext.deliveryZones.length,
+        currentStage: currentStage?.name || null,
+        blockedTopics,
+        allowedToolNames: allowedTools
       }
     };
+  }
+
+  private isTopicBlocked(topic: string, blockedTopics: string[]): boolean {
+    const normalizedTopic = topic.toLowerCase();
+    return blockedTopics.some(bt => bt.toLowerCase().includes(normalizedTopic) || 
+                                     normalizedTopic.includes(bt.toLowerCase()));
+  }
+
+  private buildStageRules(currentStage: any, blockedTopics: string[]): string {
+    if (!currentStage) {
+      return `## ESTADO DEL FLUJO\nNo hay etapa activa. Responde de forma general.`;
+    }
+
+    let rules = `## REGLAS OBLIGATORIAS DE ESTA ETAPA\n`;
+    rules += `ETAPA ACTUAL: ${currentStage.name}\n`;
+    
+    if (currentStage.description) {
+      rules += `Objetivo: ${currentStage.description}\n`;
+    }
+
+    if (currentStage.promptContext) {
+      rules += `\n${currentStage.promptContext}\n`;
+    }
+
+    if (currentStage.requiredFieldKeys?.length > 0) {
+      const missingFields = this.getMissingFields(currentStage.requiredFieldKeys);
+      if (missingFields.length > 0) {
+        rules += `\n⚠️ DEBES RECOPILAR ANTES DE AVANZAR:\n`;
+        for (const field of missingFields) {
+          rules += `- ${field}\n`;
+        }
+      }
+    }
+
+    if (blockedTopics.length > 0) {
+      rules += `\n🚫 NO MENCIONES ESTOS TEMAS:\n`;
+      for (const topic of blockedTopics) {
+        rules += `- ${topic}\n`;
+      }
+      rules += `Si el cliente pregunta por estos temas, indica que lo verán más adelante.`;
+    }
+
+    return rules;
+  }
+
+  private getMissingFields(requiredKeys: string[]): string[] {
+    const extractedData = this.conversationContext.extractedData || {};
+    const missing: string[] = [];
+    
+    for (const key of requiredKeys) {
+      const normalizedKey = key.toLowerCase().replace(/[_\s]/g, '');
+      const hasValue = Object.entries(extractedData).some(([k, v]) => {
+        const normalizedExtracted = k.toLowerCase().replace(/[_\s]/g, '');
+        return (normalizedExtracted === normalizedKey || 
+                normalizedExtracted.includes(normalizedKey) || 
+                normalizedKey.includes(normalizedExtracted)) && 
+               v !== null && v !== undefined && v !== '';
+      });
+      
+      if (!hasValue) {
+        missing.push(key);
+      }
+    }
+    
+    return missing;
+  }
+
+  private buildOperativeContext(): string {
+    let context = `## CONTEXTO OPERATIVO\n`;
+    
+    // Datos extraídos del cliente
+    const extractedData = this.conversationContext.extractedData || {};
+    const dataEntries = Object.entries(extractedData).filter(([_, v]) => v !== null && v !== undefined && v !== '');
+    
+    if (dataEntries.length > 0) {
+      context += `**Datos del cliente:**\n`;
+      for (const [key, value] of dataEntries) {
+        context += `- ${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}\n`;
+      }
+    } else {
+      context += `**Datos del cliente:** Ninguno recopilado aún.\n`;
+    }
+    
+    // Pedido activo
+    const order = this.conversationContext.existingOrder;
+    if (order) {
+      context += `\n**Pedido activo:** #${order.id.slice(-6).toUpperCase()}\n`;
+      context += `Estado: ${order.status} | Total: ${this.businessContext.currencySymbol}${order.totalAmount}\n`;
+      if (order.paidAmount > 0) {
+        context += `Pagado: ${this.businessContext.currencySymbol}${order.paidAmount} | `;
+        context += `Pendiente: ${this.businessContext.currencySymbol}${order.totalAmount - order.paidAmount}\n`;
+      }
+    }
+    
+    return context;
+  }
+
+  private buildToolsSection(allowedTools: string[]): string {
+    if (allowedTools.length === 0) {
+      return `## HERRAMIENTAS\nNo tienes herramientas disponibles en esta etapa. Solo conversa.`;
+    }
+    
+    return `## HERRAMIENTAS DISPONIBLES\nPuedes usar SOLO estas herramientas: ${allowedTools.join(', ')}.\nNo intentes usar otras herramientas aunque las conozcas.`;
+  }
+
+  private buildFinalInstruction(): string {
+    const stage = this.conversationContext.funnelStatus?.currentStage;
+    
+    let instruction = `## INSTRUCCIÓN FINAL\n`;
+    instruction += `Responde al cliente de forma natural, amigable y concisa (máximo 2 párrafos).\n`;
+    
+    if (stage?.requiredFieldKeys?.length > 0) {
+      const missing = this.getMissingFields(stage.requiredFieldKeys);
+      if (missing.length > 0) {
+        instruction += `Tu objetivo ahora: obtener ${missing[0]}.\n`;
+      }
+    }
+    
+    instruction += `No inventes información. Si no sabes algo, pregunta.`;
+    
+    return instruction;
+  }
+
+  private buildCompactedMemory(): { role: 'user' | 'assistant'; content: string }[] {
+    const { messages } = this.conversationContext;
+    
+    const filtered = messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-MEMORY_MAX_MESSAGES);
+    
+    if (filtered.length <= MEMORY_RECENT_FULL) {
+      return filtered.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+    }
+    
+    const older = filtered.slice(0, -MEMORY_RECENT_FULL);
+    const recent = filtered.slice(-MEMORY_RECENT_FULL);
+    
+    const compactedOlder = older.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content.length > MEMORY_OLDER_TRUNCATE 
+        ? m.content.slice(0, MEMORY_OLDER_TRUNCATE).replace(/\s+/g, ' ').trim() + '...'
+        : m.content.replace(/\s+/g, ' ').trim()
+    }));
+    
+    const fullRecent = recent.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content
+    }));
+    
+    return [...compactedOlder, ...fullRecent];
   }
 
   private async buildCoreIdentity(): Promise<string> {
@@ -153,7 +319,7 @@ export class ContextBuilder {
     return identity;
   }
 
-  private async buildRAGContext(): Promise<{ content: string; count: number }> {
+  private async buildRAGContext(blockedTopics: string[]): Promise<{ content: string; count: number }> {
     const { business, instanceId } = this.businessContext;
     const { messages } = this.conversationContext;
     
@@ -166,14 +332,40 @@ export class ContextBuilder {
         instanceId || undefined
       );
       
-      const totalSections = result.coreSections.length + result.ragSections.length;
+      // Filtrar secciones que pertenecen a temas bloqueados
+      const filterByBlockedTopics = (sections: any[]) => {
+        if (blockedTopics.length === 0) return sections;
+        
+        return sections.filter(section => {
+          const sectionType = (section.type || '').toLowerCase();
+          const sectionTitle = (section.title || '').toLowerCase();
+          
+          // Excluir si la categoría o título coincide con algún tema bloqueado
+          return !blockedTopics.some(topic => {
+            const normalizedTopic = topic.toLowerCase();
+            return sectionType.includes(normalizedTopic) || 
+                   normalizedTopic.includes(sectionType) ||
+                   sectionTitle.includes(normalizedTopic);
+          });
+        });
+      };
+      
+      const filteredCore = filterByBlockedTopics(result.coreSections);
+      const filteredRag = filterByBlockedTopics(result.ragSections);
+      
+      const totalSections = filteredCore.length + filteredRag.length;
       
       if (totalSections === 0) {
         return { content: '', count: 0 };
       }
       
-      const formatted = formatSectionsForPrompt(result);
-      return { content: `# CONOCIMIENTO DEL NEGOCIO\n${formatted}`, count: totalSections };
+      const filteredResult = { 
+        coreSections: filteredCore, 
+        ragSections: filteredRag,
+        totalTokensEstimate: result.totalTokensEstimate || 0
+      };
+      const formatted = formatSectionsForPrompt(filteredResult);
+      return { content: `## CONOCIMIENTO DEL NEGOCIO\n${formatted}`, count: totalSections };
     } catch (error) {
       console.error('[ContextBuilder] Error retrieving RAG sections:', error);
       return { content: '', count: 0 };

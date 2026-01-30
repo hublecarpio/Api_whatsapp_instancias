@@ -53,10 +53,14 @@ export class ToolRegistry {
       }
     }
     
+    // Aplicar mismo filtro de enabledToolNames a custom tools
     for (const [key, tool] of this.customTools.entries()) {
       if (key.startsWith(`${context.businessId}:`)) {
         if (tool.isAvailable(context)) {
-          available.push(tool);
+          // Custom tools también deben respetar la whitelist del funnel stage
+          if (!context.enabledToolNames || context.enabledToolNames.includes(tool.name)) {
+            available.push(tool);
+          }
         }
       }
     }
