@@ -3156,6 +3156,114 @@ router.post('/agent/context-preview', validateApiKey, async (req: ApiKeyRequest,
 });
 
 // ============================================================================
+// CONVERSATION HISTORY - Obtener historial formateado para debugging
+// ============================================================================
+
+router.get('/agent/conversation-history/:contactPhone', validateApiKey, async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const { contactPhone } = req.params;
+    const requestedLimit = parseInt(req.query.limit as string) || 20;
+    const limit = Math.min(Math.max(1, requestedLimit), 50);
+
+    if (!contactPhone) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Parámetro "contactPhone" es requerido' 
+      });
+    }
+
+    const phone = contactPhone.replace(/\D/g, '');
+    const businessId = req.businessId!;
+    
+    let instanceId = req.instanceId || null;
+    
+    if (!instanceId && req.business?.instances?.length > 0) {
+      instanceId = req.business.instances[0].id;
+    }
+    
+    if (!instanceId) {
+      const activeInstance = await prisma.whatsAppInstance.findFirst({
+        where: { 
+          businessId,
+          isActive: true,
+          status: { in: ['open', 'CONNECTED', 'connected'] }
+        }
+      });
+      if (activeInstance) {
+        instanceId = activeInstance.id;
+      }
+    }
+
+    const messageFilter: any = {
+      businessId,
+      direction: { in: ['inbound', 'outbound'] },
+      OR: [
+        { sender: { endsWith: phone } },
+        { recipient: { endsWith: phone } }
+      ]
+    };
+    
+    if (instanceId) {
+      messageFilter.instanceId = instanceId;
+    }
+
+    const recentMessages = await prisma.messageLog.findMany({
+      where: messageFilter,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        direction: true,
+        message: true,
+        createdAt: true,
+        sender: true,
+        recipient: true
+      }
+    });
+
+    const conversationHistory = recentMessages.reverse().map(msg => ({
+      role: msg.direction === 'inbound' ? 'user' : 'assistant' as const,
+      content: msg.message || '',
+      metadata: {
+        id: msg.id,
+        timestamp: msg.createdAt,
+        from: msg.sender,
+        to: msg.recipient
+      }
+    }));
+
+    const messagesForContextPreview = conversationHistory.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+
+    return res.json({
+      success: true,
+      contactPhone: phone,
+      businessId,
+      instanceId,
+      totalMessages: conversationHistory.length,
+      messages: conversationHistory,
+      messagesForContextPreview,
+      usage: {
+        description: 'Usa "messagesForContextPreview" directamente en el body del endpoint /agent/context-preview',
+        example: {
+          contactPhone: phone,
+          contactName: 'Nombre del cliente',
+          messages: '[ ... copiar messagesForContextPreview aquí ... ]'
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('[API] Error in conversation history:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
 // EXECUTE TOOL - Ejecutar una herramienta directamente desde n8n
 // ============================================================================
 
