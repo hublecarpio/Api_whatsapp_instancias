@@ -4514,15 +4514,28 @@ router.get('/funnel-stages/:businessId', authMiddleware, async (req: AuthRequest
       return res.status(404).json({ error: 'Business not found' });
     }
     
-    const whereClause: any = { businessId };
+    // Build where clause - if instanceId provided, include BOTH:
+    // 1. Items with that specific instanceId  
+    // 2. Items with null instanceId (business-level/global stages)
+    let whereClause: any = { businessId };
     if (instance_id && String(instance_id).trim() !== '') {
-      whereClause.instanceId = instance_id as string;
+      whereClause = {
+        businessId,
+        OR: [
+          { instanceId: instance_id as string },
+          { instanceId: null }
+        ]
+      };
     }
+    
+    console.log(`[FUNNEL-STAGES-GET] businessId=${businessId}, instance_id=${instance_id || 'none'}, whereClause=`, JSON.stringify(whereClause));
     
     const stages = await prisma.funnelStage.findMany({
       where: whereClause,
       orderBy: { order: 'asc' }
     });
+    
+    console.log(`[FUNNEL-STAGES-GET] Found ${stages.length} stages`);
     
     res.json(stages);
   } catch (error: any) {
@@ -4658,30 +4671,38 @@ router.put('/funnel-stages/:businessId/reorder', authMiddleware, async (req: Aut
     const { businessId } = req.params;
     const { stageIds } = req.body;
     
+    console.log(`[FUNNEL-STAGES-REORDER] businessId=${businessId}, stageIds=`, stageIds);
+    
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
     });
     
     if (!business) {
+      console.log(`[FUNNEL-STAGES-REORDER] Business not found for userId=${req.userId}`);
       return res.status(404).json({ error: 'Business not found' });
     }
     
     if (!Array.isArray(stageIds)) {
+      console.log(`[FUNNEL-STAGES-REORDER] stageIds is not an array:`, typeof stageIds);
       return res.status(400).json({ error: 'stageIds must be an array' });
     }
     
+    console.log(`[FUNNEL-STAGES-REORDER] Updating ${stageIds.length} stages with new order...`);
+    
     await Promise.all(
-      stageIds.map((id, index) => 
-        prisma.funnelStage.update({
+      stageIds.map((id, index) => {
+        console.log(`[FUNNEL-STAGES-REORDER] Setting stage ${id} to order ${index}`);
+        return prisma.funnelStage.update({
           where: { id },
           data: { order: index }
-        })
-      )
+        });
+      })
     );
     
+    console.log(`[FUNNEL-STAGES-REORDER] Success!`);
     res.json({ success: true });
   } catch (error: any) {
-    console.error('Reorder funnel stages error:', error);
+    console.error('[FUNNEL-STAGES-REORDER] Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
