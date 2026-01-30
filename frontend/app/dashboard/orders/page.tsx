@@ -113,6 +113,7 @@ interface PaymentLink {
   items: {
     productId: string;
     productTitle: string;
+    variation?: string;
     quantity: number;
     unitPrice: number;
     imageUrl?: string;

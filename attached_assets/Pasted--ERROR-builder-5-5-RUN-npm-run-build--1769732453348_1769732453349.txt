@@ -1,0 +1,45 @@
+ => ERROR [builder 5/5] RUN npm run build                                                                                                                  106.1s 
+------                                                                                                                                                            
+ > [builder 5/5] RUN npm run build:                                                                                                                               
+1.363                                                                                                                                                             
+1.363 > whatsapp-saas-frontend@1.0.0 build                                                                                                                        
+1.363 > next build
+1.363 
+2.820 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2.820 This information is used to shape Next.js' roadmap and prioritize features.
+2.820 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2.820 https://nextjs.org/telemetry
+2.820 
+2.997   ▲ Next.js 14.2.16
+2.998 
+3.184    Creating an optimized production build ...
+70.16  ✓ Compiled successfully
+70.17    Linting and checking validity of types ...
+105.6 Failed to compile.
+105.6 
+105.6 ./app/dashboard/orders/page.tsx:1448:112
+105.6 Type error: Property 'variation' does not exist on type '{ productId: string; productTitle: string; quantity: number; unitPrice: number; imageUrl?: string | undefined; }'.
+105.6 
+105.6   1446 |                               )}
+105.6   1447 |                               <div className="flex-1 min-w-0">
+105.6 > 1448 |                                 <p className="text-white text-xs sm:text-sm truncate">{item.productTitle}{item.variation && <span className="text-gray-400"> ({item.variation})</span>}</p>
+105.6        |                                                                                                                ^
+105.6   1449 |                                 <p className="text-gray-400 text-[10px] sm:text-xs">
+105.6   1450 |                                   {item.quantity} x {currentBusiness.currencySymbol}{item.unitPrice.toFixed(2)}
+105.6   1451 |                                 </p>
+105.8 npm notice
+105.8 npm notice New major version of npm available! 10.8.2 -> 11.8.0
+105.8 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.8.0
+105.8 npm notice To update run: npm install -g npm@11.8.0
+105.8 npm notice
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+  18 |     
+  19 | >>> RUN npm run build
+  20 |     
+  21 |     FROM node:20-alpine AS production
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+[+] Building 10.5s (5/24)                                                                                                  
