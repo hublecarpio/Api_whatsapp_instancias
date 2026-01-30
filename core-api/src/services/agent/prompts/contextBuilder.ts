@@ -276,6 +276,7 @@ NO intentes buscar productos, calcular precios ni crear órdenes hasta avanzar d
     return `## HERRAMIENTA PRINCIPAL: ejecutar_accion
 
 DEBES usar "ejecutar_accion" para TODAS las siguientes situaciones:
+- Cliente menciona CUALQUIER nombre de producto (completo o parcial) → objetivo: "buscar [producto]"
 - Cliente pregunta por un producto o precio → objetivo: "buscar [producto] y obtener precio"
 - Cliente confirma producto + variación + zona → objetivo: "calcular total de [producto] [variación] para [zona]"
 - Cliente quiere hacer un pedido → objetivo: "crear orden con [productos] para [zona] con pago [método]"
@@ -289,9 +290,15 @@ ejecutar_accion({
 })
 
 EJEMPLOS:
+- Cliente dice "blue" → ejecutar_accion({ objetivo: "buscar productos con 'blue'" })
 - Cliente dice "quiero Erba Pura 100ml" + "Lima" → ejecutar_accion({ objetivo: "calcular total de 1 Erba Pura 100ml con envío a Lima" })
 - Cliente pregunta "cuánto cuesta el perfume X?" → ejecutar_accion({ objetivo: "buscar perfume X y obtener precio" })
 - Cliente confirma "sí, lo quiero" → ejecutar_accion({ objetivo: "crear orden con los productos seleccionados" })
+
+REGLA CRÍTICA - BÚSQUEDA OBLIGATORIA:
+- Si el cliente menciona CUALQUIER palabra que podría ser un producto (nombre completo, abreviación, palabra clave como "blue", "eros", "sauvage", etc.), DEBES usar ejecutar_accion para buscarlo
+- NUNCA respondas "no identifiqué el producto" o "no encontré" SIN ANTES usar ejecutar_accion
+- Aunque el nombre sea parcial o incompleto, SIEMPRE busca primero
 
 IMPORTANTE: 
 - NO inventes precios ni totales - SIEMPRE usa ejecutar_accion para obtenerlos
