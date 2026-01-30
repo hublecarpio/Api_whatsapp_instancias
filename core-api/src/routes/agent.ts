@@ -4687,6 +4687,26 @@ router.put('/funnel-stages/:businessId/reorder', authMiddleware, async (req: Aut
       return res.status(400).json({ error: 'stageIds must be an array' });
     }
     
+    // First verify all stages exist and belong to this business
+    const existingStages = await prisma.funnelStage.findMany({
+      where: { 
+        id: { in: stageIds },
+        businessId 
+      },
+      select: { id: true }
+    });
+    
+    const existingIds = new Set(existingStages.map(s => s.id));
+    const missingIds = stageIds.filter(id => !existingIds.has(id));
+    
+    if (missingIds.length > 0) {
+      console.log(`[FUNNEL-STAGES-REORDER] Missing stages: ${missingIds.join(', ')}`);
+      return res.status(404).json({ 
+        error: 'Etapa no encontrada. Es posible que haya sido eliminada. Por favor, recarga la página.',
+        missingIds 
+      });
+    }
+    
     console.log(`[FUNNEL-STAGES-REORDER] Updating ${stageIds.length} stages with new order...`);
     
     await Promise.all(
@@ -4703,6 +4723,9 @@ router.put('/funnel-stages/:businessId/reorder', authMiddleware, async (req: Aut
     res.json({ success: true });
   } catch (error: any) {
     console.error('[FUNNEL-STAGES-REORDER] Error:', error);
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Etapa no encontrada. Es posible que haya sido eliminada. Por favor, recarga la página.' });
+    }
     res.status(500).json({ error: error.message });
   }
 });
