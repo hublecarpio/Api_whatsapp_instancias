@@ -7,6 +7,18 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const EVALUATION_COOLDOWN_MS = 30000;
 const LOCK_TTL_SECONDS = 60;
+const MAX_MESSAGES = 50;
+
+function compactConversation(messages: Array<{ role: 'user' | 'assistant'; content: string }>): string {
+  return messages.map(m => {
+    const prefix = m.role === 'user' ? 'C' : 'A';
+    const content = m.content
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 300);
+    return `${prefix}:${content}`;
+  }).join('\n');
+}
 
 interface EvaluatorInput {
   businessId: string;
@@ -102,33 +114,23 @@ export async function evaluateFunnelStageAsync(input: EvaluatorInput): Promise<v
       return desc;
     }).join('\n');
 
-    const recentConversation = conversationHistory.slice(-10).map(m => 
-      `${m.role === 'user' ? 'CLIENTE' : 'AGENTE'}: ${m.content}`
-    ).join('\n');
+    const recentConversation = compactConversation(conversationHistory.slice(-50));
 
-    const prompt = `Eres un evaluador de etapas de venta. Analiza la conversación y determina en qué etapa del proceso se encuentra el cliente.
+    const prompt = `Evaluador de etapas. Analiza y determina la etapa correcta del cliente.
 
-## ETAPAS DEL FUNNEL (en orden):
-${stagesDescription}
+ETAPAS: ${stagesDescription}
 
-## ETAPA ACTUAL: ${currentStageName}
+ACTUAL: ${currentStageName}
 
-## CONVERSACIÓN RECIENTE:
+CONVERSACIÓN:
 ${recentConversation}
 
-## INSTRUCCIONES:
-1. Analiza la conversación y determina si el cliente debería estar en una etapa diferente
-2. Las etapas avanzan secuencialmente (1 → 2 → 3, etc.)
-3. Solo sugiere cambiar si hay evidencia clara en la conversación
-4. Si el cliente ya dio información suficiente para avanzar, sugiere la siguiente etapa
-5. Si el cliente retrocede (cancela, cambia de opinión), sugiere una etapa anterior
+REGLAS:
+- Etapas avanzan 1→2→3
+- Solo cambiar con evidencia clara
+- Retroceder si cancela/cambia opinión
 
-Responde SOLO con un JSON válido (sin markdown):
-{
-  "should_change": true/false,
-  "new_stage_name": "nombre exacto de la etapa" o null,
-  "reason": "breve explicación de por qué"
-}`;
+JSON (sin markdown): {"should_change":true/false,"new_stage_name":"etapa"|null,"reason":"motivo"}`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
