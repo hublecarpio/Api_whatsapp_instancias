@@ -579,36 +579,37 @@ export class RegistrarVoucherTool extends BaseTool {
   protected buildDefinition(context: ToolDefinitionContext): ToolDefinition {
     return {
       name: this.name,
-      description: `Registra un voucher de pago para una orden. Acepta pagos parciales y acumulativos.
-IMPORTANTE: Si tienes el orderId de la memoria, úsalo directamente.
-- Si paidAmount + nuevo_voucher >= totalAmount → Estado = PAID
-- Si paidAmount + nuevo_voucher < totalAmount → Solicitar pago restante`,
+      description: `Registra un voucher de pago para una orden existente.
+IMPORTANTE: Usa el orderId de la memoria (obtenido de confirmar_pedido).
+Estructura requerida: { orderId, voucherImageUrl, amount, paymentMethod, autoConfirm }
+- Si amount + pagos anteriores >= totalAmount → Estado = PAID
+- Si amount + pagos anteriores < totalAmount → Solicitar pago restante`,
       category: this.category,
       parameters: {
         type: 'object',
         properties: {
           orderId: {
             type: 'string',
-            description: 'UUID de la orden (obtenido de confirmar_pedido). Si tienes este ID, úsalo para especificar la orden exacta.'
+            description: 'UUID de la orden (REQUERIDO - obtenido de confirmar_pedido en memoria)'
           },
-          monto_detectado: {
+          voucherImageUrl: {
+            type: 'string',
+            description: 'URL de la imagen del voucher/comprobante de pago'
+          },
+          amount: {
             type: 'number',
             description: 'Monto del voucher detectado'
           },
-          banco: {
+          paymentMethod: {
             type: 'string',
-            description: 'Método de pago: YAPE, PLIN, TRANSFERENCIA, etc.'
+            description: 'Método de pago: YAPE, PLIN, TRANSFERENCIA, BCP, INTERBANK, etc.'
           },
-          codigo_operacion: {
-            type: 'string',
-            description: 'Código de operación del comprobante (opcional)'
-          },
-          imagen_url: {
-            type: 'string',
-            description: 'URL de la imagen del voucher'
+          autoConfirm: {
+            type: 'boolean',
+            description: 'Si es true y el monto completa el pago, confirma automáticamente. Default: false'
           }
         },
-        required: ['monto_detectado']
+        required: ['orderId', 'amount']
       },
       requiresActiveOrder: true
     };

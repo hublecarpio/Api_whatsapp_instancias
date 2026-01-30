@@ -720,7 +720,7 @@ router.get('/:orderId', authMiddleware, async (req: any, res) => {
 router.post('/:orderId/voucher', authMiddleware, async (req: any, res) => {
   try {
     const { orderId } = req.params;
-    const { voucherImageUrl } = req.body;
+    const { voucherImageUrl, amount, autoConfirm, paymentMethod } = req.body;
 
     if (!voucherImageUrl) {
       return res.status(400).json({ error: 'voucherImageUrl es requerido' });
@@ -743,17 +743,79 @@ router.post('/:orderId/voucher', authMiddleware, async (req: any, res) => {
       return res.status(403).json({ error: 'No tienes acceso a este pedido' });
     }
 
+    // Calculate payment amounts
+    const voucherAmount = amount || 0;
+    const currentPaid = order.paidAmount || 0;
+    const newPaidAmount = currentPaid + voucherAmount;
+    const pendingAfter = Math.max(0, order.totalAmount - newPaidAmount);
+    const isFullyPaid = newPaidAmount >= order.totalAmount;
+
+    // Build payment history entry
+    const paymentEntry = {
+      amount: voucherAmount,
+      brand: paymentMethod || 'Desconocido',
+      imageUrl: voucherImageUrl,
+      timestamp: new Date().toISOString(),
+      type: 'VOUCHER'
+    };
+
+    // Parse existing notes for payment history
+    let existingNotes: any = {};
+    try {
+      existingNotes = order.notes ? JSON.parse(order.notes) : {};
+    } catch (e) {
+      existingNotes = { legacyNotes: order.notes };
+    }
+    const paymentHistory = existingNotes.paymentHistory || [];
+    paymentHistory.push(paymentEntry);
+
+    // Determine new status
+    let newStatus = order.status;
+    if (autoConfirm && isFullyPaid) {
+      newStatus = 'PAID';
+    } else if (voucherAmount > 0) {
+      // Keep AWAITING_VOUCHER if partial payment
+      newStatus = isFullyPaid ? 'PAID' : 'AWAITING_VOUCHER';
+    }
+
     const updatedOrder = await prisma.order.update({
       where: { id: orderId },
       data: {
         voucherImageUrl,
-        voucherReceivedAt: new Date()
+        voucherReceivedAt: new Date(),
+        paidAmount: newPaidAmount,
+        pendingAmount: pendingAfter,
+        lastVoucherAmount: voucherAmount,
+        status: newStatus,
+        paidAt: newStatus === 'PAID' ? new Date() : order.paidAt,
+        notes: JSON.stringify({
+          ...existingNotes,
+          paymentHistory,
+          lastVoucherBank: paymentMethod || 'Desconocido'
+        })
       },
       include: { items: true }
     });
 
-    console.log(`[ORDERS] Voucher attached to order ${orderId}: ${voucherImageUrl}`);
-    res.json(updatedOrder);
+    console.log(`[ORDERS] Voucher registered for order ${orderId}:`, {
+      voucherImageUrl,
+      amount: voucherAmount,
+      paymentMethod,
+      newPaidAmount,
+      pendingAfter,
+      status: newStatus
+    });
+    
+    res.json({
+      ...updatedOrder,
+      paymentSummary: {
+        voucherAmount,
+        totalPaid: newPaidAmount,
+        pendingAmount: pendingAfter,
+        isFullyPaid,
+        status: newStatus
+      }
+    });
   } catch (error: any) {
     console.error('[ORDERS] Error attaching voucher:', error);
     res.status(500).json({ error: error.message });
