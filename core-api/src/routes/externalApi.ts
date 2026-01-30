@@ -984,7 +984,19 @@ router.post('/orders/:orderId/voucher', validateApiKey, async (req: ApiKeyReques
       timestamp: new Date().toISOString()
     };
     
-    const existingNotes = order.notes ? (typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes) : {};
+    let existingNotes: any = {};
+    if (order.notes) {
+      if (typeof order.notes === 'string') {
+        try {
+          existingNotes = JSON.parse(order.notes);
+        } catch (e) {
+          // Notes field contains plain text, preserve it as legacyNotes
+          existingNotes = { legacyNotes: order.notes };
+        }
+      } else {
+        existingNotes = order.notes;
+      }
+    }
     const paymentHistory = existingNotes.paymentHistory || [];
     paymentHistory.push(paymentRecord);
     
