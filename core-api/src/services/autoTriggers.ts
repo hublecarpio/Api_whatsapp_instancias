@@ -239,6 +239,7 @@ async function handleVoucherTrigger(
             paidAmount: voucherAmount,
             pendingAmount: 0,
             lastVoucherAmount: voucherAmount,
+            lastVoucherBank: voucherResult.brand || 'Desconocido',
             voucherImageUrl: mediaUrl,
             voucherReceivedAt: new Date(),
             status: 'PAID',

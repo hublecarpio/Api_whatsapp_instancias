@@ -1022,12 +1022,20 @@ export async function registerVoucherPayment(
         paidAmount: newPaidAmount,
         pendingAmount: pendingAmount,
         lastVoucherAmount: voucherAmount,
+        lastVoucherBank: voucherBrand || 'Desconocido',
         voucherImageUrl,
         voucherReceivedAt: new Date(),
         status: newStatus,
         paidAt: isFullyPaid ? new Date() : undefined,
         notes: JSON.stringify(notesData)
       }
+    });
+    
+    logOrder('VOUCHER-UPDATE', `Order updated with voucher details`, {
+      orderId,
+      voucherImageUrl: voucherImageUrl ? 'URL_SET' : 'NO_URL',
+      lastVoucherBank: voucherBrand || 'Desconocido',
+      lastVoucherAmount: voucherAmount
     });
 
     logOrder('VOUCHER-SUCCESS', `Voucher payment registered`, {
