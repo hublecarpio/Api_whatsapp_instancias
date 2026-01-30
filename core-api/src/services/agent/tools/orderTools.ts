@@ -17,16 +17,7 @@ export class ConfirmarPedidoTool extends BaseTool {
         properties: {
           items: {
             type: 'array',
-            description: 'Lista de productos con sus UUIDs. Cada item: {productId: "uuid", quantity: 1, variation: ""}',
-            items: {
-              type: 'object',
-              properties: {
-                productId: { type: 'string', description: 'UUID del producto (obtenido de buscar_producto)' },
-                quantity: { type: 'number', description: 'Cantidad (default: 1)' },
-                variation: { type: 'string', description: 'Variación EXACTA del producto como viene de buscar_producto (ej: "100 ml", "Azul", "50 ml")' }
-              },
-              required: ['productId']
-            }
+            description: 'Lista de productos. Cada item es un objeto con: productId (UUID requerido), quantity (número, default 1), variation (string EXACTO como viene de buscar_producto ej: "100 ml", "Azul")'
           },
           deliveryZoneId: { 
             type: 'string', 
