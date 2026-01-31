@@ -54,13 +54,20 @@ export class BuscarProductoTool extends BaseTool {
       const searchResult = await searchProductsIntelligent(
         businessId,
         args.busqueda,
-        limit,
+        limit * 2, // Fetch more to account for out-of-stock filtering
         instanceId || undefined
       );
       
-      const products = searchResult?.products || [];
+      // Filter out products with stock = 0 (out of stock items should not be shown)
+      const allProducts = searchResult?.products || [];
+      const products = allProducts.filter((p: any) => {
+        // If stock is undefined/null, product has unlimited stock - show it
+        if (p.stock === undefined || p.stock === null) return true;
+        // If stock > 0, show it
+        return p.stock > 0;
+      }).slice(0, limit); // Apply original limit after filtering
       
-      console.log(`[buscar_producto] 📦 Results: ${products.length} products found`);
+      console.log(`[buscar_producto] 📦 Results: ${products.length} products found (filtered ${allProducts.length - products.length} out-of-stock)`);
       if (products.length > 0) {
         console.log(`[buscar_producto] 📋 Top results: ${products.slice(0, 3).map((p: any) => `${p.title} (${p.id?.slice(0, 8)}...)`).join(', ')}`);
       } else {
@@ -76,9 +83,7 @@ export class BuscarProductoTool extends BaseTool {
       for (const product of products) {
         const variation = (product as any).variation ? ` (${(product as any).variation})` : '';
         response += `• ${product.title}${variation}: ${currencySymbol}${product.price}`;
-        if ((product as any).stock !== undefined && (product as any).stock !== null) {
-          response += ` | Stock: ${(product as any).stock}`;
-        }
+        // Stock is internal info - do NOT expose to the agent/customer
         if (product.imageUrl) {
           response += `\n  Imagen: ${product.imageUrl}`;
         }
@@ -89,12 +94,12 @@ export class BuscarProductoTool extends BaseTool {
       }
 
       // Incluir datos estructurados de productos para el ToolMemory
+      // Note: stock is intentionally excluded - it's internal business info
       const productData = products.map((product: any) => ({
         id: product.id,
         title: product.title,
         variation: product.variation || null,
         price: product.price,
-        stock: product.stock ?? null,
         description: product.description?.slice(0, 100) || null,
         imageUrl: product.imageUrl || null
       }));
@@ -109,83 +114,19 @@ export class BuscarProductoTool extends BaseTool {
   }
 }
 
-export class ConsultarStockTool extends BaseTool {
-  readonly name = 'consultar_stock';
-  readonly category: ToolCategory = 'PRODUCT';
-
-  protected buildDefinition(context: ToolDefinitionContext): ToolDefinition {
-    return {
-      name: this.name,
-      description: 'Consulta el stock disponible de un producto específico.',
-      category: this.category,
-      parameters: {
-        type: 'object',
-        properties: {
-          producto: {
-            type: 'string',
-            description: 'Nombre del producto a consultar'
-          }
-        },
-        required: ['producto']
-      },
-      requiresProducts: true
-    };
-  }
-
-  isAvailable(context: ToolAvailabilityContext): boolean {
-    return context.hasProducts;
-  }
-
-  async execute(args: Record<string, any>, context: ToolContext): Promise<ToolResult> {
-    this.log('Execute called', args);
-    
-    const { businessId, instanceId, currencySymbol } = context;
-    
-    try {
-      if (!args.producto) {
-        return this.error('Debes especificar el nombre del producto.');
-      }
-
-      const searchResult = await searchProductsIntelligent(
-        businessId,
-        args.producto,
-        3,
-        instanceId || undefined
-      );
-      
-      const products = searchResult?.products || [];
-
-      if (!products || products.length === 0) {
-        return this.success(`No se encontró el producto "${args.producto}".`);
-      }
-
-      const product = products[0] as any;
-      const variation = product.variation ? ` (${product.variation})` : '';
-      
-      let response = `${product.title}${variation}\n`;
-      response += `Precio: ${currencySymbol}${product.price}\n`;
-      
-      if (product.stock !== undefined && product.stock !== null) {
-        if (product.stock > 0) {
-          response += `Stock disponible: ${product.stock} unidades`;
-        } else {
-          response += `⚠️ AGOTADO - No hay stock disponible`;
-        }
-      } else {
-        response += `Stock: Sin límite`;
-      }
-
-      return this.success(response);
-    } catch (error: any) {
-      this.logError('Error checking stock', error);
-      return this.error(`Error al consultar stock: ${error.message}`);
-    }
-  }
-}
+// DISABLED: ConsultarStockTool - Stock info is internal and should not be exposed to the AI agent
+// The agent should not be able to verbalize stock numbers to customers.
+// Products with stock=0 are filtered out in buscar_producto instead.
+// 
+// export class ConsultarStockTool extends BaseTool {
+//   readonly name = 'consultar_stock';
+//   readonly category: ToolCategory = 'PRODUCT';
+//   ...
+// }
 
 export function registerProductTools(): void {
   toolRegistry.registerTool(new BuscarProductoTool());
-  toolRegistry.registerTool(new ConsultarStockTool());
+  // ConsultarStockTool disabled - stock info is internal, not for customer verbalization
   
   console.log('[ProductTools] All product tools registered');
 }
