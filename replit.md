@@ -31,7 +31,7 @@ The platform employs a microservices-like architecture, consisting of a **Fronte
 *   **Production-Grade Baileys Stability**: Ensures reliable Baileys integration with Redis session management, watchdog, and rate limiting.
 *   **Gemini Multimedia Processing**: Integrates Google Gemini API for advanced audio transcription, image analysis (e.g., payment voucher validation), and video analysis.
 *   **Customizable Contact Data Extraction**: Enables businesses to configure custom fields for AI-driven data extraction from conversations.
-*   **Intelligent Product Search**: Offers fuzzy matching with typo tolerance across product titles, descriptions, and variations.
+*   **Intelligent Product Search (Hybrid Semantic + Fuzzy)**: Uses OpenAI embeddings (text-embedding-3-small) with pgvector for semantic understanding, combined with fuzzy matching for typo tolerance. Understands that "perfume para hombre" matches "Caballero" in descriptions. Hybrid scoring: 60% semantic + 40% fuzzy weight.
 *   **RAG-Based Objection Handling**: Dynamically handles customer objections using RAG sections categorized for business knowledge.
 *   **Payment Mode Control**: Toggles between Stripe payment links and voucher-based order flows.
 *   **Dual Business Objectives**: Supports both e-commerce (SALES) and service (APPOINTMENTS) modes.
