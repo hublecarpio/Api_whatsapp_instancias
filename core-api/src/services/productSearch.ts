@@ -1,4 +1,5 @@
 import prisma from './prisma.js';
+import { searchProductsBySemantic } from './embeddingService.js';
 
 function normalizeText(text: string): string {
   return text
@@ -101,41 +102,13 @@ interface SearchResult {
   similarity: number;
   matchedVariation?: string;
   matchedVariationIndex?: number;
+  searchMethod?: 'semantic' | 'fuzzy' | 'hybrid';
 }
 
-export async function searchProductsIntelligent(
-  businessId: string,
-  query: string,
-  limit: number = 5,
-  instanceId?: string | null
-): Promise<{
-  products: SearchResult[];
-  exactMatch: boolean;
-  bestMatch: SearchResult | null;
-}> {
-  console.log(`[productSearch] ─────────────────────────────────────────────`);
-  console.log(`[productSearch] 🔍 Query: "${query}"`);
-  console.log(`[productSearch] 📋 Filters: businessId=${businessId?.slice(0, 8)}..., instanceId=${instanceId?.slice(0, 8) || 'ANY'}`);
-  
-  const whereClause: any = { businessId };
-  // Filter by instanceId if provided, or include products with null instanceId (shared products)
-  if (instanceId) {
-    whereClause.OR = [
-      { instanceId },
-      { instanceId: null }
-    ];
-  }
-  
-  console.log(`[productSearch] 📝 WHERE clause: ${JSON.stringify(whereClause).substring(0, 150)}`);
-  
-  const allProducts = await prisma.product.findMany({
-    where: whereClause
-  });
-  
-  console.log(`[productSearch] 📦 DB returned: ${allProducts.length} products total`);
-
-  const normalizedQuery = normalizeText(query);
-
+function fuzzySearchProducts(
+  allProducts: any[],
+  query: string
+): SearchResult[] {
   const scoredProducts = allProducts.map(product => {
     const titleSimilarity = calculateSimilarity(query, product.title);
     const descSimilarity = product.description 
@@ -164,8 +137,6 @@ export async function searchProductsIntelligent(
     }
     
     const similarity = Math.max(titleSimilarity, descSimilarity, variationSimilarity);
-
-    // Use imageUrl if available, otherwise use first image from imageUrls array
     const productImageUrl = product.imageUrl || (product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : null);
     
     return {
@@ -182,23 +153,153 @@ export async function searchProductsIntelligent(
       available: product.stock > 0,
       similarity,
       matchedVariation,
-      matchedVariationIndex
+      matchedVariationIndex,
+      searchMethod: 'fuzzy' as const
     };
   });
 
   scoredProducts.sort((a, b) => b.similarity - a.similarity);
+  return scoredProducts.filter(p => p.similarity >= 0.3);
+}
 
-  const relevantProducts = scoredProducts.filter(p => p.similarity >= 0.3);
+export async function searchProductsIntelligent(
+  businessId: string,
+  query: string,
+  limit: number = 5,
+  instanceId?: string | null,
+  useSemanticSearch: boolean = true
+): Promise<{
+  products: SearchResult[];
+  exactMatch: boolean;
+  bestMatch: SearchResult | null;
+  searchMethod: 'semantic' | 'fuzzy' | 'hybrid';
+}> {
+  console.log(`[productSearch] ─────────────────────────────────────────────`);
+  console.log(`[productSearch] 🔍 Query: "${query}"`);
+  console.log(`[productSearch] 📋 Filters: businessId=${businessId?.slice(0, 8)}..., instanceId=${instanceId?.slice(0, 8) || 'ANY'}`);
+  console.log(`[productSearch] 🧠 Semantic search: ${useSemanticSearch ? 'ENABLED' : 'DISABLED'}`);
+  
+  let semanticResults: SearchResult[] = [];
+  let searchMethod: 'semantic' | 'fuzzy' | 'hybrid' = 'fuzzy';
+  
+  if (useSemanticSearch && process.env.OPENAI_API_KEY) {
+    try {
+      console.log(`[productSearch] 🔮 Running semantic search...`);
+      const semanticProducts = await searchProductsBySemantic(
+        businessId,
+        query,
+        limit * 2,
+        instanceId,
+        0.35
+      );
+      
+      if (semanticProducts.length > 0) {
+        semanticResults = semanticProducts.map(p => ({
+          ...p,
+          available: p.stock > 0,
+          searchMethod: 'semantic' as const
+        }));
+        console.log(`[productSearch] 🔮 Semantic found: ${semanticResults.length} products`);
+        console.log(`[productSearch] 🔮 Top semantic: ${semanticResults.slice(0, 3).map(p => `${p.title} (${(p.similarity * 100).toFixed(1)}%)`).join(', ')}`);
+      }
+    } catch (error) {
+      console.log(`[productSearch] ⚠️ Semantic search failed, falling back to fuzzy:`, error);
+    }
+  }
+  
+  const whereClause: any = { businessId };
+  if (instanceId) {
+    whereClause.OR = [
+      { instanceId },
+      { instanceId: null }
+    ];
+  }
+  
+  const allProducts = await prisma.product.findMany({
+    where: whereClause
+  });
+  
+  console.log(`[productSearch] 📦 DB returned: ${allProducts.length} products total`);
+  
+  const fuzzyResults = fuzzySearchProducts(allProducts, query);
+  console.log(`[productSearch] 📝 Fuzzy found: ${fuzzyResults.length} products`);
+  if (fuzzyResults.length > 0) {
+    console.log(`[productSearch] 📝 Top fuzzy: ${fuzzyResults.slice(0, 3).map(p => `${p.title} (${(p.similarity * 100).toFixed(1)}%)`).join(', ')}`);
+  }
+  
+  let finalResults: SearchResult[] = [];
+  
+  if (semanticResults.length > 0 && fuzzyResults.length > 0) {
+    searchMethod = 'hybrid';
+    
+    const productScores = new Map<string, { product: SearchResult; semanticScore: number; fuzzyScore: number }>();
+    
+    for (const product of semanticResults) {
+      productScores.set(product.id, {
+        product,
+        semanticScore: product.similarity,
+        fuzzyScore: 0
+      });
+    }
+    
+    for (const product of fuzzyResults) {
+      const existing = productScores.get(product.id);
+      if (existing) {
+        existing.fuzzyScore = product.similarity;
+        if (product.matchedVariation) {
+          existing.product.matchedVariation = product.matchedVariation;
+          existing.product.matchedVariationIndex = product.matchedVariationIndex;
+        }
+      } else {
+        productScores.set(product.id, {
+          product: { ...product, searchMethod: 'fuzzy' },
+          semanticScore: 0,
+          fuzzyScore: product.similarity
+        });
+      }
+    }
+    
+    const combinedResults = Array.from(productScores.values()).map(({ product, semanticScore, fuzzyScore }) => {
+      const combinedScore = (semanticScore * 0.6) + (fuzzyScore * 0.4);
+      return {
+        ...product,
+        similarity: combinedScore,
+        searchMethod: (semanticScore > 0 && fuzzyScore > 0 ? 'hybrid' : 
+                       semanticScore > 0 ? 'semantic' : 'fuzzy') as 'semantic' | 'fuzzy' | 'hybrid'
+      };
+    });
+    
+    combinedResults.sort((a, b) => b.similarity - a.similarity);
+    finalResults = combinedResults.slice(0, limit);
+    
+    console.log(`[productSearch] 🔀 Hybrid results: ${finalResults.length} products (semantic weight: 60%, fuzzy weight: 40%)`);
+  } else if (semanticResults.length > 0) {
+    searchMethod = 'semantic';
+    finalResults = semanticResults.slice(0, limit);
+    console.log(`[productSearch] 🔮 Using semantic results only`);
+  } else {
+    searchMethod = 'fuzzy';
+    finalResults = fuzzyResults.slice(0, limit);
+    console.log(`[productSearch] 📝 Using fuzzy results only`);
+  }
+  
+  if (finalResults.length > 0) {
+    console.log(`[productSearch] ✅ Final results (${searchMethod}):`);
+    finalResults.forEach((p, i) => {
+      console.log(`[productSearch]   ${i + 1}. ${p.title} - ${(p.similarity * 100).toFixed(1)}% [${p.searchMethod}]`);
+    });
+  } else {
+    console.log(`[productSearch] ⚠️ No products found for "${query}"`);
+  }
 
-  const topProducts = relevantProducts.slice(0, limit);
-
-  const exactMatch = topProducts.length > 0 && topProducts[0].similarity >= 0.9;
-  const bestMatch = topProducts.length > 0 ? topProducts[0] : null;
+  const exactMatch = finalResults.length > 0 && finalResults[0].similarity >= 0.9;
+  const bestMatch = finalResults.length > 0 ? finalResults[0] : null;
 
   return {
-    products: topProducts,
+    products: finalResults,
     exactMatch,
-    bestMatch
+    bestMatch,
+    searchMethod
   };
 }
 

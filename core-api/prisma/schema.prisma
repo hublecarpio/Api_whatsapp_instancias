@@ -609,19 +609,22 @@ model MetaTemplate {
 }
 
 model Product {
-  id                  String   @id @default(uuid())
+  id                  String                    @id @default(uuid())
   businessId          String
   instanceId          String?
   title               String
   description         String?
-  variations          String[] @default([])
-  pricePerVariation   Float[]  @default([])
-  stockPerVariation   Int[]    @default([])
-  imageUrls           String[] @default([])
-  price               Float    @default(0)
-  stock               Int      @default(0)
+  variations          String[]                  @default([])
+  pricePerVariation   Float[]                   @default([])
+  stockPerVariation   Int[]                     @default([])
+  imageUrls           String[]                  @default([])
+  price               Float                     @default(0)
+  stock               Int                       @default(0)
   imageUrl            String?
-  createdAt           DateTime @default(now())
+  embedding           Unsupported("vector(1536)")?
+  embeddingText       String?
+  embeddingUpdatedAt  DateTime?
+  createdAt           DateTime                  @default(now())
 
   business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   instance WhatsAppInstance? @relation("ProductInstance", fields: [instanceId], references: [id], onDelete: SetNull)

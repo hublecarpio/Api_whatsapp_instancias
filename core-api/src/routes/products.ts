@@ -4,6 +4,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { searchProductsIntelligent, findBestProductMatch } from '../services/productSearch.js';
+import { updateProductEmbedding, updateAllProductEmbeddings, getProductsWithoutEmbeddings } from '../services/embeddingService.js';
 
 // S3/MinIO configuration for product images
 let s3Client: S3Client | null = null;
@@ -404,6 +405,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }
     });
     
+    updateProductEmbedding(product.id).catch(err => {
+      console.error(`[Products] Failed to generate embedding for new product ${product.id}:`, err);
+    });
+    
     res.status(201).json(product);
   } catch (error) {
     console.error('Create product error:', error);
@@ -505,6 +510,12 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       }
     });
     
+    if (title !== undefined || description !== undefined || variations !== undefined) {
+      updateProductEmbedding(product.id).catch(err => {
+        console.error(`[Products] Failed to update embedding for product ${product.id}:`, err);
+      });
+    }
+    
     res.json(product);
   } catch (error) {
     console.error('Update product error:', error);
@@ -556,6 +567,69 @@ router.post('/bulk-delete', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Bulk delete products error:', error);
     res.status(500).json({ error: 'Failed to delete products' });
+  }
+});
+
+router.post('/regenerate-embeddings', async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.body;
+    
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, businessId);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    console.log(`[Products] Starting embedding regeneration for business ${businessId}`);
+    
+    const result = await updateAllProductEmbeddings(businessId, 5);
+    
+    console.log(`[Products] Embedding regeneration complete: ${result.updated}/${result.total} updated`);
+    
+    res.json({
+      success: true,
+      message: `Generated embeddings for ${result.updated} products`,
+      total: result.total,
+      updated: result.updated,
+      failed: result.failed
+    });
+  } catch (error) {
+    console.error('Regenerate embeddings error:', error);
+    res.status(500).json({ error: 'Failed to regenerate embeddings' });
+  }
+});
+
+router.get('/embedding-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const { business_id } = req.query;
+    
+    if (!business_id) {
+      return res.status(400).json({ error: 'business_id is required' });
+    }
+    
+    const business = await checkBusinessAccess(req.userId!, business_id as string);
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const totalProducts = await prisma.product.count({
+      where: { businessId: business_id as string }
+    });
+    
+    const productsWithoutEmbeddings = await getProductsWithoutEmbeddings(business_id as string, 100);
+    
+    res.json({
+      totalProducts,
+      withEmbeddings: totalProducts - productsWithoutEmbeddings.length,
+      withoutEmbeddings: productsWithoutEmbeddings.length,
+      missingProducts: productsWithoutEmbeddings.slice(0, 10).map(p => ({ id: p.id, title: p.title }))
+    });
+  } catch (error) {
+    console.error('Get embedding status error:', error);
+    res.status(500).json({ error: 'Failed to get embedding status' });
   }
 });
 
