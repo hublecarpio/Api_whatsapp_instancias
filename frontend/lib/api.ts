@@ -129,7 +129,9 @@ export const promptSectionsApi = {
   parseFromPrompt: (businessId: string, rawPrompt: string, instanceId?: string) =>
     api.post(`/prompt-sections/${businessId}/parse-from-prompt`, { rawPrompt, instanceId }),
   importSections: (businessId: string, sections: any[], instanceId?: string, replaceExisting?: boolean) =>
-    api.post(`/prompt-sections/${businessId}/import-sections`, { sections, instanceId, replaceExisting })
+    api.post(`/prompt-sections/${businessId}/import-sections`, { sections, instanceId, replaceExisting }),
+  regenerateEmbeddings: (businessId: string, instanceId?: string) =>
+    api.post(`/prompt-sections/${businessId}/regenerate-embeddings`, { instanceId })
 };
 
 export const toolsApi = {

@@ -148,6 +148,7 @@ export default function PromptPage() {
   const [splitMessages, setSplitMessages] = useState(true);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(false);
+  const [regeneratingEmbeddings, setRegeneratingEmbeddings] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [botEnabled, setBotEnabled] = useState(true);
@@ -498,6 +499,28 @@ export default function PromptPage() {
       setSuccess('Seccion eliminada');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al eliminar seccion');
+    }
+  };
+
+  const handleRegenerateEmbeddings = async () => {
+    if (!currentBusiness) return;
+    
+    setRegeneratingEmbeddings(true);
+    try {
+      const res = await promptSectionsApi.regenerateEmbeddings(currentBusiness.id, selectedInstanceId || undefined);
+      const data = res.data;
+      if (data.processed > 0) {
+        setSuccess(`Embeddings regenerados: ${data.processed} secciones procesadas`);
+        loadPromptSections();
+      } else if (data.skipped > 0) {
+        setSuccess('Todas las secciones ya tienen embeddings');
+      } else {
+        setSuccess('No hay secciones para procesar');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al regenerar embeddings');
+    } finally {
+      setRegeneratingEmbeddings(false);
     }
   };
 
@@ -1785,12 +1808,27 @@ export default function PromptPage() {
 
               {promptSections.filter(s => !s.isCore).length > 0 && (
                 <div className="mt-6">
-                  <h3 className="text-sm font-medium text-neon-blue mb-2 flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    Secciones RAG (recuperadas por contexto)
-                  </h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-neon-blue flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      Secciones RAG (recuperadas por contexto)
+                    </h3>
+                    {promptSections.filter(s => !s.isCore && !(s.metadata as any)?.hasEmbedding).length > 0 && (
+                      <button
+                        onClick={handleRegenerateEmbeddings}
+                        disabled={regeneratingEmbeddings}
+                        className="flex items-center gap-1.5 px-2 py-1 text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors disabled:opacity-50"
+                        title="Regenerar embeddings faltantes"
+                      >
+                        <svg className={`w-3.5 h-3.5 ${regeneratingEmbeddings ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {regeneratingEmbeddings ? 'Procesando...' : `${promptSections.filter(s => !s.isCore && !(s.metadata as any)?.hasEmbedding).length} sin embedding`}
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-3">
                     {promptSections.filter(s => !s.isCore).map(section => (
                       <div 

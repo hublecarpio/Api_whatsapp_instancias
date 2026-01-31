@@ -83,7 +83,7 @@ router.get('/:businessId', authMiddleware, async (req: AuthRequest, res: Respons
     }
     // When no instanceId provided, show ALL sections for the business (no filter)
 
-    const sections = await prisma.promptSection.findMany({
+    const sectionsRaw = await prisma.promptSection.findMany({
       where: whereClause,
       orderBy: [{ isCore: 'desc' }, { priority: 'desc' }, { createdAt: 'asc' }],
       select: {
@@ -97,8 +97,30 @@ router.get('/:businessId', authMiddleware, async (req: AuthRequest, res: Respons
         createdAt: true,
         updatedAt: true,
         metadata: true,
-        instanceId: true
+        instanceId: true,
+        embedding: true
       }
+    });
+
+    // Transform sections to include accurate hasEmbedding based on actual embedding field
+    const sections = sectionsRaw.map(section => {
+      const hasEmbedding = Array.isArray(section.embedding) && section.embedding.length > 0;
+      return {
+        id: section.id,
+        title: section.title,
+        content: section.content,
+        type: section.type,
+        isCore: section.isCore,
+        priority: section.priority,
+        enabled: section.enabled,
+        createdAt: section.createdAt,
+        updatedAt: section.updatedAt,
+        instanceId: section.instanceId,
+        metadata: {
+          ...((section.metadata as any) || {}),
+          hasEmbedding
+        }
+      };
     });
 
     return res.json({ sections });
