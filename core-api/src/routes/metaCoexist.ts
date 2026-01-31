@@ -490,10 +490,11 @@ router.get('/embedded-signup/config', authMiddleware, async (req: AuthRequest, r
 });
 
 // Handle Embedded Signup completion - receive tokens from frontend
+// Also supports reconnection mode when instanceId is provided
 router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
-    let { businessId, code, wabaId, phoneNumberId, metaBusinessId, provider = 'META_CLOUD' } = req.body;
+    let { businessId, code, wabaId, phoneNumberId, metaBusinessId, provider = 'META_CLOUD', instanceId } = req.body;
     
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -507,9 +508,10 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
     
     // Validate provider
     const validProviders = ['META_CLOUD', 'META_COEXIST'];
-    const selectedProvider = validProviders.includes(provider) ? provider : 'META_CLOUD';
+    let selectedProvider = validProviders.includes(provider) ? provider : 'META_CLOUD';
     
-    console.log('[EMBEDDED_SIGNUP] Completing signup:', { businessId, wabaId, phoneNumberId, provider: selectedProvider });
+    const isReconnect = !!instanceId;
+    console.log('[EMBEDDED_SIGNUP] Completing signup:', { businessId, wabaId, phoneNumberId, provider: selectedProvider, isReconnect, instanceId });
     
     // Verify business ownership
     const business = await prisma.business.findFirst({
@@ -520,7 +522,41 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
       return res.status(404).json({ error: 'Business not found or access denied' });
     }
     
-    // Check instance limits
+    // If reconnecting, verify instance exists and belongs to user
+    let existingInstance = null;
+    if (isReconnect) {
+      existingInstance = await prisma.whatsAppInstance.findFirst({
+        where: { 
+          id: instanceId, 
+          businessId,
+          business: { userId }
+        },
+        include: {
+          metaCoexistCredential: true,
+          metaCredential: true
+        }
+      });
+      
+      if (!existingInstance) {
+        return res.status(404).json({ error: 'Instance not found or access denied' });
+      }
+      
+      // SECURITY: Lock provider to existing instance's provider during reconnection
+      // This prevents accidental or malicious provider switching which could corrupt instance data
+      if (existingInstance.provider !== 'META_CLOUD' && existingInstance.provider !== 'META_COEXIST') {
+        return res.status(400).json({ 
+          error: 'Reconnection only supported for META_CLOUD and META_COEXIST instances',
+          currentProvider: existingInstance.provider
+        });
+      }
+      
+      // Override requested provider with existing instance's provider
+      selectedProvider = existingInstance.provider as 'META_CLOUD' | 'META_COEXIST';
+      
+      console.log('[EMBEDDED_SIGNUP] Reconnecting existing instance:', existingInstance.id, 'locked provider:', selectedProvider);
+    }
+    
+    // Check instance limits (only for new instances)
     const existingInstances = await prisma.whatsAppInstance.count({
       where: { businessId }
     });
@@ -534,7 +570,8 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
     const isPro = user?.isPro || tier === 'PRO' || tier === 'ENTERPRISE';
     const maxInstances = isPro ? 10 : 2;
     
-    if (existingInstances >= maxInstances) {
+    // Skip limit check for reconnection (we're updating, not creating)
+    if (!isReconnect && existingInstances >= maxInstances) {
       return res.status(400).json({ 
         error: `Has alcanzado el limite de ${maxInstances} instancias para tu plan ${tier}` 
       });
@@ -655,82 +692,212 @@ router.post('/embedded-signup/complete', authMiddleware, async (req: AuthRequest
       console.warn('[EMBEDDED_SIGNUP] Could not fetch phone details:', phoneError.message);
     }
     
-    // Create WhatsApp instance with selected provider
-    const instanceName = verifiedName || `WhatsApp ${selectedProvider === 'META_COEXIST' ? 'Coexist' : 'Cloud'} ${existingInstances + 1}`;
+    // Create or update WhatsApp instance
+    let instance;
     
-    const instance = await prisma.whatsAppInstance.create({
-      data: {
-        businessId,
-        instanceNumber: existingInstances + 1,
-        name: instanceName,
-        provider: selectedProvider,
-        status: 'connected',
-        phoneNumber: displayPhone,
-        lastConnection: new Date()
-      }
-    });
-    
-    // Store credentials based on provider type
-    if (selectedProvider === 'META_COEXIST') {
-      // Store Meta Coexist credentials
-      await prisma.metaCoexistCredential.create({
+    if (isReconnect && existingInstance) {
+      // RECONNECTION: Update existing instance
+      instance = await prisma.whatsAppInstance.update({
+        where: { id: existingInstance.id },
         data: {
-          instanceId: instance.id,
-          wabaId,
-          metaBusinessId: metaBusinessId || wabaId,
-          phoneNumberId,
-          displayPhone,
-          userAccessToken: accessToken,
-          systemAccessToken: accessToken,
-          coexistenceEnabled: true,
-          coexistStatus: 'ACTIVE',
-          qualityRating: 'GREEN',
-          lastSyncAt: new Date()
+          provider: selectedProvider,
+          status: 'connected',
+          phoneNumber: displayPhone || existingInstance.phoneNumber,
+          lastConnection: new Date()
         }
       });
       
-      // Try to enable coexistence on Meta's side
-      try {
-        const coexistUrl = `https://graph.facebook.com/v21.0/${phoneNumberId}`;
-        await axios.post(coexistUrl, { is_coexistence_enabled: true }, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
-        console.log('[EMBEDDED_SIGNUP] Coexistence enabled on Meta side');
-      } catch (coexistError: any) {
-        console.warn('[EMBEDDED_SIGNUP] Could not enable coexistence (may already be enabled):', coexistError.message);
+      // Update or create credentials based on provider type
+      if (selectedProvider === 'META_COEXIST') {
+        if (existingInstance.metaCoexistCredential) {
+          // Update existing credential
+          await prisma.metaCoexistCredential.update({
+            where: { instanceId: instance.id },
+            data: {
+              wabaId,
+              metaBusinessId: metaBusinessId || wabaId,
+              phoneNumberId,
+              displayPhone: displayPhone || existingInstance.metaCoexistCredential.displayPhone,
+              userAccessToken: accessToken,
+              systemAccessToken: accessToken,
+              coexistenceEnabled: true,
+              coexistStatus: 'ACTIVE',
+              qualityRating: 'GREEN',
+              lastSyncAt: new Date()
+            }
+          });
+        } else {
+          // Create new credential (provider switch)
+          await prisma.metaCoexistCredential.create({
+            data: {
+              instanceId: instance.id,
+              wabaId,
+              metaBusinessId: metaBusinessId || wabaId,
+              phoneNumberId,
+              displayPhone,
+              userAccessToken: accessToken,
+              systemAccessToken: accessToken,
+              coexistenceEnabled: true,
+              coexistStatus: 'ACTIVE',
+              qualityRating: 'GREEN',
+              lastSyncAt: new Date()
+            }
+          });
+        }
+        
+        // Try to enable coexistence on Meta's side
+        try {
+          const coexistUrl = `https://graph.facebook.com/v21.0/${phoneNumberId}`;
+          await axios.post(coexistUrl, { is_coexistence_enabled: true }, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          console.log('[EMBEDDED_SIGNUP] Coexistence enabled on Meta side');
+        } catch (coexistError: any) {
+          console.warn('[EMBEDDED_SIGNUP] Could not enable coexistence (may already be enabled):', coexistError.message);
+        }
+      } else {
+        // META_CLOUD
+        if (existingInstance.metaCredential) {
+          await prisma.metaCredential.update({
+            where: { instanceId: instance.id },
+            data: {
+              accessToken,
+              businessId: wabaId,
+              phoneNumberId,
+              appId: appId,
+              appSecret: appSecret
+            }
+          });
+        } else {
+          await prisma.metaCredential.create({
+            data: {
+              instanceId: instance.id,
+              accessToken,
+              businessId: wabaId,
+              phoneNumberId,
+              appId: appId,
+              appSecret: appSecret,
+              webhookVerifyToken: `wh_${require('crypto').randomBytes(16).toString('hex')}`
+            }
+          });
+        }
       }
-    } else {
-      // Store Meta Cloud credentials
-      await prisma.metaCredential.create({
+      
+      // Re-register webhook after reconnection
+      try {
+        const config = MetaCoexistService.getMetaCoexistConfig();
+        const service = new MetaCoexistService(config);
+        const webhookRegistered = await service.registerWebhook(accessToken, wabaId);
+        console.log(`[EMBEDDED_SIGNUP] Webhook re-registration for WABA ${wabaId}: ${webhookRegistered ? 'SUCCESS' : 'FAILED'}`);
+      } catch (webhookError: any) {
+        console.warn('[EMBEDDED_SIGNUP] Webhook re-registration failed (non-blocking):', webhookError.message);
+      }
+      
+      // Record instance history
+      await prisma.whatsAppInstanceHistory.create({
         data: {
           instanceId: instance.id,
-          accessToken,
-          businessId: wabaId,
-          phoneNumberId,
-          appId: appId,
-          appSecret: appSecret,
-          webhookVerifyToken: `wh_${require('crypto').randomBytes(16).toString('hex')}`
+          businessId,
+          eventType: 'RECONNECTED',
+          newProvider: selectedProvider,
+          newStatus: 'connected',
+          phoneNumber: displayPhone,
+          details: `Reconnected via Meta Embedded Signup - ${selectedProvider} (WABA: ${wabaId})`
         }
       });
+      
+      console.log('[EMBEDDED_SIGNUP] Instance reconnected successfully:', instance.id, 'provider:', selectedProvider);
+    } else {
+      // NEW INSTANCE: Create from scratch
+      const instanceName = verifiedName || `WhatsApp ${selectedProvider === 'META_COEXIST' ? 'Coexist' : 'Cloud'} ${existingInstances + 1}`;
+      
+      instance = await prisma.whatsAppInstance.create({
+        data: {
+          businessId,
+          instanceNumber: existingInstances + 1,
+          name: instanceName,
+          provider: selectedProvider,
+          status: 'connected',
+          phoneNumber: displayPhone,
+          lastConnection: new Date()
+        }
+      });
+      
+      // Store credentials based on provider type
+      if (selectedProvider === 'META_COEXIST') {
+        // Store Meta Coexist credentials
+        await prisma.metaCoexistCredential.create({
+          data: {
+            instanceId: instance.id,
+            wabaId,
+            metaBusinessId: metaBusinessId || wabaId,
+            phoneNumberId,
+            displayPhone,
+            userAccessToken: accessToken,
+            systemAccessToken: accessToken,
+            coexistenceEnabled: true,
+            coexistStatus: 'ACTIVE',
+            qualityRating: 'GREEN',
+            lastSyncAt: new Date()
+          }
+        });
+        
+        // Try to enable coexistence on Meta's side
+        try {
+          const coexistUrl = `https://graph.facebook.com/v21.0/${phoneNumberId}`;
+          await axios.post(coexistUrl, { is_coexistence_enabled: true }, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          console.log('[EMBEDDED_SIGNUP] Coexistence enabled on Meta side');
+        } catch (coexistError: any) {
+          console.warn('[EMBEDDED_SIGNUP] Could not enable coexistence (may already be enabled):', coexistError.message);
+        }
+      } else {
+        // Store Meta Cloud credentials
+        await prisma.metaCredential.create({
+          data: {
+            instanceId: instance.id,
+            accessToken,
+            businessId: wabaId,
+            phoneNumberId,
+            appId: appId,
+            appSecret: appSecret,
+            webhookVerifyToken: `wh_${require('crypto').randomBytes(16).toString('hex')}`
+          }
+        });
+      }
+      
+      // Record instance history
+      await prisma.whatsAppInstanceHistory.create({
+        data: {
+          instanceId: instance.id,
+          businessId,
+          eventType: 'CREATED',
+          newProvider: selectedProvider,
+          newStatus: 'connected',
+          phoneNumber: displayPhone,
+          details: `Created via Meta Embedded Signup - ${selectedProvider} (WABA: ${wabaId})`
+        }
+      });
+      
+      console.log('[EMBEDDED_SIGNUP] Instance created successfully:', instance.id, 'provider:', selectedProvider);
     }
     
-    // Record instance history
-    await prisma.whatsAppInstanceHistory.create({
-      data: {
-        instanceId: instance.id,
-        businessId,
-        eventType: 'CREATED',
-        newProvider: selectedProvider,
-        newStatus: 'connected',
-        phoneNumber: displayPhone,
-        details: `Created via Meta Embedded Signup - ${selectedProvider} (WABA: ${wabaId})`
+    // Register webhook for new instances
+    if (!isReconnect && selectedProvider === 'META_COEXIST') {
+      try {
+        const config = MetaCoexistService.getMetaCoexistConfig();
+        const service = new MetaCoexistService(config);
+        const webhookRegistered = await service.registerWebhook(accessToken, wabaId);
+        console.log(`[EMBEDDED_SIGNUP] Webhook registration for WABA ${wabaId}: ${webhookRegistered ? 'SUCCESS' : 'FAILED'}`);
+      } catch (webhookError: any) {
+        console.warn('[EMBEDDED_SIGNUP] Webhook registration failed (non-blocking):', webhookError.message);
       }
-    });
-    
-    console.log('[EMBEDDED_SIGNUP] Instance created successfully:', instance.id, 'provider:', selectedProvider);
+    }
     
     res.json({
       success: true,
+      reconnected: isReconnect,
       instance: {
         id: instance.id,
         name: instance.name,

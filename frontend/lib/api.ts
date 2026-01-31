@@ -282,6 +282,7 @@ export const waApi = {
     phoneNumberId?: string;
     metaBusinessId?: string;
     provider?: 'META_CLOUD' | 'META_COEXIST';
+    instanceId?: string;
   }) => api.post('/auth/meta-coexist/embedded-signup/complete', data)
 };
 

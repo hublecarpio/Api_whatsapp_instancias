@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import { useInstanceStore, WhatsAppInstance } from '@/store/instance';
 import api, { waApi, businessApi } from '@/lib/api';
 import InstanceSelector from '@/components/InstanceSelector';
+import MetaEmbeddedSignup from '@/components/MetaEmbeddedSignup';
 
 interface ConnectionEvent {
   type: string;
@@ -85,6 +86,7 @@ export default function WhatsAppPage() {
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [showMetaForm, setShowMetaForm] = useState(false);
+  const [showReconnectModal, setShowReconnectModal] = useState(false);
   const [metaInfo, setMetaInfo] = useState<any>(null);
   const [webhookInfo, setWebhookInfo] = useState<{ url: string; token: string } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -1245,7 +1247,7 @@ export default function WhatsAppPage() {
                       {provider === 'META_CLOUD' 
                         ? 'Verifica las credenciales de Meta o elimina para configurar de nuevo'
                         : provider === 'META_COEXIST'
-                        ? 'La conexion con Facebook se perdio. Elimina para reconectar via OAuth.'
+                        ? 'La conexion con Facebook se perdio. Usa el boton Reconectar para renovar la autorizacion.'
                         : 'Reconecta escaneando el QR o elimina para empezar de nuevo'}
                     </p>
                   </div>
@@ -1264,12 +1266,24 @@ export default function WhatsAppPage() {
                       Revisar credenciales
                     </button>
                   ) : provider === 'META_COEXIST' ? (
-                    <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      {actionLoading === 'delete' ? '...' : 'Eliminar y reconectar'}
-                    </button>
+                    <>
+                      <button 
+                        onClick={() => setShowReconnectModal(true)} 
+                        disabled={actionLoading !== null} 
+                        className="btn btn-primary btn-sm flex items-center gap-1"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Reconectar
+                      </button>
+                      <button onClick={handleDelete} disabled={actionLoading !== null} className="btn btn-danger btn-sm flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Eliminar
+                      </button>
+                    </>
                   ) : (
                     <button onClick={handleRestart} disabled={actionLoading !== null} className="btn btn-primary btn-sm flex items-center gap-1">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1845,6 +1859,45 @@ export default function WhatsAppPage() {
                 {loading ? 'Conectando...' : 'Conectar'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showReconnectModal && currentBusiness && selectedInstanceId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card max-w-lg w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Reconectar WhatsApp</h2>
+              <button 
+                onClick={() => setShowReconnectModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-400 mb-4">
+              Se abrira el flujo de autorizacion de Facebook. Autoriza la misma cuenta de WhatsApp Business para renovar la conexion.
+            </p>
+            
+            <MetaEmbeddedSignup
+              businessId={currentBusiness.id}
+              provider="META_COEXIST"
+              instanceId={selectedInstanceId}
+              isReconnect={true}
+              onSuccess={(instance) => {
+                setShowReconnectModal(false);
+                addEvent('success', `Reconexion exitosa: ${instance.phoneNumber || instance.name}`);
+                fetchStatus();
+              }}
+              onError={(error) => {
+                setError(error);
+                addEvent('error', `Error al reconectar: ${error}`);
+              }}
+              onCancel={() => setShowReconnectModal(false)}
+            />
           </div>
         </div>
       )}

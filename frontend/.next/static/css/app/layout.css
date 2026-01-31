@@ -4091,6 +4091,10 @@ html[data-mobile="true"] .glass-sidebar {
   background-color: rgb(161 98 7 / var(--tw-bg-opacity, 1));
 }
 
+.hover\:bg-amber-500\/10:hover {
+  background-color: rgb(245 158 11 / 0.1);
+}
+
 .hover\:text-accent-error:hover {
   --tw-text-opacity: 1;
   color: rgb(239 68 68 / var(--tw-text-opacity, 1));
@@ -4172,6 +4176,11 @@ html[data-mobile="true"] .glass-sidebar {
 .hover\:text-yellow-300:hover {
   --tw-text-opacity: 1;
   color: rgb(253 224 71 / var(--tw-text-opacity, 1));
+}
+
+.hover\:text-amber-400:hover {
+  --tw-text-opacity: 1;
+  color: rgb(251 191 36 / var(--tw-text-opacity, 1));
 }
 
 .hover\:underline:hover {

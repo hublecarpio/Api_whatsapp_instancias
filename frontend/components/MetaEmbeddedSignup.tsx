@@ -13,6 +13,8 @@ declare global {
 interface MetaEmbeddedSignupProps {
   businessId: string;
   provider?: 'META_CLOUD' | 'META_COEXIST';
+  instanceId?: string;
+  isReconnect?: boolean;
   onSuccess: (instance: any) => void;
   onError: (error: string) => void;
   onCancel: () => void;
@@ -27,6 +29,8 @@ interface SessionInfoData {
 export default function MetaEmbeddedSignup({
   businessId,
   provider = 'META_CLOUD',
+  instanceId,
+  isReconnect = false,
   onSuccess,
   onError,
   onCancel
@@ -223,14 +227,15 @@ export default function MetaEmbeddedSignup({
 
             (async () => {
               try {
-                console.log('[MetaEmbeddedSignup] Completing signup...');
+                console.log('[MetaEmbeddedSignup] Completing signup...', isReconnect ? '(reconnection mode)' : '');
                 const result = await waApi.completeEmbeddedSignup({
                   businessId,
                   code,
                   wabaId: wabaId || undefined,
                   phoneNumberId: phoneNumberId || undefined,
                   metaBusinessId: metaBusinessId || undefined,
-                  provider
+                  provider,
+                  instanceId: isReconnect ? instanceId : undefined
                 });
 
                 console.log('[MetaEmbeddedSignup] Signup result:', result.data);
@@ -373,7 +378,9 @@ export default function MetaEmbeddedSignup({
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
-              {isCoexist ? 'Conectar WhatsApp Business App' : 'Conectar con Facebook'}
+              {isReconnect 
+                ? 'Reconectar con Facebook' 
+                : (isCoexist ? 'Conectar WhatsApp Business App' : 'Conectar con Facebook')}
             </>
           )}
         </button>
