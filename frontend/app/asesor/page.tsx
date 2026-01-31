@@ -146,9 +146,10 @@ export default function AsesorPage() {
     if (!selectedBusiness) return;
     try {
       const res = await messageApi.conversations(selectedBusiness.id);
-      setConversations(res.data);
+      setConversations(res.data?.conversations || []);
     } catch (error) {
       console.error('Error loading conversations:', error);
+      setConversations([]);
     }
   };
 
