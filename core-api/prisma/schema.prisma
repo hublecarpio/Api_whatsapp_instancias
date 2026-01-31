@@ -407,6 +407,7 @@ enum WhatsAppProvider {
   BAILEYS
   META_CLOUD
   META_COEXIST
+  META_MANAGED
 }
 
 model WhatsAppInstance {
@@ -436,6 +437,7 @@ model WhatsAppInstance {
   business              Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   metaCredential        MetaCredential?
   metaCoexistCredential MetaCoexistCredential?
+  metaManagedCredential MetaManagedCredential?
   history               WhatsAppInstanceHistory[]
   reminders        Reminder[]
   appointments     Appointment[]
@@ -542,10 +544,44 @@ model MetaCoexistCredential {
   @@index([phoneNumberId])
 }
 
+enum MetaManagedStatus {
+  PENDING_REGISTRATION
+  PENDING_VERIFICATION
+  VERIFICATION_FAILED
+  ACTIVE
+  SUSPENDED
+  DISCONNECTED
+}
+
+model MetaManagedCredential {
+  id                   String              @id @default(uuid())
+  instanceId           String              @unique
+  phoneNumberId        String
+  displayPhone         String
+  verifiedName         String?
+  qualityRating        String?
+  messagingTier        String?
+  status               MetaManagedStatus   @default(PENDING_REGISTRATION)
+  registrationCode     String?
+  registrationMethod   String              @default("SMS")
+  verificationAttempts Int                 @default(0)
+  lastVerificationAt   DateTime?
+  registeredAt         DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  instance  WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  templates MetaTemplate[]
+
+  @@index([phoneNumberId])
+  @@index([displayPhone])
+}
+
 model MetaTemplate {
   id                   String   @id @default(uuid())
   credentialId         String?
   coexistCredentialId  String?
+  managedCredentialId  String?
   metaTemplateId       String
   name                 String
   language             String   @default("es")
@@ -560,13 +596,16 @@ model MetaTemplate {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  credential         MetaCredential?         @relation(fields: [credentialId], references: [id], onDelete: Cascade)
-  coexistCredential  MetaCoexistCredential?  @relation(fields: [coexistCredentialId], references: [id], onDelete: Cascade)
+  credential         MetaCredential?          @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  coexistCredential  MetaCoexistCredential?   @relation(fields: [coexistCredentialId], references: [id], onDelete: Cascade)
+  managedCredential  MetaManagedCredential?   @relation(fields: [managedCredentialId], references: [id], onDelete: Cascade)
 
   @@unique([credentialId, name])
   @@unique([coexistCredentialId, name])
+  @@unique([managedCredentialId, name])
   @@index([credentialId, status])
   @@index([coexistCredentialId, status])
+  @@index([managedCredentialId, status])
 }
 
 model Product {

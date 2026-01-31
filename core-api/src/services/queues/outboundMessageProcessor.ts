@@ -21,7 +21,8 @@ const metaHttpsAgent = new https.Agent({
 const RATE_LIMITS = {
   BAILEYS: { maxPerMinute: 60, maxPerSecond: 3 },
   META_CLOUD: { maxPerMinute: 80, maxPerSecond: 5 },
-  META_COEXIST: { maxPerMinute: 80, maxPerSecond: 5 }
+  META_COEXIST: { maxPerMinute: 80, maxPerSecond: 5 },
+  META_MANAGED: { maxPerMinute: 80, maxPerSecond: 5 }
 };
 
 let rateLimitRedis: Redis | null = null;
@@ -104,7 +105,7 @@ async function sendViaBaileys(data: OutboundMessageJobData): Promise<{ success: 
 
 async function sendViaMeta(data: OutboundMessageJobData): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const { to, message, mediaUrl, mediaType, templateData } = data;
-  const credential = data.metaCredential || data.metaCoexistCredential;
+  const credential = data.metaCredential || data.metaCoexistCredential || data.metaManagedCredential;
 
   if (!credential?.accessToken || !credential?.phoneNumberId) {
     return { success: false, error: 'No Meta credentials' };

@@ -25,7 +25,7 @@ export interface QueuedMessageResult {
 
 export interface InstanceWithCredentials {
   id: string;
-  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST' | 'META_MANAGED';
   instanceBackendId?: string | null;
   phoneNumber?: string | null;
   status: string;
@@ -36,6 +36,9 @@ export interface InstanceWithCredentials {
   metaCoexistCredential?: {
     systemAccessToken?: string | null;
     userAccessToken?: string | null;
+    phoneNumberId: string;
+  } | null;
+  metaManagedCredential?: {
     phoneNumberId: string;
   } | null;
 }
@@ -187,6 +190,15 @@ function buildJobData(
     };
   }
   
+  let metaManagedCredential: { accessToken: string; phoneNumberId: string } | undefined;
+  
+  if (instance.provider === 'META_MANAGED' && instance.metaManagedCredential) {
+    metaManagedCredential = {
+      accessToken: process.env.PLATFORM_ACCESS_TOKEN || '',
+      phoneNumberId: instance.metaManagedCredential.phoneNumberId
+    };
+  }
+  
   return {
     jobId,
     businessId,
@@ -199,6 +211,7 @@ function buildJobData(
     instanceBackendId: instance.instanceBackendId || undefined,
     metaCredential,
     metaCoexistCredential,
+    metaManagedCredential,
     phoneNumber: instance.phoneNumber || undefined,
     enqueuedAt: Date.now(),
     priority,
@@ -392,7 +405,8 @@ export async function markMessageAsRead(options: {
     where: { id: instanceId },
     include: {
       metaCredential: true,
-      metaCoexistCredential: true
+      metaCoexistCredential: true,
+      metaManagedCredential: true
     }
   });
   
@@ -402,16 +416,24 @@ export async function markMessageAsRead(options: {
   }
   
   try {
-    if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') {
+    if (instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST' || instance.provider === 'META_MANAGED') {
       const { MetaCloudService } = await import('./metaCloud.js');
       
       const isCoexist = instance.provider === 'META_COEXIST';
-      const accessToken = isCoexist 
-        ? (instance.metaCoexistCredential?.systemAccessToken || instance.metaCoexistCredential?.userAccessToken)
-        : instance.metaCredential?.accessToken;
-      const phoneNumberId = isCoexist 
-        ? instance.metaCoexistCredential?.phoneNumberId 
-        : instance.metaCredential?.phoneNumberId;
+      const isManaged = instance.provider === 'META_MANAGED';
+      let accessToken: string | undefined | null;
+      let phoneNumberId: string | undefined | null;
+      
+      if (isManaged) {
+        accessToken = process.env.PLATFORM_ACCESS_TOKEN;
+        phoneNumberId = instance.metaManagedCredential?.phoneNumberId;
+      } else if (isCoexist) {
+        accessToken = instance.metaCoexistCredential?.systemAccessToken || instance.metaCoexistCredential?.userAccessToken;
+        phoneNumberId = instance.metaCoexistCredential?.phoneNumberId;
+      } else {
+        accessToken = instance.metaCredential?.accessToken;
+        phoneNumberId = instance.metaCredential?.phoneNumberId;
+      }
       
       if (!accessToken || !phoneNumberId) {
         console.error('[WhatsAppSender] Missing credentials for markAsRead');

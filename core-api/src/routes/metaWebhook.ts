@@ -10,7 +10,7 @@ import { getMediaDownloadQueue, MediaDownloadJobData } from '../services/queues/
 
 const router = Router();
 
-type MetaProviderType = 'META_CLOUD' | 'META_COEXIST';
+type MetaProviderType = 'META_CLOUD' | 'META_COEXIST' | 'META_MANAGED';
 
 // Redis-based deduplication with TTL (atomic SET NX)
 const DEDUP_TTL_SECONDS = 300; // 5 minutes
@@ -124,6 +124,27 @@ async function findInstanceByPhoneNumberId(phoneNumberId: string) {
         wabaId: metaCoexistCredential.wabaId,
         platformBusinessId: metaCoexistCredential.instance.businessId,
         providerType: 'META_COEXIST' as MetaProviderType
+      };
+    }
+    
+    const metaManagedCredential = await (prisma as any).metaManagedCredential.findFirst({
+      where: { phoneNumberId },
+      include: { 
+        instance: { 
+          include: { business: true } 
+        } 
+      }
+    });
+    
+    if (metaManagedCredential?.instance) {
+      return {
+        instance: metaManagedCredential.instance,
+        accessToken: process.env.PLATFORM_ACCESS_TOKEN || '',
+        phoneNumberId: metaManagedCredential.phoneNumberId,
+        businessId: metaManagedCredential.instance.businessId,
+        wabaId: process.env.PLATFORM_WABA_ID || '',
+        platformBusinessId: metaManagedCredential.instance.businessId,
+        providerType: 'META_MANAGED' as MetaProviderType
       };
     }
     

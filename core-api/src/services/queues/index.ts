@@ -67,7 +67,7 @@ export interface WhatsAppIncomingJobData {
   timestamp: number;
   mediaUrl?: string;
   mediaType?: string;
-  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST' | 'META_MANAGED';
 }
 
 export interface InactivityCheckJobData {
@@ -117,13 +117,17 @@ export interface OutboundMessageJobData {
   message?: string;
   mediaUrl?: string;
   mediaType?: 'image' | 'video' | 'audio' | 'document';
-  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST' | 'META_MANAGED';
   instanceBackendId?: string;
   metaCredential?: {
     accessToken: string;
     phoneNumberId: string;
   };
   metaCoexistCredential?: {
+    accessToken: string;
+    phoneNumberId: string;
+  };
+  metaManagedCredential?: {
     accessToken: string;
     phoneNumberId: string;
   };
@@ -142,7 +146,7 @@ export interface MediaDownloadJobData {
   mediaId: string;
   mediaType: string;
   mimetype: string;
-  provider: 'META_CLOUD' | 'META_COEXIST';
+  provider: 'META_CLOUD' | 'META_COEXIST' | 'META_MANAGED';
   accessToken: string;
   phoneNumberId: string;
   contactPhone: string;
