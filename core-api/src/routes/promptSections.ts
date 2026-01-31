@@ -300,7 +300,7 @@ router.put('/:businessId/:sectionId', authMiddleware, requireActiveSubscription,
 router.delete('/:businessId/:sectionId', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { businessId, sectionId } = req.params;
-    const instanceId = req.query.instance_id as string | undefined;
+    const rawInstanceId = req.query.instance_id as string | undefined;
 
     const business = await prisma.business.findFirst({
       where: { id: businessId, userId: req.userId }
@@ -310,11 +310,25 @@ router.delete('/:businessId/:sectionId', authMiddleware, async (req: AuthRequest
       return res.status(404).json({ error: 'Business not found' });
     }
 
-    // Build query with instanceId validation - if instanceId provided, must match exactly
+    // Normalize instance_id - treat empty string, 'undefined', 'null' as not provided
+    const normalizedInstanceId = rawInstanceId && 
+      typeof rawInstanceId === 'string' && 
+      rawInstanceId.trim() !== '' && 
+      rawInstanceId !== 'undefined' && 
+      rawInstanceId !== 'null' 
+        ? rawInstanceId 
+        : null;
+
+    // Build query using same OR logic as GET - can delete instance-specific OR shared sections
     const sectionWhere: any = { id: sectionId, businessId };
-    if (instanceId) {
-      sectionWhere.instanceId = instanceId;
+    if (normalizedInstanceId) {
+      // When instanceId is provided, allow deleting sections for that instance OR shared sections (null)
+      sectionWhere.OR = [
+        { instanceId: normalizedInstanceId },
+        { instanceId: null }
+      ];
     }
+    // When no instanceId provided, allow deleting any section for this business
 
     const section = await prisma.promptSection.findFirst({
       where: sectionWhere
@@ -324,15 +338,11 @@ router.delete('/:businessId/:sectionId', authMiddleware, async (req: AuthRequest
       return res.status(404).json({ error: 'Section not found' });
     }
 
-    // Strict validation: section must have matching instanceId (or both null)
-    if (instanceId && section.instanceId !== instanceId) {
-      return res.status(403).json({ error: 'Section belongs to a different instance' });
-    }
-
     await prisma.promptSection.delete({
       where: { id: sectionId }
     });
 
+    console.log(`[SECTIONS-DELETE] Deleted section ${sectionId}, instanceId: ${section.instanceId}`);
     return res.json({ success: true });
   } catch (error) {
     console.error('Error deleting section:', error);
