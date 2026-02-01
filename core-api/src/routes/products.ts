@@ -418,7 +418,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { business_id, instance_id } = req.query;
+    const { business_id, instance_id, search, limit } = req.query;
     
     if (!business_id) {
       return res.status(400).json({ error: 'business_id query param is required' });
@@ -429,6 +429,27 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    // If search query provided, use intelligent search (semantic + fuzzy)
+    if (search && String(search).trim() !== '') {
+      const searchLimit = limit ? Math.min(parseInt(limit as string, 10) || 20, 50) : 20;
+      const result = await searchProductsIntelligent(
+        business_id as string,
+        String(search).trim(),
+        searchLimit,
+        instance_id ? String(instance_id) : undefined
+      );
+      
+      // Filter out products with stock = 0 (same as buscar_producto tool)
+      const availableProducts = result.products.filter((p: any) => {
+        if (p.stock === undefined || p.stock === null) return true;
+        return p.stock > 0;
+      });
+      
+      // Return array to maintain API compatibility with non-search GET
+      return res.json(availableProducts);
+    }
+    
+    // No search - return all products
     const whereClause: any = { businessId: business_id as string };
     // Only filter by instanceId if a specific value is provided
     // If not provided, show ALL products for the business
