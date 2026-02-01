@@ -115,6 +115,11 @@ export async function retrieveRelevantSections(
   const withEmbeddings = ragCandidates.filter(s => s.embedding);
   const withoutEmbeddings = ragCandidates.filter(s => !s.embedding);
   
+  console.log(`[RAG] Section breakdown: ${sections.filter(s => s.isCore).length} core, ${withEmbeddings.length} with embeddings, ${withoutEmbeddings.length} without embeddings`);
+  if (withoutEmbeddings.length > 0) {
+    console.log(`[RAG] Sections WITHOUT embeddings: ${withoutEmbeddings.map(s => `"${s.title}"`).join(', ')}`);
+  }
+  
   if (withoutEmbeddings.length > 0) {
     console.log(`[RAG] Generating embeddings for ${withoutEmbeddings.length} sections`);
     const batchSize = 10;
@@ -186,6 +191,17 @@ export async function retrieveRelevantSections(
   }
 
   candidateSections.sort((a, b) => b.similarity - a.similarity);
+  
+  // Log all candidates with their similarity scores for debugging
+  if (candidateSections.length > 0) {
+    console.log(`[RAG] Semantic matches above threshold (${MIN_SIMILARITY_THRESHOLD}):`);
+    candidateSections.slice(0, 10).forEach((s, i) => {
+      console.log(`[RAG]   ${i + 1}. "${s.title}" (${s.type}) - similarity: ${s.similarity.toFixed(4)}`);
+    });
+  } else {
+    console.log(`[RAG] No semantic matches found above threshold ${MIN_SIMILARITY_THRESHOLD}`);
+  }
+  
   const ragSections: RetrievedSection[] = candidateSections.slice(0, maxRagSections).map(s => ({
     ...s,
     similarity: s.similarity

@@ -428,13 +428,23 @@ ejecutar_accion({
     const { messages } = this.conversationContext;
     
     try {
+      // Use last 3 messages for RAG query context (prioritize user messages)
+      const userMessages = messages.filter(m => m.role === 'user');
+      const lastUserMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1].content : '';
       const lastMessages = messages.slice(-3).map(m => m.content).join(' ');
+      const ragQuery = lastUserMessage || lastMessages;
+      
+      console.log(`[ContextBuilder-RAG] Query for RAG: "${ragQuery.substring(0, 100)}..."`);
+      console.log(`[ContextBuilder-RAG] BusinessId: ${business.id}, InstanceId: ${instanceId || 'null'}`);
+      
       const result = await retrieveRelevantSections(
         business.id,
-        lastMessages,
+        ragQuery,
         5,
         instanceId || undefined
       );
+      
+      console.log(`[ContextBuilder-RAG] Retrieved: ${result.coreSections.length} core + ${result.ragSections.length} semantic sections`);
       
       // Filtrar secciones que pertenecen a temas bloqueados
       const filterByBlockedTopics = (sections: any[]) => {
