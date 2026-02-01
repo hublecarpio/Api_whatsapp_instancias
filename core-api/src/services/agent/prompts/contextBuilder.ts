@@ -139,7 +139,7 @@ export class ContextBuilder {
         ragSectionsUsed,
         coreSectionsUsed: 1,
         productsIncluded: 0,
-        zonesIncluded: this.businessContext.deliveryZones.length,
+        zonesIncluded: 0,
         currentStage: currentStage?.name || null,
         blockedTopics,
         allowedToolNames: allowedTools

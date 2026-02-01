@@ -804,15 +804,18 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
       return '';
     }
 
-    // Include full conversation history for LLM2 to search context
-    const formatted = messages.map(m => {
+    // Cap conversation history to avoid prompt bloat (last 50 messages max)
+    const MAX_MESSAGES = 50;
+    const recentMessages = messages.slice(-MAX_MESSAGES);
+    
+    const formatted = recentMessages.map(m => {
       const speaker = m.role === 'user' ? 'CLIENTE' : 'ASESOR';
-      const content = m.content.replace(/\s+/g, ' ').trim().substring(0, 500);
+      const content = m.content.replace(/\s+/g, ' ').trim().substring(0, 300);
       return `${speaker}: ${content}`;
     }).join('\n');
 
     return `
-HISTORIAL DE CONVERSACIÓN (para buscar contexto si lo necesitas):
+HISTORIAL DE CONVERSACIÓN (últimos ${recentMessages.length} mensajes):
 ${formatted}
 
 ⚠️ IMPORTANTE: Si el objetivo no tiene datos suficientes (producto, zona, etc.), BUSCA en el historial arriba.
