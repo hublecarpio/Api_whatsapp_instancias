@@ -170,12 +170,49 @@ async function processWithAgentQueuedWithIds(
         content
       }));
       
+      // Fetch latest message with media analysis from MessageLog
+      const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+      const latestMessageWithMedia = await prisma.messageLog.findFirst({
+        where: {
+          businessId,
+          sender: normalizedPhone,
+          direction: 'inbound',
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { metadata: true }
+      });
+      
+      // Build triggerContext from latest message's metadata
+      const msgMeta = latestMessageWithMedia?.metadata as any;
+      const triggerContext: { mediaAnalysis?: string; geminiVoucherResult?: any } = {};
+      
+      if (msgMeta?.mediaAnalysis) {
+        triggerContext.mediaAnalysis = msgMeta.mediaAnalysis;
+        console.log(`[Agent Processor] Found mediaAnalysis from latest message`);
+      }
+      
+      if (msgMeta?.voucherValidation) {
+        triggerContext.geminiVoucherResult = {
+          isPaymentProof: msgMeta.voucherValidation.isPaymentProof,
+          isValid: msgMeta.voucherValidation.isValid,
+          brand: msgMeta.voucherValidation.brand,
+          amount: msgMeta.voucherValidation.amount,
+          currency: msgMeta.voucherValidation.currency,
+          operationCode: msgMeta.voucherValidation.operationCode,
+          confidence: msgMeta.voucherValidation.confidence,
+          reason: msgMeta.voucherValidation.reason,
+          imageUrl: msgMeta.voucherValidation.imageUrl
+        };
+        console.log(`[Agent Processor] Found voucherValidation: isPaymentProof=${msgMeta.voucherValidation.isPaymentProof}`);
+      }
+      
       const orchestratorInput: OrchestratorInput = {
         businessId,
         instanceId: instanceId || null,
-        contactPhone: phone,
+        contactPhone: normalizedPhone,
         contactName,
-        messages: chatMessages
+        messages: chatMessages,
+        triggerContext: Object.keys(triggerContext).length > 0 ? triggerContext : undefined
       };
       
       const v3Result = await processWithOrchestrator(orchestratorInput);

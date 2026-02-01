@@ -270,12 +270,48 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       console.log(`[AI Worker V3] ▶ Starting V3 processing...`);
       const normalizedPhone = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
       
+      // Fetch latest message with media analysis from MessageLog
+      const latestMessageWithMedia = await prisma.messageLog.findFirst({
+        where: {
+          businessId,
+          sender: normalizedPhone,
+          direction: 'inbound',
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { metadata: true }
+      });
+      
+      // Build triggerContext from latest message's metadata
+      const msgMeta = latestMessageWithMedia?.metadata as any;
+      const triggerContext: { mediaAnalysis?: string; geminiVoucherResult?: any } = {};
+      
+      if (msgMeta?.mediaAnalysis) {
+        triggerContext.mediaAnalysis = msgMeta.mediaAnalysis;
+        console.log(`[AI Worker V3] Found mediaAnalysis from latest message: ${msgMeta.mediaAnalysis.substring(0, 100)}...`);
+      }
+      
+      if (msgMeta?.voucherValidation) {
+        triggerContext.geminiVoucherResult = {
+          isPaymentProof: msgMeta.voucherValidation.isPaymentProof,
+          isValid: msgMeta.voucherValidation.isValid,
+          brand: msgMeta.voucherValidation.brand,
+          amount: msgMeta.voucherValidation.amount,
+          currency: msgMeta.voucherValidation.currency,
+          operationCode: msgMeta.voucherValidation.operationCode,
+          confidence: msgMeta.voucherValidation.confidence,
+          reason: msgMeta.voucherValidation.reason,
+          imageUrl: msgMeta.voucherValidation.imageUrl
+        };
+        console.log(`[AI Worker V3] Found voucherValidation: isPaymentProof=${msgMeta.voucherValidation.isPaymentProof}, amount=${msgMeta.voucherValidation.amount}`);
+      }
+      
       const v3Input: OrchestratorInput = {
         businessId,
         instanceId: targetInstanceId || null,
         contactPhone: normalizedPhone,
         contactName: contactName || 'Cliente',
         messages: messages.map((m, i) => ({ role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant', content: m })),
+        triggerContext: Object.keys(triggerContext).length > 0 ? triggerContext : undefined,
         config: {
           model: 'gpt-4o-mini',
           temperature: 0.7,
@@ -284,7 +320,7 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
         }
       };
       
-      console.log(`[AI Worker V3] Input: phone=${phoneMask}, instanceId=${v3Input.instanceId?.slice(0, 8) || 'null'}, msgCount=${v3Input.messages.length}`);
+      console.log(`[AI Worker V3] Input: phone=${phoneMask}, instanceId=${v3Input.instanceId?.slice(0, 8) || 'null'}, msgCount=${v3Input.messages.length}, hasTriggerContext=${!!v3Input.triggerContext}`);
       
       const v3StartTime = Date.now();
       const v3Result = await processWithOrchestrator(v3Input);
@@ -2124,12 +2160,49 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
   if (useV3) {
     try {
       console.log(`[AI Direct] Using Agent V3 for business ${businessId}`);
+      
+      // Fetch latest message with media analysis from MessageLog
+      const latestMessageWithMedia = await prisma.messageLog.findFirst({
+        where: {
+          businessId,
+          sender: normalizedPhone,
+          direction: 'inbound',
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { metadata: true }
+      });
+      
+      // Build triggerContext from latest message's metadata
+      const msgMeta = latestMessageWithMedia?.metadata as any;
+      const triggerContext: { mediaAnalysis?: string; geminiVoucherResult?: any } = {};
+      
+      if (msgMeta?.mediaAnalysis) {
+        triggerContext.mediaAnalysis = msgMeta.mediaAnalysis;
+        console.log(`[AI Direct V3] Found mediaAnalysis from latest message`);
+      }
+      
+      if (msgMeta?.voucherValidation) {
+        triggerContext.geminiVoucherResult = {
+          isPaymentProof: msgMeta.voucherValidation.isPaymentProof,
+          isValid: msgMeta.voucherValidation.isValid,
+          brand: msgMeta.voucherValidation.brand,
+          amount: msgMeta.voucherValidation.amount,
+          currency: msgMeta.voucherValidation.currency,
+          operationCode: msgMeta.voucherValidation.operationCode,
+          confidence: msgMeta.voucherValidation.confidence,
+          reason: msgMeta.voucherValidation.reason,
+          imageUrl: msgMeta.voucherValidation.imageUrl
+        };
+        console.log(`[AI Direct V3] Found voucherValidation: isPaymentProof=${msgMeta.voucherValidation.isPaymentProof}`);
+      }
+      
       const v3Input: OrchestratorInput = {
         businessId,
         instanceId: targetInstanceId || null,
         contactPhone: normalizedPhone,
         contactName: contactName || 'Cliente',
         messages: messages.map((m, i) => ({ role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant', content: m })),
+        triggerContext: Object.keys(triggerContext).length > 0 ? triggerContext : undefined,
         config: {
           model: 'gpt-4o-mini',
           temperature: 0.7,

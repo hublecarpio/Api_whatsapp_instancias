@@ -115,8 +115,12 @@ export class ContextBuilder {
       sections.push(this.buildDeliveryZones());
     }
 
-    // BLOQUE 6: ACCIONES AUTOMÁTICAS (si hubo triggers)
-    if (this.triggerContext.autoTriggerResult) {
+    // BLOQUE 6: ACCIONES AUTOMÁTICAS Y ANÁLISIS DE MULTIMEDIA
+    // Incluir si hay cualquier trigger, análisis de imagen, o voucher detectado
+    const hasTriggerContent = this.triggerContext.autoTriggerResult || 
+                               this.triggerContext.mediaAnalysis || 
+                               this.triggerContext.geminiVoucherResult;
+    if (hasTriggerContent) {
       sections.push(this.buildTriggerContext());
     }
 
@@ -233,15 +237,44 @@ export class ContextBuilder {
     
     // Datos extraídos del cliente
     const extractedData = this.conversationContext.extractedData || {};
-    const dataEntries = Object.entries(extractedData).filter(([_, v]) => v !== null && v !== undefined && v !== '');
+    const regularEntries = Object.entries(extractedData)
+      .filter(([key, v]) => v !== null && v !== undefined && v !== '' && key !== '_session_cart');
     
-    if (dataEntries.length > 0) {
+    if (regularEntries.length > 0) {
       context += `**Datos del cliente:**\n`;
-      for (const [key, value] of dataEntries) {
+      for (const [key, value] of regularEntries) {
         context += `- ${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}\n`;
       }
     } else {
       context += `**Datos del cliente:** Ninguno recopilado aún.\n`;
+    }
+    
+    // Sesión de carrito (productos seleccionados en turnos anteriores)
+    const sessionCart = extractedData['_session_cart'];
+    if (sessionCart && typeof sessionCart === 'object') {
+      const session = sessionCart as { productData?: any[]; calculatedTotals?: any; orderId?: string; updatedAt?: string };
+      const sessionAge = session.updatedAt ? (Date.now() - new Date(session.updatedAt).getTime()) / 1000 / 60 : 0;
+      
+      // Only show if session is fresh (less than 30 minutes old)
+      if (sessionAge < 30) {
+        if (session.productData && session.productData.length > 0) {
+          context += `\n📦 **Productos YA seleccionados (turnos anteriores):**\n`;
+          for (const p of session.productData) {
+            context += `  - ${p.title}${p.variation ? ` [${p.variation}]` : ''} - ${this.businessContext.currencySymbol}${p.price}\n`;
+          }
+          if (session.calculatedTotals?.total) {
+            context += `  💰 Total calculado: ${this.businessContext.currencySymbol}${session.calculatedTotals.total}`;
+            if (session.calculatedTotals.zone) {
+              context += ` (envío a ${session.calculatedTotals.zone})`;
+            }
+            context += `\n`;
+          }
+          context += `  ⚠️ Si el cliente confirma ("sí", "ok", "dale"), CREA LA ORDEN con ejecutar_accion.\n`;
+        }
+        if (session.orderId) {
+          context += `  📦 Orden ya creada: ${session.orderId.slice(-8)}\n`;
+        }
+      }
     }
     
     // Pedido activo
@@ -293,7 +326,17 @@ EJEMPLOS:
 - Cliente dice "blue" → ejecutar_accion({ objetivo: "buscar productos con 'blue'" })
 - Cliente dice "quiero Erba Pura 100ml" + "Lima" → ejecutar_accion({ objetivo: "calcular total de 1 Erba Pura 100ml con envío a Lima" })
 - Cliente pregunta "cuánto cuesta el perfume X?" → ejecutar_accion({ objetivo: "buscar perfume X y obtener precio" })
-- Cliente confirma "sí, lo quiero" → ejecutar_accion({ objetivo: "crear orden con los productos seleccionados" })
+- Cliente confirma "sí, lo quiero" o "ok si" o "dale" → ejecutar_accion({ objetivo: "crear orden con los productos seleccionados" })
+
+REGLA CRÍTICA - CREACIÓN DE ÓRDENES:
+Cuando ya tienes: producto + zona + confirmación del cliente → DEBES usar ejecutar_accion para crear la orden INMEDIATAMENTE
+Frases de confirmación: "sí", "ok", "ok si", "dale", "perfecto", "confirmo", "lo quiero", "procedamos"
+NO esperes más confirmaciones - si el cliente ya eligió producto y zona y dijo "sí", CREA LA ORDEN.
+Ejemplo:
+- Producto: Bleu de Chanel 100ml (de buscar_producto anterior)
+- Zona: Lima
+- Cliente dice: "ok si"
+→ DEBES ejecutar: ejecutar_accion({ objetivo: "crear orden de Bleu de Chanel 100ml para Lima", contexto_adicional: "cliente confirmó 'ok si'" })
 
 REGLA CRÍTICA - BÚSQUEDA OBLIGATORIA:
 - Si el cliente menciona CUALQUIER palabra que podría ser un producto (nombre completo, abreviación, palabra clave como "blue", "eros", "sauvage", etc.), DEBES usar ejecutar_accion para buscarlo

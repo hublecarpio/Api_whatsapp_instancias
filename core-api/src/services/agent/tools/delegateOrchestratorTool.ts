@@ -2,6 +2,7 @@ import { BaseTool, ToolCategory, ToolDefinition, ToolContext, ToolResult, ToolAv
 import { LLMFactory } from '../core/llmAdapter.js';
 import { loadBusinessContext, loadConversationContext } from '../prompts/contextBuilder.js';
 import { loadCustomToolsForBusiness } from './customToolAdapter.js';
+import prisma from '../../prisma.js';
 
 // Debug flag for verbose logging
 const DEBUG_AGENT = process.env.DEBUG_AGENT_V3 === 'true';
@@ -230,11 +231,17 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         conversationMessages: conversationMessages || []
       };
 
-      const memory: ToolMemory = {
+      // Load previous session memory if available
+      const previousMemory = await loadSessionMemory(businessId, contactPhone);
+      const memory: ToolMemory = previousMemory || {
         productData: [],
         calculatedTotals: {},
         toolHistory: []
       };
+      
+      if (previousMemory) {
+        console.log(`[LLM2-Delegate] 📂 Loaded session: ${memory.productData.length} products, total=${memory.calculatedTotals.total || 'N/A'}`);
+      }
 
       const productCatalog = this.buildProductCatalog(businessContext.products);
       const zoneCatalog = this.buildZoneCatalog(businessContext.deliveryZones);
@@ -252,11 +259,21 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         console.log(`[LLM2-Delegate] 📖 Product catalog preview: ${productCatalog.substring(0, 200)}...`);
       }
 
+      // Build session context from loaded memory
+      const sessionContext = previousMemory ? `
+📂 DATOS DE SESIÓN PREVIA (productos ya seleccionados en turnos anteriores):
+${previousMemory.productData.map(p => `  • ${p.title}${p.variation ? ` [${p.variation}]` : ''} - S/${p.price} (productId: ${p.productId})`).join('\n') || '  (ninguno)'}
+${previousMemory.calculatedTotals.total ? `  💰 Total calculado: S/${previousMemory.calculatedTotals.total} (envío a ${previousMemory.calculatedTotals.zone}, zoneId: ${previousMemory.calculatedTotals.zoneId})` : ''}
+${previousMemory.orderId ? `  📦 Orden creada: ${previousMemory.orderId}` : ''}
+
+⚠️ IMPORTANTE: Si el objetivo es "crear orden" y ya tienes productos y zona en la sesión, USA ESOS DATOS directamente sin buscar de nuevo.
+` : '';
+
       const systemPrompt = `Eres un ejecutor de acciones. Tu trabajo es completar el OBJETIVO usando las herramientas en el orden correcto.
 
 OBJETIVO: ${objetivo}
 ${contextoAdicional ? `CONTEXTO ADICIONAL: ${contextoAdicional}` : ''}
-
+${sessionContext}
 CATÁLOGO DE PRODUCTOS (muestra):
 ${productCatalog}
 
@@ -562,6 +579,9 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
       }
       console.log(`[LLM2-Delegate] ═══════════════════════════════════════════════════════`);
 
+      // Persist session memory for cross-turn context
+      await persistSessionMemory(businessId, contactPhone, memory);
+
       return this.success(finalContent, resultData);
 
     } catch (error: any) {
@@ -773,6 +793,115 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
     }
     
     return parts.join('\n');
+  }
+}
+
+// Persist session memory for cross-turn context
+async function persistSessionMemory(
+  businessId: string,
+  contactPhone: string,
+  memory: ToolMemory
+): Promise<void> {
+  try {
+    const normalizedPhone = contactPhone.replace(/\D/g, '');
+    
+    // Only persist if there's meaningful data
+    if (memory.productData.length === 0 && !memory.calculatedTotals.total && !memory.orderId) {
+      return;
+    }
+    
+    const sessionData = {
+      products: memory.productData.map(p => ({
+        id: p.productId,
+        title: p.title,
+        variation: p.variation,
+        price: p.price,
+        imageUrl: p.imageUrl
+      })),
+      totals: memory.calculatedTotals,
+      orderId: memory.orderId,
+      orderStatus: memory.orderStatus,
+      updatedAt: new Date().toISOString()
+    };
+    
+    // Save as special extracted data field
+    await prisma.contactExtractedData.upsert({
+      where: {
+        businessId_contactPhone_fieldKey: {
+          businessId,
+          contactPhone: normalizedPhone,
+          fieldKey: '_session_cart'
+        }
+      },
+      create: {
+        businessId,
+        contactPhone: normalizedPhone,
+        fieldKey: '_session_cart',
+        fieldValue: JSON.stringify(sessionData),
+        confidence: 1.0,
+        source: 'tool_memory'
+      },
+      update: {
+        fieldValue: JSON.stringify(sessionData),
+        updatedAt: new Date()
+      }
+    });
+    
+    console.log(`[SessionMemory] Persisted: ${memory.productData.length} products, total=${memory.calculatedTotals.total || 'N/A'}, orderId=${memory.orderId?.slice(0, 8) || 'none'}`);
+  } catch (error: any) {
+    console.error(`[SessionMemory] Failed to persist:`, error.message);
+  }
+}
+
+// Load session memory from previous turns
+async function loadSessionMemory(
+  businessId: string,
+  contactPhone: string
+): Promise<ToolMemory | null> {
+  try {
+    const normalizedPhone = contactPhone.replace(/\D/g, '');
+    
+    const record = await prisma.contactExtractedData.findUnique({
+      where: {
+        businessId_contactPhone_fieldKey: {
+          businessId,
+          contactPhone: normalizedPhone,
+          fieldKey: '_session_cart'
+        }
+      }
+    });
+    
+    if (!record?.fieldValue) return null;
+    
+    const sessionData = JSON.parse(record.fieldValue);
+    
+    // Check if session is stale (more than 30 minutes old)
+    const updatedAt = new Date(sessionData.updatedAt);
+    const ageMinutes = (Date.now() - updatedAt.getTime()) / 1000 / 60;
+    if (ageMinutes > 30) {
+      console.log(`[SessionMemory] Session expired (${Math.round(ageMinutes)} mins old)`);
+      return null;
+    }
+    
+    const memory: ToolMemory = {
+      productData: sessionData.products?.map((p: any) => ({
+        productId: p.id,
+        title: p.title,
+        variation: p.variation,
+        price: p.price,
+        imageUrl: p.imageUrl
+      })) || [],
+      calculatedTotals: sessionData.totals || {},
+      orderId: sessionData.orderId,
+      orderStatus: sessionData.orderStatus,
+      toolHistory: []
+    };
+    
+    console.log(`[SessionMemory] Loaded: ${memory.productData.length} products, total=${memory.calculatedTotals.total || 'N/A'}`);
+    return memory;
+  } catch (error: any) {
+    console.error(`[SessionMemory] Failed to load:`, error.message);
+    return null;
   }
 }
 
