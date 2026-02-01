@@ -19,7 +19,12 @@ The platform employs a microservices-like architecture, consisting of a **Fronte
 *   **AI Pipeline**: Processes WhatsApp messages using business context, conversation history, and OpenAI API for intelligent responses.
 *   **Multi-Provider WhatsApp**: Supports Baileys (WhatsApp Web), Meta Cloud API, and Meta Coexistence for flexible WhatsApp number connectivity.
 *   **AI Agent System**:
-    *   **Agent V3 (Modular TypeScript)**: Features a robust, modular design with a Two-LLM Architecture (Conversational and Executor LLMs), a single `ejecutar_accion` delegate tool with `ToolMemory`, a dynamic `Tool Registry`, and an `LLM Adapter` for configurable model providers. It includes a `Context Builder` for modular prompt construction with RAG, and an `Agent Orchestrator` for managing the AI workflow. Native and Custom Tools are supported.
+    *   **Agent V3 (Modular TypeScript)**: Features a robust, modular design with a Two-LLM Architecture:
+        *   **LLM1 (gpt-4o-mini - Conversational)**: Responds to clients and delegates actions. Has minimal context: RAG knowledge, funnel stage rules, session memory, trigger context. Does NOT have product catalog or zone details. Only tool: `ejecutar_accion`.
+        *   **LLM2 (gpt-4o - Executor/Orchestrator)**: Executes all actions via tools. Has full context: complete product catalog, delivery zones, conversation history (last 50 messages), session memory. Can iterate up to 5 times to complete complex objectives.
+        *   **ToolMemory**: Persists products, totals, and orderId across turns via `_session_cart` in ContactExtractedData (30min expiry).
+        *   **Tool Registry**: Dynamic registration of native and custom tools per business.
+        *   **LLM Adapter**: Configurable model providers (OpenAI, OpenRouter).
     *   **Agent V2 (Python/LangGraph)**: An advanced multi-agent system with a 3-brain architecture, Redis-backed memory, OpenAI embeddings for semantic search, and dynamic learning capabilities.
 *   **Reminder/Follow-up System**: Event-driven scheduling for follow-ups, with AI-enriched message generation.
 *   **Redis + BullMQ Queue System**: Manages reminders, message buffering, and AI responses for scalability and reliability.
