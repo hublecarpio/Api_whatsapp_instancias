@@ -190,6 +190,15 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
       
       console.log(`[LLM2-Delegate] Context loaded: products=${businessContext.products.length}, zones=${businessContext.deliveryZones.length}`);
       console.log(`[LLM2-Delegate] Existing order: ${convContext.existingOrder?.id?.slice(0, 8) || 'NONE'}`);
+      
+      // Log voucher context for debugging payment flow
+      if (context.geminiVoucherResult) {
+        console.log(`[LLM2-Delegate] 🧾 Voucher context available:`);
+        console.log(`[LLM2-Delegate]   └─ isPaymentProof: ${context.geminiVoucherResult.isPaymentProof}`);
+        console.log(`[LLM2-Delegate]   └─ brand: ${context.geminiVoucherResult.brand || 'N/A'}`);
+        console.log(`[LLM2-Delegate]   └─ amount: ${context.geminiVoucherResult.amount || 'N/A'}`);
+        console.log(`[LLM2-Delegate]   └─ imageUrl: ${context.geminiVoucherResult.imageUrl ? 'YES' : 'MISSING'}`);
+      }
 
       const availabilityContext: ToolAvailabilityContext = {
         businessId,
@@ -217,6 +226,8 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         return this.success('No hay herramientas disponibles para ejecutar en este contexto.');
       }
 
+      // CRITICAL: Pass geminiVoucherResult from parent context to sub-tools
+      // This enables fallback for voucher data (imageUrl, brand) when LLM2 doesn't pass explicit args
       const toolContext: ToolContext = {
         businessId,
         instanceId,
@@ -228,7 +239,8 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         contact: convContext.contact,
         existingOrder: convContext.existingOrder,
         extractedData: convContext.extractedData,
-        conversationMessages: conversationMessages || []
+        conversationMessages: conversationMessages || [],
+        geminiVoucherResult: context.geminiVoucherResult
       };
 
       // Load previous session memory if available
@@ -318,9 +330,22 @@ ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden act
 
 REGISTRO DE VOUCHER/PAGO:
 Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
-1. Extrae del CONTEXTO ADICIONAL: voucherImageUrl, amount, brand, operationCode
-2. Usa registrar_voucher_pago({ orderId: "${convContext.existingOrder?.id || 'ID_ORDEN'}", voucherImageUrl: "URL", amount: MONTO, paymentMethod: "YAPE/PLIN", autoConfirm: true })
-3. OBLIGATORIO: siempre incluye voucherImageUrl si está disponible`;
+1. Extrae del CONTEXTO ADICIONAL los siguientes campos OBLIGATORIOS:
+   - voucherImageUrl: URL de la imagen del comprobante (SIEMPRE incluirlo si está disponible)
+   - amount: Monto del voucher (ej: 20 para S/20)
+   - paymentMethod: Marca/app de pago (YAPE, PLIN, BCP, etc.)
+   - operationCode: Código de operación si está disponible
+2. Usa registrar_voucher_pago con TODOS los parámetros disponibles:
+   registrar_voucher_pago({ 
+     orderId: "${convContext.existingOrder?.id || 'ID_ORDEN'}", 
+     voucherImageUrl: "URL_DE_LA_IMAGEN", 
+     amount: MONTO_NUMERICO, 
+     paymentMethod: "YAPE/PLIN/BCP", 
+     autoConfirm: true 
+   })
+3. ⚠️ CRÍTICO: El voucherImageUrl y paymentMethod son OBLIGATORIOS para registro completo del pago.
+   Sin voucherImageUrl, no se puede mostrar el comprobante al negocio.
+   Sin paymentMethod, el pago aparece como "Desconocido".`;
 
       const llmProvider = LLMFactory.getProvider('openai');
       const llmMessages: any[] = [

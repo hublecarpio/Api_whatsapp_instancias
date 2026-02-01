@@ -721,6 +721,21 @@ Estructura requerida: { orderId, voucherImageUrl, amount, paymentMethod, autoCon
     
     const { businessId, currencySymbol, geminiVoucherResult } = context;
     
+    // Debug: Log what we received from args vs context fallback
+    this.log('[VOUCHER-TOOL] Data sources:', {
+      fromArgs: {
+        voucherImageUrl: args.voucherImageUrl || 'NOT PROVIDED',
+        paymentMethod: args.paymentMethod || 'NOT PROVIDED',
+        amount: args.amount || 'NOT PROVIDED'
+      },
+      fromContext: {
+        hasGeminiResult: !!geminiVoucherResult,
+        brand: geminiVoucherResult?.brand || 'N/A',
+        amount: geminiVoucherResult?.amount || 'N/A',
+        imageUrl: geminiVoucherResult?.imageUrl ? 'AVAILABLE' : 'MISSING'
+      }
+    });
+    
     try {
       // Validate required parameters - matching endpoint structure
       if (!args.orderId) {
@@ -728,9 +743,12 @@ Estructura requerida: { orderId, voucherImageUrl, amount, paymentMethod, autoCon
       }
       
       // Parameter names matching endpoint: { orderId, voucherImageUrl, amount, paymentMethod, autoConfirm }
+      // Priority: explicit args > geminiVoucherResult fallback > default
       const voucherAmount = args.amount || geminiVoucherResult?.amount || 0;
       const paymentMethod = args.paymentMethod || geminiVoucherResult?.brand || 'Desconocido';
       const voucherImageUrl = args.voucherImageUrl || geminiVoucherResult?.imageUrl || null;
+      
+      this.log('[VOUCHER-TOOL] Final values after fallback:', { voucherAmount, paymentMethod, voucherImageUrl: voucherImageUrl ? 'SET' : 'NULL' });
       const autoConfirm = args.autoConfirm ?? false;
       
       if (voucherAmount <= 0) {

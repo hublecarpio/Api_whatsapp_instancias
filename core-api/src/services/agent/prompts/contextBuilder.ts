@@ -640,7 +640,12 @@ ejecutar_accion({
       if (geminiVoucherResult.imageUrl) {
         context += `- URL de imagen del voucher: ${geminiVoucherResult.imageUrl}\n`;
       }
-      context += `\nIMPORTANTE: Cuando uses ejecutar_accion para registrar este pago, DEBES incluir la URL de la imagen en el contexto_adicional.\n`;
+      context += `\n⚠️ INSTRUCCIÓN OBLIGATORIA PARA REGISTRAR PAGO:\n`;
+      context += `Cuando uses ejecutar_accion para registrar este voucher, incluye en contexto_adicional:\n`;
+      context += `"voucherImageUrl: ${geminiVoucherResult.imageUrl || 'URL_NO_DISPONIBLE'} | `;
+      context += `paymentMethod: ${geminiVoucherResult.brand || 'DESCONOCIDO'} | `;
+      context += `amount: ${geminiVoucherResult.amount || 0} | `;
+      context += `operationCode: ${geminiVoucherResult.operationCode || 'N/A'}"\n`;
     }
     
     return context;
