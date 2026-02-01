@@ -243,30 +243,37 @@ export class ContextBuilder {
       context += `**Datos del cliente:** Ninguno recopilado aún.\n`;
     }
     
-    // Sesión de carrito (productos seleccionados en turnos anteriores)
+    // Sesión de carrito y acciones previas (productos seleccionados en turnos anteriores)
     const sessionCart = extractedData['_session_cart'];
     if (sessionCart && typeof sessionCart === 'object') {
-      const session = sessionCart as { productData?: any[]; calculatedTotals?: any; orderId?: string; updatedAt?: string };
+      const session = sessionCart as { productData?: any[]; calculatedTotals?: any; orderId?: string; orderStatus?: string; updatedAt?: string };
       const sessionAge = session.updatedAt ? (Date.now() - new Date(session.updatedAt).getTime()) / 1000 / 60 : 0;
       
       // Only show if session is fresh (less than 30 minutes old)
       if (sessionAge < 30) {
+        context += `\n### ACCIONES PREVIAS (NO repetir):\n`;
+        
         if (session.productData && session.productData.length > 0) {
-          context += `\n📦 **Productos YA seleccionados (turnos anteriores):**\n`;
+          context += `✅ **BÚSQUEDA YA REALIZADA** - Productos encontrados:\n`;
           for (const p of session.productData) {
             context += `  - ${p.title}${p.variation ? ` [${p.variation}]` : ''} - ${this.businessContext.currencySymbol}${p.price}\n`;
           }
-          if (session.calculatedTotals?.total) {
-            context += `  💰 Total calculado: ${this.businessContext.currencySymbol}${session.calculatedTotals.total}`;
-            if (session.calculatedTotals.zone) {
-              context += ` (envío a ${session.calculatedTotals.zone})`;
-            }
-            context += `\n`;
-          }
-          context += `  ⚠️ Si el cliente confirma ("sí", "ok", "dale"), CREA LA ORDEN con ejecutar_accion.\n`;
         }
+        
+        if (session.calculatedTotals?.total) {
+          context += `✅ **CÁLCULO YA REALIZADO** - Total: ${this.businessContext.currencySymbol}${session.calculatedTotals.total}`;
+          if (session.calculatedTotals.zone) {
+            context += ` (envío a ${session.calculatedTotals.zone})`;
+          }
+          context += `\n`;
+        }
+        
         if (session.orderId) {
-          context += `  📦 Orden ya creada: ${session.orderId.slice(-8)}\n`;
+          context += `✅ **ORDEN YA CREADA** - ID: ${session.orderId.slice(-8)} (Estado: ${session.orderStatus || 'PENDING'})\n`;
+          context += `  → Para agregar productos usa: objetivo "agregar [producto] a la orden"\n`;
+          context += `  → Para registrar pago usa: objetivo "registrar pago", contexto_adicional con voucherImageUrl\n`;
+        } else if (session.calculatedTotals?.total) {
+          context += `⏳ **PENDIENTE**: Si cliente confirma ("sí", "ok", "dale") → CREA LA ORDEN con ejecutar_accion\n`;
         }
       }
     }
@@ -300,24 +307,43 @@ NO intentes buscar productos, calcular precios ni crear órdenes hasta avanzar d
     
     return `## HERRAMIENTA: ejecutar_accion
 
-Tu ÚNICA herramienta es "ejecutar_accion". LLM2 (orquestador) tiene acceso al catálogo completo, zonas y tools de negocio.
+Tu ÚNICA herramienta es "ejecutar_accion". LLM2 tiene acceso completo a: catálogo de productos, zonas de envío, historial de conversación, y todas las tools de negocio.
 
-CUÁNDO USAR:
-- Cliente menciona un producto → ejecutar_accion({ objetivo: "buscar [producto]" })
-- Cliente pregunta precio → ejecutar_accion({ objetivo: "buscar [producto] y obtener precio" })
-- Cliente da zona de envío → ejecutar_accion({ objetivo: "calcular total de [productos] para [zona]" })
-- Cliente confirma ("sí", "ok", "dale") → ejecutar_accion({ objetivo: "crear orden con [productos] para [zona]" })
-- Registrar voucher → ejecutar_accion({ objetivo: "registrar pago", contexto_adicional: "voucherImageUrl: ..., amount: X, brand: YAPE" })
+### SUB-HERRAMIENTAS DE LLM2 (lo que puede hacer por ti):
+| Sub-Tool | Qué hace | Parámetros clave |
+|----------|----------|------------------|
+| buscar_producto | Busca en catálogo | busqueda: texto a buscar |
+| calcular_total_pedido | Calcula subtotal + envío | productos: [{nombre, cantidad}], zona_envio: nombre |
+| confirmar_pedido | Crea orden nueva | items: [{productId, quantity, variation}], deliveryZoneId, nombre_cliente, direccion |
+| agregar_producto_orden | Agrega a orden existente | productId, variation, quantity |
+| registrar_voucher_pago | Registra pago con voucher | orderId, voucherImageUrl, amount, paymentMethod |
+| agendar_cita | Agenda cita/servicio | fecha, hora, servicio, notas |
 
-FORMATO:
-ejecutar_accion({ objetivo: "qué hacer", contexto_adicional: "datos adicionales si hay" })
+### CUÁNDO USAR (y qué decirle a LLM2):
+- Cliente menciona producto → objetivo: "buscar [nombre exacto que dijo]"
+- Cliente pregunta precio → objetivo: "buscar [producto] y obtener precio"
+- Cliente da zona → objetivo: "calcular total de [productos] para [zona]"
+- Cliente confirma ("sí", "ok", "dale") → objetivo: "crear orden", contexto_adicional: "producto: X, zona: Y, cliente confirmó"
+- Recibe voucher → objetivo: "registrar pago", contexto_adicional: "voucherImageUrl: URL, amount: X, brand: YAPE"
 
-REGLAS:
-1. NUNCA inventes precios - SIEMPRE usa ejecutar_accion para obtenerlos
+### FORMATO DE LLAMADA:
+ejecutar_accion({
+  objetivo: "descripción clara de TODAS las tareas a realizar",
+  contexto_adicional: "producto: X | variación: Y | zona: Z | cliente: Nombre | dirección: Dir"
+})
+
+### ITERACIÓN Y MÚLTIPLES TAREAS:
+- Puedes pedir VARIAS tareas en un solo objetivo: "buscar perfume X, calcular total para Lima, y crear orden si todo OK"
+- LLM2 iterará hasta 5 veces internamente para completar tareas complejas
+- NO necesitas llamar ejecutar_accion múltiples veces - describe todo en un objetivo
+
+### REGLAS CRÍTICAS:
+1. NUNCA inventes precios - SIEMPRE usa ejecutar_accion
 2. NUNCA digas "no encontré" sin antes buscar con ejecutar_accion
-3. Cuando cliente confirma (producto + zona + "sí/ok/dale") → CREA LA ORDEN inmediatamente
+3. Cuando cliente confirma (producto + zona + "sí/ok") → CREA LA ORDEN de inmediato
 4. Si ejecutar_accion retorna imagen URL, inclúyela en tu respuesta
-5. Si hay voucher detectado → registra el pago con los datos del voucher`;
+5. Si hay voucher detectado → registra el pago con los datos del voucher
+6. NO repitas acciones que ya se hicieron (revisa ACCIONES PREVIAS en contexto)`;
   }
 
   private buildFinalInstruction(): string {
