@@ -111,7 +111,26 @@ export async function queueAIResponse(data: AIResponseJobData): Promise<string |
     return null;
   }
   
-  const jobId = `ai-${data.businessId}-${data.contactPhone}-${Date.now()}`;
+  // Use deterministic jobId based on bufferId OR message content hash to prevent duplicate processing
+  // This ensures both agent.ts timeout and expiredBufferProcessor don't create duplicate jobs
+  const dedupeKey = data.bufferId 
+    ? `buffer-${data.bufferId}` 
+    : `msg-${data.businessId}-${data.contactPhone}-${data.messages.join('|').slice(0, 100)}`;
+  const jobId = `ai-${dedupeKey}`;
+  
+  // Check if job already exists to avoid duplicate processing
+  try {
+    const existingJob = await queue.getJob(jobId);
+    if (existingJob) {
+      const state = await existingJob.getState();
+      if (state === 'waiting' || state === 'delayed' || state === 'active') {
+        console.log(`[AI Queue] Job ${jobId} already exists in state ${state}, skipping duplicate`);
+        return jobId;
+      }
+    }
+  } catch (checkError) {
+    // Ignore check errors, proceed with add
+  }
   
   const priorityMap = {
     high: 1,

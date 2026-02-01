@@ -822,6 +822,95 @@ router.post('/:orderId/voucher', authMiddleware, async (req: any, res) => {
   }
 });
 
+router.delete('/:orderId/payment/:paymentIndex', authMiddleware, async (req: any, res) => {
+  try {
+    const { orderId, paymentIndex } = req.params;
+    const index = parseInt(paymentIndex, 10);
+
+    if (isNaN(index) || index < 0) {
+      return res.status(400).json({ error: 'Índice de pago inválido' });
+    }
+
+    const order = await getOrderById(orderId);
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id: order.businessId,
+        userId: req.userId
+      }
+    });
+
+    if (!business) {
+      return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    }
+
+    let existingNotes: any = {};
+    try {
+      existingNotes = order.notes ? JSON.parse(order.notes) : {};
+    } catch (e) {
+      existingNotes = { legacyNotes: order.notes };
+    }
+
+    const paymentHistory = existingNotes.paymentHistory || [];
+    
+    if (index >= paymentHistory.length) {
+      return res.status(404).json({ error: 'Pago no encontrado en el historial' });
+    }
+
+    const removedPayment = paymentHistory[index];
+    const removedAmount = removedPayment.amount || 0;
+    
+    paymentHistory.splice(index, 1);
+
+    const newPaidAmount = Math.max(0, (order.paidAmount || 0) - removedAmount);
+    const pendingAfter = Math.max(0, order.totalAmount - newPaidAmount);
+
+    let newStatus = order.status;
+    if (order.status === 'PAID' && newPaidAmount < order.totalAmount) {
+      newStatus = 'AWAITING_VOUCHER';
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paidAmount: newPaidAmount,
+        pendingAmount: pendingAfter,
+        status: newStatus,
+        voucherImageUrl: paymentHistory.length > 0 ? paymentHistory[paymentHistory.length - 1].imageUrl : null,
+        notes: JSON.stringify({
+          ...existingNotes,
+          paymentHistory
+        })
+      },
+      include: { items: true }
+    });
+
+    console.log(`[ORDERS] Payment removed from order ${orderId}:`, {
+      removedAmount,
+      newPaidAmount,
+      pendingAfter,
+      status: newStatus
+    });
+
+    res.json({
+      ...updatedOrder,
+      removedPayment,
+      paymentSummary: {
+        totalPaid: newPaidAmount,
+        pendingAmount: pendingAfter,
+        status: newStatus
+      }
+    });
+  } catch (error: any) {
+    console.error('[ORDERS] Error removing payment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/:orderId/confirm-payment', authMiddleware, async (req: any, res) => {
   try {
     const { orderId } = req.params;

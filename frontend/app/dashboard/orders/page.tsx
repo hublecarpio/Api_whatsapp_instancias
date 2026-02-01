@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
-import { ordersApi, waApi, tagsApi, messageApi, deliveryZonesApi, productApi } from '@/lib/api';
+import { ordersApi, waApi, tagsApi, messageApi, deliveryZonesApi, productApi, mediaApi } from '@/lib/api';
 import ExtractionFieldsManager from '@/components/ExtractionFieldsManager';
 import CustomSelect from '@/components/ui/CustomSelect';
 
@@ -210,6 +210,12 @@ export default function OrdersPage() {
   const [editingNotesOrderId, setEditingNotesOrderId] = useState<string | null>(null);
   const [editingNotesValue, setEditingNotesValue] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [removingPaymentIndex, setRemovingPaymentIndex] = useState<{orderId: string, index: number} | null>(null);
+  const [addingVoucherOrderId, setAddingVoucherOrderId] = useState<string | null>(null);
+  const [newVoucherAmount, setNewVoucherAmount] = useState('');
+  const [newVoucherMethod, setNewVoucherMethod] = useState('');
+  const [newVoucherFile, setNewVoucherFile] = useState<File | null>(null);
+  const [uploadingVoucher, setUploadingVoucher] = useState(false);
 
   const deleteOrder = async (orderId: string) => {
     try {
@@ -464,6 +470,45 @@ export default function OrdersPage() {
       console.error('Error confirming payment:', error);
     } finally {
       setConfirmingPayment(null);
+    }
+  };
+
+  const removePaymentFromOrder = async (orderId: string, paymentIndex: number) => {
+    try {
+      setRemovingPaymentIndex({ orderId, index: paymentIndex });
+      await ordersApi.removePayment(orderId, paymentIndex);
+      await loadOrders();
+    } catch (error) {
+      console.error('Error removing payment:', error);
+    } finally {
+      setRemovingPaymentIndex(null);
+    }
+  };
+
+  const uploadManualVoucher = async (orderId: string) => {
+    if (!newVoucherFile || !newVoucherAmount || !newVoucherMethod) {
+      alert('Por favor completa todos los campos');
+      return;
+    }
+    
+    try {
+      setUploadingVoucher(true);
+      
+      const uploadRes = await mediaApi.upload(currentBusiness!.id, newVoucherFile);
+      const voucherImageUrl = uploadRes.data.url;
+      
+      await ordersApi.attachVoucher(orderId, voucherImageUrl, parseFloat(newVoucherAmount), newVoucherMethod);
+      
+      setAddingVoucherOrderId(null);
+      setNewVoucherAmount('');
+      setNewVoucherMethod('');
+      setNewVoucherFile(null);
+      await loadOrders();
+    } catch (error) {
+      console.error('Error uploading voucher:', error);
+      alert('Error al subir el comprobante');
+    } finally {
+      setUploadingVoucher(false);
     }
   };
 
@@ -1037,7 +1082,7 @@ export default function OrdersPage() {
                             {paymentHistory.length > 0 && (
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {paymentHistory.map((payment, idx) => (
-                                  <div key={idx} className="flex items-center gap-1.5 bg-[#1a1a1a] rounded px-2 py-1">
+                                  <div key={idx} className="flex items-center gap-1.5 bg-[#1a1a1a] rounded px-2 py-1 group">
                                     {payment.imageUrl && (
                                       <img
                                         src={payment.imageUrl}
@@ -1048,6 +1093,19 @@ export default function OrdersPage() {
                                     )}
                                     <span className="text-white text-xs font-medium">{order.currencySymbol || '$'}{payment.amount.toFixed(2)}</span>
                                     <span className="text-[10px] text-gray-500">{payment.paymentMethod}</span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm('¿Eliminar este pago del historial?')) {
+                                          removePaymentFromOrder(order.id, idx);
+                                        }
+                                      }}
+                                      disabled={removingPaymentIndex?.orderId === order.id && removingPaymentIndex?.index === idx}
+                                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 text-xs ml-1 transition-opacity"
+                                      title="Eliminar pago"
+                                    >
+                                      {removingPaymentIndex?.orderId === order.id && removingPaymentIndex?.index === idx ? '...' : '✕'}
+                                    </button>
                                   </div>
                                 ))}
                               </div>
@@ -1076,29 +1134,77 @@ export default function OrdersPage() {
                               </p>
                             )}
                             
-                            {/* Boton confirmar pago manual - solo para AWAITING_VOUCHER */}
+                            {/* Boton confirmar pago manual y subir voucher - solo para AWAITING_VOUCHER */}
                             {order.status === 'AWAITING_VOUCHER' && (
-                              <div className="mt-3 pt-3 border-t border-gray-600/50">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    confirmPayment(order.id);
-                                  }}
-                                  disabled={confirmingPayment === order.id}
-                                  className="w-full px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:opacity-50 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors"
-                                >
-                                  {confirmingPayment === order.id ? (
-                                    <span className="flex items-center justify-center gap-2">
-                                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                      </svg>
-                                      Confirmando...
-                                    </span>
-                                  ) : (
-                                    'Confirmar Pago Manualmente'
-                                  )}
-                                </button>
+                              <div className="mt-3 pt-3 border-t border-gray-600/50 space-y-2">
+                                {addingVoucherOrderId === order.id ? (
+                                  <div className="space-y-2 bg-[#1a1a1a] rounded-lg p-3" onClick={(e) => e.stopPropagation()}>
+                                    <p className="text-white text-xs font-medium">Subir comprobante manualmente</p>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={(e) => setNewVoucherFile(e.target.files?.[0] || null)}
+                                      className="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-white"
+                                    />
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="number"
+                                        placeholder="Monto"
+                                        value={newVoucherAmount}
+                                        onChange={(e) => setNewVoucherAmount(e.target.value)}
+                                        className="flex-1 px-2 py-1 bg-dark-card border border-dark-border rounded text-white text-xs"
+                                      />
+                                      <select
+                                        value={newVoucherMethod}
+                                        onChange={(e) => setNewVoucherMethod(e.target.value)}
+                                        className="flex-1 px-2 py-1 bg-dark-card border border-dark-border rounded text-white text-xs"
+                                      >
+                                        <option value="">Método</option>
+                                        <option value="YAPE">Yape</option>
+                                        <option value="PLIN">Plin</option>
+                                        <option value="BCP">BCP</option>
+                                        <option value="INTERBANK">Interbank</option>
+                                        <option value="BBVA">BBVA</option>
+                                        <option value="TRANSFERENCIA">Transferencia</option>
+                                        <option value="EFECTIVO">Efectivo</option>
+                                      </select>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => { setAddingVoucherOrderId(null); setNewVoucherFile(null); setNewVoucherAmount(''); setNewVoucherMethod(''); }}
+                                        className="flex-1 px-2 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded"
+                                      >
+                                        Cancelar
+                                      </button>
+                                      <button
+                                        onClick={() => uploadManualVoucher(order.id)}
+                                        disabled={uploadingVoucher || !newVoucherFile || !newVoucherAmount || !newVoucherMethod}
+                                        className="flex-1 px-2 py-1.5 bg-neon-blue hover:bg-neon-blue/80 disabled:opacity-50 text-white text-xs rounded"
+                                      >
+                                        {uploadingVoucher ? 'Subiendo...' : 'Subir'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setAddingVoucherOrderId(order.id); }}
+                                      className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded-lg transition-colors"
+                                    >
+                                      Subir Voucher
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        confirmPayment(order.id);
+                                      }}
+                                      disabled={confirmingPayment === order.id}
+                                      className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                                    >
+                                      {confirmingPayment === order.id ? 'Confirmando...' : 'Confirmar Pago'}
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

@@ -461,8 +461,10 @@ export const ordersApi = {
     api.patch(`/orders/${orderId}/items`, { items, shippingCost }),
   confirmPayment: (orderId: string) =>
     api.post(`/orders/${orderId}/confirm-payment`),
-  attachVoucher: (orderId: string, voucherImageUrl: string) =>
-    api.post(`/orders/${orderId}/voucher`, { voucherImageUrl }),
+  attachVoucher: (orderId: string, voucherImageUrl: string, amount?: number, paymentMethod?: string) =>
+    api.post(`/orders/${orderId}/voucher`, { voucherImageUrl, amount, paymentMethod }),
+  removePayment: (orderId: string, paymentIndex: number) =>
+    api.delete(`/orders/${orderId}/payment/${paymentIndex}`),
   createPaymentLink: (data: {
     businessId: string;
     contactPhone: string;

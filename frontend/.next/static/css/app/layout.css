@@ -3652,8 +3652,16 @@ html[data-mobile="true"] .glass-sidebar {
   margin-right: 1rem;
 }
 
+.file\:mr-2::file-selector-button {
+  margin-right: 0.5rem;
+}
+
 .file\:rounded-lg::file-selector-button {
   border-radius: 0.5rem;
+}
+
+.file\:rounded::file-selector-button {
+  border-radius: 0.25rem;
 }
 
 .file\:border-0::file-selector-button {
@@ -3663,6 +3671,11 @@ html[data-mobile="true"] .glass-sidebar {
 .file\:bg-dark-hover::file-selector-button {
   --tw-bg-opacity: 1;
   background-color: rgb(45 55 72 / var(--tw-bg-opacity, 1));
+}
+
+.file\:bg-gray-700::file-selector-button {
+  --tw-bg-opacity: 1;
+  background-color: rgb(55 65 81 / var(--tw-bg-opacity, 1));
 }
 
 .file\:px-4::file-selector-button {
@@ -3675,9 +3688,24 @@ html[data-mobile="true"] .glass-sidebar {
   padding-bottom: 0.5rem;
 }
 
+.file\:px-2::file-selector-button {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.file\:py-1::file-selector-button {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
 .file\:text-sm::file-selector-button {
   font-size: 0.875rem;
   line-height: 1.25rem;
+}
+
+.file\:text-xs::file-selector-button {
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 .file\:font-medium::file-selector-button {

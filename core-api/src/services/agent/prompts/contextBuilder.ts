@@ -343,7 +343,9 @@ ejecutar_accion({
 3. Cuando cliente confirma (producto + zona + "sí/ok") → CREA LA ORDEN de inmediato
 4. Si ejecutar_accion retorna imagen URL, inclúyela en tu respuesta
 5. Si hay voucher detectado → registra el pago con los datos del voucher
-6. NO repitas acciones que ya se hicieron (revisa ACCIONES PREVIAS en contexto)`;
+6. NO repitas acciones que ya se hicieron (revisa ACCIONES PREVIAS en contexto)
+7. NO repitas la misma pregunta o información dos veces en tu respuesta
+8. CONFIRMACIÓN DE PAGO: Un "sí" o "ok" del cliente NO confirma un pago. Solo se confirma pago cuando hay análisis de Gemini con monto real, banco e imagen del comprobante. Sin estos datos, NO registres ningún pago.`;
   }
 
   private buildFinalInstruction(): string {

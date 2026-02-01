@@ -751,8 +751,23 @@ Estructura requerida: { orderId, voucherImageUrl, amount, paymentMethod, autoCon
       this.log('[VOUCHER-TOOL] Final values after fallback:', { voucherAmount, paymentMethod, voucherImageUrl: voucherImageUrl ? 'SET' : 'NULL' });
       const autoConfirm = args.autoConfirm ?? false;
       
+      // STRICT VALIDATION: Require real voucher data from Gemini analysis
+      // A valid voucher MUST have: amount > 0, valid imageUrl, and a recognized payment method
+      if (!voucherImageUrl || !voucherImageUrl.startsWith('http')) {
+        this.log('[VOUCHER-TOOL] REJECTED: Missing or invalid image URL');
+        return this.error(`No se detectó imagen de comprobante válida.
+
+Para registrar el pago necesito una captura o foto del comprobante de pago donde se vea claramente el monto, banco/app y fecha.`);
+      }
+      
       if (voucherAmount <= 0) {
-        return this.error('Falta el monto (amount). Especifica el monto del voucher detectado.');
+        this.log('[VOUCHER-TOOL] REJECTED: Amount is 0 or negative');
+        return this.error('No se pudo detectar el monto del voucher. Envía una imagen más clara o indica el monto exacto.');
+      }
+      
+      if (!paymentMethod || paymentMethod === 'Desconocido' || paymentMethod === 'N/A') {
+        this.log('[VOUCHER-TOOL] REJECTED: Unknown payment method');
+        return this.error('No se identificó el método de pago. ¿Por qué medio realizaste el pago? (Yape, Plin, BCP, etc.)');
       }
       
       this.log('[VOUCHER-TOOL] Looking up order by UUID:', args.orderId);
@@ -948,8 +963,30 @@ USAR SIEMPRE que llegue un voucher de pago. Los datos del voucher (monto, métod
       fromGemini: { amount: geminiVoucherResult?.amount, method: geminiVoucherResult?.brand, url: geminiVoucherResult?.imageUrl ? 'YES' : 'NO' }
     });
     
+    // STRICT VALIDATION: Require real voucher data from Gemini analysis
+    // A valid voucher MUST have: amount > 0, valid imageUrl, and a recognized payment method
+    if (!voucherImageUrl || !voucherImageUrl.startsWith('http')) {
+      this.log('[VOUCHER-INTELIGENTE] REJECTED: Missing or invalid image URL');
+      return this.error(`No se detectó imagen de comprobante válida.
+
+Para registrar tu pago necesito que envíes una captura o foto del comprobante de pago (Yape, Plin, transferencia, etc.) donde se vea claramente:
+- El monto transferido
+- El banco o aplicación usada
+- La fecha/hora de la operación`);
+    }
+    
     if (voucherAmount <= 0) {
-      return this.error('No se pudo detectar el monto del voucher. Por favor confirma el monto del pago.');
+      this.log('[VOUCHER-INTELIGENTE] REJECTED: Amount is 0 or negative');
+      return this.error(`No se pudo detectar el monto del voucher en la imagen.
+
+Por favor envía una imagen más clara del comprobante donde se vea el monto de la transferencia, o indícame el monto exacto que depositaste.`);
+    }
+    
+    if (!paymentMethod || paymentMethod === 'Desconocido' || paymentMethod === 'N/A') {
+      this.log('[VOUCHER-INTELIGENTE] REJECTED: Unknown payment method');
+      return this.error(`No se pudo identificar el método de pago en el comprobante.
+
+¿Por qué medio realizaste el pago? (Yape, Plin, BCP, Interbank, etc.)`);
     }
     
     try {
