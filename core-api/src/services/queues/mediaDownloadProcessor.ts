@@ -209,8 +209,11 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
           console.log(`${logPrefix} Gemini analysis already done, skipping`);
         } else {
           try {
+            const geminiStartTime = Date.now();
             console.log(`${logPrefix} Processing ${mediaType} with Gemini for AI context...`);
             const result = await geminiService.processMedia(finalMediaUrl, mediaType, '');
+            const geminiElapsed = Date.now() - geminiStartTime;
+            console.log(`${logPrefix} Gemini processing took ${geminiElapsed}ms`);
             
             if (result.success && result.text) {
               let mediaAnalysis = result.text;
@@ -458,6 +461,8 @@ export function startMediaDownloadProcessor(): Worker | null {
       {
         connection,
         concurrency: 3,
+        lockDuration: 120000,
+        stalledInterval: 60000,
         limiter: {
           max: 10,
           duration: 1000
