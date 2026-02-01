@@ -3116,7 +3116,10 @@ router.post('/agent/context-preview', validateApiKey, async (req: ApiKeyRequest,
     
     const builtContext = await contextBuilder.build();
 
-    // Get available tools
+    // Get available tools - REPLICAR EXACTAMENTE la lógica del orchestrator (líneas 145-209)
+    // Usar builtContext.allowedTools (no currentStage.toolsAllowed) para match perfecto
+    const hasToolRestriction = builtContext.allowedTools.length > 0;
+    
     const availabilityContext: ToolAvailabilityContext = {
       businessId,
       instanceId,
@@ -3124,7 +3127,8 @@ router.post('/agent/context-preview', validateApiKey, async (req: ApiKeyRequest,
       hasProducts: businessContext.products.length > 0,
       hasZones: businessContext.deliveryZones.length > 0,
       hasAppointments: businessContext.hasAppointments,
-      businessObjective: businessContext.businessObjective
+      businessObjective: businessContext.businessObjective,
+      enabledToolNames: hasToolRestriction ? builtContext.allowedTools : undefined
     };
 
     const definitionContext: ToolDefinitionContext = {
@@ -3136,17 +3140,55 @@ router.post('/agent/context-preview', validateApiKey, async (req: ApiKeyRequest,
       businessObjective: businessContext.businessObjective
     };
 
-    const availableTools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
+    // Todas las tools filtradas por availabilityContext (incluye enabledToolNames)
+    const allOpenaiTools = toolRegistry.getOpenAITools(availabilityContext, definitionContext);
+    
+    // LLM1 solo recibe ejecutar_accion - REPLICA EXACTA de orchestrator líneas 180-207
+    const LLM1_DELEGATE_TOOL = 'ejecutar_accion';
+    
+    let llm1Tools: any[] = [];
+    if (hasToolRestriction) {
+      // Solo incluir ejecutar_accion si las tools permitidas por etapa lo requieren
+      const stageAllowsActions = builtContext.allowedTools.some((tool: string) => 
+        ['buscar_producto', 'calcular_total_pedido', 'confirmar_pedido', 
+         'agregar_producto_orden', 'consultar_pedido', 'agendar_cita',
+         'ejecutar_accion'].includes(tool)
+      );
+      if (stageAllowsActions) {
+        llm1Tools = allOpenaiTools.filter((t: any) => t.function?.name === LLM1_DELEGATE_TOOL);
+      }
+      // Si no hay acciones permitidas, llm1Tools queda vacío (solo conversación)
+    } else {
+      // Sin restricciones de etapa, dar acceso a ejecutar_accion
+      llm1Tools = allOpenaiTools.filter((t: any) => t.function?.name === LLM1_DELEGATE_TOOL);
+    }
 
     return res.json({
       success: true,
       systemPrompt: builtContext.systemPrompt,
       conversationMessages: builtContext.conversationMessages,
-      availableTools: availableTools.map((t: any) => ({
+      llm1Tools: llm1Tools.map((t: any) => ({
         name: t.function?.name,
         description: t.function?.description,
         parameters: t.function?.parameters
       })),
+      llm2SubTools: allOpenaiTools
+        .filter((t: any) => t.function?.name !== LLM1_DELEGATE_TOOL)
+        .map((t: any) => ({
+          name: t.function?.name,
+          description: t.function?.description?.substring(0, 100) + '...',
+          category: t.function?.name?.includes('producto') ? 'productos' : 
+                    t.function?.name?.includes('pedido') ? 'ordenes' :
+                    t.function?.name?.includes('cita') ? 'citas' : 'otros'
+        })),
+      architecture: {
+        explanation: 'LLM1 (gpt-4o-mini) solo tiene acceso a ejecutar_accion. LLM2 (gpt-4o) ejecuta las sub-tools internamente.',
+        llm1Role: 'Conversacional - responde al cliente y delega acciones',
+        llm2Role: 'Orquestador - ejecuta tools con acceso completo a catálogo, zonas e historial',
+        llm2MaxIterations: 5,
+        hasToolRestriction,
+        allowedToolsByStage: builtContext.allowedTools.length > 0 ? builtContext.allowedTools : 'ALL (sin restricción de etapa)'
+      },
       metadata: {
         ...builtContext.metadata,
         businessName: businessContext.business?.name,
@@ -3155,7 +3197,7 @@ router.post('/agent/context-preview', validateApiKey, async (req: ApiKeyRequest,
         hasExistingOrder: !!conversationContext.existingOrder,
         orderId: conversationContext.existingOrder?.id,
         extractedDataCount: Object.keys(conversationContext.extractedData || {}).length,
-        funnelStage: conversationContext.funnelStatus?.stage?.name
+        funnelStage: builtContext.metadata.currentStage || conversationContext.funnelStatus?.currentStage?.name || 'NONE'
       }
     });
   } catch (error: any) {
