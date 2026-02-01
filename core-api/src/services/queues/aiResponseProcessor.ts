@@ -332,7 +332,11 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
         messages: messages.map((m, i) => ({ role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant', content: m })),
         triggerContext: Object.keys(triggerContext).length > 0 ? triggerContext : undefined,
         config: {
-          model: 'gpt-4o-mini',
+          model: (business as any).v3Llm1Model || (business as any).openaiModel || 'gpt-4.1-mini',
+          llm1Model: (business as any).v3Llm1Model || (business as any).openaiModel || 'gpt-4.1-mini',
+          llm1Provider: ((business as any).v3Llm1Provider || 'openai') as 'openai' | 'openrouter',
+          llm2Model: (business as any).v3Llm2Model || 'gpt-4.1',
+          llm2Provider: ((business as any).v3Llm2Provider || 'openai') as 'openai' | 'openrouter',
           temperature: 0.7,
           maxTokens: 2000,
           maxToolCalls: 5
@@ -340,6 +344,7 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       };
       
       console.log(`[AI Worker V3] Input: phone=${phoneMask}, instanceId=${v3Input.instanceId?.slice(0, 8) || 'null'}, msgCount=${v3Input.messages.length}, hasTriggerContext=${!!v3Input.triggerContext}`);
+      console.log(`[AI Worker V3] Model config: LLM1=${v3Input.config?.llm1Model}/${v3Input.config?.llm1Provider}, LLM2=${v3Input.config?.llm2Model}/${v3Input.config?.llm2Provider}`);
       
       const v3StartTime = Date.now();
       const v3Result = await processWithOrchestrator(v3Input);
@@ -2223,7 +2228,11 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
         messages: messages.map((m, i) => ({ role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant', content: m })),
         triggerContext: Object.keys(triggerContext).length > 0 ? triggerContext : undefined,
         config: {
-          model: 'gpt-4o-mini',
+          model: (business as any).v3Llm1Model || (business as any).openaiModel || 'gpt-4.1-mini',
+          llm1Model: (business as any).v3Llm1Model || (business as any).openaiModel || 'gpt-4.1-mini',
+          llm1Provider: ((business as any).v3Llm1Provider || 'openai') as 'openai' | 'openrouter',
+          llm2Model: (business as any).v3Llm2Model || 'gpt-4.1',
+          llm2Provider: ((business as any).v3Llm2Provider || 'openai') as 'openai' | 'openrouter',
           temperature: 0.7,
           maxTokens: 2000,
           maxToolCalls: 5

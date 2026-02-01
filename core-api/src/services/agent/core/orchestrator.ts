@@ -33,6 +33,10 @@ export interface OrchestratorConfig {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  llm1Model?: string;
+  llm1Provider?: 'openai' | 'openrouter';
+  llm2Model?: string;
+  llm2Provider?: 'openai' | 'openrouter';
 }
 
 export interface OrchestratorInput {
@@ -63,7 +67,8 @@ export interface OrchestratorOutput {
 let toolsInitialized = false;
 
 export class AgentOrchestrator {
-  private llmProvider: ILLMProvider;
+  private llm1Provider: ILLMProvider;
+  private llm2Provider: ILLMProvider;
   private config: OrchestratorConfig;
 
   constructor(config: OrchestratorConfig = {}) {
@@ -72,15 +77,24 @@ export class AgentOrchestrator {
       llmProvider: config.llmProvider ?? 'openai',
       model: config.model ?? 'gpt-4o-mini',
       temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 2000
+      maxTokens: config.maxTokens ?? 2000,
+      llm1Model: config.llm1Model ?? config.model ?? 'gpt-4.1-mini',
+      llm1Provider: config.llm1Provider ?? config.llmProvider ?? 'openai',
+      llm2Model: config.llm2Model ?? 'gpt-4.1',
+      llm2Provider: config.llm2Provider ?? config.llmProvider ?? 'openai'
     };
     
-    this.llmProvider = LLMFactory.getProvider(this.config.llmProvider);
+    this.llm1Provider = LLMFactory.getProvider(this.config.llm1Provider);
+    this.llm2Provider = LLMFactory.getProvider(this.config.llm2Provider);
     
     if (!toolsInitialized) {
       registerAllNativeTools();
       toolsInitialized = true;
     }
+  }
+  
+  get llmProvider(): ILLMProvider {
+    return this.llm1Provider;
   }
 
   async process(input: OrchestratorInput): Promise<OrchestratorOutput> {
@@ -233,7 +247,7 @@ export class AgentOrchestrator {
       ];
 
       const llmConfig: LLMConfig = {
-        model: this.config.model!,
+        model: this.config.llm1Model || this.config.model!,
         temperature: this.config.temperature,
         maxTokens: this.config.maxTokens
       };

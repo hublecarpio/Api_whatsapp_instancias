@@ -243,6 +243,66 @@ router.put('/:id/model', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.put('/:id/v3-models', async (req: AuthRequest, res: Response) => {
+  try {
+    const { llm1Model, llm1Provider, llm2Model, llm2Provider } = req.body;
+    
+    const existing = await prisma.business.findFirst({
+      where: { id: req.params.id, userId: req.userId }
+    });
+    
+    if (!existing) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    const updateData: any = {};
+    if (llm1Model !== undefined) updateData.v3Llm1Model = llm1Model;
+    if (llm1Provider !== undefined) updateData.v3Llm1Provider = llm1Provider;
+    if (llm2Model !== undefined) updateData.v3Llm2Model = llm2Model;
+    if (llm2Provider !== undefined) updateData.v3Llm2Provider = llm2Provider;
+    
+    const business = await prisma.business.update({
+      where: { id: req.params.id },
+      data: updateData
+    });
+    
+    console.log(`[BUSINESS] V3 models updated for ${business.id}: LLM1=${business.v3Llm1Model}/${business.v3Llm1Provider}, LLM2=${business.v3Llm2Model}/${business.v3Llm2Provider}`);
+    res.json({ 
+      id: business.id, 
+      llm1Model: business.v3Llm1Model,
+      llm1Provider: business.v3Llm1Provider,
+      llm2Model: business.v3Llm2Model,
+      llm2Provider: business.v3Llm2Provider
+    });
+  } catch (error) {
+    console.error('Update V3 models error:', error);
+    res.status(500).json({ error: 'Failed to update V3 models' });
+  }
+});
+
+router.get('/:id/v3-models', async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await prisma.business.findFirst({
+      where: { id: req.params.id, userId: req.userId }
+    });
+    
+    if (!existing) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+    
+    res.json({ 
+      id: existing.id, 
+      llm1Model: existing.v3Llm1Model || 'gpt-4.1-mini',
+      llm1Provider: existing.v3Llm1Provider || 'openai',
+      llm2Model: existing.v3Llm2Model || 'gpt-4.1',
+      llm2Provider: existing.v3Llm2Provider || 'openai'
+    });
+  } catch (error) {
+    console.error('Get V3 models error:', error);
+    res.status(500).json({ error: 'Failed to get V3 models' });
+  }
+});
+
 router.get('/:id/openai', async (req: AuthRequest, res: Response) => {
   try {
     const existing = await prisma.business.findFirst({

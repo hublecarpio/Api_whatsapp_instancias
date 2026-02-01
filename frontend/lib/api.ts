@@ -63,6 +63,9 @@ export const businessApi = {
   update: (id: string, data: any) => api.put(`/business/${id}`, data),
   updateOpenAI: (id: string, data: any) => api.put(`/business/${id}/openai`, data),
   updateModel: (id: string, model: string) => api.put(`/business/${id}/model`, { model }),
+  getV3Models: (id: string) => api.get(`/business/${id}/v3-models`),
+  updateV3Models: (id: string, data: { llm1Model?: string; llm1Provider?: string; llm2Model?: string; llm2Provider?: string }) => 
+    api.put(`/business/${id}/v3-models`, data),
   toggleBot: (id: string, enabled?: boolean) => 
     api.put(`/business/${id}/bot-toggle`, { botEnabled: enabled }),
   delete: (id: string) => api.delete(`/business/${id}`),

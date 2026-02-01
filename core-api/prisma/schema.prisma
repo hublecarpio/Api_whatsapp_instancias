@@ -316,6 +316,10 @@ model Business {
   logoUrl           String?
   openaiApiKey      String?
   openaiModel       String?            @default("gpt-4.1-mini")
+  v3Llm1Model       String?            @default("gpt-4.1-mini")
+  v3Llm1Provider    String?            @default("openai")
+  v3Llm2Model       String?            @default("gpt-4.1")
+  v3Llm2Provider    String?            @default("openai")
   botEnabled        Boolean            @default(true)
   timezone          String             @default("America/Lima")
   agentVersion      String             @default("v1")

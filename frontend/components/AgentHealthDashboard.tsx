@@ -3,6 +3,22 @@
 import { useState, useEffect } from 'react';
 import { agentHealthApi, businessApi } from '@/lib/api';
 
+const LLM1_MODELS = [
+  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', provider: 'openai', providerLabel: 'OpenAI', category: 'Económicos' },
+  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', provider: 'openai', providerLabel: 'OpenAI', category: 'Económicos' },
+  { id: 'google/gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash', provider: 'openrouter', providerLabel: 'OpenRouter', category: 'Económicos' },
+  { id: 'anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku', provider: 'openrouter', providerLabel: 'OpenRouter', category: 'Económicos' }
+];
+
+const LLM2_MODELS = [
+  { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai', providerLabel: 'OpenAI', category: 'Potentes' },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', providerLabel: 'OpenAI', category: 'Potentes' },
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'openrouter', providerLabel: 'OpenRouter', category: 'Potentes' },
+  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'openrouter', providerLabel: 'OpenRouter', category: 'Razonadores' },
+  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'openrouter', providerLabel: 'OpenRouter', category: 'Razonadores' },
+  { id: 'google/gemini-2.5-flash-preview:thinking', name: 'Gemini 2.5 Flash Thinking', provider: 'openrouter', providerLabel: 'OpenRouter', category: 'Razonadores' }
+];
+
 const AVAILABLE_MODELS = [
   { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', provider: 'OpenAI' },
   { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', provider: 'OpenAI' },
@@ -134,6 +150,10 @@ export default function AgentHealthDashboard({ businessId, instanceId }: Props) 
   const [showNetwork, setShowNetwork] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
+  const [showLlm1Selector, setShowLlm1Selector] = useState(false);
+  const [showLlm2Selector, setShowLlm2Selector] = useState(false);
+  const [v3Models, setV3Models] = useState<{ llm1Model: string; llm1Provider: string; llm2Model: string; llm2Provider: string } | null>(null);
+  const [savingV3, setSavingV3] = useState(false);
 
   const handleModelChange = async (modelId: string) => {
     if (!businessId) return;
@@ -151,12 +171,42 @@ export default function AgentHealthDashboard({ businessId, instanceId }: Props) 
     }
   };
 
+  const handleV3ModelChange = async (llmType: 'llm1' | 'llm2', modelId: string, provider: string) => {
+    if (!businessId) return;
+    setSavingV3(true);
+    try {
+      const updateData = llmType === 'llm1' 
+        ? { llm1Model: modelId, llm1Provider: provider }
+        : { llm2Model: modelId, llm2Provider: provider };
+      
+      await businessApi.updateV3Models(businessId, updateData);
+      if (v3Models) {
+        setV3Models({
+          ...v3Models,
+          ...(llmType === 'llm1' 
+            ? { llm1Model: modelId, llm1Provider: provider }
+            : { llm2Model: modelId, llm2Provider: provider })
+        });
+      }
+      setShowLlm1Selector(false);
+      setShowLlm2Selector(false);
+    } catch (error) {
+      console.error('Failed to update V3 model:', error);
+    } finally {
+      setSavingV3(false);
+    }
+  };
+
   const fetchHealth = async () => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const response = await agentHealthApi.get(businessId, instanceId || undefined);
-      setHealth(response.data);
+      const [healthResponse, v3Response] = await Promise.all([
+        agentHealthApi.get(businessId, instanceId || undefined),
+        businessApi.getV3Models(businessId)
+      ]);
+      setHealth(healthResponse.data);
+      setV3Models(v3Response.data);
     } catch (error) {
       console.error('Failed to fetch agent health:', error);
     } finally {
@@ -218,7 +268,7 @@ export default function AgentHealthDashboard({ businessId, instanceId }: Props) 
           <div className="p-8 text-center text-gray-400">Cargando...</div>
         ) : health ? (
           <div className="p-4 space-y-6">
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-dark-card rounded-lg p-3 text-center border border-dark-border">
                 <div className={`text-2xl mb-1 ${health.botEnabled ? '' : 'opacity-30'}`}>
                   {health.botEnabled ? '🟢' : '🔴'}
@@ -238,40 +288,93 @@ export default function AgentHealthDashboard({ businessId, instanceId }: Props) 
                 <div className="text-xs text-gray-400">Modo</div>
                 <div className="text-sm text-white">{health.objectiveLabel}</div>
               </div>
-              <div 
-                className={`bg-dark-card rounded-lg p-3 text-center border border-dark-border cursor-pointer hover:border-neon-blue transition-colors relative ${showModelSelector ? 'z-50' : ''}`}
-                onClick={() => setShowModelSelector(!showModelSelector)}
-              >
-                <div className="text-2xl mb-1">🤖</div>
-                <div className="text-xs text-gray-400">Modelo</div>
-                <div className="text-sm text-neon-blue truncate flex items-center justify-center gap-1" title={health.model}>
-                  {AVAILABLE_MODELS.find(m => m.id === health.model)?.name || health.model}
-                  <span className="text-xs">▼</span>
-                </div>
-                {showModelSelector && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface/95 backdrop-blur-md border border-dark-border rounded-lg shadow-xl z-50 max-h-60 overflow-auto">
-                    {AVAILABLE_MODELS.map(model => (
-                      <button
-                        key={model.id}
-                        onClick={(e) => { e.stopPropagation(); handleModelChange(model.id); }}
-                        disabled={savingModel}
-                        className={`w-full px-3 py-2 text-left text-sm hover:bg-dark-card transition-colors ${
-                          health.model === model.id ? 'text-neon-blue bg-neon-blue/10' : 'text-white'
-                        }`}
-                      >
-                        <div className="font-medium">{model.name}</div>
-                        <div className="text-xs text-gray-500">{model.provider}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
               <div className="bg-dark-card rounded-lg p-3 text-center border border-dark-border">
                 <div className="text-2xl mb-1">🌍</div>
                 <div className="text-xs text-gray-400">Zona</div>
                 <div className="text-sm text-white truncate" title={health.timezone}>{health.timezone.split('/')[1] || health.timezone}</div>
               </div>
             </div>
+            
+            {v3Models && (
+              <div className="bg-dark-card rounded-lg p-4 border border-neon-purple/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">🧠</span>
+                  <h3 className="text-sm font-semibold text-white">Configuración de Modelos V3</h3>
+                  <span className="text-xs px-2 py-0.5 bg-neon-purple/20 text-neon-purple rounded-full">Two-LLM Architecture</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div 
+                    className={`bg-dark-surface rounded-lg p-3 border border-dark-border cursor-pointer hover:border-neon-blue transition-colors relative ${showLlm1Selector ? 'z-50 border-neon-blue' : ''}`}
+                    onClick={() => { setShowLlm1Selector(!showLlm1Selector); setShowLlm2Selector(false); }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">💬</span>
+                      <div>
+                        <div className="text-xs text-gray-400">LLM1 - Conversacional</div>
+                        <div className="text-[10px] text-gray-500">Responde y delega</div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-neon-blue font-medium flex items-center justify-between">
+                      <span className="truncate">{LLM1_MODELS.find(m => m.id === v3Models.llm1Model)?.name || v3Models.llm1Model}</span>
+                      <span className="text-xs">▼</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500">{LLM1_MODELS.find(m => m.id === v3Models.llm1Model)?.providerLabel || v3Models.llm1Provider}</div>
+                    {showLlm1Selector && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface/95 backdrop-blur-md border border-dark-border rounded-lg shadow-xl z-50 max-h-60 overflow-auto">
+                        {LLM1_MODELS.map(model => (
+                          <button
+                            key={model.id}
+                            onClick={(e) => { e.stopPropagation(); handleV3ModelChange('llm1', model.id, model.provider); }}
+                            disabled={savingV3}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-dark-card transition-colors ${
+                              v3Models.llm1Model === model.id ? 'text-neon-blue bg-neon-blue/10' : 'text-white'
+                            }`}
+                          >
+                            <div className="font-medium">{model.name}</div>
+                            <div className="text-xs text-gray-500">{model.providerLabel} • {model.category}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div 
+                    className={`bg-dark-surface rounded-lg p-3 border border-dark-border cursor-pointer hover:border-neon-purple transition-colors relative ${showLlm2Selector ? 'z-50 border-neon-purple' : ''}`}
+                    onClick={() => { setShowLlm2Selector(!showLlm2Selector); setShowLlm1Selector(false); }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">🔧</span>
+                      <div>
+                        <div className="text-xs text-gray-400">LLM2 - Ejecutor</div>
+                        <div className="text-[10px] text-gray-500">Ejecuta herramientas</div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-neon-purple font-medium flex items-center justify-between">
+                      <span className="truncate">{LLM2_MODELS.find(m => m.id === v3Models.llm2Model)?.name || v3Models.llm2Model}</span>
+                      <span className="text-xs">▼</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500">{LLM2_MODELS.find(m => m.id === v3Models.llm2Model)?.providerLabel || v3Models.llm2Provider}</div>
+                    {showLlm2Selector && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-dark-surface/95 backdrop-blur-md border border-dark-border rounded-lg shadow-xl z-50 max-h-60 overflow-auto">
+                        {LLM2_MODELS.map(model => (
+                          <button
+                            key={model.id}
+                            onClick={(e) => { e.stopPropagation(); handleV3ModelChange('llm2', model.id, model.provider); }}
+                            disabled={savingV3}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-dark-card transition-colors ${
+                              v3Models.llm2Model === model.id ? 'text-neon-purple bg-neon-purple/10' : 'text-white'
+                            }`}
+                          >
+                            <div className="font-medium">{model.name}</div>
+                            <div className="text-xs text-gray-500">{model.providerLabel} • {model.category}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {health.warnings.length > 0 && (
               <div className="bg-accent-warning/10 border border-accent-warning/30 rounded-lg p-3">
