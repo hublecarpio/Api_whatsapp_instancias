@@ -269,11 +269,15 @@ ${previousMemory.orderId ? `  📦 Orden creada: ${previousMemory.orderId}` : ''
 ⚠️ IMPORTANTE: Si el objetivo es "crear orden" y ya tienes productos y zona en la sesión, USA ESOS DATOS directamente sin buscar de nuevo.
 ` : '';
 
-      const systemPrompt = `Eres un ejecutor de acciones. Tu trabajo es completar el OBJETIVO usando las herramientas en el orden correcto.
+      // Build conversation history for LLM2 context
+      const conversationHistory = this.buildConversationContext(conversationMessages || []);
+
+      const systemPrompt = `Eres un ejecutor de acciones (LLM2 Orquestador). Tu trabajo es completar el OBJETIVO usando las herramientas disponibles.
 
 OBJETIVO: ${objetivo}
 ${contextoAdicional ? `CONTEXTO ADICIONAL: ${contextoAdicional}` : ''}
 ${sessionContext}
+${conversationHistory}
 CATÁLOGO DE PRODUCTOS (muestra):
 ${productCatalog}
 
@@ -793,6 +797,27 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
     }
     
     return parts.join('\n');
+  }
+
+  private buildConversationContext(messages: Array<{ role: string; content: string }>): string {
+    if (!messages || messages.length === 0) {
+      return '';
+    }
+
+    // Include full conversation history for LLM2 to search context
+    const formatted = messages.map(m => {
+      const speaker = m.role === 'user' ? 'CLIENTE' : 'ASESOR';
+      const content = m.content.replace(/\s+/g, ' ').trim().substring(0, 500);
+      return `${speaker}: ${content}`;
+    }).join('\n');
+
+    return `
+HISTORIAL DE CONVERSACIÓN (para buscar contexto si lo necesitas):
+${formatted}
+
+⚠️ IMPORTANTE: Si el objetivo no tiene datos suficientes (producto, zona, etc.), BUSCA en el historial arriba.
+Por ejemplo: si el objetivo dice "crear orden" pero no menciona el producto, revisa el historial para encontrar qué producto eligió el cliente.
+`;
   }
 }
 

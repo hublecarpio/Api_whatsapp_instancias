@@ -106,14 +106,8 @@ export class ContextBuilder {
       ragSectionsUsed = ragSection.count;
     }
 
-    // BLOQUE 5: ZONAS DE ENVÍO (si aplica y no está bloqueado, o si el mensaje habla de ubicaciones)
-    const shouldIncludeZones = this.businessContext.deliveryZones.length > 0 && (
-      !this.isTopicBlocked('envio', blockedTopics) ||
-      this.messagesMentionLocation()
-    );
-    if (shouldIncludeZones) {
-      sections.push(this.buildDeliveryZones());
-    }
+    // BLOQUE 5: RESUMEN DE CAPACIDADES (no detalla catálogo - LLM2 busca cuando necesita)
+    sections.push(this.buildCapabilitiesSummary());
 
     // BLOQUE 6: ACCIONES AUTOMÁTICAS Y ANÁLISIS DE MULTIMEDIA
     // Incluir si hay cualquier trigger, análisis de imagen, o voucher detectado
@@ -292,7 +286,6 @@ export class ContextBuilder {
   }
 
   private buildToolsSection(allowedTools: string[]): string {
-    // Verificar si la etapa permite acciones (tools de productos, orders, citas)
     const actionTools = ['buscar_producto', 'calcular_total_pedido', 'confirmar_pedido', 
                          'agregar_producto_orden', 'consultar_pedido', 'agendar_cita', 'ejecutar_accion'];
     
@@ -305,73 +298,26 @@ No tienes herramientas disponibles en esta etapa. Solo conversa con el cliente.
 NO intentes buscar productos, calcular precios ni crear órdenes hasta avanzar de etapa.`;
     }
     
-    // LLM1 tiene acceso a ejecutar_accion para manejar todas las acciones
-    return `## HERRAMIENTA PRINCIPAL: ejecutar_accion
+    return `## HERRAMIENTA: ejecutar_accion
 
-DEBES usar "ejecutar_accion" para TODAS las siguientes situaciones:
-- Cliente menciona CUALQUIER nombre de producto (completo o parcial) → objetivo: "buscar [producto]"
-- Cliente pregunta por un producto o precio → objetivo: "buscar [producto] y obtener precio"
-- Cliente confirma producto + variación + zona → objetivo: "calcular total de [producto] [variación] para [zona]"
-- Cliente quiere hacer un pedido → objetivo: "crear orden con [productos] para [zona] con pago [método]"
-- Consultar stock o disponibilidad → objetivo: "verificar stock de [producto]"
-- Agendar citas (si aplica) → objetivo: "agendar cita para [fecha] [servicio]"
+Tu ÚNICA herramienta es "ejecutar_accion". LLM2 (orquestador) tiene acceso al catálogo completo, zonas y tools de negocio.
 
-FORMATO DE USO:
-ejecutar_accion({
-  objetivo: "descripción clara de qué hacer",
-  contexto_adicional: "datos del cliente ya recopilados"
-})
+CUÁNDO USAR:
+- Cliente menciona un producto → ejecutar_accion({ objetivo: "buscar [producto]" })
+- Cliente pregunta precio → ejecutar_accion({ objetivo: "buscar [producto] y obtener precio" })
+- Cliente da zona de envío → ejecutar_accion({ objetivo: "calcular total de [productos] para [zona]" })
+- Cliente confirma ("sí", "ok", "dale") → ejecutar_accion({ objetivo: "crear orden con [productos] para [zona]" })
+- Registrar voucher → ejecutar_accion({ objetivo: "registrar pago", contexto_adicional: "voucherImageUrl: ..., amount: X, brand: YAPE" })
 
-EJEMPLOS:
-- Cliente dice "blue" → ejecutar_accion({ objetivo: "buscar productos con 'blue'" })
-- Cliente dice "quiero Erba Pura 100ml" + "Lima" → ejecutar_accion({ objetivo: "calcular total de 1 Erba Pura 100ml con envío a Lima" })
-- Cliente pregunta "cuánto cuesta el perfume X?" → ejecutar_accion({ objetivo: "buscar perfume X y obtener precio" })
-- Cliente confirma "sí, lo quiero" o "ok si" o "dale" → ejecutar_accion({ objetivo: "crear orden con los productos seleccionados" })
+FORMATO:
+ejecutar_accion({ objetivo: "qué hacer", contexto_adicional: "datos adicionales si hay" })
 
-REGLA CRÍTICA - CREACIÓN DE ÓRDENES:
-Cuando ya tienes: producto + zona + confirmación del cliente → DEBES usar ejecutar_accion para crear la orden INMEDIATAMENTE
-Frases de confirmación: "sí", "ok", "ok si", "dale", "perfecto", "confirmo", "lo quiero", "procedamos"
-NO esperes más confirmaciones - si el cliente ya eligió producto y zona y dijo "sí", CREA LA ORDEN.
-Ejemplo:
-- Producto: Bleu de Chanel 100ml (de buscar_producto anterior)
-- Zona: Lima
-- Cliente dice: "ok si"
-→ DEBES ejecutar: ejecutar_accion({ objetivo: "crear orden de Bleu de Chanel 100ml para Lima", contexto_adicional: "cliente confirmó 'ok si'" })
-
-REGLA CRÍTICA - BÚSQUEDA OBLIGATORIA:
-- Si el cliente menciona CUALQUIER palabra que podría ser un producto (nombre completo, abreviación, palabra clave como "blue", "eros", "sauvage", etc.), DEBES usar ejecutar_accion para buscarlo
-- NUNCA respondas "no identifiqué el producto" o "no encontré" SIN ANTES usar ejecutar_accion
-- Aunque el nombre sea parcial o incompleto, SIEMPRE busca primero
-
-IMPORTANTE: 
-- NO inventes precios ni totales - SIEMPRE usa ejecutar_accion para obtenerlos
-- La herramienta te retornará datos exactos del catálogo y cálculos reales
-- Si la herramienta indica que falta información, pregunta al cliente
-
-ENVÍO DE IMÁGENES DE PRODUCTOS:
-- Cuando ejecutar_accion retorne productos con URL de imagen, puedes incluir la URL en tu respuesta para mostrar la foto al cliente
-- Simplemente incluye la URL de la imagen en una línea separada de tu mensaje
-- Ejemplo de respuesta con imagen:
-  "¡Tenemos el Blue Seduction! Es una fragancia fresca ideal para el verano.
-  
-  https://ejemplo.com/blue-seduction.png
-  
-  ¿Te gustaría saber el precio con envío?"
-- El sistema automáticamente enviará la imagen al cliente junto con tu texto
-
-REGISTRO DE PAGOS CON VOUCHER:
-- Si el sistema detectó un voucher de pago (ver sección "DATOS DEL VOUCHER DETECTADO"), DEBES registrar el pago
-- Usa ejecutar_accion con el objetivo: "registrar pago de voucher"
-- OBLIGATORIO incluir en contexto_adicional:
-  - voucherImageUrl: la URL de la imagen del voucher
-  - amount: el monto detectado
-  - brand: el método de pago (YAPE, PLIN, etc.)
-  - operationCode: el código de operación (si está disponible)
-- Ejemplo:
-  ejecutar_accion({
-    objetivo: "registrar pago de voucher por S/20 en pedido activo",
-    contexto_adicional: "voucherImageUrl: https://..., amount: 20, brand: YAPE, operationCode: 123456"
-  })`;
+REGLAS:
+1. NUNCA inventes precios - SIEMPRE usa ejecutar_accion para obtenerlos
+2. NUNCA digas "no encontré" sin antes buscar con ejecutar_accion
+3. Cuando cliente confirma (producto + zona + "sí/ok/dale") → CREA LA ORDEN inmediatamente
+4. Si ejecutar_accion retorna imagen URL, inclúyela en tu respuesta
+5. Si hay voucher detectado → registra el pago con los datos del voucher`;
   }
 
   private buildFinalInstruction(): string {
@@ -553,6 +499,31 @@ REGISTRO DE PAGOS CON VOUCHER:
     zones += `\n⚠️ IMPORTANTE: Siempre usa la herramienta "calcular_total_pedido" para calcular el total exacto incluyendo envío.`;
     
     return zones;
+  }
+
+  private buildCapabilitiesSummary(): string {
+    const { products, deliveryZones, hasAppointments, businessObjective } = this.businessContext;
+    
+    const activeProducts = products.filter((p: any) => p.isActive !== false);
+    
+    let summary = `## CAPACIDADES DEL NEGOCIO\n`;
+    
+    if (businessObjective === 'SALES') {
+      summary += `Tipo: Ventas/E-commerce\n`;
+      summary += `Catálogo: ${activeProducts.length} productos disponibles\n`;
+      if (deliveryZones.length > 0) {
+        summary += `Zonas de envío: ${deliveryZones.length} zonas configuradas\n`;
+      }
+    } else if (businessObjective === 'APPOINTMENTS') {
+      summary += `Tipo: Servicios/Citas\n`;
+      if (hasAppointments) {
+        summary += `Sistema de citas: Activo\n`;
+      }
+    }
+    
+    summary += `\n⚠️ NO conoces el catálogo ni precios directamente. Usa "ejecutar_accion" para buscar productos, calcular totales y crear órdenes. LLM2 tiene acceso completo al catálogo.`;
+    
+    return summary;
   }
 
   private buildOrderContext(): string {
