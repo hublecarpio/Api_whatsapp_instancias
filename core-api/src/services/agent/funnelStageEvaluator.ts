@@ -1,12 +1,11 @@
 import prisma from '../prisma.js';
+import { GeminiService } from '../gemini.js';
 import { getContactStageStatus, setContactStage } from '../funnelStageService.js';
 import { getRedisConnection, isRedisAvailable } from '../redis.js';
 import { logTokenUsage, estimateGeminiTokens } from '../tokenLogger.js';
-import axios from 'axios';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const gemini = new GeminiService();
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
 const EVALUATION_COOLDOWN_MS = 30000;
 const LOCK_TTL_SECONDS = 60;
@@ -37,6 +36,7 @@ function buildDynamicPrompt(
     blockedTopics: string[];
   }>,
   currentStageName: string,
+  currentStageOrder: number,
   conversation: string
 ): string {
   const stagesDescription = stages.map((s, i) => {
@@ -51,13 +51,15 @@ function buildDynamicPrompt(
     return desc;
   }).join('\n');
 
+  const stageNames = stages.map(s => `"${s.name}"`).join(', ');
+
   return `Eres un evaluador de etapas de venta. Tu trabajo es analizar la conversación y determinar si el cliente debe cambiar de etapa.
 
 ## ETAPAS DEL FUNNEL (en orden)
 ${stagesDescription}
 
 ## ETAPA ACTUAL DEL CLIENTE
-"${currentStageName}"
+"${currentStageName}" (orden: ${currentStageOrder})
 
 ## CONVERSACIÓN RECIENTE
 ${conversation}
@@ -65,13 +67,15 @@ ${conversation}
 ## REGLAS DE EVALUACIÓN
 1. Las etapas avanzan en orden: 1 → 2 → 3, etc.
 2. Solo cambiar si hay EVIDENCIA CLARA en la conversación
-3. Se puede retroceder si el cliente cancela o cambia de opinión
-4. Si no hay suficiente evidencia, mantener la etapa actual
-5. No avanzar si faltan datos requeridos de la etapa actual
+3. Solo puedes avanzar UNA etapa a la vez (de orden ${currentStageOrder} a orden ${currentStageOrder + 1})
+4. Se puede retroceder si el cliente cancela o cambia de opinión
+5. Si no hay suficiente evidencia, mantener la etapa actual
 
 ## INSTRUCCIONES
 Analiza la conversación y responde SOLO con JSON (sin markdown):
-{"should_change": true/false, "new_stage_name": "nombre exacto de etapa" | null, "reason": "explicación breve"}`;
+{"should_change": true/false, "new_stage_name": "nombre exacto" | null, "reason": "explicación breve"}
+
+IMPORTANTE: new_stage_name DEBE ser exactamente uno de: ${stageNames}`;
 }
 
 async function acquireLock(key: string): Promise<boolean> {
@@ -111,30 +115,15 @@ async function checkCooldown(key: string): Promise<boolean> {
   }
 }
 
-async function callGeminiFlash(prompt: string): Promise<{ success: boolean; text: string; error?: string }> {
-  if (!GEMINI_API_KEY) {
-    return { success: false, text: '', error: 'GEMINI_API_KEY not configured' };
-  }
-
-  try {
-    const response = await axios.post(
-      `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 300
-        }
-      },
-      { timeout: 30000 }
-    );
-
-    const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return { success: true, text };
-  } catch (error: any) {
-    const errorMessage = error?.response?.data?.error?.message || error?.message || 'Unknown error';
-    return { success: false, text: '', error: errorMessage };
-  }
+function validateStageTransition(
+  currentOrder: number,
+  targetOrder: number,
+  totalStages: number
+): boolean {
+  if (targetOrder < 1 || targetOrder > totalStages) return false;
+  if (targetOrder === currentOrder) return false;
+  if (targetOrder > currentOrder + 1) return false;
+  return true;
 }
 
 export async function evaluateFunnelStageAsync(input: EvaluatorInput): Promise<void> {
@@ -159,7 +148,7 @@ export async function evaluateFunnelStageAsync(input: EvaluatorInput): Promise<v
   try {
     console.log(`[FunnelEvaluator] Starting Gemini Flash evaluation for ${normalizedPhone}`);
     
-    if (!GEMINI_API_KEY) {
+    if (!gemini.isConfigured()) {
       console.log(`[FunnelEvaluator] Gemini not configured, skipping`);
       return;
     }
@@ -181,6 +170,7 @@ export async function evaluateFunnelStageAsync(input: EvaluatorInput): Promise<v
     const currentStatus = await getContactStageStatus(businessId, normalizedPhone);
     const currentStageInList = stages.find(s => s.id === currentStatus.currentStage?.id);
     const currentStageName = currentStageInList?.name || stages[0].name;
+    const currentStageOrder = currentStageInList?.order || stages[0].order;
 
     const cleanConversation = formatCleanConversation(conversationHistory);
     
@@ -193,11 +183,15 @@ export async function evaluateFunnelStageAsync(input: EvaluatorInput): Promise<v
         blockedTopics: s.blockedTopics
       })),
       currentStageName,
+      currentStageOrder,
       cleanConversation
     );
 
     const startTime = Date.now();
-    const response = await callGeminiFlash(prompt);
+    const response = await gemini.generateText(prompt, {
+      temperature: 0.2,
+      maxTokens: 300
+    });
 
     if (!response.success) {
       console.error(`[FunnelEvaluator] Gemini error: ${response.error}`);
@@ -249,6 +243,11 @@ export async function evaluateFunnelStageAsync(input: EvaluatorInput): Promise<v
       }
 
       if (targetStage && targetStage.id !== currentStatus.currentStage?.id) {
+        if (!validateStageTransition(currentStageOrder, targetStage.order, stages.length)) {
+          console.log(`[FunnelEvaluator] ⚠️ Invalid transition: ${currentStageName} (${currentStageOrder}) → ${targetStage.name} (${targetStage.order}) - skipping multi-stage jump`);
+          return;
+        }
+
         await setContactStage(businessId, normalizedPhone, targetStage.id, instanceId || undefined);
         console.log(`[FunnelEvaluator] ✅ Stage updated: ${currentStageName} → ${targetStage.name} (${decision.reason})`);
       } else if (!targetStage) {

@@ -127,6 +127,43 @@ export class GeminiService {
     return { buffer: Buffer.from(response.data), mimeType };
   }
 
+  async generateText(
+    prompt: string,
+    options: { temperature?: number; maxTokens?: number } = {}
+  ): Promise<GeminiResponse> {
+    if (!this.isConfigured()) {
+      return { success: false, text: '', error: 'Gemini API not configured' };
+    }
+
+    const { temperature = 0.3, maxTokens = 500 } = options;
+
+    try {
+      const response = await axios.post(
+        `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${this.apiKey}`,
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature,
+            maxOutputTokens: maxTokens
+          }
+        },
+        { timeout: 30000 }
+      );
+
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return { success: true, text: text.trim() };
+    } catch (error: any) {
+      if (this.isQuotaError(error) && this.hasOpenRouterFallback()) {
+        console.log('[GEMINI] Quota exceeded, falling back to OpenRouter');
+        return await this.callOpenRouter(prompt, { temperature, maxTokens });
+      }
+
+      const errorMessage = error?.response?.data?.error?.message || error?.message || 'Unknown error';
+      console.error('[GEMINI] generateText error:', errorMessage);
+      return { success: false, text: '', error: errorMessage };
+    }
+  }
+
   async transcribeAudio(audioUrl: string): Promise<GeminiResponse> {
     if (!this.isConfigured()) {
       return { success: false, text: '', error: 'Gemini API not configured' };
