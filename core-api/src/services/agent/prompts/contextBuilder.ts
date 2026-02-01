@@ -440,7 +440,7 @@ ejecutar_accion({
       const result = await retrieveRelevantSections(
         business.id,
         ragQuery,
-        5,
+        2,
         instanceId || undefined
       );
       
