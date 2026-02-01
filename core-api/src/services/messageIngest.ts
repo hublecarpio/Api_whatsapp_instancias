@@ -27,7 +27,7 @@ function logIngest(tag: string, message: string, data?: any) {
 export interface IncomingMessage {
   businessId: string;
   instanceId: string;
-  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST';
+  provider: 'BAILEYS' | 'META_CLOUD' | 'META_COEXIST' | 'META_MANAGED';
   from: string;
   pushName: string;
   messageId: string;
