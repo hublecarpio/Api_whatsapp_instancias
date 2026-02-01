@@ -223,7 +223,7 @@ async function processWebhookPayload(payload: MetaWebhookPayload) {
   });
 
   for (const msg of parsed.messages) {
-    await processMessage(msg, instance, metaService, providerType);
+    await processMessage(msg, instance, metaService, providerType, parsed.displayPhoneNumber);
   }
 
   for (const status of parsed.statuses) {
@@ -235,7 +235,8 @@ async function processMessage(
   msg: ParsedMessage, 
   instance: any, 
   metaService: MetaCloudService, 
-  providerType: MetaProviderType
+  providerType: MetaProviderType,
+  businessPhoneNumber?: string
 ) {
   const startTime = Date.now();
 
@@ -247,6 +248,88 @@ async function processMessage(
       reason: 'duplicate'
     }, 'Skipping duplicate message');
     return;
+  }
+  
+  // COEXISTENCE MODE: Detect messages sent from WhatsApp App (not from API)
+  // In coexistence, when business sends from app, msg.from == business phone number
+  const normalizedFrom = msg.from?.replace(/\D/g, '') || '';
+  const normalizedBusinessPhone = businessPhoneNumber?.replace(/\D/g, '') || '';
+  const isBusinessOutbound = normalizedBusinessPhone && normalizedFrom === normalizedBusinessPhone;
+  
+  if (isBusinessOutbound) {
+    // This is a message sent by the business from WhatsApp App
+    // Save it as outbound for context (CRM visibility + agent memory) but don't trigger AI
+    // ONLY store if we can deterministically identify the recipient from contextFrom (reply context)
+    const recipientPhone = msg.contextFrom?.replace(/\D/g, '') || '';
+    
+    if (!recipientPhone) {
+      // Without contextFrom we can't reliably determine the recipient
+      // This is expected for messages that aren't direct replies
+      // The status.sent fallback will create a placeholder if needed
+      webhookLogger.debug({
+        messageId: msg.messageId,
+        from: msg.from,
+        type: msg.type
+      }, 'WhatsApp App outbound message without contextFrom - will use status.sent fallback');
+      return;
+    }
+    
+    // Check if already exists (deduplication with status.sent handler)
+    const existing = await prisma.messageLog.findFirst({
+      where: { providerMessageId: msg.messageId, businessId: instance.businessId }
+    });
+    
+    if (existing) {
+      // Update placeholder with real content if needed
+      if (existing.message?.includes('[Mensaje enviado desde WhatsApp App]')) {
+        await prisma.messageLog.update({
+          where: { id: existing.id },
+          data: {
+            message: msg.text || msg.caption || '[Multimedia desde WhatsApp App]',
+            recipient: recipientPhone,
+            mediaUrl: msg.mediaId ? `meta:${msg.mediaId}` : undefined,
+            metadata: {
+              ...(existing.metadata as any || {}),
+              source: 'whatsapp_app',
+              type: msg.type,
+              updatedWithRealContent: true
+            }
+          }
+        });
+        webhookLogger.info({ messageId: msg.messageId }, 'Updated placeholder with real content');
+      }
+      return;
+    }
+    
+    await prisma.messageLog.create({
+      data: {
+        businessId: instance.businessId,
+        instanceId: instance.id,
+        direction: 'outbound',
+        sender: 'business',
+        recipient: recipientPhone,
+        message: msg.text || msg.caption || '[Multimedia desde WhatsApp App]',
+        mediaUrl: msg.mediaId ? `meta:${msg.mediaId}` : undefined,
+        providerMessageId: msg.messageId,
+        metadata: {
+          source: 'whatsapp_app',
+          provider: providerType,
+          type: msg.type,
+          timestamp: msg.timestamp,
+          pushName: msg.pushName
+        }
+      }
+    });
+    
+    webhookLogger.info({
+      messageId: msg.messageId,
+      from: msg.from,
+      recipient: recipientPhone,
+      type: msg.type,
+      hasText: !!(msg.text || msg.caption)
+    }, 'Stored WhatsApp App outbound message (coexistence mode)');
+    
+    return; // Don't process as inbound - no AI trigger
   }
 
   logWebhookEvent({
@@ -640,6 +723,38 @@ async function processStatusUpdate(status: ParsedStatus, instance: any, provider
         messageId: status.messageId,
         status: status.status
       }, 'Message status updated');
+    } else if (status.status === 'sent') {
+      // Message sent from WhatsApp App (not from API) - create passive memory record
+      // This captures business human responses for AI context
+      const cleanRecipient = status.recipientId?.replace(/\D/g, '') || '';
+      
+      if (cleanRecipient) {
+        await prisma.messageLog.create({
+          data: {
+            businessId: instance.businessId,
+            instanceId: instance.id,
+            direction: 'outbound',
+            sender: 'business',
+            recipient: cleanRecipient,
+            message: '[Mensaje enviado desde WhatsApp App]',
+            providerMessageId: status.messageId,
+            metadata: {
+              source: 'whatsapp_app',
+              provider: providerType,
+              conversationId: status.conversationId,
+              originType: status.originType,
+              deliveryStatus: status.status,
+              timestamp: status.timestamp
+            }
+          }
+        });
+        
+        webhookLogger.info({
+          messageId: status.messageId,
+          recipientId: cleanRecipient,
+          businessId: instance.businessId
+        }, 'Created message log for WhatsApp App outbound message');
+      }
     } else {
       webhookLogger.debug({
         messageId: status.messageId,
