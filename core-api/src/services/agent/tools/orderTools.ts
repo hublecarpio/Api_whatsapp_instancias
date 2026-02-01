@@ -878,6 +878,330 @@ Resumen de pagos:
   }
 }
 
+export class ProcesarVoucherInteligenteTool extends BaseTool {
+  readonly name = 'procesar_voucher_inteligente';
+  readonly category: ToolCategory = 'PAYMENT';
+
+  protected buildDefinition(context: ToolDefinitionContext): ToolDefinition {
+    return {
+      name: this.name,
+      description: `Procesa un voucher/comprobante de pago de forma inteligente:
+1. Si hay orden activa → registra el pago en esa orden
+2. Si NO hay orden pero el cliente tiene carrito con productos y datos → crea la orden automáticamente y registra el pago
+3. Si no hay datos suficientes → indica qué falta
+
+USAR SIEMPRE que llegue un voucher de pago. Los datos del voucher (monto, método, URL) se obtienen automáticamente del análisis de Gemini.`,
+      category: this.category,
+      parameters: {
+        type: 'object',
+        properties: {
+          orderId: {
+            type: 'string',
+            description: 'UUID de la orden (opcional - si no se proporciona, busca orden activa o crea una nueva)'
+          },
+          amount: {
+            type: 'number',
+            description: 'Monto del voucher (se obtiene automáticamente del análisis de imagen)'
+          },
+          paymentMethod: {
+            type: 'string',
+            description: 'Método de pago: YAPE, PLIN, TRANSFERENCIA, etc.'
+          },
+          voucherImageUrl: {
+            type: 'string',
+            description: 'URL de la imagen del voucher (se obtiene automáticamente)'
+          },
+          nombre_cliente: {
+            type: 'string',
+            description: 'Nombre del cliente (requerido si se debe crear orden)'
+          },
+          direccion: {
+            type: 'string',
+            description: 'Dirección de envío (requerida si se debe crear orden)'
+          }
+        },
+        required: []
+      }
+    };
+  }
+
+  isAvailable(context: ToolAvailabilityContext): boolean {
+    return context.hasVoucherContext === true || context.hasActiveOrder || context.hasSessionCart === true;
+  }
+
+  async execute(args: Record<string, any>, context: ToolContext): Promise<ToolResult> {
+    this.log('[VOUCHER-INTELIGENTE] Execute called', args);
+    
+    const { businessId, instanceId, contactPhone, contactName, currencySymbol, geminiVoucherResult, extractedData } = context;
+    const normalizedPhone = contactPhone.replace(/\D/g, '');
+    
+    // Get voucher data from args or geminiVoucherResult fallback
+    const voucherAmount = args.amount || geminiVoucherResult?.amount || 0;
+    const paymentMethod = args.paymentMethod || geminiVoucherResult?.brand || 'Desconocido';
+    const voucherImageUrl = args.voucherImageUrl || geminiVoucherResult?.imageUrl || null;
+    
+    this.log('[VOUCHER-INTELIGENTE] Voucher data:', {
+      amount: voucherAmount,
+      method: paymentMethod,
+      hasImageUrl: !!voucherImageUrl,
+      fromArgs: { amount: args.amount, method: args.paymentMethod, url: args.voucherImageUrl ? 'YES' : 'NO' },
+      fromGemini: { amount: geminiVoucherResult?.amount, method: geminiVoucherResult?.brand, url: geminiVoucherResult?.imageUrl ? 'YES' : 'NO' }
+    });
+    
+    if (voucherAmount <= 0) {
+      return this.error('No se pudo detectar el monto del voucher. Por favor confirma el monto del pago.');
+    }
+    
+    try {
+      // Step 1: Try to find existing active order
+      let order = await prisma.order.findFirst({
+        where: {
+          businessId,
+          contactPhone: normalizedPhone,
+          status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] },
+          ...(instanceId ? { instanceId } : {})
+        },
+        include: { items: true },
+        orderBy: { createdAt: 'desc' }
+      });
+      
+      // If orderId provided, try that specific order
+      if (!order && args.orderId) {
+        order = await prisma.order.findFirst({
+          where: {
+            id: args.orderId,
+            businessId,
+            status: { in: [OrderStatus.AWAITING_VOUCHER, OrderStatus.PENDING_PAYMENT] }
+          },
+          include: { items: true }
+        });
+      }
+      
+      this.log('[VOUCHER-INTELIGENTE] Order lookup:', { found: !!order, orderId: order?.id?.slice(0, 8) || 'NONE' });
+      
+      // Step 2: If no order, try to create one from session data
+      if (!order) {
+        this.log('[VOUCHER-INTELIGENTE] No active order found, checking session cart...');
+        
+        // Get session cart from extracted data OR load from DB directly
+        let sessionCart = extractedData?.['_session_cart'];
+        
+        // If not in extractedData, load directly from ContactExtractedData
+        if (!sessionCart) {
+          this.log('[VOUCHER-INTELIGENTE] Session cart not in extractedData, loading from DB...');
+          const sessionRecord = await prisma.contactExtractedData.findUnique({
+            where: {
+              businessId_contactPhone_fieldKey: {
+                businessId,
+                contactPhone: normalizedPhone,
+                fieldKey: '_session_cart'
+              }
+            }
+          });
+          if (sessionRecord?.fieldValue) {
+            sessionCart = sessionRecord.fieldValue;
+            this.log('[VOUCHER-INTELIGENTE] Loaded session cart from DB');
+          }
+        }
+        
+        if (!sessionCart) {
+          this.log('[VOUCHER-INTELIGENTE] No session cart found');
+          return this.error(`No hay pedido activo para registrar este voucher.
+          
+Para procesar tu pago necesito:
+1. Primero confirmar qué productos deseas
+2. Tu nombre y dirección de envío
+3. Zona de envío
+
+¿Puedes indicarme qué productos te interesan?`);
+        }
+        
+        const session = typeof sessionCart === 'string' ? JSON.parse(sessionCart) : sessionCart;
+        const products = session.products || [];
+        const totals = session.totals || {};
+        
+        this.log('[VOUCHER-INTELIGENTE] Session cart data:', {
+          productCount: products.length,
+          hasTotal: !!totals.total,
+          total: totals.total
+        });
+        
+        if (products.length === 0) {
+          return this.error(`Recibí tu comprobante de pago pero aún no tienes productos en tu carrito.
+
+Por favor indícame qué productos deseas ordenar para poder crear tu pedido.`);
+        }
+        
+        // Check for required customer data
+        const nombre = args.nombre_cliente || extractedData?.nombre || extractedData?.name || contactName;
+        const direccion = args.direccion || extractedData?.direccion || extractedData?.address;
+        
+        if (!nombre || !direccion) {
+          const missing: string[] = [];
+          if (!nombre) missing.push('nombre completo');
+          if (!direccion) missing.push('dirección de envío');
+          
+          return this.error(`Recibí tu voucher de ${currencySymbol}${voucherAmount.toFixed(2)} pero necesito los siguientes datos para crear tu pedido:
+
+${missing.map(m => `• ${m}`).join('\n')}
+
+Por favor proporcióname estos datos para completar tu orden.`);
+        }
+        
+        // Create order from session cart
+        this.log('[VOUCHER-INTELIGENTE] Creating order from session cart...');
+        
+        const orderItems = products.map((p: any) => ({
+          productId: p.id,
+          productTitle: p.title,
+          quantity: p.quantity || 1,
+          unitPrice: p.price,
+          variation: p.variation,
+          imageUrl: p.imageUrl
+        }));
+        
+        const subtotal = totals.subtotal || orderItems.reduce((sum: number, item: any) => sum + (item.unitPrice * item.quantity), 0);
+        const shipping = totals.shipping || 0;
+        const totalAmount = totals.total || (subtotal + shipping);
+        
+        const createdOrder = await prisma.order.create({
+          data: {
+            businessId,
+            instanceId,
+            contactPhone: normalizedPhone,
+            contactName: nombre,
+            shippingAddress: direccion,
+            deliveryZoneId: totals.zoneId || null,
+            status: OrderStatus.AWAITING_VOUCHER,
+            subtotalAmount: subtotal,
+            shippingCost: shipping,
+            totalAmount: totalAmount,
+            notes: JSON.stringify({ preferredPaymentMethod: paymentMethod }),
+            items: {
+              create: orderItems.map((item: any) => ({
+                productId: item.productId,
+                productTitle: item.productTitle,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                variation: item.variation,
+                imageUrl: item.imageUrl
+              }))
+            }
+          },
+          include: { items: true }
+        });
+        order = createdOrder;
+        
+        this.log('[VOUCHER-INTELIGENTE] Order created:', { orderId: order.id.slice(0, 8), total: totalAmount });
+      }
+      
+      // At this point order must exist
+      if (!order) {
+        return this.error('No se pudo encontrar o crear una orden para este voucher.');
+      }
+      
+      // Step 3: Register the voucher on the order
+      const currentPaid = order.paidAmount || 0;
+      const newPaidAmount = currentPaid + voucherAmount;
+      const pendingAfter = Math.max(0, order.totalAmount - newPaidAmount);
+      const isFullyPaid = newPaidAmount >= order.totalAmount;
+      
+      this.log('[VOUCHER-INTELIGENTE] Payment calculation:', {
+        orderTotal: order.totalAmount,
+        previousPaid: currentPaid,
+        voucherAmount,
+        newPaidAmount,
+        pendingAfter,
+        isFullyPaid
+      });
+      
+      // Build payment history
+      const paymentEntry = {
+        amount: voucherAmount,
+        brand: paymentMethod,
+        imageUrl: voucherImageUrl,
+        timestamp: new Date().toISOString(),
+        type: 'VOUCHER'
+      };
+      
+      let existingNotes: any = {};
+      try {
+        existingNotes = order.notes ? JSON.parse(order.notes) : {};
+      } catch { 
+        existingNotes = { legacyNotes: order.notes }; 
+      }
+      const paymentHistory = existingNotes.paymentHistory || [];
+      paymentHistory.push(paymentEntry);
+      
+      const newStatus = isFullyPaid ? OrderStatus.PAID : OrderStatus.AWAITING_VOUCHER;
+      
+      // Update order
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          voucherImageUrl: voucherImageUrl,
+          voucherReceivedAt: new Date(),
+          paidAmount: newPaidAmount,
+          pendingAmount: pendingAfter,
+          lastVoucherAmount: voucherAmount,
+          status: newStatus,
+          paidAt: newStatus === OrderStatus.PAID ? new Date() : order.paidAt,
+          notes: JSON.stringify({
+            ...existingNotes,
+            paymentHistory,
+            lastVoucherBank: paymentMethod
+          })
+        }
+      });
+      
+      const orderIdShort = order.id.slice(-6).toUpperCase();
+      
+      if (isFullyPaid) {
+        this.log(`[VOUCHER-INTELIGENTE] Order ${orderIdShort} FULLY PAID`);
+        return this.success(`✅ PAGO COMPLETO REGISTRADO
+
+Pedido #${orderIdShort}
+Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${paymentMethod})
+
+Total pagado: ${currencySymbol}${newPaidAmount.toFixed(2)}
+Total del pedido: ${currencySymbol}${order.totalAmount.toFixed(2)}
+━━━━━━━━━━━━━━━━━━━━
+Estado: PAGADO ✓
+
+El pedido está listo para ser procesado.`, { 
+          orderId: order.id, 
+          status: 'PAID', 
+          fullyPaid: true,
+          voucherImageUrl,
+          paymentMethod
+        });
+      } else {
+        this.log(`[VOUCHER-INTELIGENTE] Order ${orderIdShort} PARTIAL PAYMENT`);
+        return this.success(`💳 PAGO REGISTRADO
+
+Pedido #${orderIdShort}
+Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${paymentMethod})
+
+Resumen de pagos:
+• Total del pedido: ${currencySymbol}${order.totalAmount.toFixed(2)}
+• Pagado hasta ahora: ${currencySymbol}${newPaidAmount.toFixed(2)}
+• Saldo pendiente: ${currencySymbol}${pendingAfter.toFixed(2)}`, { 
+          orderId: order.id, 
+          status: 'AWAITING_VOUCHER', 
+          fullyPaid: false,
+          paidAmount: newPaidAmount,
+          pendingAmount: pendingAfter,
+          voucherImageUrl,
+          paymentMethod
+        });
+      }
+    } catch (error: any) {
+      this.logError('[VOUCHER-INTELIGENTE] Error processing voucher', error);
+      return this.error(`Error al procesar voucher: ${error.message}`);
+    }
+  }
+}
+
 export function registerOrderTools(): void {
   toolRegistry.registerTool(new ConfirmarPedidoTool());
   toolRegistry.registerTool(new AgregarProductoTool());
@@ -885,6 +1209,7 @@ export function registerOrderTools(): void {
   toolRegistry.registerTool(new ConfirmarEntregaTool());
   toolRegistry.registerTool(new CalcularTotalTool());
   toolRegistry.registerTool(new RegistrarVoucherTool());
+  toolRegistry.registerTool(new ProcesarVoucherInteligenteTool());
   
-  console.log('[OrderTools] All order tools registered');
+  console.log('[OrderTools] All order tools registered (including ProcesarVoucherInteligente)');
 }

@@ -200,6 +200,10 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         console.log(`[LLM2-Delegate]   └─ imageUrl: ${context.geminiVoucherResult.imageUrl ? 'YES' : 'MISSING'}`);
       }
 
+      // Load previous session memory if available (needed for availability check)
+      const previousMemory = await loadSessionMemory(businessId, contactPhone);
+      const hasSessionCart = !!(previousMemory && (previousMemory.productData?.length > 0 || previousMemory.orderId));
+      
       const availabilityContext: ToolAvailabilityContext = {
         businessId,
         instanceId,
@@ -207,7 +211,9 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         hasProducts: businessContext.products.length > 0,
         hasZones: businessContext.deliveryZones.length > 0,
         hasAppointments: businessContext.hasAppointments,
-        businessObjective: businessContext.businessObjective
+        businessObjective: businessContext.businessObjective,
+        hasVoucherContext: !!(context.geminiVoucherResult?.isPaymentProof),
+        hasSessionCart
       };
 
       const definitionContext: ToolDefinitionContext = {
@@ -243,8 +249,7 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         geminiVoucherResult: context.geminiVoucherResult
       };
 
-      // Load previous session memory if available
-      const previousMemory = await loadSessionMemory(businessId, contactPhone);
+      // Use already-loaded session memory from availability check
       const memory: ToolMemory = previousMemory || {
         productData: [],
         calculatedTotals: {},

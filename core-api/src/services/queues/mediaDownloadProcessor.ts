@@ -242,6 +242,43 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
                   : mediaAnalysis;
               }
               
+              // For images, also check if it's a payment voucher
+              let voucherValidation: any = null;
+              if (mediaType === 'image') {
+                try {
+                  // Get business currency for proper voucher validation
+                  const business = await prisma.business.findUnique({
+                    where: { id: businessId },
+                    select: { currencyCode: true }
+                  });
+                  const currency = business?.currencyCode || 'PEN';
+                  
+                  console.log(`${logPrefix} Checking if image is a payment voucher (currency: ${currency})...`);
+                  const voucherResult = await geminiService.validatePaymentVoucher(finalMediaUrl, { currency });
+                  
+                  // Save voucherValidation if it's a payment proof (even if not fully valid)
+                  // This allows downstream tools to decide based on isPaymentProof
+                  if (voucherResult.isPaymentProof) {
+                    console.log(`${logPrefix} 🧾 VOUCHER DETECTED! Brand=${voucherResult.brand}, Amount=${voucherResult.amount}, Valid=${voucherResult.isValid}`);
+                    voucherValidation = {
+                      isPaymentProof: voucherResult.isPaymentProof,
+                      isValid: voucherResult.isValid,
+                      brand: voucherResult.brand,
+                      amount: voucherResult.amount,
+                      currency: voucherResult.currency,
+                      operationCode: voucherResult.operationCode,
+                      confidence: voucherResult.confidence,
+                      reason: voucherResult.reason,
+                      imageUrl: finalMediaUrl
+                    };
+                  } else {
+                    console.log(`${logPrefix} Image is not a payment voucher: ${voucherResult.reason}`);
+                  }
+                } catch (voucherError: any) {
+                  console.warn(`${logPrefix} Voucher validation failed (non-critical): ${voucherError.message}`);
+                }
+              }
+              
               await prisma.messageLog.update({
                 where: { id: messageLogId },
                 data: {
@@ -250,11 +287,12 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
                     ...metadataForGemini,
                     mediaAnalysis: result.text,
                     mediaAnalysisType: mediaType,
-                    mediaAnalysisAt: new Date().toISOString()
+                    mediaAnalysisAt: new Date().toISOString(),
+                    ...(voucherValidation ? { voucherValidation } : {})
                   }
                 }
               });
-              console.log(`${logPrefix} Gemini analysis complete and saved`);
+              console.log(`${logPrefix} Gemini analysis complete and saved${voucherValidation ? ' (with voucher data)' : ''}`);
             }
           } catch (geminiError: any) {
             console.warn(`${logPrefix} Gemini processing failed (non-critical): ${geminiError.message}`);

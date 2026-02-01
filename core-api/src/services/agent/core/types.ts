@@ -101,6 +101,8 @@ export interface ToolAvailabilityContext {
   hasAppointments: boolean;
   businessObjective?: 'SALES' | 'APPOINTMENTS';
   enabledToolNames?: string[];
+  hasVoucherContext?: boolean;
+  hasSessionCart?: boolean;
 }
 
 export interface OpenAIToolFormat {
