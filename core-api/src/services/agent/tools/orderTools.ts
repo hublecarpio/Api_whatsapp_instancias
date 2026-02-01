@@ -853,7 +853,9 @@ El pedido está listo para ser procesado.`, {
         });
       } else {
         this.log(`[VOUCHER-TOOL] Order ${orderIdShort} PARTIAL PAYMENT, pending: ${pendingAfter}`);
-        return this.success(`💳 PAGO PARCIAL REGISTRADO
+        // NOTE: Message is purely informational - no instructions on what to do next
+        // The business's master prompt should define the next step (dispatch data, request more payment, etc.)
+        return this.success(`💳 PAGO REGISTRADO
 
 Pedido #${orderIdShort}
 Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${paymentMethod})
@@ -861,12 +863,11 @@ Voucher recibido: ${currencySymbol}${voucherAmount.toFixed(2)} (${paymentMethod}
 Resumen de pagos:
 • Total del pedido: ${currencySymbol}${order.totalAmount.toFixed(2)}
 • Pagado hasta ahora: ${currencySymbol}${newPaidAmount.toFixed(2)}
-• PENDIENTE: ${currencySymbol}${pendingAfter.toFixed(2)}
-━━━━━━━━━━━━━━━━━━━━
-Por favor solicita al cliente el pago del monto pendiente.`, { 
+• Saldo pendiente: ${currencySymbol}${pendingAfter.toFixed(2)}`, { 
           orderId: order.id, 
           status: 'AWAITING_VOUCHER', 
           fullyPaid: false,
+          paidAmount: newPaidAmount,
           pendingAmount: pendingAfter 
         });
       }
