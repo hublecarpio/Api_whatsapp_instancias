@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { messageApi, waApi, mediaApi, templatesApi } from '@/lib/api';
-import { ArrowLeft, Send, Paperclip, Mic, User, Bot, Image as ImageIcon, Video, FileText, Check, CheckCheck, Clock, X, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, Mic, User, Bot, Image as ImageIcon, Video, FileText, Check, CheckCheck, Clock, X, AlertCircle, Reply, ShoppingBag } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -25,6 +25,23 @@ interface Message {
     mediaPending?: boolean;
     mediaDownloadFailed?: boolean;
     mediaId?: string;
+    quotedMessage?: {
+      messageId?: string;
+      from?: string;
+      text?: string;
+      type?: string;
+      mediaUrl?: string;
+      caption?: string;
+    };
+    referredProduct?: {
+      catalogId?: string;
+      productId: string;
+      title?: string;
+      description?: string;
+      price?: number;
+      currency?: string;
+      imageUrl?: string;
+    };
   };
 }
 
@@ -368,6 +385,56 @@ export default function ChatPage() {
                     ? 'bg-cyan-600 text-white rounded-br-md'
                     : 'bg-gray-700 text-white rounded-bl-md'
                 } ${msg.metadata?.pending ? 'opacity-60' : ''}`}>
+                  
+                  {msg.metadata?.quotedMessage && (
+                    <div className={`mb-2 p-2 rounded-lg border-l-4 ${
+                      msg.direction === 'outbound' 
+                        ? 'bg-cyan-700/50 border-cyan-400' 
+                        : 'bg-gray-600/50 border-gray-500'
+                    }`}>
+                      <div className="flex items-center gap-1 text-xs opacity-80 mb-1">
+                        <Reply className="w-3 h-3" />
+                        <span>Respuesta a mensaje</span>
+                      </div>
+                      {msg.metadata.quotedMessage.mediaUrl && (
+                        <div className="flex items-center gap-1 text-xs opacity-70 mb-1">
+                          {msg.metadata.quotedMessage.type?.includes('image') ? (
+                            <ImageIcon className="w-3 h-3" />
+                          ) : msg.metadata.quotedMessage.type?.includes('video') ? (
+                            <Video className="w-3 h-3" />
+                          ) : (
+                            <FileText className="w-3 h-3" />
+                          )}
+                          <span>{msg.metadata.quotedMessage.type || 'Archivo'}</span>
+                        </div>
+                      )}
+                      <p className="text-sm opacity-90 line-clamp-2">
+                        {msg.metadata.quotedMessage.text || msg.metadata.quotedMessage.caption || '[Mensaje multimedia]'}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {msg.metadata?.referredProduct && (
+                    <div className={`mb-2 p-2 rounded-lg border-l-4 ${
+                      msg.direction === 'outbound' 
+                        ? 'bg-cyan-700/50 border-green-400' 
+                        : 'bg-gray-600/50 border-green-500'
+                    }`}>
+                      <div className="flex items-center gap-1 text-xs opacity-80 mb-1">
+                        <ShoppingBag className="w-3 h-3" />
+                        <span>Producto del catálogo</span>
+                      </div>
+                      <p className="text-sm font-medium">
+                        {msg.metadata.referredProduct.title || msg.metadata.referredProduct.productId}
+                      </p>
+                      {msg.metadata.referredProduct.price && (
+                        <p className="text-xs opacity-80">
+                          {msg.metadata.referredProduct.currency || ''} {msg.metadata.referredProduct.price}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
                   {(msg.mediaUrl || msg.metadata?.mediaPending || msg.metadata?.mediaDownloadFailed) && (
                     <div className="mb-2">
                       {renderMedia(msg)}
