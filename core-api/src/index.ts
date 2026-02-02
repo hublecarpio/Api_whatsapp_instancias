@@ -43,6 +43,7 @@ import promotionsRoutes from './routes/promotions.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { resolveShortUrl } from './services/shortUrl.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
+import { ensureRequiredTables } from './utils/ensureTables.js';
 
 dotenv.config();
 
@@ -282,12 +283,21 @@ async function gracefulShutdown(): Promise<void> {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-app.listen(Number(PORT), '0.0.0.0', () => {
+app.listen(Number(PORT), '0.0.0.0', async () => {
   console.log('================================================================================');
   console.log(`🚀 Core API ${BUILD_VERSION} starting...`);
   console.log(`   Build Timestamp: ${BUILD_TIMESTAMP}`);
   console.log(`   Route Order: /webhook/meta BEFORE /webhook/:businessId ✓`);
   console.log(`   Server: http://0.0.0.0:${PORT}`);
   console.log('================================================================================');
+  
+  // Ensure required tables exist (bypasses Prisma silent failures)
+  try {
+    await ensureRequiredTables();
+  } catch (error: any) {
+    console.error('[STARTUP] Failed to ensure required tables:', error.message);
+    // Continue anyway - individual operations will fail gracefully
+  }
+  
   initializeWorkers();
 });
