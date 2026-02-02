@@ -81,6 +81,14 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
           contexto_adicional: {
             type: 'string',
             description: 'Información adicional del cliente: nombre, dirección, productos ya mencionados, etc.'
+          },
+          descuento_porcentaje: {
+            type: 'number',
+            description: 'Porcentaje de descuento a aplicar (ej: 20 para 20%). Solo usar si el prompt del negocio define promociones.'
+          },
+          descuento_razon: {
+            type: 'string',
+            description: 'Razón del descuento (ej: "2x1 en 100ml", "Promo Black Friday")'
           }
         },
         required: ['objetivo']
@@ -175,7 +183,14 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
     const { businessId, instanceId, contactPhone, contactName, conversationMessages } = context;
     const objetivo = args.objetivo;
     const contextoAdicional = args.contexto_adicional || '';
+    const descuentoPorcentaje = args.descuento_porcentaje ? parseFloat(args.descuento_porcentaje) : undefined;
+    const descuentoRazon = args.descuento_razon || undefined;
     const maxIterations = 5;
+    
+    // Log discount if provided
+    if (descuentoPorcentaje) {
+      console.log(`[LLM2-Delegate] 🏷️ Descuento recibido: ${descuentoPorcentaje}% - "${descuentoRazon || 'sin razón'}"`);
+    }
 
     if (!objetivo) {
       console.log(`[LLM2-Delegate] ✗ ERROR: No objetivo specified`);
@@ -289,10 +304,23 @@ ${previousMemory.orderId ? `  📦 Orden creada: ${previousMemory.orderId}` : ''
       // Build conversation history for LLM2 context
       const conversationHistory = this.buildConversationContext(conversationMessages || []);
 
+      // Build discount context for LLM2
+      const discountContext = descuentoPorcentaje ? `
+🏷️ DESCUENTO/PROMOCIÓN A APLICAR:
+   - Porcentaje: ${descuentoPorcentaje}%
+   - Razón: "${descuentoRazon || 'Promoción aplicada'}"
+   
+   ⚠️ IMPORTANTE: Al crear el pedido con confirmar_pedido, incluye los siguientes parámetros de descuento:
+   - descuento_porcentaje: ${descuentoPorcentaje}
+   - descuento_razon: "${descuentoRazon || 'Promoción aplicada'}"
+   
+   El sistema calculará automáticamente el monto del descuento sobre el subtotal.` : '';
+      
       const systemPrompt = `Eres un ejecutor de acciones (LLM2 Orquestador). Tu trabajo es completar el OBJETIVO usando las herramientas disponibles.
 
 OBJETIVO: ${objetivo}
 ${contextoAdicional ? `CONTEXTO ADICIONAL: ${contextoAdicional}` : ''}
+${discountContext}
 ${sessionContext}
 ${conversationHistory}
 CATÁLOGO DE PRODUCTOS (muestra):

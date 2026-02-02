@@ -49,6 +49,14 @@ export class ConfirmarPedidoTool extends BaseTool {
             type: 'string', 
             description: 'Notas adicionales (opcional)' 
           },
+          descuento_porcentaje: {
+            type: 'number',
+            description: 'Porcentaje de descuento a aplicar (ej: 20 para 20% de descuento)'
+          },
+          descuento_razon: {
+            type: 'string',
+            description: 'Razón del descuento (ej: "2x1 en 100ml", "Promo Black Friday")'
+          },
           // Legacy support
           producto: { type: 'string', description: '[LEGACY] Nombre del producto - usa items[] en su lugar' },
           cantidad: { type: 'number', description: '[LEGACY] Cantidad - usa items[] en su lugar' },
@@ -211,7 +219,22 @@ NO crees otra orden. Usa agregar_producto_orden para añadir los productos solic
         }
       }
       
-      const total = subtotal + shippingCost;
+      // Calculate discount if provided
+      const discountPercent = args.descuento_porcentaje ? parseFloat(args.descuento_porcentaje) : 0;
+      const discountReason = args.descuento_razon || undefined;
+      let discountAmount = 0;
+      
+      if (discountPercent > 0 && discountPercent <= 100) {
+        discountAmount = (subtotal * discountPercent) / 100;
+        this.log('[CONFIRMAR_PEDIDO] Applying discount', { 
+          discountPercent, 
+          discountReason, 
+          subtotal, 
+          discountAmount 
+        });
+      }
+      
+      const total = subtotal + shippingCost - discountAmount;
 
       // Create order with items
       const notesWithPayment = args.metodo_pago 
@@ -228,6 +251,10 @@ NO crees otra orden. Usa agregar_producto_orden para añadir los productos solic
           deliveryZoneId: zone?.id,
           subtotalAmount: subtotal,
           shippingCost,
+          discountType: discountPercent > 0 ? 'PERCENTAGE' : undefined,
+          discountValue: discountPercent > 0 ? discountPercent : undefined,
+          discountAmount: discountAmount > 0 ? discountAmount : undefined,
+          promotionName: discountReason,
           totalAmount: total,
           pendingAmount: total,
           currencySymbol,
@@ -258,15 +285,22 @@ NO crees otra orden. Usa agregar_producto_orden para añadir los productos solic
       this.log('[CONFIRMAR_PEDIDO] Order created successfully', { 
         orderId: order.id, 
         itemsCount: order.items?.length || itemsToCreate.length,
-        total 
+        total,
+        discountAmount,
+        discountPercent
       });
+      
+      // Build discount line if applicable
+      const discountLine = discountAmount > 0 
+        ? `Descuento${discountReason ? ` (${discountReason})` : ''}: -${currencySymbol}${discountAmount.toFixed(2)} (${discountPercent}%)\n` 
+        : '';
       
       return this.success(`PEDIDO CONFIRMADO #${orderIdShort}
 
 ${itemsSummary}
 ━━━━━━━━━━━━━━━━━━━━
 Subtotal: ${currencySymbol}${subtotal.toFixed(2)}
-Envío${zone ? ` (${zone.name})` : ''}: ${currencySymbol}${shippingCost.toFixed(2)}
+${discountLine}Envío${zone ? ` (${zone.name})` : ''}: ${currencySymbol}${shippingCost.toFixed(2)}
 TOTAL: ${currencySymbol}${total.toFixed(2)}
 
 Cliente: ${args.nombre_cliente}
@@ -277,7 +311,11 @@ Estado: Esperando comprobante de pago`, {
         orderId: order.id,
         orderIdShort,
         total,
-        itemsCount: order.items?.length || itemsToCreate.length
+        itemsCount: order.items?.length || itemsToCreate.length,
+        discountApplied: discountAmount > 0,
+        discountAmount,
+        discountPercent,
+        discountReason
       });
     } catch (error: any) {
       this.logError('Error creating order', error);
