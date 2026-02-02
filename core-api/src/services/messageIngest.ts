@@ -46,6 +46,27 @@ export interface IncomingMessage {
   reaction?: { messageId: string; emoji: string };
   order?: { catalogId: string; items: Array<{ productId: string; quantity: number; price: number; currency: string }> };
   skipAI?: boolean; // Skip AI processing when media is pending async download
+  
+  // Quoted/Reply message context
+  quotedMessage?: {
+    messageId: string;
+    from?: string;
+    text?: string;
+    type?: string;
+    mediaUrl?: string;
+    caption?: string;
+  };
+  
+  // Catalog product reference (when user selects product from catalog)
+  referredProduct?: {
+    catalogId?: string;
+    productId: string;
+    title?: string;
+    description?: string;
+    price?: number;
+    currency?: string;
+    imageUrl?: string;
+  };
 }
 
 export async function processIncomingMessage(message: IncomingMessage): Promise<boolean> {

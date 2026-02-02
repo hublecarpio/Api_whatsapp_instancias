@@ -693,6 +693,72 @@ export class WhatsAppInstance {
     }
   }
 
+  private extractQuotedMessageInfo(contextInfo: any): any {
+    const quotedMessage = contextInfo.quotedMessage;
+    const stanzaId = contextInfo.stanzaId || contextInfo.quotedStanzaId;
+    const participant = contextInfo.participant || contextInfo.remoteJid;
+    
+    let quotedText = '';
+    let quotedType = 'unknown';
+    let quotedCaption = '';
+    let quotedMediaUrl = '';
+    
+    // Extract text from various message types
+    if (quotedMessage.conversation) {
+      quotedText = quotedMessage.conversation;
+      quotedType = 'text';
+    } else if (quotedMessage.extendedTextMessage) {
+      quotedText = quotedMessage.extendedTextMessage.text || '';
+      quotedType = 'text';
+    } else if (quotedMessage.imageMessage) {
+      quotedCaption = quotedMessage.imageMessage.caption || '';
+      quotedType = 'image';
+    } else if (quotedMessage.videoMessage) {
+      quotedCaption = quotedMessage.videoMessage.caption || '';
+      quotedType = 'video';
+    } else if (quotedMessage.audioMessage) {
+      quotedType = quotedMessage.audioMessage.ptt ? 'ptt' : 'audio';
+    } else if (quotedMessage.documentMessage) {
+      quotedCaption = quotedMessage.documentMessage.fileName || '';
+      quotedType = 'document';
+    } else if (quotedMessage.stickerMessage) {
+      quotedType = 'sticker';
+    } else if (quotedMessage.locationMessage) {
+      quotedType = 'location';
+      quotedText = `📍 ${quotedMessage.locationMessage.degreesLatitude}, ${quotedMessage.locationMessage.degreesLongitude}`;
+    } else if (quotedMessage.productMessage) {
+      quotedType = 'product';
+      const product = quotedMessage.productMessage.product || quotedMessage.productMessage;
+      quotedText = product?.title || product?.productId || 'Producto del catálogo';
+    }
+    
+    return {
+      messageId: stanzaId,
+      from: participant,
+      text: quotedText || quotedCaption,
+      type: quotedType,
+      caption: quotedCaption || undefined
+    };
+  }
+  
+  private extractProductReference(contextInfo: any): any {
+    // Handle product message from catalog
+    const productMessage = (contextInfo as any).productMessage || (contextInfo as any).forwardedProduct;
+    if (!productMessage) return null;
+    
+    const product = productMessage.product || productMessage;
+    
+    return {
+      catalogId: product?.catalogId || product?.businessOwnerId || undefined,
+      productId: product?.productId || product?.productRetailerId || 'unknown',
+      title: product?.title || product?.name || undefined,
+      description: product?.description || undefined,
+      price: product?.priceAmount1000 ? product.priceAmount1000 / 1000 : undefined,
+      currency: product?.currencyCode || undefined,
+      imageUrl: product?.productImage?.url || product?.productImageUrl || undefined
+    };
+  }
+  
   private extractActualMessage(msg: proto.IMessage): proto.IMessage {
     if (msg.viewOnceMessage?.message) {
       return msg.viewOnceMessage.message;
@@ -721,11 +787,24 @@ export class WhatsAppInstance {
     }
 
     if (msg.extendedTextMessage) {
-      return {
+      const result: any = {
         type: 'text',
-        text: msg.extendedTextMessage.text || '',
-        quotedMessage: msg.extendedTextMessage.contextInfo?.quotedMessage ? true : false
+        text: msg.extendedTextMessage.text || ''
       };
+      
+      // Extract quoted message context
+      const contextInfo = msg.extendedTextMessage.contextInfo;
+      if (contextInfo) {
+        if (contextInfo.quotedMessage) {
+          result.quotedMessage = this.extractQuotedMessageInfo(contextInfo);
+        }
+        // Check for catalog product reference
+        if ((contextInfo as any).productMessage || (contextInfo as any).forwardedProduct) {
+          result.referredProduct = this.extractProductReference(contextInfo);
+        }
+      }
+      
+      return result;
     }
 
     if (msg.imageMessage) {
@@ -854,6 +933,42 @@ export class WhatsAppInstance {
         type: 'template_button_reply',
         selectedId: msg.templateButtonReplyMessage.selectedId || '',
         selectedDisplayText: msg.templateButtonReplyMessage.selectedDisplayText || ''
+      };
+    }
+    
+    // Product message from WhatsApp catalog
+    if ((msg as any).productMessage) {
+      const productMsg = (msg as any).productMessage;
+      const product = productMsg.product || productMsg;
+      return {
+        type: 'product',
+        text: `Producto seleccionado: ${product?.title || product?.productId || 'del catálogo'}`,
+        referredProduct: {
+          catalogId: product?.catalogId || product?.businessOwnerId || undefined,
+          productId: product?.productId || product?.productRetailerId || 'unknown',
+          title: product?.title || product?.name || undefined,
+          description: product?.description || undefined,
+          price: product?.priceAmount1000 ? product.priceAmount1000 / 1000 : undefined,
+          currency: product?.currencyCode || undefined,
+          imageUrl: product?.productImage?.url || product?.productImageUrl || undefined
+        }
+      };
+    }
+    
+    // Order message from catalog
+    if ((msg as any).orderMessage) {
+      const orderMsg = (msg as any).orderMessage;
+      const items = orderMsg.itemCount || 1;
+      const orderId = orderMsg.orderId || orderMsg.token || 'unknown';
+      return {
+        type: 'order',
+        text: `Pedido del catálogo (${items} productos)`,
+        orderMessage: {
+          orderId,
+          itemCount: items,
+          status: orderMsg.status || 'pending',
+          orderTitle: orderMsg.orderTitle || undefined
+        }
       };
     }
 
