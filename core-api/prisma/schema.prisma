@@ -1548,3 +1548,25 @@ model MediaShortUrl {
   @@index([shortId])
   @@index([businessId, createdAt])
 }
+
+model WebhookRawLog {
+  id              String   @id @default(uuid())
+  source          String   @default("META")
+  endpoint        String
+  method          String   @default("POST")
+  headers         Json?
+  queryParams     Json?
+  body            Json
+  phoneNumberId   String?
+  businessId      String?
+  instanceId      String?
+  messageCount    Int      @default(0)
+  statusCount     Int      @default(0)
+  processingError String?
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([source, createdAt])
+  @@index([phoneNumberId, createdAt])
+  @@index([businessId, createdAt])
+}

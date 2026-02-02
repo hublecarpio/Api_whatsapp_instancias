@@ -915,6 +915,75 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================================
+// WEBHOOK RAW LOGS - Debug endpoint to query all raw Meta webhooks
+// ============================================================================
+router.get('/raw-logs', async (req: Request, res: Response) => {
+  try {
+    const { phoneNumberId, limit = '50', offset = '0', source = 'META' } = req.query;
+    
+    const where: any = { source: source as string };
+    if (phoneNumberId) {
+      where.phoneNumberId = phoneNumberId as string;
+    }
+    
+    const logs = await prisma.webhookRawLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(parseInt(limit as string) || 50, 200),
+      skip: parseInt(offset as string) || 0,
+      select: {
+        id: true,
+        source: true,
+        endpoint: true,
+        phoneNumberId: true,
+        businessId: true,
+        messageCount: true,
+        statusCount: true,
+        processingError: true,
+        processedAt: true,
+        createdAt: true,
+        body: true
+      }
+    });
+    
+    const total = await prisma.webhookRawLog.count({ where });
+    
+    res.json({
+      success: true,
+      data: logs,
+      pagination: {
+        total,
+        limit: parseInt(limit as string) || 50,
+        offset: parseInt(offset as string) || 0
+      }
+    });
+  } catch (error: any) {
+    console.error('[WEBHOOK RAW LOGS] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get a single raw log by ID (full payload)
+router.get('/raw-logs/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const log = await prisma.webhookRawLog.findUnique({
+      where: { id }
+    });
+    
+    if (!log) {
+      return res.status(404).json({ success: false, error: 'Log not found' });
+    }
+    
+    res.json({ success: true, data: log });
+  } catch (error: any) {
+    console.error('[WEBHOOK RAW LOGS] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.post('/', async (req: Request, res: Response) => {
   const timestamp = new Date().toISOString();
   
@@ -932,12 +1001,55 @@ router.post('/', async (req: Request, res: Response) => {
   console.log('[META WEBHOOK] RAW PAYLOAD:', JSON.stringify(req.body, null, 2));
   console.log('='.repeat(80));
   
+  // ========================================================================
+  // CRITICAL: Save RAW webhook payload to DB BEFORE any processing
+  // This ensures we never lose any Meta webhook events for debugging
+  // ========================================================================
+  let rawLogId: string | null = null;
+  try {
+    const payload = req.body as MetaWebhookPayload;
+    const phoneNumberId = payload?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+    const messageCount = payload?.entry?.[0]?.changes?.[0]?.value?.messages?.length || 0;
+    const statusCount = payload?.entry?.[0]?.changes?.[0]?.value?.statuses?.length || 0;
+    
+    const rawLog = await prisma.webhookRawLog.create({
+      data: {
+        source: 'META',
+        endpoint: req.originalUrl || '/webhook/meta',
+        method: req.method || 'POST',
+        headers: {
+          'content-type': req.headers['content-type'],
+          'user-agent': req.headers['user-agent'],
+          'x-hub-signature-256': req.headers['x-hub-signature-256'] ? 'present' : 'missing'
+        },
+        queryParams: req.query || {},
+        body: req.body || {},
+        phoneNumberId: phoneNumberId || null,
+        messageCount,
+        statusCount
+      }
+    });
+    rawLogId = rawLog.id;
+    console.log(`[META WEBHOOK RAW] Saved raw log: ${rawLogId} (msgs=${messageCount}, statuses=${statusCount})`);
+  } catch (rawLogError: any) {
+    console.error('[META WEBHOOK RAW] Failed to save raw log:', rawLogError.message);
+    // Don't fail the webhook - continue processing even if logging fails
+  }
+  // ========================================================================
+  
   try {
     const payload: MetaWebhookPayload = req.body;
     
     if (!payload || typeof payload !== 'object') {
       console.error('[META WEBHOOK] ERROR: Invalid payload received');
       console.error('[META WEBHOOK] Payload value:', payload);
+      // Update raw log with error
+      if (rawLogId) {
+        await prisma.webhookRawLog.update({
+          where: { id: rawLogId },
+          data: { processingError: 'Invalid payload - null or not object', processedAt: new Date() }
+        }).catch(() => {});
+      }
       res.status(200).send('EVENT_RECEIVED');
       return;
     }
@@ -959,13 +1071,35 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(200).send('EVENT_RECEIVED');
     
     // Process in background - don't await to avoid blocking response
-    processWebhookPayload(payload).catch(error => {
+    processWebhookPayload(payload).then(async () => {
+      // Mark raw log as processed successfully
+      if (rawLogId) {
+        await prisma.webhookRawLog.update({
+          where: { id: rawLogId },
+          data: { processedAt: new Date() }
+        }).catch(() => {});
+      }
+    }).catch(async error => {
       console.error('[META WEBHOOK] BACKGROUND PROCESSING ERROR:', error);
       webhookLogger.error({ error: error.message, stack: error.stack }, 'Webhook background processing error');
+      // Update raw log with error
+      if (rawLogId) {
+        await prisma.webhookRawLog.update({
+          where: { id: rawLogId },
+          data: { processingError: error.message, processedAt: new Date() }
+        }).catch(() => {});
+      }
     });
   } catch (error: any) {
     console.error('[META WEBHOOK] PROCESSING ERROR:', error);
     webhookLogger.error({ error: error.message, stack: error.stack }, 'Webhook processing error');
+    // Update raw log with error
+    if (rawLogId) {
+      await prisma.webhookRawLog.update({
+        where: { id: rawLogId },
+        data: { processingError: error.message, processedAt: new Date() }
+      }).catch(() => {});
+    }
     if (!res.headersSent) {
       res.status(200).send('EVENT_RECEIVED');
     }
