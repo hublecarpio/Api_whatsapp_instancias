@@ -445,6 +445,44 @@ async function processMessage(
   // Skip AI if media is pending async download - AI will be called after media is ready
   const skipAI = !!mediaPendingData;
   
+  // Fetch quoted message content if contextMessageId exists
+  let quotedMessage: any = undefined;
+  if (msg.contextMessageId) {
+    try {
+      const quotedLog = await prisma.messageLog.findFirst({
+        where: {
+          businessId: instance.businessId,
+          providerMessageId: msg.contextMessageId
+        },
+        select: {
+          id: true,
+          message: true,
+          direction: true,
+          mediaUrl: true,
+          metadata: true
+        }
+      });
+      
+      if (quotedLog) {
+        const metadata = quotedLog.metadata as any || {};
+        quotedMessage = {
+          messageId: msg.contextMessageId,
+          from: msg.contextFrom || (quotedLog.direction === 'inbound' ? metadata.contactPhone : 'business'),
+          text: quotedLog.message || '',
+          type: metadata.mediaType || metadata.type || 'text',
+          mediaUrl: quotedLog.mediaUrl || undefined,
+          caption: metadata.caption || undefined
+        };
+        console.log(`[META WEBHOOK] Quoted message resolved:`, {
+          messageId: msg.contextMessageId,
+          textPreview: quotedMessage.text?.substring(0, 50)
+        });
+      }
+    } catch (err: any) {
+      console.warn(`[META WEBHOOK] Failed to fetch quoted message:`, err.message);
+    }
+  }
+  
   const processed = await processIncomingMessage({
     businessId: instance.businessId,
     instanceId: instance.id,
@@ -466,7 +504,9 @@ async function processMessage(
     interactiveId: msg.interactiveId,
     reaction: msg.reaction,
     order: msg.order,
-    skipAI
+    skipAI,
+    quotedMessage,
+    referredProduct: msg.referredProduct
   });
   
   // Only dispatch webhook if message was actually processed (not a duplicate in DB)

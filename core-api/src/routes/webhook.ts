@@ -475,7 +475,9 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                 latitude: latitude,
                 longitude: longitude,
                 isProductMessage: isProductMessage || undefined,
-                productInfo: productInfo || undefined
+                productInfo: productInfo || undefined,
+                quotedMessage: data.quotedMessage || undefined,
+                referredProduct: data.referredProduct || undefined
               }
             }
           });
@@ -559,6 +561,35 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               }
             }
             
+            // Extract quoted message context if present
+            let quotedContext = '';
+            if (data.quotedMessage) {
+              const qm = data.quotedMessage;
+              const quotedText = qm.text || qm.caption || '';
+              const quotedType = qm.type || 'mensaje';
+              if (quotedText) {
+                quotedContext = `\n\n[SISTEMA - El cliente está respondiendo a un ${quotedType} anterior: "${quotedText.substring(0, 200)}${quotedText.length > 200 ? '...' : ''}"]`;
+              } else if (quotedType !== 'text') {
+                quotedContext = `\n\n[SISTEMA - El cliente está respondiendo a un ${quotedType} anterior]`;
+              }
+              console.log(`[WEBHOOK] Quoted message context detected:`, { quotedType, quotedTextLength: quotedText?.length || 0 });
+            }
+            
+            // Extract referred product context if present
+            let productContext = '';
+            if (data.referredProduct) {
+              const product = data.referredProduct;
+              const productName = product.title || product.productId || 'producto del catálogo';
+              const productPrice = product.price ? ` - Precio: ${product.currency || ''} ${product.price}` : '';
+              productContext = `\n\n[SISTEMA - El cliente está consultando sobre un producto del catálogo de WhatsApp: "${productName}"${productPrice}]`;
+              console.log(`[WEBHOOK] Product reference detected:`, { productId: product.productId, title: product.title });
+            }
+            
+            // Append context to message
+            if (quotedContext || productContext) {
+              messageForAgent = messageForAgent + quotedContext + productContext;
+            }
+            
             if (messageForAgent) {
               try {
                 console.log(`[WEBHOOK] Calling agent/think with backendId: ${resolvedBackendId}`);
@@ -569,7 +600,9 @@ router.post('/:businessId', async (req: Request, res: Response) => {
                   phoneNumber: contactPhone,
                   contactName,
                   instanceId: instance?.id,
-                  instanceBackendId: resolvedBackendId
+                  instanceBackendId: resolvedBackendId,
+                  quotedMessage: data.quotedMessage || undefined,
+                  referredProduct: data.referredProduct || undefined
                 }, {
                   headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
                 });

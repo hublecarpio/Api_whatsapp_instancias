@@ -376,6 +376,15 @@ export interface ParsedMessage {
   isVoiceNote?: boolean;
   isAnimatedSticker?: boolean;
   order?: { catalogId: string; items: Array<{ productId: string; quantity: number; price: number; currency: string }> };
+  referredProduct?: {
+    catalogId?: string;
+    productId: string;
+    title?: string;
+    description?: string;
+    price?: number;
+    currency?: string;
+    imageUrl?: string;
+  };
 }
 
 export interface MetaWebhookPayload {
@@ -1005,6 +1014,24 @@ export class MetaCloudService {
           if (msg.context) {
             parsed.contextMessageId = msg.context.id;
             parsed.contextFrom = msg.context.from;
+            
+            // Parse referred product from catalog (when user replies to a catalog product)
+            if (msg.context.referred_product) {
+              const refProd = msg.context.referred_product;
+              parsed.referredProduct = {
+                catalogId: refProd.catalog_id,
+                productId: refProd.product_retailer_id || 'unknown',
+                title: undefined, // Not available in context, will need to be looked up
+                description: undefined,
+                price: undefined,
+                currency: undefined,
+                imageUrl: undefined
+              };
+              console.log(`[META PARSE] Referred product detected:`, {
+                catalogId: refProd.catalog_id,
+                productId: refProd.product_retailer_id
+              });
+            }
           }
 
           switch (msg.type) {

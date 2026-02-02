@@ -291,8 +291,32 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
     }
   }
 
+  // Build context for quoted message if present
+  let quotedContext = '';
+  if (message.quotedMessage) {
+    const qm = message.quotedMessage;
+    const quotedText = qm.text || qm.caption || '';
+    const quotedType = qm.type || 'mensaje';
+    if (quotedText) {
+      quotedContext = `\n\n[SISTEMA - El cliente está respondiendo a un ${quotedType} anterior: "${quotedText.substring(0, 200)}${quotedText.length > 200 ? '...' : ''}"]`;
+    } else if (quotedType !== 'text') {
+      quotedContext = `\n\n[SISTEMA - El cliente está respondiendo a un ${quotedType} anterior]`;
+    }
+    logIngest('QUOTED', `Quoted message context added`, { quotedType, quotedTextLength: quotedText?.length || 0 });
+  }
+  
+  // Build context for referred product if present
+  let productContext = '';
+  if (message.referredProduct) {
+    const product = message.referredProduct;
+    const productName = product.title || product.productId || 'producto del catálogo';
+    const productPrice = product.price ? ` - Precio: ${product.currency || ''} ${product.price}` : '';
+    productContext = `\n\n[SISTEMA - El cliente está consultando sobre un producto del catálogo de WhatsApp: "${productName}"${productPrice}]`;
+    logIngest('PRODUCT-REF', `Product reference context added`, { productId: product.productId, title: product.title });
+  }
+  
   // Build full message for AI agent, including auto-trigger context if available
-  const fullMessageForAgent = messageText + mediaAnalysis + (autoTriggerContext && !mediaAnalysis.includes(autoTriggerContext) ? autoTriggerContext : '');
+  const fullMessageForAgent = messageText + mediaAnalysis + (autoTriggerContext && !mediaAnalysis.includes(autoTriggerContext) ? autoTriggerContext : '') + quotedContext + productContext;
 
   await prisma.messageLog.create({
     data: {
@@ -314,7 +338,9 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
         mediaType: mediaUrl ? type : undefined,
         order: message.order || undefined,
         voucherValidation: voucherValidationData || undefined,
-        voucherContext: voucherContext || undefined
+        voucherContext: voucherContext || undefined,
+        quotedMessage: message.quotedMessage || undefined,
+        referredProduct: message.referredProduct || undefined
       }
     }
   });
