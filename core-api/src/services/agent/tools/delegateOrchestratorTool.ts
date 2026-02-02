@@ -709,7 +709,10 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
     
     return zones.map(z => {
       const free = z.freeAbove ? ` (gratis desde S/${z.freeAbove})` : '';
-      return `- ${z.name}: S/${z.cost}${free}`;
+      const districts = z.districts && z.districts.length > 0 
+        ? `\n  Distritos: ${z.districts.join(', ')}`
+        : '';
+      return `- ${z.name} [ID: ${z.id}]: S/${z.cost}${free}${districts}`;
     }).join('\n');
   }
 

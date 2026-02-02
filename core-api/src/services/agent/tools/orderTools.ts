@@ -642,16 +642,41 @@ export class CalcularTotalTool extends BaseTool {
       }
 
       const zones = await prisma.deliveryZone.findMany({
-        where: { businessId }
+        where: { businessId, isActive: true }
       });
 
       const zonaNorm = args.zona_envio.toLowerCase().trim();
+      
+      // First try: exact zone name match
       let matchedZone = zones.find(z => 
         z.name.toLowerCase().includes(zonaNorm) || zonaNorm.includes(z.name.toLowerCase())
       );
 
+      // Second try: match by district name (smart zone detection)
       if (!matchedZone) {
-        return this.error(`Zona "${args.zona_envio}" no encontrada. Disponibles: ${zones.map(z => z.name).join(', ')}`);
+        for (const zone of zones) {
+          if (zone.districts && Array.isArray(zone.districts)) {
+            const districtMatch = zone.districts.some((district: string) => {
+              const districtNorm = district.toLowerCase().trim();
+              // Check if input contains district or district contains input
+              return districtNorm.includes(zonaNorm) || zonaNorm.includes(districtNorm);
+            });
+            if (districtMatch) {
+              matchedZone = zone;
+              console.log(`[CALCULAR_TOTAL] Smart zone match: "${args.zona_envio}" -> ${zone.name} (matched by district)`);
+              break;
+            }
+          }
+        }
+      }
+
+      if (!matchedZone) {
+        // Build helpful error with zone names and sample districts
+        const zoneInfo = zones.map(z => {
+          const sampleDistricts = z.districts?.slice(0, 3).join(', ') || '';
+          return `${z.name}${sampleDistricts ? ` (incluye: ${sampleDistricts})` : ''}`;
+        }).join('; ');
+        return this.error(`Zona o distrito "${args.zona_envio}" no encontrado. Zonas disponibles: ${zoneInfo}`);
       }
 
       let subtotal = 0;
