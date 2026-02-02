@@ -240,6 +240,21 @@ async function processMessage(
 ) {
   const startTime = Date.now();
 
+  // [COEXIST-DEBUG] Log ALL incoming messages for debugging
+  console.log(`[COEXIST-DEBUG] processMessage ENTRY`, JSON.stringify({
+    messageId: msg.messageId,
+    from: msg.from,
+    type: msg.type,
+    text: msg.text?.substring(0, 50),
+    provider: providerType,
+    businessPhone: businessPhoneNumber,
+    instanceId: instance.id,
+    businessId: instance.businessId,
+    contextFrom: msg.contextFrom,
+    contextMessageId: msg.contextMessageId,
+    timestamp: new Date().toISOString()
+  }));
+
   // DEDUPLICATION CHECK - prevent duplicate webhook events
   if (await isMessageAlreadyProcessed(msg.messageId)) {
     webhookLogger.info({
@@ -256,16 +271,39 @@ async function processMessage(
   const normalizedBusinessPhone = businessPhoneNumber?.replace(/\D/g, '') || '';
   const isBusinessOutbound = normalizedBusinessPhone && normalizedFrom === normalizedBusinessPhone;
   
+  // [COEXIST-DEBUG] Log the business outbound detection logic
+  console.log(`[COEXIST-DEBUG] Outbound detection`, JSON.stringify({
+    messageId: msg.messageId,
+    normalizedFrom,
+    normalizedBusinessPhone,
+    isBusinessOutbound,
+    contextFrom: msg.contextFrom,
+    provider: providerType
+  }));
+  
   if (isBusinessOutbound) {
     // This is a message sent by the business from WhatsApp App
     // Save it as outbound for context (CRM visibility + agent memory) but don't trigger AI
     // ONLY store if we can deterministically identify the recipient from contextFrom (reply context)
     const recipientPhone = msg.contextFrom?.replace(/\D/g, '') || '';
     
+    console.log(`[COEXIST-DEBUG] isBusinessOutbound=TRUE`, JSON.stringify({
+      messageId: msg.messageId,
+      recipientPhone,
+      hasRecipient: !!recipientPhone,
+      text: msg.text?.substring(0, 50),
+      type: msg.type
+    }));
+    
     if (!recipientPhone) {
       // Without contextFrom we can't reliably determine the recipient
       // This is expected for messages that aren't direct replies
       // The status.sent fallback will create a placeholder if needed
+      console.log(`[COEXIST-DEBUG] NO recipientPhone - will use status.sent fallback`, JSON.stringify({
+        messageId: msg.messageId,
+        from: msg.from,
+        type: msg.type
+      }));
       webhookLogger.debug({
         messageId: msg.messageId,
         from: msg.from,
@@ -301,7 +339,7 @@ async function processMessage(
       return;
     }
     
-    await prisma.messageLog.create({
+    const createdLog = await prisma.messageLog.create({
       data: {
         businessId: instance.businessId,
         instanceId: instance.id,
@@ -320,6 +358,15 @@ async function processMessage(
         }
       }
     });
+    
+    console.log(`[COEXIST-DEBUG] MessageLog CREATED for business outbound`, JSON.stringify({
+      logId: createdLog.id,
+      messageId: msg.messageId,
+      recipient: recipientPhone,
+      message: (msg.text || msg.caption || '[Multimedia]').substring(0, 50),
+      direction: 'outbound',
+      sender: 'business'
+    }));
     
     webhookLogger.info({
       messageId: msg.messageId,
@@ -713,6 +760,19 @@ async function processMessage(
 }
 
 async function processStatusUpdate(status: ParsedStatus, instance: any, providerType: MetaProviderType) {
+  // [COEXIST-DEBUG] Log ALL status updates
+  console.log(`[COEXIST-DEBUG] processStatusUpdate ENTRY`, JSON.stringify({
+    status: status.status,
+    messageId: status.messageId,
+    recipientId: status.recipientId,
+    provider: providerType,
+    instanceId: instance.id,
+    businessId: instance.businessId,
+    conversationId: status.conversationId,
+    originType: status.originType,
+    timestamp: new Date().toISOString()
+  }));
+  
   logWebhookEvent({
     eventType: 'status_update',
     phoneNumberId: instance.phoneNumber,
@@ -768,8 +828,15 @@ async function processStatusUpdate(status: ParsedStatus, instance: any, provider
       // This captures business human responses for AI context
       const cleanRecipient = status.recipientId?.replace(/\D/g, '') || '';
       
+      console.log(`[COEXIST-DEBUG] status.sent received (no existingLog)`, JSON.stringify({
+        messageId: status.messageId,
+        cleanRecipient,
+        hasRecipient: !!cleanRecipient,
+        provider: providerType
+      }));
+      
       if (cleanRecipient) {
-        await prisma.messageLog.create({
+        const createdLog = await prisma.messageLog.create({
           data: {
             businessId: instance.businessId,
             instanceId: instance.id,
@@ -789,11 +856,25 @@ async function processStatusUpdate(status: ParsedStatus, instance: any, provider
           }
         });
         
+        console.log(`[COEXIST-DEBUG] MessageLog CREATED via status.sent fallback`, JSON.stringify({
+          logId: createdLog.id,
+          messageId: status.messageId,
+          recipient: cleanRecipient,
+          message: '[Mensaje enviado desde WhatsApp App]',
+          direction: 'outbound',
+          sender: 'business'
+        }));
+        
         webhookLogger.info({
           messageId: status.messageId,
           recipientId: cleanRecipient,
           businessId: instance.businessId
         }, 'Created message log for WhatsApp App outbound message');
+      } else {
+        console.log(`[COEXIST-DEBUG] status.sent SKIPPED - no recipient`, JSON.stringify({
+          messageId: status.messageId,
+          recipientId: status.recipientId
+        }));
       }
     } else {
       webhookLogger.debug({
