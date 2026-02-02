@@ -1166,6 +1166,48 @@ router.get('/:instanceId', async (req: Request, res: Response) => {
 });
 
 router.post('/:instanceId', async (req: Request, res: Response) => {
+  const timestamp = new Date().toISOString();
+  console.log('='.repeat(80));
+  console.log(`[META WEBHOOK /:instanceId] Event received at ${timestamp}`);
+  console.log('[META WEBHOOK /:instanceId] RAW PAYLOAD:', JSON.stringify(req.body, null, 2));
+  console.log('='.repeat(80));
+  
+  // ========================================================================
+  // CRITICAL: Save RAW webhook payload to DB BEFORE any processing
+  // ========================================================================
+  let rawLogId: string | null = null;
+  try {
+    const { instanceId } = req.params;
+    const payload = req.body as MetaWebhookPayload;
+    const phoneNumberId = payload?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+    const messageCount = payload?.entry?.[0]?.changes?.[0]?.value?.messages?.length || 0;
+    const statusCount = payload?.entry?.[0]?.changes?.[0]?.value?.statuses?.length || 0;
+    
+    const rawLog = await prisma.webhookRawLog.create({
+      data: {
+        source: 'META_INSTANCE',
+        endpoint: req.originalUrl || `/webhook/meta/${instanceId}`,
+        method: req.method || 'POST',
+        headers: {
+          'content-type': req.headers['content-type'],
+          'user-agent': req.headers['user-agent'],
+          'x-hub-signature-256': req.headers['x-hub-signature-256'] ? 'present' : 'missing',
+          'instanceId': instanceId
+        },
+        queryParams: req.query || {},
+        body: req.body || {},
+        phoneNumberId: phoneNumberId || null,
+        messageCount,
+        statusCount
+      }
+    });
+    rawLogId = rawLog.id;
+    console.log(`[META WEBHOOK RAW /:instanceId] Saved raw log: ${rawLogId} (msgs=${messageCount}, statuses=${statusCount})`);
+  } catch (rawLogError: any) {
+    console.error('[META WEBHOOK RAW /:instanceId] Failed to save raw log:', rawLogError.message);
+  }
+  // ========================================================================
+  
   try {
     const { instanceId } = req.params;
     const payload: MetaWebhookPayload = req.body;
@@ -1174,9 +1216,31 @@ router.post('/:instanceId', async (req: Request, res: Response) => {
 
     res.status(200).send('EVENT_RECEIVED');
 
-    await processWebhookPayload(payload);
+    // Process in background - don't await to avoid blocking response
+    processWebhookPayload(payload).then(async () => {
+      if (rawLogId) {
+        await prisma.webhookRawLog.update({
+          where: { id: rawLogId },
+          data: { processedAt: new Date() }
+        }).catch(() => {});
+      }
+    }).catch(async error => {
+      console.error('[META WEBHOOK /:instanceId] BACKGROUND PROCESSING ERROR:', error);
+      if (rawLogId) {
+        await prisma.webhookRawLog.update({
+          where: { id: rawLogId },
+          data: { processingError: error.message, processedAt: new Date() }
+        }).catch(() => {});
+      }
+    });
   } catch (error: any) {
     console.error('[META WEBHOOK] Processing error:', error);
+    if (rawLogId) {
+      await prisma.webhookRawLog.update({
+        where: { id: rawLogId },
+        data: { processingError: error.message, processedAt: new Date() }
+      }).catch(() => {});
+    }
   }
 });
 
