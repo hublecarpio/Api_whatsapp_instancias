@@ -366,6 +366,7 @@ model Business {
   knowledgeChunks   BusinessKnowledgeChunk[]
   promptSections    PromptSection[]
   configBackups     ConfigurationBackup[]
+  mediaShortUrls    MediaShortUrl[]
 }
 
 model GoogleCalendarCredential {
@@ -1532,4 +1533,18 @@ model ConfigurationBackup {
 
   @@index([businessId, createdAt])
   @@index([businessId, instanceId])
+}
+
+model MediaShortUrl {
+  id          String   @id @default(uuid())
+  shortId     String   @unique
+  originalUrl String
+  businessId  String?
+  mediaType   String?
+  createdAt   DateTime @default(now())
+
+  business Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+
+  @@index([shortId])
+  @@index([businessId, createdAt])
 }

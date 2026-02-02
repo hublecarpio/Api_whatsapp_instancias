@@ -41,6 +41,7 @@ import metaCoexistRoutes from './routes/metaCoexist.js';
 import metaManagedRoutes from './routes/metaManaged.js';
 import promotionsRoutes from './routes/promotions.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
+import { resolveShortUrl } from './services/shortUrl.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
 
 dotenv.config();
@@ -149,6 +150,27 @@ app.use('/auth/meta-coexist', metaCoexistRoutes);
 app.use('/auth/meta-managed', metaManagedRoutes);
 app.use('/promotions', promotionsRoutes);
 app.use('/internal/wa', waInternalRouter);
+
+app.get('/m/:shortId', async (req, res) => {
+  try {
+    const { shortId } = req.params;
+    
+    if (!shortId || shortId.length !== 12) {
+      return res.status(400).send('Invalid short URL');
+    }
+    
+    const originalUrl = await resolveShortUrl(shortId);
+    
+    if (!originalUrl) {
+      return res.status(404).send('Media not found');
+    }
+    
+    res.redirect(301, originalUrl);
+  } catch (error: any) {
+    console.error('[SHORT_URL] Redirect error:', error.message);
+    res.status(500).send('Error resolving URL');
+  }
+});
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

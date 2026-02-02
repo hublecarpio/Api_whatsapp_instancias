@@ -1,5 +1,6 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
+import { createShortUrl } from './shortUrl.js';
 
 let s3Client: S3Client | null = null;
 let bucketName: string | null = null;
@@ -65,6 +66,8 @@ function getMediaType(mimetype: string): 'image' | 'video' | 'audio' | 'file' {
 
 export interface UploadResult {
   url: string;
+  shortUrl?: string;
+  originalUrl: string;
   type: 'image' | 'video' | 'audio' | 'file';
   key: string;
 }
@@ -92,11 +95,24 @@ export async function uploadBuffer(
       ContentType: mimetype,
     }));
 
-    const url = `${publicBaseUrl}/${bucketName}/${key}`;
+    const originalUrl = `${publicBaseUrl}/${bucketName}/${key}`;
     
-    console.log('[STORAGE] Uploaded media:', { key, type, url });
+    let shortUrl: string | undefined;
+    try {
+      const shortResult = await createShortUrl(originalUrl, businessId, type);
+      shortUrl = shortResult.shortUrl;
+      console.log('[STORAGE] Uploaded media with short URL:', { key, type, shortUrl, originalLength: originalUrl.length, shortLength: shortUrl.length });
+    } catch (shortErr: any) {
+      console.warn('[STORAGE] Short URL creation failed, using original:', shortErr.message);
+    }
     
-    return { url, type, key };
+    return { 
+      url: shortUrl || originalUrl,
+      shortUrl,
+      originalUrl,
+      type, 
+      key 
+    };
   } catch (error) {
     console.error('[STORAGE] Upload failed:', error);
     return null;
