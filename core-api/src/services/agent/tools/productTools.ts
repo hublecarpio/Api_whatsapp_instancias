@@ -80,31 +80,92 @@ export class BuscarProductoTool extends BaseTool {
 
       let response = `Productos encontrados para "${args.busqueda}":\n\n`;
       
-      for (const product of products) {
-        const variation = (product as any).variation ? ` (${(product as any).variation})` : '';
-        response += `• ${product.title}${variation}: ${currencySymbol}${product.price}`;
-        // Stock is internal info - do NOT expose to the agent/customer
-        if (product.imageUrl) {
-          response += `\n  Imagen: ${product.imageUrl}`;
-        }
-        if (product.description) {
-          response += `\n  ${product.description.slice(0, 80)}...`;
-        }
-        response += '\n';
-      }
-
-      // Incluir datos estructurados de productos para el ToolMemory
-      // Note: stock is intentionally excluded - it's internal business info
-      const productData = products.map((product: any) => ({
-        id: product.id,
-        title: product.title,
-        variation: product.variation || null,
-        price: product.price,
-        description: product.description?.slice(0, 100) || null,
-        imageUrl: product.imageUrl || null
-      }));
+      // Build structured product data with variations expanded
+      const productData: any[] = [];
+      let addedCount = 0;
       
-      return this.success(response, { count: products.length, products: productData });
+      for (const product of products) {
+        const hasVariations = product.variations && product.variations.length > 0;
+        
+        if (hasVariations) {
+          // First, build list of in-stock variations
+          const variationsData: Array<{ name: string; price: number; imageUrl?: string }> = [];
+          
+          for (let i = 0; i < product.variations.length; i++) {
+            const varName = product.variations[i];
+            const varPrice = product.pricePerVariation?.[i] ?? product.price;
+            const varStock = product.stockPerVariation?.[i] ?? product.stock;
+            const varImageUrl = product.imageUrls?.[i] || product.imageUrl || null;
+            
+            // Skip out-of-stock variations
+            if (varStock !== undefined && varStock !== null && varStock <= 0) {
+              continue;
+            }
+            
+            variationsData.push({
+              name: varName,
+              price: varPrice,
+              imageUrl: varImageUrl || undefined
+            });
+          }
+          
+          // Skip product entirely if all variations are out of stock
+          if (variationsData.length === 0) {
+            console.log(`[buscar_producto] Skipping ${product.title} - all variations out of stock`);
+            continue;
+          }
+          
+          // Product has in-stock variations - show each with its price
+          response += `• ${product.title}:\n`;
+          for (const variation of variationsData) {
+            response += `    - ${variation.name}: ${currencySymbol}${variation.price}\n`;
+          }
+          
+          if (product.description) {
+            response += `  ${product.description.slice(0, 80)}...\n`;
+          }
+          if (product.imageUrl) {
+            response += `  Imagen: ${product.imageUrl}\n`;
+          }
+          
+          // Add product with variations array to structured data
+          productData.push({
+            id: product.id,
+            title: product.title,
+            basePrice: product.price,
+            variations: variationsData,
+            description: product.description?.slice(0, 100) || null,
+            imageUrl: product.imageUrl || null
+          });
+          addedCount++;
+        } else {
+          // No variations - simple product
+          response += `• ${product.title}: ${currencySymbol}${product.price}`;
+          if (product.imageUrl) {
+            response += `\n  Imagen: ${product.imageUrl}`;
+          }
+          if (product.description) {
+            response += `\n  ${product.description.slice(0, 80)}...`;
+          }
+          response += '\n';
+          
+          productData.push({
+            id: product.id,
+            title: product.title,
+            price: product.price,
+            variations: null,
+            description: product.description?.slice(0, 100) || null,
+            imageUrl: product.imageUrl || null
+          });
+          addedCount++;
+        }
+      }
+      
+      if (addedCount === 0) {
+        return this.success(`No se encontraron productos disponibles para "${args.busqueda}". Pregunta si desea buscar algo diferente.`);
+      }
+      
+      return this.success(response, { count: productData.length, products: productData });
     } catch (error: any) {
       console.log(`[buscar_producto] ❌ EXCEPTION: ${error.message}`);
       console.log(`[buscar_producto] Stack: ${error.stack?.substring(0, 300)}`);

@@ -631,10 +631,49 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
     if (products.length === 0) return 'Sin productos';
     
     const sample = products.slice(0, 15);
-    return sample.map(p => {
-      const variation = p.variation ? ` [${p.variation}]` : '';
-      return `- ${p.title}${variation}: S/${p.price}${p.stock !== null ? ` (stock: ${p.stock})` : ''}`;
-    }).join('\n');
+    const lines: string[] = [];
+    
+    for (const p of sample) {
+      const hasVariations = p.variations && p.variations.length > 0;
+      
+      if (hasVariations) {
+        // Filter in-stock variations first
+        const inStockVariations: Array<{ name: string; price: number }> = [];
+        for (let i = 0; i < p.variations.length; i++) {
+          const varStock = p.stockPerVariation?.[i] ?? p.stock;
+          // Include if stock is null/undefined (unlimited) or > 0
+          if (varStock === undefined || varStock === null || varStock > 0) {
+            inStockVariations.push({
+              name: p.variations[i],
+              price: p.pricePerVariation?.[i] ?? p.price
+            });
+          }
+        }
+        
+        // Skip product if all variations are out of stock
+        if (inStockVariations.length === 0) {
+          continue;
+        }
+        
+        // Product with in-stock variations - show each with its price
+        lines.push(`- ${p.title} (${inStockVariations.length} variaciones disponibles):`);
+        for (let i = 0; i < Math.min(inStockVariations.length, 5); i++) {
+          lines.push(`    • ${inStockVariations[i].name}: S/${inStockVariations[i].price}`);
+        }
+        if (inStockVariations.length > 5) {
+          lines.push(`    ... y ${inStockVariations.length - 5} más`);
+        }
+      } else {
+        // Simple product without variations - skip if out of stock
+        if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
+          continue;
+        }
+        const variation = p.variation ? ` [${p.variation}]` : '';
+        lines.push(`- ${p.title}${variation}: S/${p.price}`);
+      }
+    }
+    
+    return lines.length > 0 ? lines.join('\n') : 'Sin productos disponibles';
   }
 
   private buildZoneCatalog(zones: any[]): string {
@@ -655,22 +694,45 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
       if (products && Array.isArray(products)) {
         console.log(`[LLM2-Memory] Found ${products.length} products in structured data`);
         for (const product of products) {
-          const existing = memory.productData.find(p => 
-            p.productId === product.id || 
-            (p.title.toLowerCase() === product.title?.toLowerCase() && p.variation === product.variation)
-          );
-          
-          if (!existing) {
-            const newProduct = {
-              productId: product.id || `found_${memory.productData.length}`,
-              title: product.title,
-              variation: product.variation || undefined,
-              price: product.price,
-              stock: product.stock ?? undefined,
-              imageUrl: product.imageUrl || undefined
-            };
-            memory.productData.push(newProduct);
-            console.log(`[LLM2-Memory] Added product: ${newProduct.title} (${newProduct.productId?.slice(0, 8)}...) ${newProduct.variation || ''}`);
+          // Check if product has variations array (new format)
+          if (product.variations && Array.isArray(product.variations) && product.variations.length > 0) {
+            // Expand each variation as a separate memory entry
+            for (const variation of product.variations) {
+              const existing = memory.productData.find(p => 
+                p.productId === product.id && p.variation === variation.name
+              );
+              
+              if (!existing) {
+                const newProduct = {
+                  productId: product.id || `found_${memory.productData.length}`,
+                  title: product.title,
+                  variation: variation.name,
+                  price: variation.price,
+                  imageUrl: variation.imageUrl || product.imageUrl || undefined
+                };
+                memory.productData.push(newProduct);
+                console.log(`[LLM2-Memory] Added product+variation: ${newProduct.title} [${newProduct.variation}] S/${newProduct.price}`);
+              }
+            }
+          } else {
+            // Simple product without variations (old format or no variations)
+            const existing = memory.productData.find(p => 
+              p.productId === product.id || 
+              (p.title.toLowerCase() === product.title?.toLowerCase() && !p.variation)
+            );
+            
+            if (!existing) {
+              const newProduct = {
+                productId: product.id || `found_${memory.productData.length}`,
+                title: product.title,
+                variation: undefined,
+                price: product.price || product.basePrice,
+                stock: product.stock ?? undefined,
+                imageUrl: product.imageUrl || undefined
+              };
+              memory.productData.push(newProduct);
+              console.log(`[LLM2-Memory] Added product: ${newProduct.title} (${newProduct.productId?.slice(0, 8)}...)`);
+            }
           }
         }
       } else {
