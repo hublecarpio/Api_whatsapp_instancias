@@ -17,6 +17,23 @@ interface Conversation {
   instanceId?: string | null;
 }
 
+interface QuotedMessage {
+  messageId?: string;
+  from?: string;
+  text?: string;
+  type?: string;
+  mediaUrl?: string;
+}
+
+interface ReferredProduct {
+  productId?: string;
+  title?: string;
+  price?: string;
+  currency?: string;
+  description?: string;
+  imageUrl?: string;
+}
+
 interface Message {
   id: string;
   direction: string;
@@ -33,6 +50,8 @@ interface Message {
     mediaPending?: boolean;
     isTemplate?: boolean;
     templateName?: string;
+    quotedMessage?: QuotedMessage;
+    referredProduct?: ReferredProduct;
   };
 }
 
@@ -1879,6 +1898,58 @@ export default function ChatPage() {
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`chat-bubble ${msg.direction === 'outbound' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'} ${msg.metadata?.pending ? 'opacity-70' : ''}`}>
+                      {/* Quoted Message - WhatsApp reply bubble */}
+                      {msg.metadata?.quotedMessage && (
+                        <div className={`mb-2 p-2 rounded-lg border-l-4 ${msg.direction === 'outbound' ? 'bg-[#1a3a2f] border-[#25D366]' : 'bg-gray-700/50 border-gray-500'}`}>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-[10px] font-medium text-gray-400">
+                              {msg.metadata.quotedMessage.from === 'business' ? '📤 Tú' : '📥 Cliente'}
+                            </span>
+                          </div>
+                          {msg.metadata.quotedMessage.mediaUrl && (
+                            <div className="mb-1">
+                              <span className="text-xs text-gray-400">
+                                {msg.metadata.quotedMessage.type === 'image' ? '🖼️ Imagen' :
+                                 msg.metadata.quotedMessage.type === 'video' ? '🎬 Video' :
+                                 msg.metadata.quotedMessage.type === 'audio' || msg.metadata.quotedMessage.type === 'ptt' ? '🎤 Audio' :
+                                 msg.metadata.quotedMessage.type === 'document' ? '📄 Documento' : '📎 Archivo'}
+                              </span>
+                            </div>
+                          )}
+                          {msg.metadata.quotedMessage.text && (
+                            <p className="text-xs text-gray-300 line-clamp-2 italic">
+                              "{msg.metadata.quotedMessage.text.substring(0, 150)}{msg.metadata.quotedMessage.text.length > 150 ? '...' : ''}"
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {/* Referred Product - WhatsApp catalog product */}
+                      {msg.metadata?.referredProduct && (
+                        <div className={`mb-2 p-2 rounded-lg border-l-4 ${msg.direction === 'outbound' ? 'bg-[#1a3a2f] border-[#25D366]' : 'bg-purple-900/30 border-purple-500'}`}>
+                          <div className="flex items-center gap-2">
+                            {msg.metadata.referredProduct.imageUrl && (
+                              <img 
+                                src={msg.metadata.referredProduct.imageUrl} 
+                                alt={msg.metadata.referredProduct.title || 'Producto'}
+                                className="w-10 h-10 rounded object-cover"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1 mb-0.5">
+                                <span className="text-[10px] font-medium text-purple-400">🛒 Producto del catálogo</span>
+                              </div>
+                              <p className="text-xs font-medium text-gray-200 truncate">
+                                {msg.metadata.referredProduct.title || 'Producto'}
+                              </p>
+                              {msg.metadata.referredProduct.price && (
+                                <p className="text-xs text-green-400 font-medium">
+                                  {msg.metadata.referredProduct.currency || 'S/'}{msg.metadata.referredProduct.price}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {msg.mediaUrl && renderMedia(msg.mediaUrl, msg.direction === 'outbound', msg.metadata?.mediaType || msg.metadata?.type)}
                       {!msg.mediaUrl && msg.metadata?.mediaPending && (
                         <div className="flex items-center gap-2 text-gray-400 text-sm py-2">

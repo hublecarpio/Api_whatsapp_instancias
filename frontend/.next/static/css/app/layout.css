@@ -1871,6 +1871,10 @@ body.glass-mode .mobile-drawer {
 .border-dashed {
   border-style: dashed;
 }
+.border-\[\#25D366\] {
+  --tw-border-opacity: 1;
+  border-color: rgb(37 211 102 / var(--tw-border-opacity, 1));
+}
 .border-\[\#25D366\]\/30 {
   border-color: rgb(37 211 102 / 0.3);
 }
@@ -2138,6 +2142,10 @@ body.glass-mode .mobile-drawer {
 .bg-\[\#1a2a1a\] {
   --tw-bg-opacity: 1;
   background-color: rgb(26 42 26 / var(--tw-bg-opacity, 1));
+}
+.bg-\[\#1a3a2f\] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(26 58 47 / var(--tw-bg-opacity, 1));
 }
 .bg-\[\#1e1e1e\] {
   --tw-bg-opacity: 1;
@@ -2424,6 +2432,9 @@ body.glass-mode .mobile-drawer {
 .bg-purple-600 {
   --tw-bg-opacity: 1;
   background-color: rgb(147 51 234 / var(--tw-bg-opacity, 1));
+}
+.bg-purple-900\/30 {
+  background-color: rgb(88 28 135 / 0.3);
 }
 .bg-red-400 {
   --tw-bg-opacity: 1;
