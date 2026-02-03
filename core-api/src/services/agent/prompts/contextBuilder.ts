@@ -593,6 +593,8 @@ Luego: Creas orden con productos reales + descuento_porcentaje: "20", descuento_
     
     summary += `\n⚠️ NO conoces el catálogo ni precios directamente. Usa "ejecutar_accion" para buscar productos, calcular totales y crear órdenes. LLM2 tiene acceso completo al catálogo.`;
     
+    summary += `\n\n📦 PROMOCIONES/PACKS: Las promos NO son productos, son combinaciones de productos + descuento. Cuando cliente pida una promo: pregunta qué productos quiere → búscalos individualmente → aplica el descuento usando descuento_porcentaje y descuento_razon.`;
+    
     return summary;
   }
 
