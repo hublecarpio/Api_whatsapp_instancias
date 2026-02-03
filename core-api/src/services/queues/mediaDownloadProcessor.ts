@@ -188,16 +188,19 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
     });
     const existingMetadata = (existingLog?.metadata as Record<string, any>) || {};
     
+    // Use geminiMediaUrl (original MinIO URL) for storage - it's more reliable for frontend display
+    // The shortUrl may not work in all environments (depends on CORE_API_PUBLIC_URL)
     await prisma.messageLog.update({
       where: { id: messageLogId },
       data: {
-        mediaUrl: finalMediaUrl,
+        mediaUrl: geminiMediaUrl, // Use original MinIO URL for frontend display (more reliable)
         metadata: {
           ...existingMetadata,
           mediaPending: false,
           mediaDownloadCompleted: true,
           mediaDownloadAttempt: attemptNumber,
-          mediaDownloadCompletedAt: new Date().toISOString()
+          mediaDownloadCompletedAt: new Date().toISOString(),
+          shortMediaUrl: finalMediaUrl // Keep short URL in metadata if needed for messages
         }
       }
     });
