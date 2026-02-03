@@ -259,7 +259,7 @@ router.post('/send-message', validateApiKey, async (req: ApiKeyRequest, res: Res
       jobId,
       to: cleanTo,
       status: 'pending',
-      statusUrl: `/api/external/message-status/${jobId}`
+      statusUrl: `/api/v1/message-status/${jobId}`
     });
     
   } catch (error: any) {
@@ -2380,7 +2380,7 @@ router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: R
       to: cleanTo,
       template: template.name,
       status: 'pending',
-      statusUrl: `/api/external/message-status/${jobId}`
+      statusUrl: `/api/v1/message-status/${jobId}`
     });
     
   } catch (error: any) {

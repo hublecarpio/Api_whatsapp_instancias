@@ -97,9 +97,12 @@ async function sendViaBaileys(data: OutboundMessageJobData): Promise<{ success: 
     }
   }
 
+  console.log(`[BAILEYS_SEND] Sending to ${WA_API_URL}${endpoint}`, { to, hasMedia: !!mediaUrl, mediaType });
+  
   const response = await axios.post(`${WA_API_URL}${endpoint}`, payload, { timeout: 30000 });
   const messageId = response.data.messageId || response.data.key?.id;
 
+  console.log(`[BAILEYS_SEND] Success: messageId=${messageId}`);
   return { success: true, messageId };
 }
 
