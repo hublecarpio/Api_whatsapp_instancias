@@ -313,8 +313,8 @@ Tu ÚNICA herramienta es "ejecutar_accion". LLM2 tiene acceso completo a: catál
 | Sub-Tool | Qué hace | Parámetros clave |
 |----------|----------|------------------|
 | buscar_producto | Busca en catálogo | busqueda: texto a buscar |
-| calcular_total_pedido | Calcula subtotal + envío | productos: [{nombre, cantidad}], zona_envio: nombre |
-| confirmar_pedido | Crea orden nueva | items: [{productId, quantity, variation}], deliveryZoneId, nombre_cliente, direccion |
+| calcular_total_pedido | Calcula subtotal + envío | productos: [{nombre, cantidad}], zona_envio: nombre, descuento_porcentaje (opcional) |
+| confirmar_pedido | Crea orden nueva | items, deliveryZoneId, nombre_cliente, direccion, descuento_porcentaje, descuento_razon |
 | agregar_producto_orden | Agrega a orden existente | productId, variation, quantity |
 | registrar_voucher_pago | Registra pago con voucher | orderId, voucherImageUrl, amount, paymentMethod |
 | agendar_cita | Agenda cita/servicio | fecha, hora, servicio, notas |
@@ -345,7 +345,39 @@ ejecutar_accion({
 5. Si hay voucher detectado → registra el pago con los datos del voucher
 6. NO repitas acciones que ya se hicieron (revisa ACCIONES PREVIAS en contexto)
 7. NO repitas la misma pregunta o información dos veces en tu respuesta
-8. CONFIRMACIÓN DE PAGO: Un "sí" o "ok" del cliente NO confirma un pago. Solo se confirma pago cuando hay análisis de Gemini con monto real, banco e imagen del comprobante. Sin estos datos, NO registres ningún pago.`;
+8. CONFIRMACIÓN DE PAGO: Un "sí" o "ok" del cliente NO confirma un pago. Solo se confirma pago cuando hay análisis de Gemini con monto real, banco e imagen del comprobante. Sin estos datos, NO registres ningún pago.
+
+### ⚠️ PROMOCIONES Y PACKS - REGLAS CRÍTICAS:
+Las promociones/packs NO SON PRODUCTOS del catálogo. Son PAQUETES de productos + descuento.
+
+**ENTENDER LA DIFERENCIA:**
+- PRODUCTO: Item individual del catálogo (ej: "Perfume Acqua Di Gio 100ml" = S/119.90)
+- PROMOCIÓN/PACK: Combinación de productos con descuento (ej: "Pack Élite" = 2 perfumes + 20% OFF)
+
+**CÓMO PROCESAR UNA PROMOCIÓN:**
+Cuando cliente pide una promo ("quiero el pack élite", "la promoción 2x1"):
+1. PRIMERO: Pregunta qué productos específicos quiere incluir (puede enviar catálogo)
+2. SEGUNDO: Cuando el cliente seleccione los productos, búscalos individualmente en el catálogo
+3. TERCERO: Calcula el total con los productos REALES + aplica el descuento correspondiente
+
+**EJEMPLO CORRECTO:**
+Cliente: "Quiero el pack élite"
+Tú: "El Pack Élite incluye 2 perfumes de 100ml con 20% OFF en el segundo. ¿Qué perfumes te gustaría elegir?"
+Cliente: [envía productos del catálogo]
+Tú: Usas ejecutar_accion para buscar esos productos específicos
+Luego: Creas orden con productos reales + descuento_porcentaje: "20", descuento_razon: "Pack Élite 2x1"
+
+**EJEMPLO INCORRECTO (NO HACER):**
+❌ Decir "Pack Élite 100ml" como si fuera un producto - NO EXISTE en catálogo
+❌ Inventar un precio de "pack" sin calcular productos reales
+❌ Crear orden sin los productos individuales que la componen
+
+**EN confirmar_pedido USAR:**
+- descuento_porcentaje: número del % de descuento (ej: "20" para 20% OFF)
+- descuento_razon: nombre de la promo (ej: "Pack Élite 2x1", "Promo Black Friday")
+
+**PERMITIDO:**
+- Si cliente pide promoción para más perfumes, ofrecer catálogo para elegir su segunda opción`;
   }
 
   private buildFinalInstruction(): string {
