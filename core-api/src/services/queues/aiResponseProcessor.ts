@@ -297,12 +297,18 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
           direction: 'inbound',
         },
         orderBy: { createdAt: 'desc' },
-        select: { metadata: true }
+        select: { metadata: true, message: true, createdAt: true }
       });
+      
+      console.log(`[AI Worker V3] [AUDIO-DEBUG] Searching for latest message: businessId=${businessId?.slice(0, 8)}, sender=${normalizedPhone}`);
+      console.log(`[AI Worker V3] [AUDIO-DEBUG] Found message: createdAt=${latestMessageWithMedia?.createdAt}, hasMetadata=${!!latestMessageWithMedia?.metadata}, messagePreview="${(latestMessageWithMedia?.message || '').substring(0, 100)}..."`);
       
       // Build triggerContext from latest message's metadata
       const msgMeta = latestMessageWithMedia?.metadata as any;
       const triggerContext: { mediaAnalysis?: string; geminiVoucherResult?: any } = {};
+      
+      console.log(`[AI Worker V3] [AUDIO-DEBUG] Metadata keys: ${msgMeta ? Object.keys(msgMeta).join(', ') : 'null'}`);
+      console.log(`[AI Worker V3] [AUDIO-DEBUG] mediaAnalysis in metadata: ${msgMeta?.mediaAnalysis ? 'YES (len=' + msgMeta.mediaAnalysis.length + ')' : 'NO'}`);
       
       if (msgMeta?.mediaAnalysis) {
         triggerContext.mediaAnalysis = msgMeta.mediaAnalysis;

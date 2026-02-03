@@ -562,29 +562,34 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               where: {
                 businessId,
                 contactPhone: cleanPhoneForSettings
-              }
+              },
+              select: { botDisabled: true, botTestEnabled: true }
             });
             
-            // Check if contact has testing mode enabled (from Contact table)
+            // Check if contact has testing mode or bot disabled (from Contact table)
             const contact = await prisma.contact.findFirst({
               where: {
                 businessId,
                 phone: cleanPhoneForSettings
               },
-              select: { botTestEnabled: true }
+              select: { botTestEnabled: true, botDisabled: true }
             });
+            
+            // Merge bot settings from both Contact and ContactSettings (either can disable)
+            const isBotDisabledForContact = contact?.botDisabled || contactSettings?.botDisabled;
+            const isBotTestEnabledForContact = contact?.botTestEnabled || contactSettings?.botTestEnabled;
             
             // Determine if we should process this message with the agent
             let shouldProcessWithAgent = false;
             
             if (business.botEnabled) {
               // Bot is globally enabled - process unless disabled for this contact
-              if (contactSettings?.botDisabled) {
-                console.log(`[WEBHOOK] Bot disabled for contact ${cleanPhoneForSettings}, skipping agent`);
+              if (isBotDisabledForContact) {
+                console.log(`[WEBHOOK] Bot disabled for contact ${cleanPhoneForSettings} (from Contact or ContactSettings), skipping agent`);
               } else {
                 shouldProcessWithAgent = true;
               }
-            } else if (contact?.botTestEnabled) {
+            } else if (isBotTestEnabledForContact) {
               // Bot is globally disabled BUT testing mode is enabled for this contact
               console.log(`[WEBHOOK] Bot globally disabled but Testing ON for contact ${cleanPhoneForSettings}, processing with agent`);
               shouldProcessWithAgent = true;

@@ -211,9 +211,16 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
           try {
             const geminiStartTime = Date.now();
             console.log(`${logPrefix} Processing ${mediaType} with Gemini for AI context...`);
+            console.log(`${logPrefix} [AUDIO-DEBUG] Gemini isConfigured: ${geminiService.isConfigured()}, mediaUrl: ${finalMediaUrl?.substring(0, 80)}...`);
             const result = await geminiService.processMedia(finalMediaUrl, mediaType, '');
             const geminiElapsed = Date.now() - geminiStartTime;
-            console.log(`${logPrefix} Gemini processing took ${geminiElapsed}ms`);
+            console.log(`${logPrefix} Gemini processing took ${geminiElapsed}ms, success=${result.success}, textLength=${result.text?.length || 0}`);
+            
+            if (result.success && result.text) {
+              console.log(`${logPrefix} [AUDIO-DEBUG] Transcription result: "${result.text.substring(0, 100)}..."`);
+            } else {
+              console.warn(`${logPrefix} [AUDIO-DEBUG] Gemini failed or no text: error=${result.error}, success=${result.success}`);
+            }
             
             if (result.success && result.text) {
               let mediaAnalysis = result.text;
@@ -380,6 +387,19 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
         select: { botDisabled: true, botTestEnabled: true }
       });
 
+      // Also check ContactSettings table for bot toggle (used by frontend toggle button)
+      const contactSettings = await prisma.contactSettings.findFirst({
+        where: {
+          businessId,
+          contactPhone: cleanPhone
+        },
+        select: { botDisabled: true, botTestEnabled: true }
+      });
+
+      // Merge bot settings from both Contact and ContactSettings (either can disable)
+      const isBotDisabledForContact = contact?.botDisabled || contactSettings?.botDisabled;
+      const isBotTestEnabledForContact = contact?.botTestEnabled || contactSettings?.botTestEnabled;
+
       if (fullMessageLog) {
         const msgMetadata = (fullMessageLog.metadata as Record<string, any>) || {};
         const pushName = msgMetadata.pushName || '';
@@ -392,18 +412,20 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
         
         if (!business?.botEnabled) {
           // Bot globally disabled, check if contact has test mode enabled
-          if (!contact?.botTestEnabled) {
+          if (!isBotTestEnabledForContact) {
             shouldCallAI = false;
             console.log(`${logPrefix} Bot disabled for business, skipping AI`);
           }
-        } else if (contact?.botDisabled) {
-          // Bot globally enabled but disabled for this contact
+        } else if (isBotDisabledForContact) {
+          // Bot globally enabled but disabled for this contact (from Contact or ContactSettings)
           shouldCallAI = false;
-          console.log(`${logPrefix} Bot disabled for contact ${cleanPhone}, skipping AI`);
+          console.log(`${logPrefix} Bot disabled for contact ${cleanPhone}, skipping AI (from Contact or ContactSettings)`);
         }
         
         if (shouldCallAI) {
           console.log(`${logPrefix} Calling AI agent with media ready...`);
+          console.log(`${logPrefix} [AUDIO-DEBUG] fullMessageForAgent length=${fullMessageForAgent.length}, hasMediaAnalysis=${!!mediaAnalysis}, mediaAnalysisLength=${mediaAnalysis?.length || 0}`);
+          console.log(`${logPrefix} [AUDIO-DEBUG] Message preview: "${fullMessageForAgent.substring(0, 200)}..."`);
           
           // AI agent receives ONLY the Gemini-processed text, not the raw S3 URL
           // The mediaAnalysis is already concatenated into fullMessageForAgent

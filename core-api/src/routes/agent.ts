@@ -3371,16 +3371,31 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     }
     
     // Check if bot is disabled globally but contact has testing mode enabled
+    const cleanContactPhone = contactPhone.replace(/\D/g, '');
+    
+    const contact = await prisma.contact.findFirst({
+      where: {
+        businessId: business_id,
+        phone: cleanContactPhone
+      },
+      select: { botTestEnabled: true, botDisabled: true }
+    });
+    
+    // Also check ContactSettings table for bot toggle (used by frontend toggle button)
+    const contactSettings = await prisma.contactSettings.findFirst({
+      where: {
+        businessId: business_id,
+        contactPhone: cleanContactPhone
+      },
+      select: { botDisabled: true, botTestEnabled: true }
+    });
+    
+    // Merge bot settings from both Contact and ContactSettings
+    const isBotDisabledForContact = contact?.botDisabled || contactSettings?.botDisabled;
+    const isBotTestEnabledForContact = contact?.botTestEnabled || contactSettings?.botTestEnabled;
+    
     if (!business.botEnabled) {
-      const contact = await prisma.contact.findFirst({
-        where: {
-          businessId: business_id,
-          phone: contactPhone.replace(/\D/g, '')
-        },
-        select: { botTestEnabled: true }
-      });
-      
-      if (!contact?.botTestEnabled) {
+      if (!isBotTestEnabledForContact) {
         console.log(`[Agent Think] Bot disabled globally and no testing mode for contact ${contactPhone}`);
         return res.json({
           action: 'manual',
@@ -3389,6 +3404,17 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
         });
       }
       console.log(`[Agent Think] Bot disabled globally but Testing ON for contact ${contactPhone}, processing...`);
+    }
+    
+    // Per-contact bot disable (only applies when bot is globally enabled)
+    if (business.botEnabled && isBotDisabledForContact) {
+      console.log(`[Agent Think] Bot disabled for contact ${contactPhone} (from Contact or ContactSettings)`);
+      return res.json({
+        action: 'manual',
+        message: 'Bot is disabled for this contact',
+        botEnabled: false,
+        botDisabledPerContact: true
+      });
     }
     
     // Find the correct prompt config: instance-specific first, then shared (null instanceId), then first available
