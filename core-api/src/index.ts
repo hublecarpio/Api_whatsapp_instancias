@@ -40,6 +40,7 @@ import googleCalendarRoutes from './routes/googleCalendar.js';
 import metaCoexistRoutes from './routes/metaCoexist.js';
 import metaManagedRoutes from './routes/metaManaged.js';
 import promotionsRoutes from './routes/promotions.js';
+import quickRepliesRoutes from './routes/quickReplies.js';
 import { testRedisConnection, closeRedisConnection, isRedisAvailable } from './services/redis.js';
 import { resolveShortUrl } from './services/shortUrl.js';
 import { startReminderWorker as startLegacyReminderWorker } from './services/reminderWorker.js';
@@ -150,6 +151,7 @@ app.use('/google-calendar', googleCalendarRoutes);
 app.use('/auth/meta-coexist', metaCoexistRoutes);
 app.use('/auth/meta-managed', metaManagedRoutes);
 app.use('/promotions', promotionsRoutes);
+app.use('/quick-replies', quickRepliesRoutes);
 app.use('/internal/wa', waInternalRouter);
 
 app.get('/m/:shortId', async (req, res) => {
