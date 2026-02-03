@@ -532,38 +532,103 @@ async function processMessage(
   
   // Enrich referred product from catalog if present
   let enrichedReferredProduct = msg.referredProduct;
-  if (msg.referredProduct?.catalogId && msg.referredProduct?.productId) {
+  if (msg.referredProduct?.productId) {
+    const productRetailerId = msg.referredProduct.productId;
+    
+    console.log(`[META WEBHOOK] Enriching referred product:`, {
+      catalogId: msg.referredProduct.catalogId,
+      productId: productRetailerId
+    });
+    
+    // Strategy 1: Try to find product in local database first (faster and more reliable)
     try {
-      console.log(`[META WEBHOOK] Enriching referred product from catalog:`, {
-        catalogId: msg.referredProduct.catalogId,
-        productId: msg.referredProduct.productId
+      // Search for product by title containing the retailer ID or by exact title match
+      // Since we don't have a retailer_id field, we search by title or description containing the SKU
+      const localProduct = await prisma.product.findFirst({
+        where: {
+          businessId: instance.businessId,
+          OR: [
+            { title: { contains: productRetailerId, mode: 'insensitive' } },
+            { description: { contains: productRetailerId, mode: 'insensitive' } },
+            // Also try exact match on title (SKU is often the product title)
+            { title: productRetailerId }
+          ]
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          price: true,
+          imageUrl: true,
+          imageUrls: true
+        }
       });
       
-      // Get accessToken from metaService credentials
-      const serviceAccessToken = (metaService as any)['credentials']?.accessToken;
-      const productDetails = await fetchCatalogProductDetails(
-        serviceAccessToken,
-        msg.referredProduct.catalogId,
-        msg.referredProduct.productId
-      );
-      
-      if (productDetails) {
+      if (localProduct) {
+        const currencySymbol = 'S/'; // Default, could get from business settings
         enrichedReferredProduct = {
           ...msg.referredProduct,
-          title: productDetails.title || msg.referredProduct.title,
-          description: productDetails.description || msg.referredProduct.description,
-          price: productDetails.price || msg.referredProduct.price,
-          currency: productDetails.currency || msg.referredProduct.currency,
-          imageUrl: productDetails.imageUrl || msg.referredProduct.imageUrl
+          title: localProduct.title,
+          description: localProduct.description || undefined,
+          price: localProduct.price,
+          currency: currencySymbol,
+          imageUrl: localProduct.imageUrl || localProduct.imageUrls?.[0] || undefined
         };
-        console.log(`[META WEBHOOK] Referred product enriched:`, {
-          productId: enrichedReferredProduct.productId,
-          title: enrichedReferredProduct.title,
-          price: enrichedReferredProduct.price
+        console.log(`[META WEBHOOK] ✅ Referred product found in LOCAL DB:`, {
+          productId: productRetailerId,
+          localId: localProduct.id,
+          title: localProduct.title,
+          price: localProduct.price
         });
       }
-    } catch (err: any) {
-      console.warn(`[META WEBHOOK] Failed to enrich referred product:`, err.message);
+    } catch (localErr: any) {
+      console.warn(`[META WEBHOOK] Local product search failed:`, localErr.message);
+    }
+    
+    // Strategy 2: If not found locally and we have catalogId, try Meta API
+    if (!enrichedReferredProduct?.title && msg.referredProduct?.catalogId) {
+      try {
+        const serviceAccessToken = (metaService as any)['credentials']?.accessToken;
+        if (serviceAccessToken) {
+          const productDetails = await fetchCatalogProductDetails(
+            serviceAccessToken,
+            msg.referredProduct.catalogId,
+            productRetailerId
+          );
+          
+          if (productDetails) {
+            enrichedReferredProduct = {
+              ...msg.referredProduct,
+              title: productDetails.title || msg.referredProduct.title,
+              description: productDetails.description || msg.referredProduct.description,
+              price: productDetails.price || msg.referredProduct.price,
+              currency: productDetails.currency || msg.referredProduct.currency,
+              imageUrl: productDetails.imageUrl || msg.referredProduct.imageUrl
+            };
+            console.log(`[META WEBHOOK] ✅ Referred product enriched from META API:`, {
+              productId: productRetailerId,
+              title: enrichedReferredProduct.title,
+              price: enrichedReferredProduct.price
+            });
+          } else {
+            console.warn(`[META WEBHOOK] ⚠️ Meta API returned no product details for:`, productRetailerId);
+          }
+        } else {
+          console.warn(`[META WEBHOOK] ⚠️ No accessToken available for catalog lookup`);
+        }
+      } catch (metaErr: any) {
+        console.warn(`[META WEBHOOK] Meta catalog API failed:`, metaErr.message);
+      }
+    }
+    
+    // Strategy 3: If all else fails, ensure at least productId is visible as title
+    if (!enrichedReferredProduct?.title && productRetailerId !== 'unknown') {
+      enrichedReferredProduct = {
+        ...msg.referredProduct,
+        title: `SKU: ${productRetailerId}`, // At least show the SKU as title
+        description: undefined
+      };
+      console.log(`[META WEBHOOK] ⚠️ Using productId as fallback title:`, productRetailerId);
     }
   }
   
