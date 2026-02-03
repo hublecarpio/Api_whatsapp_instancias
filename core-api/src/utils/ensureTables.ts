@@ -6,11 +6,60 @@ export async function ensureRequiredTables(): Promise<void> {
   console.log('[DB-INIT] Checking for required tables...');
   
   try {
+    await ensureVectorExtension();
+    await ensureProductEmbeddingColumns();
     await ensureWebhookRawLogTable();
     console.log('[DB-INIT] All required tables verified/created successfully');
   } catch (error: any) {
     console.error('[DB-INIT] Error ensuring tables:', error.message);
     throw error;
+  }
+}
+
+async function ensureVectorExtension(): Promise<void> {
+  try {
+    await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS vector`);
+    console.log('[DB-INIT] Vector extension ensured');
+  } catch (error: any) {
+    console.warn('[DB-INIT] Could not create vector extension (may already exist or not available):', error.message);
+  }
+}
+
+async function ensureProductEmbeddingColumns(): Promise<void> {
+  const tableName = 'Product';
+  
+  try {
+    const columnCheck = await prisma.$queryRaw<Array<{column_name: string}>>`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name = ${tableName}
+      AND column_name IN ('embeddingText', 'embeddingUpdatedAt', 'embedding')
+    `;
+    
+    const existingColumns = new Set(columnCheck.map(c => c.column_name));
+    
+    if (!existingColumns.has('embeddingText')) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "embeddingText" TEXT`);
+      console.log('[DB-INIT] Added embeddingText column to Product');
+    }
+    
+    if (!existingColumns.has('embeddingUpdatedAt')) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "embeddingUpdatedAt" TIMESTAMP(3)`);
+      console.log('[DB-INIT] Added embeddingUpdatedAt column to Product');
+    }
+    
+    if (!existingColumns.has('embedding')) {
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "embedding" vector(1536)`);
+        console.log('[DB-INIT] Added embedding column to Product');
+      } catch (err: any) {
+        console.warn('[DB-INIT] Could not add vector column (extension may not be available):', err.message);
+      }
+    }
+    
+    console.log(`[DB-INIT] Product embedding columns verified`);
+  } catch (error: any) {
+    console.error(`[DB-INIT] Error checking Product columns:`, error.message);
   }
 }
 

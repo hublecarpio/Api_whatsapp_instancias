@@ -97,7 +97,25 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
         include: { tools: { where: { enabled: true } } }
       },
       policy: true,
-      products: true
+      products: {
+        select: {
+          id: true,
+          businessId: true,
+          instanceId: true,
+          title: true,
+          description: true,
+          variations: true,
+          pricePerVariation: true,
+          stockPerVariation: true,
+          imageUrls: true,
+          price: true,
+          stock: true,
+          imageUrl: true,
+          embeddingText: true,
+          embeddingUpdatedAt: true,
+          createdAt: true
+        }
+      }
     }
   });
 
