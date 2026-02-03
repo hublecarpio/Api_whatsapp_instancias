@@ -52,6 +52,7 @@ The platform employs a microservices-like architecture, consisting of a **Fronte
 *   **RAG Knowledge Architecture**: A scalable knowledge management system using structured categories, semantic embeddings for retrieval, instance isolation, and a priority system for content. Gemini powers the automatic categorization of raw prompts.
 *   **Early Order Creation System**: Creates orders at an earlier stage (product + zone + payment method confirmed), supporting partial payments, multiple vouchers, and automatic order confirmation.
 *   **Intelligent Auto-Trigger System**: A pre-processing system that detects critical intents (e.g., `VOUCHER_RECEIVED`, `PURCHASE_CONFIRMED`) and executes required actions before the AI agent responds, ensuring critical tasks like payment processing are handled proactively.
+*   **Gemini-First Voucher Processing**: When Gemini detects a valid payment voucher, the system bypasses LLM1 and executes the auto-trigger directly to save the payment. LLM1 only receives the confirmation context (not the image URL or description), preventing confusion and ensuring reliable payment registration.
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
