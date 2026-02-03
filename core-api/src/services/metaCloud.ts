@@ -217,6 +217,94 @@ async function metaApiRequest(
   }
 }
 
+// Fetch catalog product details from Meta API
+// Uses the Catalog API to get product name, description, price from retailer_id
+export async function fetchCatalogProductDetails(
+  accessToken: string,
+  catalogId: string,
+  productRetailerId: string
+): Promise<{
+  title?: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  imageUrl?: string;
+} | null> {
+  const logPrefix = `[META-CATALOG]`;
+  const maxRetries = 2;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`${logPrefix} Fetching product details: catalogId=${catalogId}, retailerId=${productRetailerId}, attempt=${attempt + 1}`);
+      
+      // Use the catalog products endpoint with retailer_id filter
+      const url = `${META_API_URL}/${catalogId}/products?fields=id,name,description,price,currency,image_url,retailer_id&filter={"retailer_id":{"eq":"${productRetailerId}"}}`;
+      
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        httpsAgent,
+        timeout: 10000
+      });
+      
+      const products = response.data?.data || [];
+      
+      if (products.length > 0) {
+        const product = products[0];
+        console.log(`${logPrefix} Product found:`, {
+          retailerId: productRetailerId,
+          name: product.name,
+          price: product.price
+        });
+        
+        // Parse price (Meta returns as string like "12500" for cents or "125.00")
+        let priceValue: number | undefined;
+        if (product.price) {
+          const priceStr = String(product.price).replace(/[^0-9.]/g, '');
+          priceValue = parseFloat(priceStr);
+          // If price seems to be in cents (no decimal), convert to actual price
+          if (priceValue > 1000 && !priceStr.includes('.')) {
+            priceValue = priceValue / 100;
+          }
+        }
+        
+        return {
+          title: product.name || undefined,
+          description: product.description || undefined,
+          price: priceValue,
+          currency: product.currency || 'PEN',
+          imageUrl: product.image_url || undefined
+        };
+      }
+      
+      console.log(`${logPrefix} No product found for retailerId=${productRetailerId}`);
+      return null;
+      
+    } catch (error: any) {
+      const isRetryable = isNetworkTimeoutError(error) || error?.response?.status >= 500;
+      
+      console.warn(`${logPrefix} Error fetching product (attempt ${attempt + 1}):`, {
+        status: error?.response?.status,
+        message: error?.message?.substring(0, 100)
+      });
+      
+      if (isRetryable && attempt < maxRetries) {
+        const delay = 1000 * (attempt + 1);
+        console.log(`${logPrefix} Retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      
+      // Don't throw, just return null - product lookup failure shouldn't block message processing
+      return null;
+    }
+  }
+  
+  return null;
+}
+
 // Undici agent with better connection handling
 // Force IPv4 to avoid IPv6 connection issues in Docker containers
 const undiciAgent = new Agent({

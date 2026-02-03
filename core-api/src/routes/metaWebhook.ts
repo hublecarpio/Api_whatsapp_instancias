@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma, { withRetry } from '../services/prisma.js';
-import { MetaCloudService, MetaWebhookPayload, ParsedMessage, ParsedStatus } from '../services/metaCloud.js';
+import { MetaCloudService, MetaWebhookPayload, ParsedMessage, ParsedStatus, fetchCatalogProductDetails } from '../services/metaCloud.js';
 import { processIncomingMessage } from '../services/messageIngest.js';
 import { uploadBuffer, isS3Configured } from '../services/storage.js';
 import { dispatchUserMessage, dispatchMediaUpdate } from '../services/webhookService.js';
@@ -530,6 +530,43 @@ async function processMessage(
     }
   }
   
+  // Enrich referred product from catalog if present
+  let enrichedReferredProduct = msg.referredProduct;
+  if (msg.referredProduct?.catalogId && msg.referredProduct?.productId) {
+    try {
+      console.log(`[META WEBHOOK] Enriching referred product from catalog:`, {
+        catalogId: msg.referredProduct.catalogId,
+        productId: msg.referredProduct.productId
+      });
+      
+      // Get accessToken from metaService credentials
+      const serviceAccessToken = (metaService as any)['credentials']?.accessToken;
+      const productDetails = await fetchCatalogProductDetails(
+        serviceAccessToken,
+        msg.referredProduct.catalogId,
+        msg.referredProduct.productId
+      );
+      
+      if (productDetails) {
+        enrichedReferredProduct = {
+          ...msg.referredProduct,
+          title: productDetails.title || msg.referredProduct.title,
+          description: productDetails.description || msg.referredProduct.description,
+          price: productDetails.price || msg.referredProduct.price,
+          currency: productDetails.currency || msg.referredProduct.currency,
+          imageUrl: productDetails.imageUrl || msg.referredProduct.imageUrl
+        };
+        console.log(`[META WEBHOOK] Referred product enriched:`, {
+          productId: enrichedReferredProduct.productId,
+          title: enrichedReferredProduct.title,
+          price: enrichedReferredProduct.price
+        });
+      }
+    } catch (err: any) {
+      console.warn(`[META WEBHOOK] Failed to enrich referred product:`, err.message);
+    }
+  }
+  
   const processed = await processIncomingMessage({
     businessId: instance.businessId,
     instanceId: instance.id,
@@ -553,7 +590,7 @@ async function processMessage(
     order: msg.order,
     skipAI,
     quotedMessage,
-    referredProduct: msg.referredProduct
+    referredProduct: enrichedReferredProduct
   });
   
   // Only dispatch webhook if message was actually processed (not a duplicate in DB)
