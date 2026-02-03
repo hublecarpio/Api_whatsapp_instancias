@@ -84,16 +84,16 @@ async function sendViaBaileys(data: OutboundMessageJobData): Promise<{ success: 
   if (mediaUrl) {
     if (mediaType === 'image' || mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
       endpoint = `/instances/${instanceBackendId}/sendImage`;
-      payload = { to, imageUrl: mediaUrl, caption: message || '' };
+      payload = { to, url: mediaUrl, caption: message || '' };
     } else if (mediaType === 'video' || mediaUrl.match(/\.(mp4|mov|avi)$/i)) {
       endpoint = `/instances/${instanceBackendId}/sendVideo`;
-      payload = { to, videoUrl: mediaUrl, caption: message || '' };
+      payload = { to, url: mediaUrl, caption: message || '' };
     } else if (mediaType === 'audio' || mediaUrl.match(/\.(mp3|ogg|wav|m4a)$/i)) {
       endpoint = `/instances/${instanceBackendId}/sendAudio`;
-      payload = { to, audioUrl: mediaUrl };
+      payload = { to, url: mediaUrl };
     } else if (mediaType === 'document' || mediaUrl.match(/\.(pdf|doc|docx|xls|xlsx)$/i)) {
       endpoint = `/instances/${instanceBackendId}/sendFile`;
-      payload = { to, fileUrl: mediaUrl, caption: message || '', fileName: 'document' };
+      payload = { to, url: mediaUrl, fileName: 'document', mimeType: 'application/octet-stream' };
     }
   }
 
