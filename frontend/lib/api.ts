@@ -721,3 +721,16 @@ export const promptImporterApi = {
   importFull: (businessId: string, rawPrompt: string, instanceId?: string, options?: { skipConflicts?: boolean; clearExisting?: boolean }) =>
     api.post('/agent/import-full-prompt', { business_id: businessId, rawPrompt, instanceId, options })
 };
+
+export const quickRepliesApi = {
+  list: (businessId: string) =>
+    api.get('/quick-replies', { params: { business_id: businessId } }),
+  create: (businessId: string, data: { shortcut: string; title: string; message: string; order?: number }) =>
+    api.post('/quick-replies', { business_id: businessId, ...data }),
+  update: (id: string, data: { shortcut?: string; title?: string; message?: string; order?: number }) =>
+    api.put(`/quick-replies/${id}`, data),
+  delete: (id: string) =>
+    api.delete(`/quick-replies/${id}`),
+  reorder: (businessId: string, items: { id: string; order: number }[]) =>
+    api.put('/quick-replies/reorder', { business_id: businessId, items })
+};

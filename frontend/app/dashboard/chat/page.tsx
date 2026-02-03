@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
-import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi, funnelStagesApi } from '@/lib/api';
+import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi, funnelStagesApi, quickRepliesApi } from '@/lib/api';
+import QuickReplyDropdown from '@/components/QuickReplyDropdown';
+import QuickReplyManager from '@/components/QuickReplyManager';
 
 interface Conversation {
   phone: string;
@@ -129,6 +131,8 @@ export default function ChatPage() {
   const [selectedContactName, setSelectedContactName] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [showQuickReplyDropdown, setShowQuickReplyDropdown] = useState(false);
+  const [showQuickReplyManager, setShowQuickReplyManager] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -2037,7 +2041,19 @@ export default function ChatPage() {
 
               {error && <div className="mx-3 mb-2 px-4 py-2 bg-accent-error/10 border border-accent-error/20 rounded-lg text-accent-error text-sm">{error}</div>}
 
-              <form onSubmit={handleSend} className="p-3 border-t border-dark-border bg-dark-card safe-area-pb">
+              <form onSubmit={handleSend} className="p-3 border-t border-dark-border bg-dark-card safe-area-pb relative">
+                {showQuickReplyDropdown && currentBusiness && (
+                  <QuickReplyDropdown
+                    businessId={currentBusiness.id}
+                    inputValue={newMessage}
+                    onSelect={(message) => {
+                      setNewMessage(message);
+                      setShowQuickReplyDropdown(false);
+                      inputRef.current?.focus();
+                    }}
+                    onClose={() => setShowQuickReplyDropdown(false)}
+                  />
+                )}
                 <div className="flex items-center gap-2">
                   <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx" />
                   <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-shrink-0 p-2.5 text-gray-400 hover:text-white hover:bg-dark-hover rounded-full transition-colors" disabled={sending || (['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen)}>
@@ -2046,14 +2062,31 @@ export default function ChatPage() {
                   <button type="button" onClick={isRecording ? handleStopRecording : handleStartRecording} className={`flex-shrink-0 p-2.5 rounded-full transition-colors ${isRecording ? 'bg-accent-error text-white animate-pulse' : 'text-gray-400 hover:text-white hover:bg-dark-hover'}`} disabled={(sending && !isRecording) || (['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen)}>
                     <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
                   </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowQuickReplyManager(true)} 
+                    className="flex-shrink-0 p-2.5 text-gray-400 hover:text-neon-blue hover:bg-dark-hover rounded-full transition-colors" 
+                    disabled={sending}
+                    title="Respuestas rapidas"
+                  >
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  </button>
                   <input 
                     ref={inputRef}
                     type="text" 
                     value={newMessage} 
-                    onChange={(e) => setNewMessage(e.target.value)} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewMessage(val);
+                      if (val.startsWith('/') && val.length >= 1) {
+                        setShowQuickReplyDropdown(true);
+                      } else {
+                        setShowQuickReplyDropdown(false);
+                      }
+                    }} 
                     onFocus={handleInputFocus}
                     onBlur={handleInputBlur}
-                    placeholder={['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen ? "Ventana cerrada - usa plantilla" : "Escribe un mensaje..."} 
+                    placeholder={['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen ? "Ventana cerrada - usa plantilla" : "Escribe / para respuestas rapidas..."} 
                     className="flex-1 min-w-0 px-4 py-2.5 bg-dark-surface border border-dark-border rounded-full text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue/50 text-sm sm:text-base" 
                     disabled={sending || (['META_CLOUD', 'META_COEXIST'].includes(windowStatus?.provider || '') && !windowStatus?.windowOpen)}
                     enterKeyHint="send"
@@ -2088,6 +2121,13 @@ export default function ChatPage() {
           )}
         </div>
       </div>
+
+      {showQuickReplyManager && currentBusiness && (
+        <QuickReplyManager
+          businessId={currentBusiness.id}
+          onClose={() => setShowQuickReplyManager(false)}
+        />
+      )}
 
       {showTemplateModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
