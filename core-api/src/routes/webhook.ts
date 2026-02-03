@@ -123,6 +123,28 @@ router.post('/:businessId', async (req: Request, res: Response) => {
     console.log(`Webhook received for business ${businessId}:`, event);
     console.log('Webhook payload:', JSON.stringify(payload, null, 2));
     
+    // Log all Baileys webhook payloads to WebhookRawLog for debugging
+    let rawLogId: string | null = null;
+    try {
+      const rawLog = await prisma.webhookRawLog.create({
+        data: {
+          source: 'BAILEYS',
+          endpoint: `/webhook/${businessId}`,
+          method: 'POST',
+          headers: req.headers as any,
+          body: req.body,
+          businessId,
+          instanceId: instanceId || null,
+          messageCount: event === 'message.received' ? 1 : 0,
+          statusCount: event === 'message.status' ? 1 : 0
+        }
+      });
+      rawLogId = rawLog.id;
+      console.log(`[WEBHOOK-RAW] Logged Baileys webhook: ${rawLogId}, event: ${event}`);
+    } catch (logErr: any) {
+      console.error('[WEBHOOK-RAW] Failed to log webhook:', logErr.message);
+    }
+    
     const business = await prisma.business.findUnique({
       where: { id: businessId }
     });
@@ -481,6 +503,35 @@ router.post('/:businessId', async (req: Request, res: Response) => {
               }
             }
           });
+          
+          // Upsert Contact so conversation appears in frontend chat list
+          if (!isFromMe && contactPhone) {
+            try {
+              const now = new Date();
+              await prisma.contact.upsert({
+                where: {
+                  businessId_phone: { businessId, phone: contactPhone }
+                },
+                create: {
+                  businessId,
+                  phone: contactPhone,
+                  name: contactName || null,
+                  source: 'BAILEYS',
+                  firstMessageAt: now,
+                  lastMessageAt: now,
+                  messageCount: 1
+                },
+                update: {
+                  name: contactName || undefined,
+                  lastMessageAt: now,
+                  messageCount: { increment: 1 }
+                }
+              });
+              console.log(`[WEBHOOK] Contact upserted: ${contactPhone} for business ${businessId}`);
+            } catch (contactErr: any) {
+              console.error(`[WEBHOOK] Failed to upsert contact ${contactPhone}:`, contactErr.message);
+            }
+          }
           
           // Dispatch user_message webhook for incoming messages
           if (!isFromMe) {
