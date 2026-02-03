@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
-import { advisorApi, messageApi, mediaApi, waApi, tagsApi } from '@/lib/api';
+import { advisorApi, messageApi, mediaApi, waApi, tagsApi, quickRepliesApi } from '@/lib/api';
 import Logo from '@/components/Logo';
+import QuickReplyDropdown from '@/components/QuickReplyDropdown';
+import QuickReplyManager from '@/components/QuickReplyManager';
 
 interface Business {
   id: string;
@@ -95,7 +97,10 @@ export default function AsesorPage() {
   const [contactBotToggling, setContactBotToggling] = useState(false);
   const [contactRemindersPaused, setContactRemindersPaused] = useState(false);
   const [contactReminderToggling, setContactReminderToggling] = useState(false);
+  const [showQuickReplyDropdown, setShowQuickReplyDropdown] = useState(false);
+  const [showQuickReplyManager, setShowQuickReplyManager] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -1118,7 +1123,19 @@ export default function AsesorPage() {
                       </div>
                     )}
                     
-                    <form onSubmit={handleSendMessage} className="p-3 md:p-4 flex items-center gap-1 md:gap-2">
+                    <form onSubmit={handleSendMessage} className="p-3 md:p-4 flex items-center gap-1 md:gap-2 relative">
+                      {showQuickReplyDropdown && selectedBusiness && (
+                        <QuickReplyDropdown
+                          businessId={selectedBusiness.id}
+                          inputValue={messageInput}
+                          onSelect={(message) => {
+                            setMessageInput(message);
+                            setShowQuickReplyDropdown(false);
+                            messageInputRef.current?.focus();
+                          }}
+                          onClose={() => setShowQuickReplyDropdown(false)}
+                        />
+                      )}
                       <input
                         type="file"
                         ref={fileInputRef}
@@ -1164,11 +1181,30 @@ export default function AsesorPage() {
                         </button>
                       )}
                       
+                      <button 
+                        type="button" 
+                        onClick={() => setShowQuickReplyManager(true)} 
+                        className="p-2.5 text-gray-400 hover:text-neon-blue hover:bg-dark-hover rounded-xl transition-colors touch-manipulation" 
+                        disabled={sending}
+                        title="Respuestas rapidas"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                      </button>
+                      
                       <input
                         type="text"
+                        ref={messageInputRef}
                         value={messageInput}
-                        onChange={(e) => setMessageInput(e.target.value)}
-                        placeholder={isRecording ? 'Grabando...' : 'Mensaje...'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMessageInput(val);
+                          if (val.startsWith('/') && val.length >= 1) {
+                            setShowQuickReplyDropdown(true);
+                          } else {
+                            setShowQuickReplyDropdown(false);
+                          }
+                        }}
+                        placeholder={isRecording ? 'Grabando...' : 'Escribe / para respuestas rapidas...'}
                         disabled={isRecording}
                         className="flex-1 min-w-0 px-3 py-2 bg-dark-surface border border-dark-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-blue"
                       />
@@ -1294,6 +1330,13 @@ export default function AsesorPage() {
           )}
         </div>
       </div>
+
+      {showQuickReplyManager && selectedBusiness && (
+        <QuickReplyManager
+          businessId={selectedBusiness.id}
+          onClose={() => setShowQuickReplyManager(false)}
+        />
+      )}
     </div>
   );
 }
