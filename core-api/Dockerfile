@@ -30,6 +30,7 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/dist ./dist
 COPY entrypoint.sh ./entrypoint.sh
+COPY scripts ./scripts
 
 RUN chmod +x ./entrypoint.sh && chown -R node:node /app
 
