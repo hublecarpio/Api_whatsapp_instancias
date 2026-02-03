@@ -367,6 +367,7 @@ model Business {
   promptSections    PromptSection[]
   configBackups     ConfigurationBackup[]
   mediaShortUrls    MediaShortUrl[]
+  quickReplies      QuickReply[]
 }
 
 model GoogleCalendarCredential {
@@ -406,6 +407,22 @@ model DeliveryZone {
   @@index([businessId, isActive])
   @@index([businessId, order])
   @@index([businessId, instanceId])
+}
+
+model QuickReply {
+  id         String   @id @default(uuid())
+  businessId String
+  shortcut   String
+  title      String
+  message    String
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, shortcut])
+  @@index([businessId, order])
 }
 
 enum WhatsAppProvider {
