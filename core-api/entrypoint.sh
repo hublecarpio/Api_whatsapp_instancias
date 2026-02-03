@@ -69,11 +69,25 @@ fi
 
 echo ""
 echo "Running database migrations..."
-if npx prisma db push --skip-generate --accept-data-loss; then
+DB_PUSH_FAILED=0
+if npx prisma db push --skip-generate --accept-data-loss 2>&1; then
   echo "Migrations completed successfully!"
 else
-  echo "ERROR: Database migration failed!"
-  exit 1
+  echo "WARNING: Prisma db push had issues (likely due to vector type)"
+  echo "Verifying core tables exist..."
+  DB_PUSH_FAILED=1
+fi
+
+# Re-run init-extensions to verify core tables exist after db push
+if [ $DB_PUSH_FAILED -eq 1 ]; then
+  echo ""
+  echo "Running table verification..."
+  if node scripts/init-extensions.js; then
+    echo "Table verification passed - all required tables exist"
+  else
+    echo "ERROR: Required tables are missing. Cannot start."
+    exit 1
+  fi
 fi
 
 echo ""

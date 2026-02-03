@@ -1499,8 +1499,8 @@ export default function WhatsAppPage() {
                         className="text-xs text-neon-blue hover:text-cyan-400 flex items-center gap-1"
                       >
                         <span>⚙️</span> Opciones avanzadas
-                        {apiConfig.webhookEvents.length > 0 && (
-                          <span className="text-gray-500">({apiConfig.webhookEvents.length} eventos)</span>
+                        {(apiConfig.webhookEvents?.length || 0) > 0 && (
+                          <span className="text-gray-500">({apiConfig.webhookEvents?.length || 0} eventos)</span>
                         )}
                       </button>
                     </div>
