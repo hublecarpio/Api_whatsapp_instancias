@@ -152,6 +152,9 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
 
     let finalMediaUrl: string;
 
+    // Track both URLs: shortUrl for frontend, originalUrl for Gemini
+    let geminiMediaUrl = metaMediaUrl; // URL for Gemini to access (must be publicly accessible)
+    
     if (isS3Configured()) {
       console.log(`${logPrefix} Downloading media from Meta...`);
       const mediaBuffer = await metaService.downloadMedia(metaMediaUrl);
@@ -160,15 +163,20 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
       const uploadResult = await uploadBuffer(mediaBuffer, mimetype, businessId);
       
       if (uploadResult) {
+        // Use shortUrl for storage/frontend (shorter URLs in messages)
         finalMediaUrl = uploadResult.url;
-        console.log(`${logPrefix} Uploaded to S3: ${finalMediaUrl.substring(0, 60)}...`);
+        // Use originalUrl (direct MinIO URL) for Gemini - it's publicly accessible
+        geminiMediaUrl = uploadResult.originalUrl;
+        console.log(`${logPrefix} Uploaded to S3: shortUrl=${finalMediaUrl.substring(0, 60)}..., originalUrl=${geminiMediaUrl.substring(0, 60)}...`);
       } else {
         console.warn(`${logPrefix} S3 upload failed, using Meta URL as fallback`);
         finalMediaUrl = metaMediaUrl;
+        geminiMediaUrl = metaMediaUrl;
       }
     } else {
       console.log(`${logPrefix} S3 not configured, using Meta URL`);
       finalMediaUrl = metaMediaUrl;
+      geminiMediaUrl = metaMediaUrl;
     }
 
     // Merge with existing metadata
@@ -211,8 +219,9 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
           try {
             const geminiStartTime = Date.now();
             console.log(`${logPrefix} Processing ${mediaType} with Gemini for AI context...`);
-            console.log(`${logPrefix} [AUDIO-DEBUG] Gemini isConfigured: ${geminiService.isConfigured()}, mediaUrl: ${finalMediaUrl?.substring(0, 80)}...`);
-            const result = await geminiService.processMedia(finalMediaUrl, mediaType, '');
+            console.log(`${logPrefix} [AUDIO-DEBUG] Gemini isConfigured: ${geminiService.isConfigured()}, geminiMediaUrl: ${geminiMediaUrl?.substring(0, 80)}...`);
+            // Use geminiMediaUrl (direct MinIO URL) instead of shortUrl - Gemini needs publicly accessible URL
+            const result = await geminiService.processMedia(geminiMediaUrl, mediaType, '');
             const geminiElapsed = Date.now() - geminiStartTime;
             console.log(`${logPrefix} Gemini processing took ${geminiElapsed}ms, success=${result.success}, textLength=${result.text?.length || 0}`);
             
@@ -261,7 +270,8 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
                   const currency = business?.currencyCode || 'PEN';
                   
                   console.log(`${logPrefix} Checking if image is a payment voucher (currency: ${currency})...`);
-                  const voucherResult = await geminiService.validatePaymentVoucher(finalMediaUrl, { currency });
+                  // Use geminiMediaUrl (direct MinIO URL) for voucher validation - Gemini needs publicly accessible URL
+                  const voucherResult = await geminiService.validatePaymentVoucher(geminiMediaUrl, { currency });
                   
                   // Save voucherValidation if it's a payment proof (even if not fully valid)
                   // This allows downstream tools to decide based on isPaymentProof

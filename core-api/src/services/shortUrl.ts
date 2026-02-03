@@ -24,9 +24,15 @@ export async function createShortUrl(
   businessId?: string,
   mediaType?: string
 ): Promise<CreateShortUrlResult> {
-  const baseUrl = process.env.CORE_API_PUBLIC_URL || process.env.REPLIT_DEV_DOMAIN 
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : 'http://localhost:3001';
+  // Priority: CORE_API_PUBLIC_URL > REPLIT_DEV_DOMAIN > localhost
+  let baseUrl: string;
+  if (process.env.CORE_API_PUBLIC_URL) {
+    baseUrl = process.env.CORE_API_PUBLIC_URL;
+  } else if (process.env.REPLIT_DEV_DOMAIN) {
+    baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  } else {
+    baseUrl = 'http://localhost:3001';
+  }
   
   let shortId = generateShortId();
   let attempts = 0;
