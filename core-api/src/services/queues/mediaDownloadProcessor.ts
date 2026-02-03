@@ -167,7 +167,9 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
         finalMediaUrl = uploadResult.url;
         // Use originalUrl (direct MinIO URL) for Gemini - it's publicly accessible
         geminiMediaUrl = uploadResult.originalUrl;
-        console.log(`${logPrefix} Uploaded to S3: shortUrl=${finalMediaUrl.substring(0, 60)}..., originalUrl=${geminiMediaUrl.substring(0, 60)}...`);
+        console.log(`${logPrefix} Uploaded to S3: shortUrl=${finalMediaUrl.substring(0, 60)}...`);
+        console.log(`${logPrefix} [AUDIO-DEBUG] geminiMediaUrl (originalUrl for Gemini): ${geminiMediaUrl}`);
+        console.log(`${logPrefix} [AUDIO-DEBUG] MINIO_PUBLIC_URL configured: ${!!process.env.MINIO_PUBLIC_URL}`);
       } else {
         console.warn(`${logPrefix} S3 upload failed, using Meta URL as fallback`);
         finalMediaUrl = metaMediaUrl;
