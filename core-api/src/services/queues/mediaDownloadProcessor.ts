@@ -6,6 +6,7 @@ import { MetaCloudService, getCircuitBreakerState } from '../metaCloud.js';
 import { uploadBuffer, isS3Configured } from '../storage.js';
 import { dispatchMediaUpdate, dispatchUserMessage } from '../webhookService.js';
 import { geminiService } from '../gemini.js';
+import { processAutoTriggers, TriggerContext, TriggerResult } from '../autoTriggers.js';
 
 const MAX_MEDIA_DOWNLOAD_ATTEMPTS = 5;
 const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
@@ -263,23 +264,24 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
                   : mediaAnalysis;
               }
               
-              // For images, also check if it's a payment voucher
+              // For images, check if it's a payment voucher and execute auto-trigger if valid
               let voucherValidation: any = null;
+              let voucherTriggerResult: TriggerResult | null = null;
+              
               if (mediaType === 'image') {
                 try {
                   // Get business currency for proper voucher validation
-                  const business = await prisma.business.findUnique({
+                  const businessForVoucher = await prisma.business.findUnique({
                     where: { id: businessId },
                     select: { currencyCode: true }
                   });
-                  const currency = business?.currencyCode || 'PEN';
+                  const currency = businessForVoucher?.currencyCode || 'PEN';
                   
                   console.log(`${logPrefix} Checking if image is a payment voucher (currency: ${currency})...`);
                   // Use geminiMediaUrl (direct MinIO URL) for voucher validation - Gemini needs publicly accessible URL
                   const voucherResult = await geminiService.validatePaymentVoucher(geminiMediaUrl, { currency });
                   
                   // Save voucherValidation if it's a payment proof (even if not fully valid)
-                  // This allows downstream tools to decide based on isPaymentProof
                   if (voucherResult.isPaymentProof) {
                     console.log(`${logPrefix} 🧾 VOUCHER DETECTED! Brand=${voucherResult.brand}, Amount=${voucherResult.amount}, Valid=${voucherResult.isValid}`);
                     voucherValidation = {
@@ -291,8 +293,52 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
                       operationCode: voucherResult.operationCode,
                       confidence: voucherResult.confidence,
                       reason: voucherResult.reason,
-                      imageUrl: finalMediaUrl
+                      imageUrl: geminiMediaUrl // Use original URL for storage
                     };
+                    
+                    // CRITICAL: If valid voucher detected, execute auto-trigger IMMEDIATELY
+                    // This bypasses LLM1 decision-making - Gemini detection is authoritative for vouchers
+                    if (voucherResult.isValid && voucherResult.amount && voucherResult.amount > 0) {
+                      console.log(`${logPrefix} 🔥 EXECUTING VOUCHER AUTO-TRIGGER (bypassing LLM1)`);
+                      
+                      // Get contact name for order creation
+                      const contactForTrigger = await prisma.contact.findUnique({
+                        where: { businessId_phone: { businessId, phone: contactPhone.replace(/\D/g, '') } },
+                        select: { name: true }
+                      });
+                      
+                      const triggerContext: TriggerContext = {
+                        businessId,
+                        instanceId: instanceId || undefined,
+                        contactPhone,
+                        contactName: contactForTrigger?.name || 'Cliente',
+                        messageText: '', // Not relevant for voucher trigger
+                        mediaUrl: geminiMediaUrl,
+                        mediaType: 'image',
+                        geminiVoucherResult: {
+                          isPaymentProof: voucherResult.isPaymentProof,
+                          isValid: voucherResult.isValid,
+                          brand: voucherResult.brand,
+                          amount: voucherResult.amount,
+                          currency: voucherResult.currency,
+                          operationCode: voucherResult.operationCode,
+                          confidence: voucherResult.confidence,
+                          imageUrl: geminiMediaUrl
+                        }
+                      };
+                      
+                      voucherTriggerResult = await processAutoTriggers(triggerContext);
+                      
+                      if (voucherTriggerResult.executed) {
+                        console.log(`${logPrefix} ✅ VOUCHER TRIGGER EXECUTED SUCCESSFULLY`, {
+                          trigger: voucherTriggerResult.trigger,
+                          orderId: voucherTriggerResult.result?.orderId,
+                          amount: voucherTriggerResult.result?.voucherAmount
+                        });
+                      } else {
+                        console.log(`${logPrefix} ⚠️ Voucher trigger not executed: ${voucherTriggerResult.error || 'unknown reason'}`);
+                      }
+                    }
                   } else {
                     console.log(`${logPrefix} Image is not a payment voucher: ${voucherResult.reason}`);
                   }
@@ -310,11 +356,16 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
                     mediaAnalysis: result.text,
                     mediaAnalysisType: mediaType,
                     mediaAnalysisAt: new Date().toISOString(),
-                    ...(voucherValidation ? { voucherValidation } : {})
+                    ...(voucherValidation ? { voucherValidation } : {}),
+                    ...(voucherTriggerResult?.executed ? { 
+                      voucherTriggerExecuted: true,
+                      voucherTriggerContext: voucherTriggerResult.contextForAgent,
+                      voucherTriggerOrderId: voucherTriggerResult.result?.orderId
+                    } : {})
                   }
                 }
               });
-              console.log(`${logPrefix} Gemini analysis complete and saved${voucherValidation ? ' (with voucher data)' : ''}`);
+              console.log(`${logPrefix} Gemini analysis complete and saved${voucherValidation ? ' (with voucher data)' : ''}${voucherTriggerResult?.executed ? ' (trigger executed)' : ''}`);
             }
           } catch (geminiError: any) {
             console.warn(`${logPrefix} Gemini processing failed (non-critical): ${geminiError.message}`);
@@ -438,12 +489,29 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
         }
         
         if (shouldCallAI) {
-          console.log(`${logPrefix} Calling AI agent with media ready...`);
-          console.log(`${logPrefix} [AUDIO-DEBUG] fullMessageForAgent length=${fullMessageForAgent.length}, hasMediaAnalysis=${!!mediaAnalysis}, mediaAnalysisLength=${mediaAnalysis?.length || 0}`);
-          console.log(`${logPrefix} [AUDIO-DEBUG] Message preview: "${fullMessageForAgent.substring(0, 200)}..."`);
+          // Check if a voucher trigger was executed - if so, send ONLY the trigger context
+          // This prevents LLM1 from seeing the image URL/description and making redundant decisions
+          const voucherTriggerExecuted = msgMetadata.voucherTriggerExecuted === true;
+          const voucherTriggerContext = msgMetadata.voucherTriggerContext || '';
           
-          // AI agent receives ONLY the Gemini-processed text, not the raw S3 URL
-          // The mediaAnalysis is already concatenated into fullMessageForAgent
+          let messageForAI: string;
+          
+          if (voucherTriggerExecuted && voucherTriggerContext) {
+            // CRITICAL: Voucher was already processed by Gemini + auto-trigger
+            // LLM1 receives ONLY the system context, NOT the image description
+            // This prevents LLM1 from trying to process the voucher again
+            messageForAI = voucherTriggerContext;
+            console.log(`${logPrefix} 🎯 VOUCHER TRIGGER MODE: Sending only trigger context to LLM1 (no image analysis)`);
+            console.log(`${logPrefix} Trigger context preview: "${messageForAI.substring(0, 150)}..."`);
+          } else {
+            // Normal flow: send message + media analysis
+            messageForAI = fullMessageForAgent;
+            console.log(`${logPrefix} Calling AI agent with media ready...`);
+            console.log(`${logPrefix} [AUDIO-DEBUG] fullMessageForAgent length=${fullMessageForAgent.length}, hasMediaAnalysis=${!!mediaAnalysis}, mediaAnalysisLength=${mediaAnalysis?.length || 0}`);
+            console.log(`${logPrefix} [AUDIO-DEBUG] Message preview: "${fullMessageForAgent.substring(0, 200)}..."`);
+          }
+          
+          // AI agent receives the appropriate message based on trigger status
           await axios.post(`${CORE_API_URL}/agent/think`, {
             business_id: businessId,
             instanceId,
@@ -451,14 +519,16 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
             phone: `${cleanPhone}@s.whatsapp.net`,
             phoneNumber: cleanPhone,
             contactName: pushName,
-            user_message: fullMessageForAgent,
-            providerMessageId: fullMessageLog.providerMessageId || undefined
+            user_message: messageForAI,
+            providerMessageId: fullMessageLog.providerMessageId || undefined,
+            // Pass flag so agent knows this is a system-triggered message
+            isVoucherTrigger: voucherTriggerExecuted
           }, {
             headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET },
             timeout: 30000
           });
           
-          console.log(`${logPrefix} AI agent called successfully`);
+          console.log(`${logPrefix} AI agent called successfully${voucherTriggerExecuted ? ' (voucher trigger mode)' : ''}`);
         }
       }
     } catch (aiError: any) {

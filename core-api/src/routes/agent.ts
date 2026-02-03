@@ -3351,9 +3351,14 @@ async function buildLayeredContext(params: ContextBuilderParams, tools: any[]): 
 }
 
 router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Response) => {
-  console.log(`[Agent Think] Endpoint called - business_id: ${req.body.business_id}, phone: ${req.body.phone}`);
+  console.log(`[Agent Think] Endpoint called - business_id: ${req.body.business_id}, phone: ${req.body.phone}${req.body.isVoucherTrigger ? ' [VOUCHER TRIGGER]' : ''}`);
   try {
-    const { business_id, user_message, phone, phoneNumber, contactName, instanceId, instanceBackendId, providerMessageId, provider } = req.body;
+    const { business_id, user_message, phone, phoneNumber, contactName, instanceId, instanceBackendId, providerMessageId, provider, isVoucherTrigger } = req.body;
+    
+    // Log voucher trigger mode for debugging
+    if (isVoucherTrigger) {
+      console.log(`[Agent Think] 🎯 VOUCHER TRIGGER MODE - Payment already processed, LLM1 receives confirmation context only`);
+    }
     
     if (!business_id || !user_message || !phone) {
       return res.status(400).json({ error: 'business_id, user_message and phone are required' });
