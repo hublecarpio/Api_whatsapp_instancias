@@ -60,6 +60,14 @@ fi
 sleep 2
 
 echo ""
+echo "Initializing database extensions..."
+if node scripts/init-extensions.js; then
+  echo "Extensions initialized!"
+else
+  echo "WARNING: Extension initialization had issues (continuing anyway)"
+fi
+
+echo ""
 echo "Running database migrations..."
 if npx prisma db push --skip-generate --accept-data-loss; then
   echo "Migrations completed successfully!"
