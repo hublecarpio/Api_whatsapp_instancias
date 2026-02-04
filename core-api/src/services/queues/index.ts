@@ -254,7 +254,7 @@ export function initializeQueues(): void {
   outboundMessageQueue = new Queue<OutboundMessageJobData>(QUEUE_NAMES.OUTBOUND_MESSAGE, {
     connection: conn,
     defaultJobOptions: {
-      attempts: 1000,
+      attempts: 10,
       backoff: {
         type: 'custom'
       },

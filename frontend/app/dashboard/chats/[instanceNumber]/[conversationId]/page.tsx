@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useBusinessStore } from '@/store/business';
 import { messageApi, waApi, mediaApi, templatesApi } from '@/lib/api';
+import { getMediaProxyUrl } from '@/lib/mediaProxy';
 import { ArrowLeft, Send, Paperclip, Mic, User, Bot, Image as ImageIcon, Video, FileText, Check, CheckCheck, Clock, X, AlertCircle, Reply, ShoppingBag } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -289,18 +290,21 @@ export default function ChatPage() {
     }
     
     if (mediaType.includes('video') || msg.mediaUrl.match(/\.(mp4|webm|mov)$/i)) {
+      const proxyUrl = getMediaProxyUrl(msg.mediaUrl, 'video');
       return (
         <video 
-          src={msg.mediaUrl} 
+          src={proxyUrl} 
           controls 
           className="max-w-xs rounded-lg"
+          preload="metadata"
         />
       );
     }
     
     if (mediaType.includes('audio') || msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a)$/i)) {
+      const proxyUrl = getMediaProxyUrl(msg.mediaUrl, 'audio');
       return (
-        <audio src={msg.mediaUrl} controls className="max-w-xs" />
+        <audio src={proxyUrl} controls className="max-w-xs" preload="metadata" />
       );
     }
     

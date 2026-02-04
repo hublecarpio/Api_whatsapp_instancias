@@ -6,6 +6,7 @@ import { useBusinessStore } from '@/store/business';
 import { useInstanceStore } from '@/store/instance';
 import { useAuthStore } from '@/store/auth';
 import { messageApi, waApi, mediaApi, businessApi, tagsApi, billingApi, templatesApi, advisorApi, extractionApi, funnelStagesApi, quickRepliesApi } from '@/lib/api';
+import { getMediaProxyUrl } from '@/lib/mediaProxy';
 import QuickReplyDropdown from '@/components/QuickReplyDropdown';
 import QuickReplyManager from '@/components/QuickReplyManager';
 
@@ -1305,19 +1306,22 @@ export default function ChatPage() {
       );
     }
     if (isVideo) {
+      const proxyUrl = getMediaProxyUrl(mediaUrl, 'video') || mediaUrl;
       return (
         <div className="relative rounded-lg overflow-hidden" style={{ maxWidth: '220px' }}>
           <video 
-            src={mediaUrl} 
+            src={proxyUrl} 
             controls 
             className="max-w-full" 
-            style={{ maxHeight: '180px' }} 
+            style={{ maxHeight: '180px' }}
+            preload="metadata"
           />
         </div>
       );
     }
     if (isAudio) {
-      return <AudioPlayer src={mediaUrl} isOutbound={isOutbound} />;
+      const proxyUrl = getMediaProxyUrl(mediaUrl, 'audio') || mediaUrl;
+      return <AudioPlayer src={proxyUrl} isOutbound={isOutbound} />;
     }
     const fileName = mediaUrl.split('/').pop()?.split('?')[0] || 'archivo';
     return (

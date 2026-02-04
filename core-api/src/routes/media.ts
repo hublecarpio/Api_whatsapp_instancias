@@ -1,7 +1,7 @@
-import { Router, Response } from 'express';
+import { Router, Response, Request } from 'express';
 import multer from 'multer';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { randomUUID } from 'crypto';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { randomUUID, createHmac } from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { writeFile, readFile, unlink } from 'fs/promises';
@@ -9,6 +9,50 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { Readable } from 'stream';
+
+const MEDIA_TOKEN_SECRET = process.env.SESSION_SECRET || 'fallback-media-token-secret';
+const TOKEN_VALIDITY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function generateMediaToken(key: string, businessId: string, expiresAt: number): string {
+  const data = `${key}:${businessId}:${expiresAt}`;
+  const signature = createHmac('sha256', MEDIA_TOKEN_SECRET).update(data).digest('hex').slice(0, 16);
+  return Buffer.from(`${data}:${signature}`).toString('base64url');
+}
+
+function validateMediaToken(token: string, key: string): { valid: boolean; businessId?: string } {
+  try {
+    const decoded = Buffer.from(token, 'base64url').toString();
+    const parts = decoded.split(':');
+    if (parts.length !== 4) return { valid: false };
+    
+    const [tokenKey, businessId, expiresAtStr, signature] = parts;
+    const expiresAt = parseInt(expiresAtStr, 10);
+    
+    // Check expiration
+    if (Date.now() > expiresAt) {
+      return { valid: false };
+    }
+    
+    // Verify key matches
+    if (tokenKey !== key) {
+      return { valid: false };
+    }
+    
+    // Verify signature
+    const data = `${tokenKey}:${businessId}:${expiresAtStr}`;
+    const expectedSig = createHmac('sha256', MEDIA_TOKEN_SECRET).update(data).digest('hex').slice(0, 16);
+    if (signature !== expectedSig) {
+      return { valid: false };
+    }
+    
+    return { valid: true, businessId };
+  } catch {
+    return { valid: false };
+  }
+}
+
+export { generateMediaToken };
 
 const execAsync = promisify(exec);
 const router = Router();
@@ -80,6 +124,175 @@ function getMediaType(mimetype: string): 'image' | 'video' | 'audio' | 'file' {
   if (mimetype.startsWith('audio/')) return 'audio';
   return 'file';
 }
+
+// ============================================================================
+// AUTHENTICATED MEDIA PROXY: Range request support for audio/video streaming
+// 
+// Security Model:
+// - Requires a signed token (generated when messages are fetched) that contains:
+//   * The media key
+//   * The businessId that owns the media
+//   * Expiration timestamp
+//   * HMAC signature using SESSION_SECRET
+// - Token is validated before serving media, preventing IDOR attacks
+// - Tokens expire after 24 hours, limiting exposure window
+// - If no token is provided, falls back to DB existence check (for backwards compat)
+//
+// Must be defined BEFORE authMiddleware to allow audio/video players without Bearer token
+// ============================================================================
+router.get('/proxy', async (req: Request, res: Response) => {
+  try {
+    const { key, token } = req.query;
+    
+    if (!key || typeof key !== 'string') {
+      return res.status(400).json({ error: 'Missing key parameter' });
+    }
+    
+    if (!initializeS3()) {
+      return res.status(500).json({ error: 'Media storage not configured' });
+    }
+    
+    // Security: validate key format (should be like chat/businessId/file.ext or media/businessId/file.ext)
+    if (!key.match(/^(chat|media)\/[a-zA-Z0-9-]+\/[a-zA-Z0-9-]+\.[a-zA-Z0-9]+$/)) {
+      console.log('[MEDIA PROXY] Invalid key format:', key);
+      return res.status(400).json({ error: 'Invalid key format' });
+    }
+    
+    // Extract businessId from key for validation
+    const keyParts = key.split('/');
+    const keyBusinessId = keyParts[1]; // chat/BUSINESSID/file.ext
+    
+    // Security: Validate signed token if provided (preferred method)
+    if (token && typeof token === 'string') {
+      const validation = validateMediaToken(token, key);
+      if (!validation.valid) {
+        console.log('[MEDIA PROXY] Invalid or expired token for key:', key);
+        return res.status(403).json({ error: 'Invalid or expired token' });
+      }
+      // Verify token's businessId matches the key's businessId (cross-tenant protection)
+      if (validation.businessId !== keyBusinessId) {
+        console.log('[MEDIA PROXY] Token businessId mismatch:', validation.businessId, '!=', keyBusinessId);
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      // Token is valid and businessId matches
+    } else {
+      // Fallback: Verify this media key exists in our database (backwards compat)
+      // This is less secure but maintains compatibility during transition
+      const [messageWithMedia, productWithMedia] = await Promise.all([
+        prisma.messageLog.findFirst({
+          where: { 
+            mediaUrl: { contains: key },
+            businessId: keyBusinessId // Verify business ownership
+          },
+          select: { id: true }
+        }),
+        prisma.product.findFirst({
+          where: { 
+            imageUrl: { contains: key },
+            businessId: keyBusinessId // Verify business ownership
+          },
+          select: { id: true }
+        })
+      ]);
+      
+      if (!messageWithMedia && !productWithMedia) {
+        console.log('[MEDIA PROXY] Access denied - key not found for business:', key, keyBusinessId);
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+    
+    // Get object metadata first to know the size
+    let contentLength: number;
+    let contentType: string;
+    
+    try {
+      const headResult = await s3Client!.send(new HeadObjectCommand({
+        Bucket: bucketName!,
+        Key: key,
+      }));
+      contentLength = headResult.ContentLength || 0;
+      contentType = headResult.ContentType || 'application/octet-stream';
+    } catch (headErr: any) {
+      if (headErr.name === 'NotFound' || headErr.$metadata?.httpStatusCode === 404) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+      throw headErr;
+    }
+    
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
+    
+    // Handle OPTIONS preflight
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    
+    // Parse Range header for partial content requests (critical for audio/video seeking)
+    const rangeHeader = req.headers.range;
+    let start = 0;
+    let end = contentLength - 1;
+    
+    if (rangeHeader) {
+      const matches = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      if (matches) {
+        start = parseInt(matches[1], 10);
+        end = matches[2] ? parseInt(matches[2], 10) : contentLength - 1;
+        
+        // Validate range
+        if (start >= contentLength || end >= contentLength || start > end) {
+          res.setHeader('Content-Range', `bytes */${contentLength}`);
+          return res.status(416).json({ error: 'Range not satisfiable' });
+        }
+      }
+    }
+    
+    const chunkSize = end - start + 1;
+    
+    // Get the object with range
+    const getResult = await s3Client!.send(new GetObjectCommand({
+      Bucket: bucketName!,
+      Key: key,
+      Range: `bytes=${start}-${end}`,
+    }));
+    
+    if (!getResult.Body) {
+      return res.status(500).json({ error: 'Failed to retrieve file' });
+    }
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Length', chunkSize);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    
+    if (rangeHeader) {
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${contentLength}`);
+      res.status(206); // Partial Content
+    } else {
+      res.status(200);
+    }
+    
+    // Stream the response
+    const stream = getResult.Body as Readable;
+    stream.pipe(res);
+    
+    stream.on('error', (err) => {
+      console.error('[MEDIA PROXY] Stream error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Stream error' });
+      }
+    });
+    
+  } catch (error: any) {
+    console.error('[MEDIA PROXY] Error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to proxy media' });
+    }
+  }
+});
 
 async function convertAudioForWhatsApp(inputBuffer: Buffer, inputMimetype: string): Promise<{ buffer: Buffer; extension: string; mimetype: string }> {
   const inputExt = inputMimetype.includes('webm') ? 'webm' : 

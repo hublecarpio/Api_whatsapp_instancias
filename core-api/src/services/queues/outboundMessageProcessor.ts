@@ -1,4 +1,4 @@
-import { Worker, Job, DelayedError } from 'bullmq';
+import { Worker, Job, DelayedError, UnrecoverableError } from 'bullmq';
 import Redis from 'ioredis';
 import axios from 'axios';
 import https from 'https'; // <--- 1. IMPORTAR HTTPS
@@ -300,7 +300,7 @@ async function processOutboundMessage(job: Job<OutboundMessageJobData>, token?: 
       console.log(`[OUTBOUND_WORKER] Transient error (realFailure ${newRealFailures}/${MAX_REAL_FAILURES}):`, sendError.message);
 
       if (newRealFailures >= MAX_REAL_FAILURES) {
-        throw new Error(`Max real failures (${MAX_REAL_FAILURES}) reached: ${sendError.message}`);
+        throw new UnrecoverableError(`Max real failures (${MAX_REAL_FAILURES}) reached: ${sendError.message}`);
       }
 
       await job.updateData({ ...data, realFailures: newRealFailures });
@@ -309,8 +309,10 @@ async function processOutboundMessage(job: Job<OutboundMessageJobData>, token?: 
       throw error;
     }
 
+    // PERMANENT errors should NOT retry - use UnrecoverableError to stop immediately
     const fullErrorMsg = sendError?.response?.data?.error?.message || sendError?.message || 'Unknown error';
-    throw new Error(`Permanent failure: ${fullErrorMsg}`);
+    console.log(`[OUTBOUND_WORKER] PERMANENT error - will NOT retry: ${fullErrorMsg}`);
+    throw new UnrecoverableError(`Permanent failure: ${fullErrorMsg}`);
   }
 
   if (!result.success) {
@@ -318,7 +320,7 @@ async function processOutboundMessage(job: Job<OutboundMessageJobData>, token?: 
     console.log(`[OUTBOUND_WORKER] Result failed (realFailure ${newRealFailures}/${MAX_REAL_FAILURES}):`, result.error);
 
     if (newRealFailures >= MAX_REAL_FAILURES) {
-      throw new Error(`Max real failures (${MAX_REAL_FAILURES}) reached: ${result.error}`);
+      throw new UnrecoverableError(`Max real failures (${MAX_REAL_FAILURES}) reached: ${result.error}`);
     }
 
     await job.updateData({ ...data, realFailures: newRealFailures });
