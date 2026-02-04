@@ -24,10 +24,10 @@ export async function createShortUrl(
   businessId?: string,
   mediaType?: string
 ): Promise<CreateShortUrlResult> {
-  // Priority: CORE_API_PUBLIC_URL > REPLIT_DEV_DOMAIN > localhost
+  // Priority: NEXT_PUBLIC_API_URL > REPLIT_DEV_DOMAIN > localhost
   let baseUrl: string;
-  if (process.env.CORE_API_PUBLIC_URL) {
-    baseUrl = process.env.CORE_API_PUBLIC_URL;
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    baseUrl = process.env.NEXT_PUBLIC_API_URL;
   } else if (process.env.REPLIT_DEV_DOMAIN) {
     baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN}`;
   } else {

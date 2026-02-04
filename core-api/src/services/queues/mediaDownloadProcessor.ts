@@ -190,7 +190,7 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
     const existingMetadata = (existingLog?.metadata as Record<string, any>) || {};
     
     // Use geminiMediaUrl (original MinIO URL) for storage - it's more reliable for frontend display
-    // The shortUrl may not work in all environments (depends on CORE_API_PUBLIC_URL)
+    // The shortUrl may not work in all environments (depends on NEXT_PUBLIC_API_URL)
     await prisma.messageLog.update({
       where: { id: messageLogId },
       data: {

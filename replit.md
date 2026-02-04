@@ -59,7 +59,7 @@ The platform employs a microservices-like architecture, consisting of a **Fronte
     *   Files are loaded into the agent's context at runtime (contextBuilder.ts)
     *   Agent includes file URLs in responses when relevant to the conversation
     *   Short URLs via `/m/:shortId` redirect to MinIO for production compatibility
-    *   Production requires `CORE_API_PUBLIC_URL` environment variable for correct short URL generation
+    *   Production uses `NEXT_PUBLIC_API_URL` environment variable for correct short URL generation
 
 **System Design Choices**:
 *   **Database**: PostgreSQL with Prisma ORM.
