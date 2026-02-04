@@ -109,6 +109,12 @@ export class ContextBuilder {
     // BLOQUE 5: RESUMEN DE CAPACIDADES (no detalla catálogo - LLM2 busca cuando necesita)
     sections.push(this.buildCapabilitiesSummary());
 
+    // BLOQUE 5.5: ARCHIVOS DISPONIBLES DEL AGENTE (fotos, documentos que puede enviar)
+    const agentFilesSection = this.buildAgentFilesSection();
+    if (agentFilesSection) {
+      sections.push(agentFilesSection);
+    }
+
     // BLOQUE 6: ACCIONES AUTOMÁTICAS Y ANÁLISIS DE MULTIMEDIA
     // Incluir si hay cualquier trigger, análisis de imagen, o voucher detectado
     const hasTriggerContent = this.triggerContext.autoTriggerResult || 
@@ -635,6 +641,42 @@ Luego: Creas orden con productos reales + descuento_porcentaje: "20", descuento_
     return summary;
   }
 
+  private buildAgentFilesSection(): string | null {
+    const { agentFiles } = this.businessContext;
+    
+    if (!agentFiles || agentFiles.length === 0) {
+      return null;
+    }
+
+    let section = `## ARCHIVOS MULTIMEDIA DISPONIBLES\n`;
+    section += `Tienes acceso a los siguientes archivos (fotos, documentos) que puedes enviar al cliente cuando sea relevante.\n`;
+    section += `Para enviar una imagen o archivo, simplemente incluye la URL en tu respuesta.\n\n`;
+
+    for (const file of agentFiles) {
+      section += `### ${file.name}\n`;
+      section += `URL: ${file.fileUrl}\n`;
+      section += `Tipo: ${file.fileType}\n`;
+      
+      if (file.description) {
+        section += `Descripción: ${file.description}\n`;
+      }
+      
+      if (file.triggerKeywords) {
+        section += `Palabras clave: ${file.triggerKeywords}\n`;
+      }
+      
+      if (file.triggerContext) {
+        section += `Cuándo usar: ${file.triggerContext}\n`;
+      }
+      
+      section += `\n`;
+    }
+
+    section += `📸 INSTRUCCIÓN: Cuando el cliente pregunte sobre algo relacionado con las palabras clave de un archivo, incluye la URL correspondiente en tu respuesta para que pueda ver la imagen o documento.`;
+    
+    return section;
+  }
+
   private buildOrderContext(): string {
     const { existingOrder } = this.conversationContext;
     const { currencySymbol } = this.businessContext;
@@ -796,7 +838,18 @@ export async function loadBusinessContext(
     promptLength: agentPrompt?.prompt?.length || 0
   });
 
-  const [products, deliveryZones, extractionFields, funnelStages] = await Promise.all([
+  // Load agentFiles if we have a prompt
+  const agentFilesPromise = agentPrompt 
+    ? prisma.agentFile.findMany({
+        where: { 
+          promptId: agentPrompt.id,
+          enabled: true 
+        },
+        orderBy: { order: 'asc' }
+      })
+    : Promise.resolve([]);
+
+  const [products, deliveryZones, extractionFields, funnelStages, agentFiles] = await Promise.all([
     prisma.product.findMany({
       where: { businessId, ...instanceCondition },
       take: 100
@@ -810,8 +863,15 @@ export async function loadBusinessContext(
     prisma.funnelStage.findMany({
       where: { businessId, ...instanceCondition },
       orderBy: { order: 'asc' }
-    })
+    }),
+    agentFilesPromise
   ]);
+
+  console.log('[LoadBusinessContext] AgentFiles loaded:', {
+    businessId: businessId.slice(0, 8),
+    count: agentFiles.length,
+    files: agentFiles.map(f => ({ name: f.name, type: f.fileType }))
+  });
 
   return {
     business,
@@ -821,7 +881,7 @@ export async function loadBusinessContext(
     extractionFields,
     funnelStages,
     promptConfig,
-    agentFiles: [],
+    agentFiles,
     currencySymbol: (business as any).currencySymbol || 'S/.',
     currencyCode: (business as any).currencyCode || 'PEN',
     businessObjective: (business as any).businessObjective || 'SALES',
