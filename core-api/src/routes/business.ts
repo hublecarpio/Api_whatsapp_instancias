@@ -340,10 +340,24 @@ router.put('/:id/bot-toggle', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
     
+    const newBotEnabled = botEnabled ?? !existing.botEnabled;
+    
     const business = await prisma.business.update({
       where: { id: req.params.id },
-      data: { botEnabled: botEnabled ?? !existing.botEnabled }
+      data: { botEnabled: newBotEnabled }
     });
+    
+    // IMPORTANT: If bot is being disabled, cancel all pending reminders for this business
+    if (newBotEnabled === false) {
+      const cancelResult = await prisma.reminder.updateMany({
+        where: {
+          businessId: req.params.id,
+          status: 'pending'
+        },
+        data: { status: 'cancelled_bot_disabled' }
+      });
+      console.log(`[BOT-TOGGLE] Bot disabled - cancelled ${cancelResult.count} pending reminders for business ${req.params.id}`);
+    }
     
     res.json({ id: business.id, botEnabled: business.botEnabled });
   } catch (error) {

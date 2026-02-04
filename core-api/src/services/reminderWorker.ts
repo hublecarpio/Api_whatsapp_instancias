@@ -586,11 +586,23 @@ export async function processReminders(): Promise<void> {
       });
       if (!freshReminder) continue;
       
+      // CRITICAL: Check if bot is globally disabled for this business
+      if (!reminder.business.botEnabled) {
+        console.log(`[REMINDER] Skipping ${reminder.id} - business botEnabled=false`);
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: { status: 'skipped', processingAt: null }
+        });
+        continue;
+      }
+      
       const config = reminder.business.followUpConfigs?.find(c => 
         c.instanceId === reminder.instanceId || !c.instanceId
       ) || reminder.business.followUpConfigs?.[0];
       
-      if (config && !config.enabled && reminder.type === 'auto') {
+      // Skip ALL reminders when follow-up config is disabled (not just type='auto')
+      if (config && !config.enabled) {
+        console.log(`[REMINDER] Skipping ${reminder.id} - followUpConfig.enabled=false`);
         await prisma.reminder.update({
           where: { id: reminder.id },
           data: { status: 'skipped', processingAt: null }

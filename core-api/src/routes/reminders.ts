@@ -133,6 +133,19 @@ router.put('/config/:businessId', async (req: Request, res: Response) => {
       }
     }
     
+    // IMPORTANT: If config is being disabled, cancel all pending reminders
+    if (enabled === false) {
+      const cancelResult = await prisma.reminder.updateMany({
+        where: {
+          businessId,
+          status: 'pending',
+          ...(instanceId ? { instanceId } : {})
+        },
+        data: { status: 'cancelled_config_disabled' }
+      });
+      console.log(`[FOLLOW-UP] Config disabled - cancelled ${cancelResult.count} pending reminders for business ${businessId}`);
+    }
+    
     res.json(config);
   } catch (error) {
     console.error('Error updating config:', error);

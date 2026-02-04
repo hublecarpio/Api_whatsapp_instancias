@@ -301,11 +301,23 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
     return;
   }
   
+  // CRITICAL: Check if bot is globally disabled for this business
+  if (!reminder.business.botEnabled) {
+    console.log(`[REMINDER] Skipping ${reminderId} - business botEnabled=false`);
+    await prisma.reminder.update({
+      where: { id: reminderId },
+      data: { status: 'skipped' }
+    });
+    return;
+  }
+  
   const config = reminder.business.followUpConfigs?.find((c: any) => 
     c.instanceId === reminder.instanceId || !c.instanceId
   ) || reminder.business.followUpConfigs?.[0];
   
-  if (config && !config.enabled && reminder.type === 'auto') {
+  // Skip ALL auto reminders when follow-up config is disabled (not just type='auto')
+  if (config && !config.enabled) {
+    console.log(`[REMINDER] Skipping ${reminderId} - followUpConfig.enabled=false`);
     await prisma.reminder.update({
       where: { id: reminderId },
       data: { status: 'skipped' }
