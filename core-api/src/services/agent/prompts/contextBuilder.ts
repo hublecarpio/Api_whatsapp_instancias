@@ -307,6 +307,12 @@ NO intentes buscar productos, calcular precios ni crear órdenes hasta avanzar d
     
     return `## HERRAMIENTA: ejecutar_accion
 
+🚨🚨🚨 REGLA ABSOLUTAMENTE OBLIGATORIA 🚨🚨🚨
+Cuando el cliente mencione CUALQUIER producto, precio, pedido o compra:
+→ DEBES usar ejecutar_accion ANTES de responder
+→ NUNCA respondas sobre productos/precios sin llamar primero a ejecutar_accion
+→ Si respondes sin usar la herramienta, estarás INVENTANDO información
+
 Tu ÚNICA herramienta es "ejecutar_accion". LLM2 tiene acceso completo a: catálogo de productos, zonas de envío, historial de conversación, y todas las tools de negocio.
 
 ### SUB-HERRAMIENTAS DE LLM2 (lo que puede hacer por ti):
@@ -572,7 +578,7 @@ Luego: Creas orden con productos reales + descuento_porcentaje: "20", descuento_
   }
 
   private buildCapabilitiesSummary(): string {
-    const { products, deliveryZones, hasAppointments, businessObjective } = this.businessContext;
+    const { products, deliveryZones, hasAppointments, businessObjective, currencySymbol } = this.businessContext;
     
     const activeProducts = products.filter((p: any) => p.isActive !== false);
     
@@ -584,6 +590,37 @@ Luego: Creas orden con productos reales + descuento_porcentaje: "20", descuento_
       if (deliveryZones.length > 0) {
         summary += `Zonas de envío: ${deliveryZones.length} zonas configuradas\n`;
       }
+      
+      // Include product name list so LLM1 knows what exists (prevents hallucination)
+      if (activeProducts.length > 0) {
+        summary += `\n### PRODUCTOS DISPONIBLES (solo nombres - usa ejecutar_accion para precios):\n`;
+        
+        // Group by title to show unique products with their variations
+        const productMap = new Map<string, string[]>();
+        for (const p of activeProducts.slice(0, 30)) {
+          const title = p.title || 'Sin nombre';
+          if (!productMap.has(title)) {
+            productMap.set(title, []);
+          }
+          if (p.variation) {
+            productMap.get(title)!.push(p.variation);
+          }
+        }
+        
+        for (const [title, variations] of productMap) {
+          if (variations.length > 0) {
+            summary += `• ${title} (${variations.slice(0, 3).join(', ')}${variations.length > 3 ? '...' : ''})\n`;
+          } else {
+            summary += `• ${title}\n`;
+          }
+        }
+        
+        if (activeProducts.length > 30) {
+          summary += `... y ${activeProducts.length - 30} productos más\n`;
+        }
+        
+        summary += `\n🚨 REGLA CRÍTICA: Solo puedes mencionar productos de esta lista. Si el cliente pregunta por algo que NO está aquí, usa ejecutar_accion para buscarlo - podría existir con otro nombre.\n`;
+      }
     } else if (businessObjective === 'APPOINTMENTS') {
       summary += `Tipo: Servicios/Citas\n`;
       if (hasAppointments) {
@@ -591,7 +628,7 @@ Luego: Creas orden con productos reales + descuento_porcentaje: "20", descuento_
       }
     }
     
-    summary += `\n⚠️ NO conoces el catálogo ni precios directamente. Usa "ejecutar_accion" para buscar productos, calcular totales y crear órdenes. LLM2 tiene acceso completo al catálogo.`;
+    summary += `\n⚠️ NO TIENES ACCESO A PRECIOS. Usa "ejecutar_accion" para buscar productos, obtener precios exactos, calcular totales y crear órdenes. NUNCA inventes precios.`;
     
     summary += `\n\n📦 PROMOCIONES/PACKS: Las promos NO son productos, son combinaciones de productos + descuento. Cuando cliente pida una promo: pregunta qué productos quiere → búscalos individualmente → aplica el descuento usando descuento_porcentaje y descuento_razon.`;
     
