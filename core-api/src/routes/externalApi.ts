@@ -10,6 +10,7 @@ import { processWithOrchestrator, OrchestratorInput, toolRegistry } from '../ser
 import { ContextBuilder, loadBusinessContext, loadConversationContext } from '../services/agent/prompts/contextBuilder.js';
 import { ToolContext, ToolAvailabilityContext, ToolDefinitionContext } from '../services/agent/core/types.js';
 import { loadCustomToolsForBusiness } from '../services/agent/tools/customToolAdapter.js';
+import { interpolateTemplateContent, buildTemplateMetadata } from '../utils/templateUtils.js';
 
 const router = Router();
 
@@ -2308,20 +2309,28 @@ router.post('/templates/send', validateApiKey, async (req: ApiKeyRequest, res: R
         }
       );
       
+      // Build the full template message content for display using centralized helper
+      const displayMessage = interpolateTemplateContent({
+        bodyText: template.bodyText,
+        templateName: template.name,
+        variables
+      });
+      
       await prisma.messageLog.create({
         data: {
           businessId: req.businessId!,
           instanceId: req.instanceId,
           direction: 'outbound',
           recipient: cleanTo,
-          message: `[Template: ${template.name}]`,
-          metadata: { 
+          message: displayMessage,
+          metadata: buildTemplateMetadata({
             provider: req.instance.provider,
-            template: template.name,
+            templateName: template.name,
+            templateBodyText: template.bodyText,
             variables,
-            viaExternalApi: true,
-            sync: true
-          }
+            isTemplate: true,
+            additionalMetadata: { viaExternalApi: true, sync: true }
+          })
         }
       });
       

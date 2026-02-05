@@ -1133,6 +1133,13 @@ router.post('/', async (req: Request, res: Response) => {
     });
     rawLogId = rawLog.id;
     console.log(`[META WEBHOOK RAW] Saved raw log: ${rawLogId} (msgs=${messageCount}, statuses=${statusCount})`);
+    
+    // Highlight status-only webhooks for debugging delivered/read events
+    if (statusCount > 0 && messageCount === 0) {
+      console.log(`[META WEBHOOK STATUS] *** STATUS-ONLY WEBHOOK DETECTED ***`);
+      console.log(`[META WEBHOOK STATUS] phoneNumberId: ${phoneNumberId}`);
+      console.log(`[META WEBHOOK STATUS] Statuses:`, JSON.stringify(payload?.entry?.[0]?.changes?.[0]?.value?.statuses, null, 2));
+    }
   } catch (rawLogError: any) {
     console.error('[META WEBHOOK RAW] Failed to save raw log:', rawLogError.message);
     // Don't fail the webhook - continue processing even if logging fails

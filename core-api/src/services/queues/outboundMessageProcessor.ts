@@ -6,6 +6,7 @@ import prisma from '../prisma.js';
 import { dispatchAgentMessage } from '../webhookService.js';
 import eventLogger from '../eventLogger.js';
 import { QUEUE_NAMES, OutboundMessageJobData, getQueueConnection } from './index.js';
+import { interpolateTemplateContent } from '../../utils/templateUtils.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6389';
@@ -329,9 +330,17 @@ async function processOutboundMessage(job: Job<OutboundMessageJobData>, token?: 
     throw error;
   }
 
-  const messageContent = data.templateData 
-    ? `[Template: ${data.templateData.name}]` 
-    : (data.message || (data.mediaUrl ? `[Media: ${data.mediaType || 'file'}]` : ''));
+  // Build full template message content for display using centralized helper
+  let messageContent: string;
+  if (data.templateData) {
+    messageContent = interpolateTemplateContent({
+      bodyText: data.templateData.bodyText,
+      templateName: data.templateData.name,
+      components: data.templateData.components
+    });
+  } else {
+    messageContent = data.message || (data.mediaUrl ? `[Media: ${data.mediaType || 'file'}]` : '');
+  }
   
   const metadata: Record<string, any> = { 
     source: data.source, 

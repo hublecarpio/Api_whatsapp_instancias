@@ -107,6 +107,7 @@ export interface TemplateData {
   name: string;
   language: string;
   components?: TemplateComponent[];
+  bodyText?: string;
 }
 
 export interface OutboundMessageJobData {

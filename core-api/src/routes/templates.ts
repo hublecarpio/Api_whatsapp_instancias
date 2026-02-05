@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import axios from 'axios';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { interpolateTemplateContent, buildTemplateMetadata } from '../utils/templateUtils.js';
 
 const router = Router();
 const META_API_URL = 'https://graph.facebook.com/v18.0';
@@ -426,20 +427,30 @@ router.post('/:businessId/send-template', async (req: AuthRequest, res: Response
       }
     });
     
+    // Build the full template message content for display using centralized helper
+    const displayMessage = interpolateTemplateContent({
+      bodyText: template.bodyText,
+      templateName: template.name,
+      variables,
+      headerVariables
+    });
+    
     await prisma.messageLog.create({
       data: {
         businessId: req.params.businessId,
         instanceId: instance?.id,
         direction: 'outbound',
         recipient: cleanTo,
-        message: `[Template: ${template.name}]`,
-        metadata: { 
+        message: displayMessage,
+        metadata: buildTemplateMetadata({
           provider: credential.provider,
-          contactPhone: cleanTo,
-          isTemplate: true,
           templateName: template.name,
-          variables
-        }
+          templateBodyText: template.bodyText,
+          variables,
+          headerVariables,
+          isTemplate: true,
+          additionalMetadata: { contactPhone: cleanTo }
+        })
       }
     });
     
