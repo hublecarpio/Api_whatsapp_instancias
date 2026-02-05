@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -29,6 +29,57 @@ interface Catalog {
   currencySymbol: string;
   whatsappPhone: string | null;
   products: Product[];
+}
+
+function DescriptionPopover({ description }: { description: string }) {
+  const [open, setOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const truncated = description.length > 60;
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  if (!truncated) {
+    return <p className="text-sm text-gray-500 mb-2">{description}</p>;
+  }
+
+  return (
+    <div className="relative mb-2" ref={popoverRef}>
+      <p className="text-sm text-gray-500">
+        {description.slice(0, 60)}...
+        <button
+          onClick={() => setOpen(!open)}
+          className="ml-1 text-green-600 hover:text-green-700 font-medium text-xs inline-flex items-center gap-0.5 transition-colors"
+        >
+          Ver m&aacute;s
+          <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </p>
+
+      {open && (
+        <div className="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="absolute -top-2 left-4 w-4 h-4 bg-white border-l border-t border-gray-200 rotate-45"></div>
+          <p className="text-sm text-gray-600 leading-relaxed relative z-10">{description}</p>
+          <button
+            onClick={() => setOpen(false)}
+            className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CatalogPage() {
@@ -168,7 +219,7 @@ export default function CatalogPage() {
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">{product.title}</h3>
                     {product.description && (
-                      <p className="text-sm text-gray-500 mb-2 line-clamp-2">{product.description}</p>
+                      <DescriptionPopover description={product.description} />
                     )}
                     
                     {product.variations.length > 0 && (
