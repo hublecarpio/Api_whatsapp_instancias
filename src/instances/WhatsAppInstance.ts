@@ -1503,15 +1503,17 @@ export class WhatsAppInstance {
   }
 
   async clearSession(): Promise<void> {
-    if (this.usingRedis && this.clearSessionState) {
+    // Clear session from PostgreSQL or Redis (whichever is being used)
+    if (this.clearSessionState) {
       try {
         await this.clearSessionState();
-        this.logger.info('Session data cleared from Redis');
+        this.logger.info('Session data cleared from storage (PostgreSQL/Redis)');
       } catch (error: any) {
-        this.logger.warn({ error: error.message }, 'Failed to clear Redis session');
+        this.logger.warn({ error: error.message }, 'Failed to clear session from storage');
       }
     }
     
+    // Also clear file-based session if exists
     const sessionPath = this.getSessionPath();
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true, force: true });
