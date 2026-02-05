@@ -2277,6 +2277,113 @@ function mapBaileysStatus(baileysStatus: string): string {
   return statusMap[baileysStatus] || baileysStatus;
 }
 
+// Baileys Session persistence endpoints - store sessions in PostgreSQL
+internalRouter.get('/baileys-session/:instanceId', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    const expectedSecret = process.env.INTERNAL_API_SECRET || 'internal-secret-key';
+    
+    if (internalSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { instanceId } = req.params;
+    
+    const sessions = await prisma.baileysSession.findMany({
+      where: { instanceId }
+    });
+    
+    const sessionMap: Record<string, string> = {};
+    for (const session of sessions) {
+      sessionMap[session.sessionKey] = session.data;
+    }
+    
+    console.log(`[Internal API] Restored ${sessions.length} session keys for instance ${instanceId}`);
+    
+    res.json({ sessions: sessionMap });
+  } catch (error: any) {
+    console.error('Get baileys session error:', error);
+    res.status(500).json({ error: 'Failed to get session' });
+  }
+});
+
+internalRouter.post('/baileys-session/:instanceId', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    const expectedSecret = process.env.INTERNAL_API_SECRET || 'internal-secret-key';
+    
+    if (internalSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { instanceId } = req.params;
+    const { sessionKey, data } = req.body;
+    
+    if (!sessionKey || data === undefined) {
+      return res.status(400).json({ error: 'sessionKey and data are required' });
+    }
+    
+    await prisma.baileysSession.upsert({
+      where: {
+        instanceId_sessionKey: { instanceId, sessionKey }
+      },
+      update: { data },
+      create: { instanceId, sessionKey, data }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Save baileys session error:', error);
+    res.status(500).json({ error: 'Failed to save session' });
+  }
+});
+
+internalRouter.delete('/baileys-session/:instanceId/:sessionKey', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    const expectedSecret = process.env.INTERNAL_API_SECRET || 'internal-secret-key';
+    
+    if (internalSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { instanceId, sessionKey } = req.params;
+    
+    await prisma.baileysSession.deleteMany({
+      where: { instanceId, sessionKey }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Delete baileys session error:', error);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+});
+
+internalRouter.delete('/baileys-session/:instanceId', async (req, res) => {
+  try {
+    const internalSecret = req.headers['x-internal-secret'];
+    const expectedSecret = process.env.INTERNAL_API_SECRET || 'internal-secret-key';
+    
+    if (internalSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { instanceId } = req.params;
+    
+    const result = await prisma.baileysSession.deleteMany({
+      where: { instanceId }
+    });
+    
+    console.log(`[Internal API] Cleared all ${result.count} session keys for instance ${instanceId}`);
+    
+    res.json({ success: true, deleted: result.count });
+  } catch (error: any) {
+    console.error('Clear baileys session error:', error);
+    res.status(500).json({ error: 'Failed to clear session' });
+  }
+});
+
 // Sync endpoint - WhatsApp API reports its active instances to keep DB in sync
 internalRouter.post('/sync-instances', async (req, res) => {
   try {

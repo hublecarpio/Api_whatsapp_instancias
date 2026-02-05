@@ -19,6 +19,7 @@ import { MediaStorage } from '../core/MediaStorage';
 import { ConnectionStatus } from '../utils/types';
 import { isRedisEnabled } from '../core/RedisClient';
 import { useRedisAuthState } from '../core/RedisAuthState';
+import { usePostgresAuthState } from '../core/PostgresAuthState';
 
 const SESSIONS_PATH = path.join(process.cwd(), 'src', 'storage', 'sessions');
 
@@ -121,16 +122,38 @@ export class WhatsAppInstance {
     let state: any;
     let saveCreds: () => Promise<void>;
 
-    if (isRedisEnabled()) {
-      try {
-        const redisAuth = await useRedisAuthState(this.id);
-        state = redisAuth.state;
-        saveCreds = redisAuth.saveCreds;
-        this.clearSessionState = redisAuth.clearState;
-        this.usingRedis = true;
-        this.logger.info('Using Redis for session storage');
-      } catch (error: any) {
-        this.logger.warn({ error: error.message }, 'Redis auth failed, falling back to file storage');
+    // Priority: PostgreSQL > Redis > File storage
+    // PostgreSQL is most reliable for Docker deployments (survives container rebuilds)
+    try {
+      const postgresAuth = await usePostgresAuthState(this.id);
+      state = postgresAuth.state;
+      saveCreds = postgresAuth.saveCreds;
+      this.clearSessionState = postgresAuth.clearState;
+      this.usingRedis = false;
+      this.logger.info('Using PostgreSQL for session storage (persistent across Docker rebuilds)');
+    } catch (postgresError: any) {
+      this.logger.warn({ error: postgresError.message }, 'PostgreSQL auth failed, trying Redis...');
+      
+      if (isRedisEnabled()) {
+        try {
+          const redisAuth = await useRedisAuthState(this.id);
+          state = redisAuth.state;
+          saveCreds = redisAuth.saveCreds;
+          this.clearSessionState = redisAuth.clearState;
+          this.usingRedis = true;
+          this.logger.info('Using Redis for session storage (fallback)');
+        } catch (redisError: any) {
+          this.logger.warn({ error: redisError.message }, 'Redis auth failed, falling back to file storage');
+          const sessionPath = this.getSessionPath();
+          if (!fs.existsSync(sessionPath)) {
+            fs.mkdirSync(sessionPath, { recursive: true });
+          }
+          const fileAuth = await useMultiFileAuthState(sessionPath);
+          state = fileAuth.state;
+          saveCreds = fileAuth.saveCreds;
+          this.usingRedis = false;
+        }
+      } else {
         const sessionPath = this.getSessionPath();
         if (!fs.existsSync(sessionPath)) {
           fs.mkdirSync(sessionPath, { recursive: true });
@@ -140,15 +163,6 @@ export class WhatsAppInstance {
         saveCreds = fileAuth.saveCreds;
         this.usingRedis = false;
       }
-    } else {
-      const sessionPath = this.getSessionPath();
-      if (!fs.existsSync(sessionPath)) {
-        fs.mkdirSync(sessionPath, { recursive: true });
-      }
-      const fileAuth = await useMultiFileAuthState(sessionPath);
-      state = fileAuth.state;
-      saveCreds = fileAuth.saveCreds;
-      this.usingRedis = false;
     }
 
     const silentLogger = pino({ level: 'silent' });

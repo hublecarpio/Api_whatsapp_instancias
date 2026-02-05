@@ -1535,3 +1535,15 @@ enum BroadcastLogStatus {
   FAILED
   SKIPPED
 }
+
+model BaileysSession {
+  id         String   @id @default(uuid())
+  instanceId String
+  sessionKey String
+  data       String   @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([instanceId, sessionKey])
+  @@index([instanceId])
+}
