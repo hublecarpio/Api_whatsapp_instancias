@@ -313,12 +313,15 @@ router.get('/catalog/:slug', async (req: Request, res: Response) => {
     const primaryInstance = business.instances[0];
     const whatsappPhone = primaryInstance?.phoneNumber?.replace(/\D/g, '') || null;
 
-    // Filter products by the primary instance if it exists
+    // Filter products by the primary instance ONLY (no shared products)
     let filteredProducts = business.products;
     if (primaryInstance) {
       filteredProducts = business.products.filter(
-        p => p.instanceId === primaryInstance.id || p.instanceId === null
+        p => p.instanceId === primaryInstance.id
       );
+    } else {
+      // If no instance, only show products without instance assignment
+      filteredProducts = business.products.filter(p => p.instanceId === null);
     }
 
     res.json({
