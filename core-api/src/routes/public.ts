@@ -157,6 +157,7 @@ router.get('/queues/status', async (req: Request, res: Response) => {
 });
 
 // Public catalog endpoint - no auth required
+// Supports both instance-level and business-level catalogs
 router.get('/catalog/:slug', async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
@@ -165,29 +166,29 @@ router.get('/catalog/:slug', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Se requiere el identificador del catálogo' });
     }
 
-    // Find business by slug
-    const business = await prisma.business.findFirst({
+    const normalizedSlug = slug.toLowerCase();
+
+    // First, try to find by WhatsApp instance slug (preferred - instance-specific catalog)
+    const instance = await prisma.whatsAppInstance.findFirst({
       where: { 
-        slug: slug.toLowerCase()
+        slug: normalizedSlug,
+        isActive: true
       },
       select: {
         id: true,
         name: true,
-        description: true,
-        logoUrl: true,
-        industry: true,
-        currencyCode: true,
-        currencySymbol: true,
-        instances: {
-          where: { 
-            isActive: true,
-            phoneNumber: { not: null }
-          },
+        phoneNumber: true,
+        catalogLogoUrl: true,
+        business: {
           select: {
-            phoneNumber: true,
-            name: true
-          },
-          take: 1
+            id: true,
+            name: true,
+            description: true,
+            logoUrl: true,
+            industry: true,
+            currencyCode: true,
+            currencySymbol: true
+          }
         },
         products: {
           select: {
@@ -207,12 +208,118 @@ router.get('/catalog/:slug', async (req: Request, res: Response) => {
       }
     });
 
+    if (instance) {
+      // Instance-level catalog found
+      const whatsappPhone = instance.phoneNumber?.replace(/\D/g, '') || null;
+      const logoUrl = instance.catalogLogoUrl || instance.business.logoUrl;
+
+      return res.json({
+        success: true,
+        catalog: {
+          businessName: instance.business.name,
+          instanceName: instance.name,
+          description: instance.business.description,
+          logoUrl,
+          industry: instance.business.industry,
+          currencyCode: instance.business.currencyCode,
+          currencySymbol: instance.business.currencySymbol,
+          whatsappPhone,
+          products: instance.products.map(product => {
+            const variations = product.variations || [];
+            const pricePerVariation = product.pricePerVariation || [];
+            
+            // Calculate minimum price for "desde" display
+            let displayPrice = product.price;
+            let hasVariablePricing = false;
+            
+            if (variations.length > 0 && pricePerVariation.length > 0) {
+              const validPrices = pricePerVariation.filter(p => p > 0);
+              if (validPrices.length > 0) {
+                const minPrice = Math.min(...validPrices);
+                const maxPrice = Math.max(...validPrices);
+                hasVariablePricing = minPrice !== maxPrice;
+                displayPrice = minPrice;
+              }
+            }
+            
+            return {
+              id: product.id,
+              title: product.title,
+              description: product.description,
+              price: product.price,
+              displayPrice,
+              hasVariablePricing,
+              imageUrl: product.imageUrl || (product.imageUrls && product.imageUrls[0]) || null,
+              imageUrls: product.imageUrls || [],
+              variations,
+              pricePerVariation,
+              stock: product.stock,
+              stockPerVariation: product.stockPerVariation || []
+            };
+          })
+        }
+      });
+    }
+
+    // Fallback: Try to find by business slug (legacy support)
+    const business = await prisma.business.findFirst({
+      where: { 
+        slug: normalizedSlug
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        logoUrl: true,
+        industry: true,
+        currencyCode: true,
+        currencySymbol: true,
+        instances: {
+          where: { 
+            isActive: true,
+            phoneNumber: { not: null }
+          },
+          select: {
+            id: true,
+            phoneNumber: true,
+            name: true
+          },
+          take: 1
+        },
+        products: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            price: true,
+            imageUrl: true,
+            imageUrls: true,
+            variations: true,
+            pricePerVariation: true,
+            stock: true,
+            stockPerVariation: true,
+            instanceId: true
+          },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
     if (!business) {
       return res.status(404).json({ error: 'Catálogo no encontrado' });
     }
 
-    // Get the WhatsApp phone number (cleaned for wa.me links)
-    const whatsappPhone = business.instances[0]?.phoneNumber?.replace(/\D/g, '') || null;
+    // Get the first active instance's phone number
+    const primaryInstance = business.instances[0];
+    const whatsappPhone = primaryInstance?.phoneNumber?.replace(/\D/g, '') || null;
+
+    // Filter products by the primary instance if it exists
+    let filteredProducts = business.products;
+    if (primaryInstance) {
+      filteredProducts = business.products.filter(
+        p => p.instanceId === primaryInstance.id || p.instanceId === null
+      );
+    }
 
     res.json({
       success: true,
@@ -224,18 +331,39 @@ router.get('/catalog/:slug', async (req: Request, res: Response) => {
         currencyCode: business.currencyCode,
         currencySymbol: business.currencySymbol,
         whatsappPhone,
-        products: business.products.map(product => ({
-          id: product.id,
-          title: product.title,
-          description: product.description,
-          price: product.price,
-          imageUrl: product.imageUrl || (product.imageUrls && product.imageUrls[0]) || null,
-          imageUrls: product.imageUrls || [],
-          variations: product.variations || [],
-          pricePerVariation: product.pricePerVariation || [],
-          stock: product.stock,
-          stockPerVariation: product.stockPerVariation || []
-        }))
+        products: filteredProducts.map(product => {
+          const variations = product.variations || [];
+          const pricePerVariation = product.pricePerVariation || [];
+          
+          // Calculate minimum price for "desde" display
+          let displayPrice = product.price;
+          let hasVariablePricing = false;
+          
+          if (variations.length > 0 && pricePerVariation.length > 0) {
+            const validPrices = pricePerVariation.filter(p => p > 0);
+            if (validPrices.length > 0) {
+              const minPrice = Math.min(...validPrices);
+              const maxPrice = Math.max(...validPrices);
+              hasVariablePricing = minPrice !== maxPrice;
+              displayPrice = minPrice;
+            }
+          }
+          
+          return {
+            id: product.id,
+            title: product.title,
+            description: product.description,
+            price: product.price,
+            displayPrice,
+            hasVariablePricing,
+            imageUrl: product.imageUrl || (product.imageUrls && product.imageUrls[0]) || null,
+            imageUrls: product.imageUrls || [],
+            variations,
+            pricePerVariation,
+            stock: product.stock,
+            stockPerVariation: product.stockPerVariation || []
+          };
+        })
       }
     });
 

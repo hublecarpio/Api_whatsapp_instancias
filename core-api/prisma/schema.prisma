@@ -350,6 +350,8 @@ model WhatsAppInstance {
   webhookUrl            String?
   webhookSecret         String?
   webhookEvents         String[]                  @default([])
+  slug                  String?                   @unique
+  catalogLogoUrl        String?
   agentPrompt           AgentPrompt?
   appointments          Appointment[]
   broadcasts            BroadcastCampaign[]
@@ -371,6 +373,7 @@ model WhatsAppInstance {
   @@index([businessId])
   @@index([apiKeyPrefix])
   @@index([businessId, archivedAt])
+  @@index([slug])
 }
 
 model WhatsAppInstanceHistory {

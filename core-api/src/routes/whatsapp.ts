@@ -245,7 +245,7 @@ router.put('/instances/:instanceId', requireEmailVerified, async (req: AuthReque
   try {
     const { instanceId } = req.params;
     const { businessId } = req.query;
-    const { name, businessObjective, botEnabled } = req.body;
+    const { name, businessObjective, botEnabled, slug, catalogLogoUrl } = req.body;
     
     if (!businessId) {
       return res.status(400).json({ error: 'businessId is required' });
@@ -264,10 +264,22 @@ router.put('/instances/:instanceId', requireEmailVerified, async (req: AuthReque
       return res.status(404).json({ error: 'Instance not found' });
     }
     
+    // Check if slug is unique (if provided)
+    if (slug !== undefined && slug !== null && slug !== '') {
+      const existingInstance = await prisma.whatsAppInstance.findFirst({
+        where: { slug, id: { not: instanceId } }
+      });
+      if (existingInstance) {
+        return res.status(400).json({ error: 'Este slug ya esta en uso por otra instancia' });
+      }
+    }
+    
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (businessObjective !== undefined) updateData.businessObjective = businessObjective;
     if (botEnabled !== undefined) updateData.botEnabled = botEnabled;
+    if (slug !== undefined) updateData.slug = slug || null;
+    if (catalogLogoUrl !== undefined) updateData.catalogLogoUrl = catalogLogoUrl || null;
     
     const updated = await prisma.whatsAppInstance.update({
       where: { id: instance.id },

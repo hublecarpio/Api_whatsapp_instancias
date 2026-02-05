@@ -10,6 +10,8 @@ interface Product {
   title: string;
   description: string | null;
   price: number;
+  displayPrice: number;
+  hasVariablePricing: boolean;
   imageUrl: string | null;
   imageUrls: string[];
   variations: string[];
@@ -191,9 +193,18 @@ export default function CatalogPage() {
                     )}
                     
                     <div className="flex items-center justify-between">
-                      <span className="text-lg font-bold text-green-600">
-                        {catalog.currencySymbol}{currentPrice.toFixed(2)}
-                      </span>
+                      <div>
+                        {product.hasVariablePricing && selectedVariation === undefined ? (
+                          <span className="text-lg font-bold text-green-600">
+                            <span className="text-sm font-normal text-gray-500">desde </span>
+                            {catalog.currencySymbol}{product.displayPrice.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-lg font-bold text-green-600">
+                            {catalog.currencySymbol}{currentPrice.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
                       
                       {whatsappLink ? (
                         <a

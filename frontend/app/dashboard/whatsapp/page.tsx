@@ -113,6 +113,10 @@ export default function WhatsAppPage() {
   const [showAdvancedWebhook, setShowAdvancedWebhook] = useState(false);
   const [webhookEventsInput, setWebhookEventsInput] = useState<string[]>([]);
   
+  const [instanceSlug, setInstanceSlug] = useState('');
+  const [instanceCatalogLogo, setInstanceCatalogLogo] = useState('');
+  const [savingCatalog, setSavingCatalog] = useState(false);
+  
   const [metaForm, setMetaForm] = useState<MetaFormData>({
     name: '',
     accessToken: '',
@@ -854,6 +858,8 @@ export default function WhatsAppPage() {
               setStatus(instance.status);
               setProvider(instance.provider);
               setPhoneNumber(instance.phoneNumber || '');
+              setInstanceSlug((instance as any).slug || '');
+              setInstanceCatalogLogo((instance as any).catalogLogoUrl || '');
               if ((instance.status === 'pending_qr' || instance.status === 'requires_qr') && instance.provider !== 'META_CLOUD' && instance.provider !== 'META_COEXIST') {
                 waApi.qr(currentBusiness.id).then(res => setQrCode(res.data.qr || '')).catch(() => {});
               }
@@ -1369,6 +1375,87 @@ export default function WhatsAppPage() {
                   <span className="block text-lg mb-1">📅</span>
                   Citas
                 </button>
+              </div>
+            </div>
+          )}
+
+          {selectedInstanceId && (status === 'open' || status === 'connected') && (
+            <div className="card">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                <span>📦</span> Catalogo
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Slug del catalogo</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">/catalogo/</span>
+                    <input
+                      type="text"
+                      value={instanceSlug}
+                      onChange={(e) => {
+                        const newSlug = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+                        setInstanceSlug(newSlug);
+                      }}
+                      className="w-full text-xs bg-dark-bg border border-dark-border rounded px-2 py-1.5 pl-[70px] text-white focus:outline-none focus:border-neon-blue"
+                      placeholder="mi-tienda"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Logo del catalogo (URL 500x500)</label>
+                  <input
+                    type="url"
+                    value={instanceCatalogLogo}
+                    onChange={(e) => setInstanceCatalogLogo(e.target.value)}
+                    className="w-full text-xs bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-white focus:outline-none focus:border-neon-blue"
+                    placeholder="https://ejemplo.com/logo.png"
+                  />
+                  {instanceCatalogLogo && (
+                    <div className="mt-2 flex justify-center">
+                      <img 
+                        src={instanceCatalogLogo} 
+                        alt="Logo preview" 
+                        className="w-16 h-16 rounded-lg object-cover border border-dark-border"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    if (currentBusiness && selectedInstanceId) {
+                      setSavingCatalog(true);
+                      try {
+                        await waApi.updateInstance(selectedInstanceId, currentBusiness.id, { 
+                          slug: instanceSlug || null, 
+                          catalogLogoUrl: instanceCatalogLogo || null 
+                        });
+                        updateInstance(selectedInstanceId, { slug: instanceSlug, catalogLogoUrl: instanceCatalogLogo } as any);
+                      } catch (err: any) {
+                        setError(err.response?.data?.error || 'Error al guardar catalogo');
+                      } finally {
+                        setSavingCatalog(false);
+                      }
+                    }
+                  }}
+                  disabled={savingCatalog}
+                  className="w-full text-xs px-3 py-2 bg-neon-blue/20 text-neon-blue rounded hover:bg-neon-blue/30 disabled:opacity-50 font-medium"
+                >
+                  {savingCatalog ? 'Guardando...' : 'Guardar catalogo'}
+                </button>
+                {instanceSlug && (
+                  <div className="p-2 bg-dark-bg rounded-lg">
+                    <p className="text-xs text-gray-400 mb-1">Tu catalogo:</p>
+                    <a 
+                      href={`/catalogo/${instanceSlug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neon-blue hover:underline text-xs break-all"
+                    >
+                      {typeof window !== 'undefined' ? window.location.origin : ''}/catalogo/{instanceSlug}
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           )}
