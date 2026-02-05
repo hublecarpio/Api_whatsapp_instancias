@@ -276,6 +276,7 @@ model Business {
   tags                Tag[]
   userRoles           UserBusinessRole[]
   instances           WhatsAppInstance[]
+  quickReplies        QuickReply[]
 }
 
 model GoogleCalendarCredential {
@@ -324,6 +325,7 @@ model QuickReply {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now()) @updatedAt
   order      Int      @default(0)
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@unique([businessId, shortcut])
 }
@@ -361,6 +363,7 @@ model WhatsAppInstance {
   funnelStages          FunnelStage[]
   metaCoexistCredential MetaCoexistCredential?
   metaCredential        MetaCredential?
+  metaManagedCredential MetaManagedCredential?
   orders                Order[]                   @relation("OrderInstance")
   products              Product[]                 @relation("ProductInstance")
   promptSections        PromptSection[]           @relation("PromptSectionInstance")
@@ -435,6 +438,39 @@ model MetaCoexistCredential {
 
   @@index([wabaId])
   @@index([phoneNumberId])
+}
+
+model MetaManagedCredential {
+  id                   String           @id @default(uuid())
+  instanceId           String           @unique
+  phoneNumberId        String
+  displayPhone         String?
+  verifiedName         String?
+  status               String           @default("PENDING_VERIFICATION")
+  qualityRating        String?
+  messagingTier        String?
+  registrationMethod   String           @default("SMS")
+  registeredAt         DateTime?
+  verificationAttempts Int              @default(0)
+  lastVerificationAt   DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  instance             WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([phoneNumberId])
+}
+
+model MediaShortUrl {
+  id          String   @id @default(uuid())
+  shortId     String   @unique
+  originalUrl String
+  businessId  String?
+  mediaType   String?
+  createdAt   DateTime @default(now())
+
+  @@index([shortId])
+  @@index([businessId])
+  @@index([createdAt])
 }
 
 model MetaTemplate {

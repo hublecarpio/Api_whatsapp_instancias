@@ -2168,7 +2168,7 @@ router.get('/available-agents', superAdminMiddleware, async (req: SuperAdminRequ
     
     const availableUsers = users.map(u => ({
       ...u,
-      isCurrentAgent: u.delegatedAgentFor.length > 0
+      isCurrentAgent: u.delegatedAgentFor !== null
     }));
     
     res.json({ users: availableUsers });
