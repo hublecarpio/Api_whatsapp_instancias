@@ -67,12 +67,13 @@ interface MediaItem {
 function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedText: string } {
   const mediaItems: MediaItem[] = [];
   let cleanedText = text;
+  const urlsToRemove: Set<string> = new Set();
   
   const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
   let match;
   while ((match = imageRegex.exec(text)) !== null) {
     const url = match[2];
-    if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || url.includes('/image')) {
+    if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i) || url.includes('/image') || url.includes('/m/')) {
       mediaItems.push({ type: 'image', url });
     } else if (url.match(/\.(mp4|mov|avi)$/i) || url.includes('/video')) {
       mediaItems.push({ type: 'video', url });
@@ -80,10 +81,20 @@ function extractMediaFromText(text: string): { mediaItems: MediaItem[]; cleanedT
       mediaItems.push({ type: 'file', url, fileName: match[1] || 'document' });
     }
     cleanedText = cleanedText.replace(match[0], '');
+    urlsToRemove.add(url);
+  }
+  
+  const shortUrlRegex = /(https?:\/\/[^\s<>\[\]()]+\/m\/[A-Za-z0-9_-]+)/gi;
+  while ((match = shortUrlRegex.exec(text)) !== null) {
+    const url = match[1];
+    const alreadyIncluded = mediaItems.some(m => m.url === url);
+    if (!alreadyIncluded) {
+      mediaItems.push({ type: 'image', url });
+    }
+    urlsToRemove.add(url);
   }
   
   const urlRegex = /(https?:\/\/[^\s<>\[\]()]+\.(jpg|jpeg|png|gif|webp|mp4|mov|pdf|doc|docx))/gi;
-  const urlsToRemove: Set<string> = new Set();
   while ((match = urlRegex.exec(text)) !== null) {
     const url = match[1];
     const ext = match[2].toLowerCase();
