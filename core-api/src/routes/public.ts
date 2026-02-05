@@ -156,6 +156,95 @@ router.get('/queues/status', async (req: Request, res: Response) => {
   }
 });
 
+// Public catalog endpoint - no auth required
+router.get('/catalog/:slug', async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    
+    if (!slug) {
+      return res.status(400).json({ error: 'Se requiere el identificador del catálogo' });
+    }
+
+    // Find business by slug
+    const business = await prisma.business.findFirst({
+      where: { 
+        slug: slug.toLowerCase()
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        logoUrl: true,
+        industry: true,
+        currencyCode: true,
+        currencySymbol: true,
+        instances: {
+          where: { 
+            isActive: true,
+            phoneNumber: { not: null }
+          },
+          select: {
+            phoneNumber: true,
+            name: true
+          },
+          take: 1
+        },
+        products: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            price: true,
+            imageUrl: true,
+            imageUrls: true,
+            variations: true,
+            pricePerVariation: true,
+            stock: true,
+            stockPerVariation: true
+          },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
+    if (!business) {
+      return res.status(404).json({ error: 'Catálogo no encontrado' });
+    }
+
+    // Get the WhatsApp phone number (cleaned for wa.me links)
+    const whatsappPhone = business.instances[0]?.phoneNumber?.replace(/\D/g, '') || null;
+
+    res.json({
+      success: true,
+      catalog: {
+        businessName: business.name,
+        description: business.description,
+        logoUrl: business.logoUrl,
+        industry: business.industry,
+        currencyCode: business.currencyCode,
+        currencySymbol: business.currencySymbol,
+        whatsappPhone,
+        products: business.products.map(product => ({
+          id: product.id,
+          title: product.title,
+          description: product.description,
+          price: product.price,
+          imageUrl: product.imageUrl || (product.imageUrls && product.imageUrls[0]) || null,
+          imageUrls: product.imageUrls || [],
+          variations: product.variations || [],
+          pricePerVariation: product.pricePerVariation || [],
+          stock: product.stock,
+          stockPerVariation: product.stockPerVariation || []
+        }))
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Error fetching public catalog:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 router.get('/ui-settings', async (req: Request, res: Response) => {
   try {
     const settings = await prisma.platformSettings.findUnique({

@@ -72,6 +72,8 @@ export default function BusinessPage() {
   const [timezone, setTimezone] = useState('America/Lima');
   const [currencyCode, setCurrencyCode] = useState('PEN');
   const [currencySymbol, setCurrencySymbol] = useState('S/.');
+  const [slug, setSlug] = useState('');
+  const [slugError, setSlugError] = useState('');
   
 
   useEffect(() => {
@@ -172,6 +174,7 @@ export default function BusinessPage() {
       setTimezone(currentBusiness.timezone || 'America/Lima');
       setCurrencyCode(currentBusiness.currencyCode || 'PEN');
       setCurrencySymbol(currentBusiness.currencySymbol || 'S/.');
+      setSlug((currentBusiness as any).slug || '');
       businessApi.getStats(currentBusiness.id).then((res) => {
         setStats(res.data);
       }).catch(() => {});
@@ -193,7 +196,7 @@ export default function BusinessPage() {
 
     try {
       if (currentBusiness) {
-        await businessApi.update(currentBusiness.id, { name, description, industry, timezone, currencyCode, currencySymbol });
+        await businessApi.update(currentBusiness.id, { name, description, industry, timezone, currencyCode, currencySymbol, slug: slug || null });
         
         const refreshed = await businessApi.get(currentBusiness.id);
         setCurrentBusiness(refreshed.data);
@@ -575,6 +578,52 @@ export default function BusinessPage() {
           
         </div>
       </div>
+
+      {currentBusiness && (
+        <div className="card mb-6">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <span>🛍️</span> Catalogo Publico
+          </h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Configura un enlace publico donde tus clientes pueden ver tu catalogo de productos y contactarte por WhatsApp directamente.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Slug del Catalogo
+            </label>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">/catalogo/</span>
+                <input
+                  type="text"
+                  value={slug}
+                  onChange={(e) => {
+                    const newSlug = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+                    setSlug(newSlug);
+                    setSlugError('');
+                  }}
+                  className="input pl-[85px]"
+                  placeholder="mi-tienda"
+                />
+              </div>
+            </div>
+            {slugError && <p className="text-red-400 text-xs mt-1">{slugError}</p>}
+            {slug && (
+              <div className="mt-3 p-3 bg-dark-bg rounded-lg">
+                <p className="text-xs text-gray-400 mb-2">Tu catalogo sera accesible en:</p>
+                <a 
+                  href={`/catalogo/${slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-neon-blue hover:underline text-sm break-all"
+                >
+                  {typeof window !== 'undefined' ? window.location.origin : ''}/catalogo/{slug}
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <button
         onClick={handleSaveBusiness}

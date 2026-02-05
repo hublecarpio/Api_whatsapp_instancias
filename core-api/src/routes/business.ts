@@ -164,7 +164,7 @@ router.get('/:id/delivery-zones', async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, industry, logoUrl, agentVersion, timezone, currencyCode, currencySymbol, businessObjective, onboardingCompleted, onboardingSkipped, openaiModel } = req.body;
+    const { name, description, industry, logoUrl, agentVersion, timezone, currencyCode, currencySymbol, businessObjective, onboardingCompleted, onboardingSkipped, openaiModel, slug } = req.body;
     
     const existing = await prisma.business.findFirst({
       where: { id: req.params.id, userId: req.userId }
@@ -205,6 +205,20 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (onboardingCompleted !== undefined) updateData.onboardingCompleted = onboardingCompleted;
     if (onboardingSkipped !== undefined) updateData.onboardingSkipped = onboardingSkipped;
     if (openaiModel !== undefined) updateData.openaiModel = openaiModel;
+    if (slug !== undefined) {
+      const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      if (cleanSlug) {
+        const existingSlug = await prisma.business.findFirst({
+          where: { slug: cleanSlug, NOT: { id: req.params.id } }
+        });
+        if (existingSlug) {
+          return res.status(400).json({ error: 'Este slug ya está en uso por otro negocio' });
+        }
+        updateData.slug = cleanSlug;
+      } else {
+        updateData.slug = null;
+      }
+    }
     
     const business = await prisma.business.update({
       where: { id: req.params.id },

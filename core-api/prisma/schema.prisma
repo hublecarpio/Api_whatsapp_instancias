@@ -1,15 +1,10 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 generator client {
   provider = "prisma-client-js"
 }
 
-enum UserRole {
-  ADMIN
-  ASESOR
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -44,24 +39,24 @@ model User {
   proBonusExpiresAt           DateTime?
   stripePausedAt              DateTime?
   referralCode                String?
-  referralCodeId              String?             // FK to the referral code used at registration
+  referralCodeId              String?
   bonusTokens                 Int                 @default(0)
-  bonusDemoDays               Int                 @default(0) // Extra demo days granted at registration
-  bonusTrialDays              Int                 @default(0) // Extra Stripe trial days granted at registration
+  bonusDemoDays               Int                 @default(0)
+  bonusTrialDays              Int                 @default(0)
   demoStartedAt               DateTime?
   demoPhase                   String              @default("DEMO")
   createdAt                   DateTime            @default(now())
+  advisorInvitations          AdvisorInvitation[] @relation("InvitedBy")
+  delegatedAgentFor           AgentDelegation?    @relation("DelegatedAgent")
+  delegatedAgentsOwned        AgentDelegation[]   @relation("DelegationOwner")
   businesses                  Business[]
+  platformUserContacts        Contact[]           @relation("PlatformUserContacts")
+  contactAssignments          ContactAssignment[]
+  ownedReferralCodes          ReferralCode[]      @relation("UserReferralCodes")
   subscriptions               Subscription[]
   parentUser                  User?               @relation("UserAdvisors", fields: [parentUserId], references: [id])
   advisors                    User[]              @relation("UserAdvisors")
-  advisorInvitations          AdvisorInvitation[] @relation("InvitedBy")
-  contactAssignments          ContactAssignment[]
-  ownedReferralCodes          ReferralCode[]      @relation("UserReferralCodes")
-  referredByCode              ReferralCode?       @relation("ReferredByCode", fields: [referralCodeId], references: [id], onDelete: SetNull)
-  platformUserContacts        Contact[]           @relation("PlatformUserContacts")
-  delegatedAgentFor           AgentDelegation[]   @relation("DelegatedAgent")
-  delegatedAgentsOwned        AgentDelegation[]   @relation("DelegationOwner")
+  referredByCode              ReferralCode?       @relation("ReferredByCode", fields: [referralCodeId], references: [id])
   businessRoles               UserBusinessRole[]
 }
 
@@ -72,46 +67,38 @@ model AgentDelegation {
   isActive      Boolean   @default(true)
   assignedAt    DateTime  @default(now())
   deactivatedAt DateTime?
-
-  owner         User      @relation("DelegationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   agentUser     User      @relation("DelegatedAgent", fields: [agentUserId], references: [id], onDelete: Cascade)
+  owner         User      @relation("DelegationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([agentUserId])
 }
 
 model AdvisorInvitation {
-  id            String    @id @default(uuid())
-  email         String
-  token         String    @unique
-  invitedById   String
-  businessId    String
-  expiresAt     DateTime
-  acceptedAt    DateTime?
-  createdAt     DateTime  @default(now())
-  
-  invitedBy     User      @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
-  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  
+  id          String    @id @default(uuid())
+  email       String
+  token       String    @unique
+  invitedById String
+  businessId  String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
   @@unique([email, businessId])
 }
 
-enum BusinessRoleType {
-  OWNER
-  ADVISOR
-}
-
 model UserBusinessRole {
-  id          String           @id @default(uuid())
-  userId      String
-  businessId  String
-  role        BusinessRoleType
-  isActive    Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  business    Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id         String           @id @default(uuid())
+  userId     String
+  businessId String
+  role       BusinessRoleType
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  business   Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, businessId])
   @@index([userId, isActive])
@@ -124,60 +111,40 @@ model ContactAssignment {
   contactPhone String
   userId       String
   assignedAt   DateTime @default(now())
-  
   business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@unique([businessId, contactPhone])
 }
 
 model Contact {
-  id              String    @id @default(uuid())
+  id              String   @id @default(uuid())
   businessId      String
   phone           String
   name            String?
   email           String?
-  tags            String[]  @default([])
+  tags            String[] @default([])
   notes           String?
   source          String?
   firstMessageAt  DateTime
   lastMessageAt   DateTime
-  messageCount    Int       @default(1)
-  isArchived      Boolean   @default(false)
-  botDisabled     Boolean   @default(false)
-  botTestEnabled  Boolean   @default(false)
-  remindersPaused Boolean   @default(false)
+  messageCount    Int      @default(1)
+  isArchived      Boolean  @default(false)
+  botDisabled     Boolean  @default(false)
+  botTestEnabled  Boolean  @default(false)
+  remindersPaused Boolean  @default(false)
   platformUserId  String?
   metadata        Json?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  platformUser    User?     @relation("PlatformUserContacts", fields: [platformUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  platformUser    User?    @relation("PlatformUserContacts", fields: [platformUserId], references: [id])
 
   @@unique([businessId, phone])
   @@index([businessId, isArchived])
   @@index([businessId, lastMessageAt])
   @@index([businessId, tags])
   @@index([platformUserId])
-}
-
-enum ReferralCodeType {
-  STANDARD
-  ENTERPRISE
-}
-
-enum SubscriptionTier {
-  STANDARD
-  BASIC
-  PRO
-  ENTERPRISE
-}
-
-enum SubscriptionSource {
-  STRIPE
-  ENTERPRISE
-  TRIAL
 }
 
 model ReferralCode {
@@ -192,14 +159,11 @@ model ReferralCode {
   usageCount        Int               @default(0)
   createdAt         DateTime          @default(now())
   expiresAt         DateTime?
-  
-  // Affiliate program fields
-  ownerUserId       String?           // User who owns this referral code (for affiliate tracking)
-  bonusDemoDays     Int?              // Extra demo days (without card) - adds to default 2 days
-  bonusTrialDays    Int?              // Extra Stripe trial days - adds to default 5 days
-  commissionRate    Float             @default(0.20) // Commission rate (default 20%)
-  
-  owner             User?             @relation("UserReferralCodes", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  ownerUserId       String?
+  bonusDemoDays     Int?
+  bonusTrialDays    Int?
+  commissionRate    Float             @default(0.20)
+  owner             User?             @relation("UserReferralCodes", fields: [ownerUserId], references: [id])
   subscriptions     Subscription[]
   referredUsers     User[]            @relation("ReferredByCode")
 
@@ -209,82 +173,41 @@ model ReferralCode {
 }
 
 model Subscription {
-  id              String             @id @default(uuid())
-  userId          String
-  source          SubscriptionSource
-  tier            SubscriptionTier   @default(PRO)
-  status          SubscriptionStatus @default(ACTIVE)
-  startsAt        DateTime           @default(now())
-  endsAt          DateTime?
-  referralCodeId  String?
-  activatedBy     String?
-  notes           String?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  referralCode    ReferralCode?      @relation(fields: [referralCodeId], references: [id], onDelete: SetNull)
+  id             String             @id @default(uuid())
+  userId         String
+  source         SubscriptionSource
+  tier           SubscriptionTier   @default(PRO)
+  status         SubscriptionStatus @default(ACTIVE)
+  startsAt       DateTime           @default(now())
+  endsAt         DateTime?
+  referralCodeId String?
+  activatedBy    String?
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  referralCode   ReferralCode?      @relation(fields: [referralCodeId], references: [id])
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([endsAt, status])
   @@index([source])
 }
 
-enum SystemEventType {
-  USER_REGISTERED
-  USER_LOGIN
-  USER_LOGOUT
-  BUSINESS_CREATED
-  BUSINESS_UPDATED
-  INSTANCE_CREATED
-  INSTANCE_CONNECTED
-  INSTANCE_DISCONNECTED
-  INSTANCE_ERROR
-  MESSAGE_SENT
-  MESSAGE_RECEIVED
-  AI_RESPONSE
-  AI_ERROR
-  ORDER_CREATED
-  ORDER_PAID
-  ORDER_SHIPPED
-  ORDER_DELIVERED
-  PAYMENT_SUCCESS
-  PAYMENT_FAILED
-  SUBSCRIPTION_STARTED
-  SUBSCRIPTION_CANCELLED
-  TOOL_EXECUTED
-  TOOL_ERROR
-  WEBHOOK_RECEIVED
-  API_ERROR
-  SYSTEM_ERROR
-  REMINDER_SENT
-  APPOINTMENT_CREATED
-  APPOINTMENT_CONFIRMED
-}
-
-enum EventSeverity {
-  DEBUG
-  INFO
-  WARNING
-  ERROR
-  CRITICAL
-}
-
 model SystemEvent {
-  id          String          @id @default(uuid())
-  eventType   SystemEventType
-  severity    EventSeverity   @default(INFO)
-  source      String
-  userId      String?
-  businessId  String?
-  instanceId  String?
-  message     String
-  details     Json?
-  metadata    Json?
-  ip          String?
-  userAgent   String?
-  duration    Int?
-  createdAt   DateTime        @default(now())
+  id         String          @id @default(uuid())
+  eventType  SystemEventType
+  severity   EventSeverity   @default(INFO)
+  source     String
+  userId     String?
+  businessId String?
+  instanceId String?
+  message    String
+  details    Json?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  duration   Int?
+  createdAt  DateTime        @default(now())
 
   @@index([eventType, createdAt])
   @@index([severity, createdAt])
@@ -294,99 +217,83 @@ model SystemEvent {
   @@index([source, createdAt])
 }
 
-enum SubscriptionStatus {
-  PENDING
-  TRIAL
-  ACTIVE
-  PAST_DUE
-  CANCELED
-}
-
-enum BusinessObjective {
-  SALES
-  APPOINTMENTS
-}
-
 model Business {
-  id                String             @id @default(uuid())
-  userId            String
-  name              String
-  description       String?
-  industry          String?
-  logoUrl           String?
-  openaiApiKey      String?
-  openaiModel       String?            @default("gpt-4.1-mini")
-  v3Llm1Model       String?            @default("gpt-4.1-mini")
-  v3Llm1Provider    String?            @default("openai")
-  v3Llm2Model       String?            @default("gpt-4.1")
-  v3Llm2Provider    String?            @default("openai")
-  botEnabled        Boolean            @default(true)
-  timezone          String             @default("America/Lima")
-  agentVersion      String             @default("v1")
-  agentV2Config     Json?
-  currencyCode      String             @default("PEN")
-  currencySymbol    String             @default("S/.")
-  businessObjective BusinessObjective  @default(SALES)
-  appointmentConfig Json?
-  businessContext   Json?
-  injectionCode     String?
-  apiKeyHash        String?
-  apiKeyPrefix      String?
-  apiKeyCreatedAt   DateTime?
-  webhookUrl        String?
-  webhookEvents     String[]           @default([])
-  webhookSecret     String?
-  roundRobinEnabled Boolean            @default(false)
-  roundRobinAdvisors String[]          @default([])
-  roundRobinWeights  Json               @default("{}")
-  roundRobinLastIndex Int              @default(0)
-  onboardingCompleted Boolean          @default(false)
-  onboardingSkipped   Boolean          @default(false)
-  createdAt         DateTime           @default(now())
-
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instances         WhatsAppInstance[]
-  products          Product[]
-  policy            Policy?
-  agentPrompts      AgentPrompt[]
-  messages          MessageLog[]
-  tags              Tag[]
-  followUpConfigs   FollowUpConfig[]
-  reminders         Reminder[]
-  appointments      Appointment[]
-  availability      BusinessAvailability[]
-  advisorInvitations AdvisorInvitation[]
-  contactAssignments ContactAssignment[]
-  contacts           Contact[]
-  googleCalendar    GoogleCalendarCredential?
-  salesObjections   SalesObjection[]
-  funnelStages      FunnelStage[]
-  userRoles         UserBusinessRole[]
-  deliveryZones     DeliveryZone[]
-  knowledgeChunks   BusinessKnowledgeChunk[]
-  promptSections    PromptSection[]
-  configBackups     ConfigurationBackup[]
-  mediaShortUrls    MediaShortUrl[]
-  quickReplies      QuickReply[]
+  id                  String                    @id @default(uuid())
+  userId              String
+  name                String
+  description         String?
+  industry            String?
+  logoUrl             String?
+  openaiApiKey        String?
+  openaiModel         String?                   @default("gpt-4.1-mini")
+  botEnabled          Boolean                   @default(true)
+  timezone            String                    @default("America/Lima")
+  agentVersion        String                    @default("v1")
+  agentV2Config       Json?
+  currencyCode        String                    @default("PEN")
+  currencySymbol      String                    @default("S/.")
+  businessObjective   BusinessObjective         @default(SALES)
+  appointmentConfig   Json?
+  businessContext     Json?
+  injectionCode       String?
+  apiKeyHash          String?
+  apiKeyPrefix        String?
+  apiKeyCreatedAt     DateTime?
+  webhookUrl          String?
+  webhookEvents       String[]                  @default([])
+  webhookSecret       String?
+  roundRobinEnabled   Boolean                   @default(false)
+  roundRobinAdvisors  String[]                  @default([])
+  roundRobinLastIndex Int                       @default(0)
+  onboardingCompleted Boolean                   @default(false)
+  onboardingSkipped   Boolean                   @default(false)
+  createdAt           DateTime                  @default(now())
+  roundRobinWeights   Json                      @default("{}")
+  v3Llm1Model         String?                   @default("gpt-4.1-mini")
+  v3Llm1Provider      String?                   @default("openai")
+  v3Llm2Model         String?                   @default("gpt-4.1")
+  v3Llm2Provider      String?                   @default("openai")
+  slug                String?
+  advisorInvitations  AdvisorInvitation[]
+  agentPrompts        AgentPrompt[]
+  appointments        Appointment[]
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availability        BusinessAvailability[]
+  knowledgeChunks     BusinessKnowledgeChunk[]
+  configBackups       ConfigurationBackup[]
+  contacts            Contact[]
+  contactAssignments  ContactAssignment[]
+  deliveryZones       DeliveryZone[]
+  followUpConfigs     FollowUpConfig[]
+  funnelStages        FunnelStage[]
+  googleCalendar      GoogleCalendarCredential?
+  messages            MessageLog[]
+  policy              Policy?
+  products            Product[]
+  promptSections      PromptSection[]
+  reminders           Reminder[]
+  salesObjections     SalesObjection[]
+  tags                Tag[]
+  userRoles           UserBusinessRole[]
+  instances           WhatsAppInstance[]
 }
 
 model GoogleCalendarCredential {
-  id              String   @id @default(uuid())
-  businessId      String   @unique
-  accessToken     String
-  refreshToken    String
-  tokenExpiry     DateTime
-  calendarId      String   @default("primary")
-  syncEnabled     Boolean  @default(true)
-  connectedEmail  String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid())
+  businessId     String   @unique
+  accessToken    String
+  refreshToken   String
+  tokenExpiry    DateTime
+  calendarId     String   @default("primary")
+  syncEnabled    Boolean  @default(true)
+  connectedEmail String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 }
 
 model DeliveryZone {
-  id           String   @id @default(uuid())
+  id           String            @id @default(uuid())
   businessId   String
   instanceId   String?
   name         String
@@ -396,13 +303,12 @@ model DeliveryZone {
   freeAbove    Float?
   deliveryTime String?
   policy       String?
-  isActive     Boolean  @default(true)
-  order        Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  isActive     Boolean           @default(true)
+  order        Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance     WhatsAppInstance? @relation(fields: [instanceId], references: [id])
 
   @@index([businessId, isActive])
   @@index([businessId, order])
@@ -410,69 +316,56 @@ model DeliveryZone {
 }
 
 model QuickReply {
-  id         String   @id @default(uuid())
+  id         String   @id @default(dbgenerated("(gen_random_uuid())::text"))
   businessId String
   shortcut   String
   title      String
   message    String
-  order      Int      @default(0)
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  updatedAt  DateTime @default(now()) @updatedAt
+  order      Int      @default(0)
 
   @@unique([businessId, shortcut])
-  @@index([businessId, order])
-}
-
-enum WhatsAppProvider {
-  BAILEYS
-  META_CLOUD
-  META_COEXIST
-  META_MANAGED
 }
 
 model WhatsAppInstance {
-  id                String           @id @default(uuid())
-  businessId        String
-  instanceNumber    Int              @default(1)
-  name              String           @default("WhatsApp")
-  provider          WhatsAppProvider @default(BAILEYS)
-  instanceBackendId String?
-  phoneNumber       String?
-  status            String           @default("pending_qr")
-  qr                String?
-  isActive          Boolean          @default(true)
-  botEnabled        Boolean          @default(true)
-  lastConnection    DateTime?
-  webhookConfig     Json?
-  createdAt         DateTime         @default(now())
-  archivedAt        DateTime?
-  businessObjective BusinessObjective?
-  
-  apiKeyHash        String?
-  apiKeyPrefix      String?
-  webhookUrl        String?
-  webhookSecret     String?
-  webhookEvents     String[]          @default([])
-
-  business              Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  metaCredential        MetaCredential?
+  id                    String                    @id @default(uuid())
+  businessId            String
+  instanceNumber        Int                       @default(1)
+  name                  String                    @default("WhatsApp")
+  provider              WhatsAppProvider          @default(BAILEYS)
+  instanceBackendId     String?
+  phoneNumber           String?
+  status                String                    @default("pending_qr")
+  qr                    String?
+  isActive              Boolean                   @default(true)
+  botEnabled            Boolean                   @default(true)
+  lastConnection        DateTime?
+  webhookConfig         Json?
+  createdAt             DateTime                  @default(now())
+  archivedAt            DateTime?
+  businessObjective     BusinessObjective?
+  apiKeyHash            String?
+  apiKeyPrefix          String?
+  webhookUrl            String?
+  webhookSecret         String?
+  webhookEvents         String[]                  @default([])
+  agentPrompt           AgentPrompt?
+  appointments          Appointment[]
+  broadcasts            BroadcastCampaign[]
+  knowledgeChunks       BusinessKnowledgeChunk[]  @relation("KnowledgeChunkInstance")
+  deliveryZones         DeliveryZone[]
+  followUpConfig        FollowUpConfig?
+  funnelStages          FunnelStage[]
   metaCoexistCredential MetaCoexistCredential?
-  metaManagedCredential MetaManagedCredential?
+  metaCredential        MetaCredential?
+  orders                Order[]                   @relation("OrderInstance")
+  products              Product[]                 @relation("ProductInstance")
+  promptSections        PromptSection[]           @relation("PromptSectionInstance")
+  reminders             Reminder[]
+  tags                  Tag[]
+  business              Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   history               WhatsAppInstanceHistory[]
-  reminders        Reminder[]
-  appointments     Appointment[]
-  broadcasts       BroadcastCampaign[]
-  followUpConfig   FollowUpConfig?
-  agentPrompt      AgentPrompt?
-  tags             Tag[]
-  products         Product[]                 @relation("ProductInstance")
-  orders           Order[]                   @relation("OrderInstance")
-  funnelStages     FunnelStage[]
-  knowledgeChunks  BusinessKnowledgeChunk[]  @relation("KnowledgeChunkInstance")
-  promptSections   PromptSection[]           @relation("PromptSectionInstance")
-  deliveryZones    DeliveryZone[]
 
   @@unique([businessId, instanceNumber])
   @@index([businessId])
@@ -480,190 +373,125 @@ model WhatsAppInstance {
   @@index([businessId, archivedAt])
 }
 
-enum InstanceEventType {
-  CREATED
-  CONNECTED
-  DISCONNECTED
-  PROVIDER_CHANGED
-  DELETED
-  RECONNECTED
-  QR_GENERATED
-  SESSION_EXPIRED
-  ERROR
-}
-
 model WhatsAppInstanceHistory {
-  id              String            @id @default(uuid())
-  instanceId      String?
-  businessId      String
-  eventType       InstanceEventType
+  id               String            @id @default(uuid())
+  instanceId       String?
+  businessId       String
+  eventType        InstanceEventType
   previousProvider WhatsAppProvider?
-  newProvider     WhatsAppProvider?
-  previousStatus  String?
-  newStatus       String?
-  phoneNumber     String?
-  backendId       String?
-  details         String?
-  metadata        Json?
-  createdAt       DateTime          @default(now())
-
-  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  newProvider      WhatsAppProvider?
+  previousStatus   String?
+  newStatus        String?
+  phoneNumber      String?
+  backendId        String?
+  details          String?
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  instance         WhatsAppInstance? @relation(fields: [instanceId], references: [id])
 
   @@index([businessId, createdAt])
   @@index([instanceId, createdAt])
 }
 
 model MetaCredential {
-  id                 String   @id @default(uuid())
-  instanceId         String   @unique
+  id                 String           @id @default(uuid())
+  instanceId         String           @unique
   accessToken        String
   businessId         String
   phoneNumberId      String
   appId              String
   appSecret          String
-  webhookVerifyToken String   @default(uuid())
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  instance  WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  templates MetaTemplate[]
-}
-
-enum MetaCoexistStatus {
-  PENDING
-  AWAITING_QR
-  CONNECTED
-  ACTIVE
-  REVOKED
-  BLOCKED
-  DISABLED
+  webhookVerifyToken String           @default(uuid())
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  instance           WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  templates          MetaTemplate[]
 }
 
 model MetaCoexistCredential {
-  id                   String             @id @default(uuid())
-  instanceId           String             @unique
-  wabaId               String
-  metaBusinessId       String
-  phoneNumberId        String
-  displayPhone         String?
-  userAccessToken      String
-  systemAccessToken    String?
-  tokenExpiresAt       DateTime?
-  webhookVerifyToken   String             @default(uuid())
-  coexistenceEnabled   Boolean            @default(false)
-  coexistStatus        MetaCoexistStatus  @default(PENDING)
-  qualityRating        String?
-  messagingTier        String?
-  sessionId            String?
-  lastSyncAt           DateTime?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-
-  instance   WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  templates  MetaTemplate[]
+  id                 String            @id @default(uuid())
+  instanceId         String            @unique
+  wabaId             String
+  metaBusinessId     String
+  phoneNumberId      String
+  displayPhone       String?
+  userAccessToken    String
+  systemAccessToken  String?
+  tokenExpiresAt     DateTime?
+  webhookVerifyToken String            @default(uuid())
+  coexistenceEnabled Boolean           @default(false)
+  coexistStatus      MetaCoexistStatus @default(PENDING)
+  qualityRating      String?
+  messagingTier      String?
+  sessionId          String?
+  lastSyncAt         DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  instance           WhatsAppInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  templates          MetaTemplate[]
 
   @@index([wabaId])
   @@index([phoneNumberId])
 }
 
-enum MetaManagedStatus {
-  PENDING_REGISTRATION
-  PENDING_VERIFICATION
-  VERIFICATION_FAILED
-  ACTIVE
-  SUSPENDED
-  DISCONNECTED
-}
-
-model MetaManagedCredential {
-  id                   String              @id @default(uuid())
-  instanceId           String              @unique
-  phoneNumberId        String
-  displayPhone         String
-  verifiedName         String?
-  qualityRating        String?
-  messagingTier        String?
-  status               MetaManagedStatus   @default(PENDING_REGISTRATION)
-  registrationCode     String?
-  registrationMethod   String              @default("SMS")
-  verificationAttempts Int                 @default(0)
-  lastVerificationAt   DateTime?
-  registeredAt         DateTime?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-
-  instance  WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  templates MetaTemplate[]
-
-  @@index([phoneNumberId])
-  @@index([displayPhone])
-}
-
 model MetaTemplate {
-  id                   String   @id @default(uuid())
-  credentialId         String?
-  coexistCredentialId  String?
-  managedCredentialId  String?
-  metaTemplateId       String
-  name                 String
-  language             String   @default("es")
-  category             String   @default("UTILITY")
-  status               String   @default("PENDING")
-  components           Json
-  headerType           String?
-  bodyText             String?
-  footerText           String?
-  buttons              Json?
-  lastSynced           DateTime @default(now())
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  credential         MetaCredential?          @relation(fields: [credentialId], references: [id], onDelete: Cascade)
-  coexistCredential  MetaCoexistCredential?   @relation(fields: [coexistCredentialId], references: [id], onDelete: Cascade)
-  managedCredential  MetaManagedCredential?   @relation(fields: [managedCredentialId], references: [id], onDelete: Cascade)
+  id                  String                 @id @default(uuid())
+  credentialId        String?
+  coexistCredentialId String?
+  metaTemplateId      String
+  name                String
+  language            String                 @default("es")
+  category            String                 @default("UTILITY")
+  status              String                 @default("PENDING")
+  components          Json
+  headerType          String?
+  bodyText            String?
+  footerText          String?
+  buttons             Json?
+  lastSynced          DateTime               @default(now())
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  managedCredentialId String?
+  coexistCredential   MetaCoexistCredential? @relation(fields: [coexistCredentialId], references: [id], onDelete: Cascade)
+  credential          MetaCredential?        @relation(fields: [credentialId], references: [id], onDelete: Cascade)
 
   @@unique([credentialId, name])
   @@unique([coexistCredentialId, name])
-  @@unique([managedCredentialId, name])
   @@index([credentialId, status])
   @@index([coexistCredentialId, status])
-  @@index([managedCredentialId, status])
 }
 
 model Product {
-  id                  String                    @id @default(uuid())
-  businessId          String
-  instanceId          String?
-  title               String
-  description         String?
-  variations          String[]                  @default([])
-  pricePerVariation   Float[]                   @default([])
-  stockPerVariation   Int[]                     @default([])
-  imageUrls           String[]                  @default([])
-  price               Float                     @default(0)
-  stock               Int                       @default(0)
-  imageUrl            String?
-  embedding           Unsupported("vector(1536)")?
-  embeddingText       String?
-  embeddingUpdatedAt  DateTime?
-  createdAt           DateTime                  @default(now())
-
-  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance? @relation("ProductInstance", fields: [instanceId], references: [id], onDelete: SetNull)
+  id                 String            @id @default(uuid())
+  businessId         String
+  instanceId         String?
+  title              String
+  description        String?
+  price              Float             @default(0)
+  stock              Int               @default(0)
+  imageUrl           String?
+  createdAt          DateTime          @default(now())
+  imageUrls          String[]          @default([])
+  pricePerVariation  Float[]           @default([])
+  stockPerVariation  Int[]             @default([])
+  variations         String[]          @default([])
+  embeddingText      String?
+  embeddingUpdatedAt DateTime?
+  business           Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance           WhatsAppInstance? @relation("ProductInstance", fields: [instanceId], references: [id])
 
   @@index([businessId, title])
   @@index([businessId, instanceId])
 }
 
 model Policy {
-  id             String  @id @default(uuid())
-  businessId     String  @unique
+  id             String   @id @default(uuid())
+  businessId     String   @unique
   shippingPolicy String?
   refundPolicy   String?
   brandVoice     String?
   allowedHours   String?
-
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 }
 
 model AgentPrompt {
@@ -675,67 +503,52 @@ model AgentPrompt {
   historyLimit  Int               @default(10)
   splitMessages Boolean           @default(true)
   updatedAt     DateTime          @default(now())
-
-  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  tools    AgentTool[]
-  files    AgentFile[]
+  files         AgentFile[]
+  business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance      WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  tools         AgentTool[]
 
   @@index([businessId])
 }
 
 model AgentFile {
-  id          String   @id @default(uuid())
-  promptId    String
-  name        String
-  description String?
-  fileUrl     String
-  fileType    String   @default("document")
+  id              String      @id @default(uuid())
+  promptId        String
+  name            String
+  description     String?
+  fileUrl         String
+  fileType        String      @default("document")
   triggerKeywords String?
   triggerContext  String?
-  order       Int      @default(0)
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  prompt AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  order           Int         @default(0)
+  enabled         Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  prompt          AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
 
   @@index([promptId, enabled])
   @@index([promptId, order])
 }
 
-enum KnowledgeCategory {
-  BUSINESS_INFO
-  PRODUCTS
-  POLICIES
-  FAQ
-  PROCESSES
-  OBJECTIONS
-  DELIVERY
-  PROMOTIONS
-  CUSTOM
-}
-
 model BusinessKnowledgeChunk {
-  id          String            @id @default(uuid())
-  businessId  String
-  instanceId  String?
-  category    KnowledgeCategory
-  title       String
-  content     String
-  embedding   Float[]
-  keywords    String[]          @default([])
-  priority    Int               @default(0)
-  isActive    Boolean           @default(true)
-  sourceType  String            @default("manual")
-  sourceId    String?
-  metadata    Json?
-  tokenCount  Int               @default(0)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-
-  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance? @relation("KnowledgeChunkInstance", fields: [instanceId], references: [id], onDelete: SetNull)
+  id         String            @id @default(uuid())
+  businessId String
+  instanceId String?
+  category   KnowledgeCategory
+  title      String
+  content    String
+  embedding  Float[]
+  keywords   String[]          @default([])
+  priority   Int               @default(0)
+  isActive   Boolean           @default(true)
+  sourceType String            @default("manual")
+  sourceId   String?
+  metadata   Json?
+  tokenCount Int               @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  business   Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance   WhatsAppInstance? @relation("KnowledgeChunkInstance", fields: [instanceId], references: [id])
 
   @@index([businessId, category])
   @@index([businessId, instanceId, category])
@@ -743,87 +556,69 @@ model BusinessKnowledgeChunk {
 }
 
 model AgentTool {
-  id          String  @id @default(uuid())
-  promptId    String
-  name        String
-  description String
-  url         String
-  method      String  @default("POST")
-  headers     Json?
-  bodyTemplate Json?
-  parameters  Json?
+  id               String      @id @default(uuid())
+  promptId         String
+  name             String
+  description      String
+  url              String
+  method           String      @default("POST")
+  headers          Json?
+  bodyTemplate     Json?
+  parameters       Json?
   dynamicVariables Json?
-  enabled     Boolean @default(true)
-
-  prompt AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
-  logs   ToolLog[]
+  enabled          Boolean     @default(true)
+  prompt           AgentPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  logs             ToolLog[]
 }
 
 model ToolLog {
-  id          String   @id @default(uuid())
-  toolId      String
-  businessId  String
+  id           String    @id @default(uuid())
+  toolId       String
+  businessId   String
   contactPhone String?
-  request     Json
-  response    Json?
-  status      String   @default("success")
-  duration    Int?
-  createdAt   DateTime @default(now())
-
-  tool AgentTool @relation(fields: [toolId], references: [id], onDelete: Cascade)
-}
-
-enum IntentType {
-  GREETING
-  PRODUCT_INQUIRY
-  PRICE_INQUIRY
-  OBJECTION
-  READY_TO_BUY
-  SCHEDULE_APPOINTMENT
-  SUPPORT_REQUEST
-  COMPLAINT
-  FOLLOWUP
-  CLOSING
-  OTHER
+  request      Json
+  response     Json?
+  status       String    @default("success")
+  duration     Int?
+  createdAt    DateTime  @default(now())
+  tool         AgentTool @relation(fields: [toolId], references: [id], onDelete: Cascade)
 }
 
 model SalesObjection {
-  id              String   @id @default(uuid())
-  businessId      String
-  name            String
-  triggerPhrases  String[]
-  responseScript  String
-  priority        Int      @default(0)
-  isActive        Boolean  @default(true)
-  category        String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid())
+  businessId     String
+  name           String
+  triggerPhrases String[]
+  responseScript String
+  priority       Int      @default(0)
+  isActive       Boolean  @default(true)
+  category       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([businessId, isActive])
   @@index([businessId, category])
 }
 
 model FunnelStage {
-  id                String   @id @default(uuid())
+  id                String               @id @default(uuid())
   businessId        String
   instanceId        String?
   name              String
-  order             Int      @default(0)
+  order             Int                  @default(0)
   description       String?
   promptContext     String?
   toolsAllowed      String[]
-  requiredFieldKeys String[] @default([])
-  blockedTopics     String[] @default([])
+  requiredFieldKeys String[]             @default([])
+  blockedTopics     String[]             @default([])
   autoTransition    Json?
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @default(now()) @updatedAt
-
-  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  contacts ContactFunnelState[]
+  isActive          Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @default(now()) @updatedAt
+  contacts          ContactFunnelState[]
+  business          Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance          WhatsAppInstance?    @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@unique([businessId, name, instanceId])
   @@index([businessId, order])
@@ -832,30 +627,29 @@ model FunnelStage {
 }
 
 model ContactFunnelState {
-  id              String    @id @default(uuid())
+  id              String      @id @default(uuid())
   businessId      String
   contactPhone    String
   stageId         String
-  enteredAt       DateTime  @default(now())
+  enteredAt       DateTime    @default(now())
   lastInteraction DateTime?
   metadata        Json?
-
-  stage FunnelStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  stage           FunnelStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
 
   @@unique([businessId, contactPhone])
   @@index([stageId])
 }
 
 model IntentLog {
-  id              String     @id @default(uuid())
-  businessId      String
-  contactPhone    String
-  messageId       String?
-  detectedIntent  IntentType
-  confidence      Float
-  objectionId     String?
-  reasoning       String?
-  createdAt       DateTime   @default(now())
+  id             String     @id @default(uuid())
+  businessId     String
+  contactPhone   String
+  messageId      String?
+  detectedIntent IntentType
+  confidence     Float
+  objectionId    String?
+  reasoning      String?
+  createdAt      DateTime   @default(now())
 
   @@index([businessId, contactPhone])
   @@index([businessId, detectedIntent])
@@ -890,34 +684,32 @@ model MessageLog {
   message           String?
   mediaUrl          String?
   metadata          Json?
-  deliveryStatus    String?  @default("sent")
-  deliveryError     String?
-  deliveryAttempts  Int      @default(0)
   createdAt         DateTime @default(now())
-
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  deliveryAttempts  Int      @default(0)
+  deliveryError     String?
+  deliveryStatus    String?  @default("sent")
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@unique([businessId, providerMessageId])
 }
 
 model Tag {
-  id          String   @id @default(uuid())
+  id          String            @id @default(uuid())
   businessId  String
   instanceId  String?
   name        String
-  color       String   @default("#6B7280")
+  color       String            @default("#6B7280")
   description String?
-  order       Int      @default(0)
-  isDefault   Boolean  @default(false)
-  type        String   @default("SYSTEM")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance     WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  assignments  TagAssignment[]
-  history      TagHistory[]
-  stagePrompt  StagePrompt?
+  order       Int               @default(0)
+  isDefault   Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  type        String            @default("SYSTEM")
+  stagePrompt StagePrompt?
+  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance    WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  assignments TagAssignment[]
+  history     TagHistory[]
 
   @@unique([businessId, name, instanceId])
   @@index([businessId, order])
@@ -933,8 +725,7 @@ model TagAssignment {
   assignedAt   DateTime @default(now())
   assignedBy   String?
   source       String   @default("manual")
-
-  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tag          Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([businessId, contactPhone, tagId])
   @@index([businessId, contactPhone])
@@ -951,48 +742,45 @@ model TagHistory {
   removedAt    DateTime?
   source       String    @default("manual")
   notes        String?
-
-  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tag          Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@index([businessId, contactPhone])
   @@index([tagId, assignedAt])
 }
 
 model StagePrompt {
-  id              String  @id @default(uuid())
-  tagId           String  @unique
-  promptOverride  String?
-  systemContext   String?
-  toolsOverride   Json?
-
-  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  id             String  @id @default(uuid())
+  tagId          String  @unique
+  promptOverride String?
+  systemContext  String?
+  toolsOverride  Json?
+  tag            Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
 }
 
 model FollowUpConfig {
-  id                  String            @id @default(uuid())
-  businessId          String
-  instanceId          String?           @unique
-  enabled             Boolean           @default(false)
-  firstDelayMinutes   Int               @default(15)
-  secondDelayMinutes  Int               @default(60)
-  thirdDelayMinutes   Int               @default(240)
-  maxDailyAttempts    Int               @default(3)
-  pressureLevel       Int               @default(1)
-  allowedStartHour    Int               @default(9)
-  allowedEndHour      Int               @default(21)
-  weekendsEnabled     Boolean           @default(false)
-  triggerMode         String            @default("user")
-  stopOnReply         Boolean           @default(true)
-  followUpSteps       Json?
-  metaTemplateId      String?
-  templateVariables   Json?
-  templateEnabled     Boolean           @default(false)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-
-  business  Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance  WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  reminders Reminder[]
+  id                 String            @id @default(uuid())
+  businessId         String
+  instanceId         String?           @unique
+  enabled            Boolean           @default(false)
+  firstDelayMinutes  Int               @default(15)
+  secondDelayMinutes Int               @default(60)
+  thirdDelayMinutes  Int               @default(240)
+  maxDailyAttempts   Int               @default(3)
+  pressureLevel      Int               @default(1)
+  allowedStartHour   Int               @default(9)
+  allowedEndHour     Int               @default(21)
+  weekendsEnabled    Boolean           @default(false)
+  triggerMode        String            @default("user")
+  stopOnReply        Boolean           @default(true)
+  followUpSteps      Json?
+  metaTemplateId     String?
+  templateVariables  Json?
+  templateEnabled    Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  business           Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance           WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  reminders          Reminder[]
 
   @@index([businessId])
 }
@@ -1015,10 +803,9 @@ model Reminder {
   generatedMessage String?
   configId         String?
   createdAt        DateTime          @default(now())
-  
-  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
-  config   FollowUpConfig?   @relation(fields: [configId], references: [id], onDelete: SetNull)
+  business         Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  config           FollowUpConfig?   @relation(fields: [configId], references: [id])
+  instance         WhatsAppInstance? @relation(fields: [instanceId], references: [id])
 
   @@index([businessId, status, scheduledAt])
   @@index([businessId, contactPhone])
@@ -1065,19 +852,8 @@ model ContactSettings {
   @@index([businessId, contactPhone])
 }
 
-enum OrderStatus {
-  PENDING_PAYMENT
-  AWAITING_VOUCHER
-  PAID
-  PROCESSING
-  SHIPPED
-  DELIVERED
-  CANCELLED
-  REFUNDED
-}
-
 model Order {
-  id                    String      @id @default(uuid())
+  id                    String            @id @default(uuid())
   businessId            String
   instanceId            String?
   contactPhone          String
@@ -1089,23 +865,18 @@ model Order {
   shippingZip           String?
   shippingCountry       String?
   locationCoordinates   String?
-  deliveryZoneId        String?
   notes                 String?
   totalAmount           Float
   subtotalAmount        Float?
-  shippingCost          Float?      @default(0)
-  paidAmount            Float       @default(0)
-  pendingAmount         Float?
-  currencyCode          String      @default("PEN")
-  currencySymbol        String      @default("S/.")
-  status                OrderStatus @default(PENDING_PAYMENT)
-  stripeSessionId       String?     @unique
+  shippingCost          Float?            @default(0)
+  currencyCode          String            @default("PEN")
+  currencySymbol        String            @default("S/.")
+  status                OrderStatus       @default(PENDING_PAYMENT)
+  stripeSessionId       String?           @unique
   stripePaymentIntentId String?
   paidAt                DateTime?
   voucherImageUrl       String?
   voucherReceivedAt     DateTime?
-  lastVoucherAmount     Float?
-  lastVoucherBank       String?
   deliveryAgentName     String?
   deliveryAgentPhone    String?
   deliveryNotes         String?
@@ -1116,16 +887,20 @@ model Order {
   promotionName         String?
   discountType          String?
   discountValue         Float?
-  discountAmount        Float?      @default(0)
+  discountAmount        Float?            @default(0)
   giftItems             String?
   idempotencyKey        String?
   orderSource           String?
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
-
-  items     OrderItem[]
-  instance  WhatsAppInstance? @relation("OrderInstance", fields: [instanceId], references: [id], onDelete: SetNull)
-  promotion Promotion?        @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  deliveryZoneId        String?
+  lastVoucherAmount     Float?
+  paidAmount            Float             @default(0)
+  pendingAmount         Float?
+  lastVoucherBank       String?
+  instance              WhatsAppInstance? @relation("OrderInstance", fields: [instanceId], references: [id])
+  promotion             Promotion?        @relation(fields: [promotionId], references: [id])
+  items                 OrderItem[]
 
   @@unique([businessId, contactPhone, idempotencyKey])
   @@index([businessId, status])
@@ -1137,25 +912,24 @@ model Order {
 }
 
 model Promotion {
-  id             String    @id @default(uuid())
-  businessId     String
-  instanceId     String?
-  name           String
-  description    String?
-  discountType   String    @default("PERCENTAGE")
-  discountValue  Float     @default(0)
-  giftItems      String?
-  minPurchase    Float?
-  maxUses        Int?
-  usedCount      Int       @default(0)
-  validFrom      DateTime?
-  validUntil     DateTime?
-  isActive       Boolean   @default(true)
-  keywords       String[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  orders Order[]
+  id            String    @id @default(uuid())
+  businessId    String
+  instanceId    String?
+  name          String
+  description   String?
+  discountType  String    @default("PERCENTAGE")
+  discountValue Float     @default(0)
+  giftItems     String?
+  minPurchase   Float?
+  maxUses       Int?
+  usedCount     Int       @default(0)
+  validFrom     DateTime?
+  validUntil    DateTime?
+  isActive      Boolean   @default(true)
+  keywords      String[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  orders        Order[]
 
   @@index([businessId, isActive])
   @@index([businessId, instanceId])
@@ -1166,12 +940,11 @@ model OrderItem {
   orderId      String
   productId    String?
   productTitle String
-  variation    String?
   quantity     Int     @default(1)
   unitPrice    Float
   imageUrl     String?
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variation    String?
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }
@@ -1259,7 +1032,7 @@ model PaymentLinkRequest {
 model AgentV2Config {
   id         String   @id @default(uuid())
   businessId String   @unique
-  skills     Json     @default("{\"search_product\":true,\"payment\":true,\"followup\":true,\"media\":true,\"crm\":true}")
+  skills     Json     @default("{\"crm\": true, \"media\": true, \"payment\": true, \"followup\": true, \"search_product\": true}")
   prompts    Json     @default("{}")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -1297,14 +1070,6 @@ model LearnedRule {
   @@index([businessId, enabled])
 }
 
-enum KnowledgeDocType {
-  TEXT
-  FAQ
-  POLICY
-  GUIDE
-  OTHER
-}
-
 model KnowledgeDocument {
   id         String           @id @default(uuid())
   businessId String
@@ -1323,50 +1088,30 @@ model KnowledgeDocument {
   @@index([businessId, type])
 }
 
-enum PromptSectionType {
-  CORE
-  TONE
-  SALES
-  POLICIES
-  FAQ
-  OBJECTIONS
-  CLOSING
-  OTHER
-}
-
 model PromptSection {
-  id          String            @id @default(uuid())
-  businessId  String
-  instanceId  String?
-  title       String
-  content     String
-  type        PromptSectionType @default(OTHER)
-  isCore      Boolean           @default(false)
-  priority    Int               @default(0)
-  embedding   Json?
-  metadata    Json?
-  sourceType  String            @default("manual")
-  keywords    String[]          @default([])
-  enabled     Boolean           @default(true)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-
-  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance? @relation("PromptSectionInstance", fields: [instanceId], references: [id], onDelete: SetNull)
+  id         String            @id @default(uuid())
+  businessId String
+  instanceId String?
+  title      String
+  content    String
+  type       PromptSectionType @default(OTHER)
+  isCore     Boolean           @default(false)
+  priority   Int               @default(0)
+  embedding  Json?
+  metadata   Json?
+  sourceType String            @default("manual")
+  keywords   String[]          @default([])
+  enabled    Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  business   Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance   WhatsAppInstance? @relation("PromptSectionInstance", fields: [instanceId], references: [id])
 
   @@index([businessId])
   @@index([businessId, instanceId])
   @@index([businessId, enabled])
   @@index([businessId, isCore])
   @@index([businessId, type])
-}
-
-enum AppointmentStatus {
-  PENDING
-  CONFIRMED
-  CANCELLED
-  COMPLETED
-  NO_SHOW
 }
 
 model Appointment {
@@ -1393,9 +1138,8 @@ model Appointment {
   createdBy          String            @default("agent")
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
-
-  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  business           Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  instance           WhatsAppInstance? @relation(fields: [instanceId], references: [id])
 
   @@index([businessId, scheduledAt])
   @@index([businessId, status])
@@ -1405,73 +1149,45 @@ model Appointment {
 }
 
 model BusinessAvailability {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   businessId  String
   dayOfWeek   Int
   startTime   String
   endTime     String
-  isBlocked   Boolean  @default(false)
+  isBlocked   Boolean   @default(false)
   blockDate   DateTime?
   blockReason String?
-  createdAt   DateTime @default(now())
-
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([businessId, dayOfWeek])
   @@index([businessId, blockDate])
 }
 
-enum ReasoningEffort {
-  none
-  low
-  medium
-  high
-  xhigh
-}
-
 model PlatformSettings {
-  id                    String          @id @default("default")
-  defaultModelV1        String          @default("gpt-4.1-mini")
-  defaultModelV2        String          @default("gpt-5")
-  vendorModelV2         String          @default("gpt-5.2")
-  observerModelV2       String          @default("gpt-4.1-mini")
-  refinerModelV2        String          @default("gpt-4.1-mini")
-  defaultReasoningV1    ReasoningEffort @default(none)
-  defaultReasoningV2    ReasoningEffort @default(medium)
-  availableModels       String[]        @default(["gpt-4.1-mini", "gpt-4.1", "gpt-4.1-nano", "gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.2"])
-  maxTokensPerRequest   Int             @default(4096)
-  enableGPT5Features    Boolean         @default(true)
-  glassMode             Boolean         @default(false)
-  enableMetaCoexist     Boolean         @default(false)
-  brandingEnabled       Boolean         @default(true)
-  appName               String          @default("EfficoreChat")
-  appTagline            String          @default("WhatsApp Business Platform")
-  logoUrl               String?
-  faviconUrl            String?
-  primaryColor          String          @default("#00D4FF")
-  secondaryColor        String          @default("#8B5CF6")
-  accentColor           String          @default("#10B981")
-  updatedAt             DateTime        @updatedAt
-  updatedBy             String?
-}
-
-enum BroadcastStatus {
-  DRAFT
-  SCHEDULED
-  RUNNING
-  PAUSED
-  COMPLETED
-  CANCELLED
-  FAILED
-}
-
-enum BroadcastMessageType {
-  TEXT
-  IMAGE
-  VIDEO
-  AUDIO
-  DOCUMENT
-  TEMPLATE
+  id                  String          @id @default("default")
+  defaultModelV1      String          @default("gpt-4.1-mini")
+  defaultModelV2      String          @default("gpt-5")
+  vendorModelV2       String          @default("gpt-5.2")
+  observerModelV2     String          @default("gpt-4.1-mini")
+  refinerModelV2      String          @default("gpt-4.1-mini")
+  defaultReasoningV1  ReasoningEffort @default(none)
+  defaultReasoningV2  ReasoningEffort @default(medium)
+  availableModels     String[]        @default(["gpt-4.1-mini", "gpt-4.1", "gpt-4.1-nano", "gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.2"])
+  maxTokensPerRequest Int             @default(4096)
+  enableGPT5Features  Boolean         @default(true)
+  glassMode           Boolean         @default(false)
+  enableMetaCoexist   Boolean         @default(false)
+  brandingEnabled     Boolean         @default(true)
+  appName             String          @default("EfficoreChat")
+  appTagline          String          @default("WhatsApp Business Platform")
+  logoUrl             String?
+  faviconUrl          String?
+  primaryColor        String          @default("#00D4FF")
+  secondaryColor      String          @default("#8B5CF6")
+  accentColor         String          @default("#10B981")
+  updatedAt           DateTime        @updatedAt
+  updatedBy           String?
 }
 
 model BroadcastCampaign {
@@ -1500,14 +1216,277 @@ model BroadcastCampaign {
   createdBy       String?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
-
-  instance WhatsAppInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
-  logs     BroadcastLog[]
+  instance        WhatsAppInstance?    @relation(fields: [instanceId], references: [id])
+  logs            BroadcastLog[]
 
   @@index([businessId, status])
   @@index([businessId, createdAt])
   @@index([status, scheduledAt])
   @@index([instanceId])
+}
+
+model BroadcastLog {
+  id           String             @id @default(uuid())
+  campaignId   String
+  contactPhone String
+  contactName  String?
+  status       BroadcastLogStatus @default(PENDING)
+  usedTemplate Boolean            @default(false)
+  sentAt       DateTime?
+  error        String?
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+  campaign     BroadcastCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, status])
+  @@index([campaignId, createdAt])
+}
+
+model ConfigurationBackup {
+  id          String   @id @default(uuid())
+  businessId  String
+  instanceId  String?
+  configJson  Json
+  description String?
+  backupType  String   @default("manual")
+  version     String   @default("1.0")
+  createdAt   DateTime @default(now())
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([businessId, instanceId])
+}
+
+model WebhookRawLog {
+  id              String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  source          String    @default("META")
+  endpoint        String
+  method          String    @default("POST")
+  headers         Json?
+  queryParams     Json?
+  body            Json
+  phoneNumberId   String?
+  businessId      String?
+  instanceId      String?
+  messageCount    Int       @default(0)
+  statusCount     Int       @default(0)
+  processingError String?
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([source, createdAt])
+  @@index([phoneNumberId, createdAt])
+  @@index([businessId, createdAt])
+}
+
+enum UserRole {
+  ADMIN
+  ASESOR
+}
+
+enum BusinessRoleType {
+  OWNER
+  ADVISOR
+}
+
+enum ReferralCodeType {
+  STANDARD
+  ENTERPRISE
+}
+
+enum SubscriptionTier {
+  STANDARD
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionSource {
+  STRIPE
+  ENTERPRISE
+  TRIAL
+}
+
+enum SystemEventType {
+  USER_REGISTERED
+  USER_LOGIN
+  USER_LOGOUT
+  BUSINESS_CREATED
+  BUSINESS_UPDATED
+  INSTANCE_CREATED
+  INSTANCE_CONNECTED
+  INSTANCE_DISCONNECTED
+  INSTANCE_ERROR
+  MESSAGE_SENT
+  MESSAGE_RECEIVED
+  AI_RESPONSE
+  AI_ERROR
+  ORDER_CREATED
+  ORDER_PAID
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  SUBSCRIPTION_STARTED
+  SUBSCRIPTION_CANCELLED
+  TOOL_EXECUTED
+  TOOL_ERROR
+  WEBHOOK_RECEIVED
+  API_ERROR
+  SYSTEM_ERROR
+  REMINDER_SENT
+  APPOINTMENT_CREATED
+  APPOINTMENT_CONFIRMED
+}
+
+enum EventSeverity {
+  DEBUG
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum SubscriptionStatus {
+  PENDING
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum BusinessObjective {
+  SALES
+  APPOINTMENTS
+}
+
+enum WhatsAppProvider {
+  BAILEYS
+  META_CLOUD
+  META_COEXIST
+  META_MANAGED
+}
+
+enum InstanceEventType {
+  CREATED
+  CONNECTED
+  DISCONNECTED
+  PROVIDER_CHANGED
+  DELETED
+  RECONNECTED
+  QR_GENERATED
+  SESSION_EXPIRED
+  ERROR
+}
+
+enum MetaCoexistStatus {
+  PENDING
+  AWAITING_QR
+  CONNECTED
+  ACTIVE
+  REVOKED
+  BLOCKED
+  DISABLED
+}
+
+enum MetaManagedStatus {
+  PENDING_REGISTRATION
+  PENDING_VERIFICATION
+  VERIFICATION_FAILED
+  ACTIVE
+  SUSPENDED
+  DISCONNECTED
+}
+
+enum KnowledgeCategory {
+  BUSINESS_INFO
+  PRODUCTS
+  POLICIES
+  FAQ
+  PROCESSES
+  OBJECTIONS
+  DELIVERY
+  PROMOTIONS
+  CUSTOM
+}
+
+enum IntentType {
+  GREETING
+  PRODUCT_INQUIRY
+  PRICE_INQUIRY
+  OBJECTION
+  READY_TO_BUY
+  SCHEDULE_APPOINTMENT
+  SUPPORT_REQUEST
+  COMPLAINT
+  FOLLOWUP
+  CLOSING
+  OTHER
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  AWAITING_VOUCHER
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum KnowledgeDocType {
+  TEXT
+  FAQ
+  POLICY
+  GUIDE
+  OTHER
+}
+
+enum PromptSectionType {
+  CORE
+  TONE
+  SALES
+  POLICIES
+  FAQ
+  OBJECTIONS
+  CLOSING
+  OTHER
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum ReasoningEffort {
+  none
+  low
+  medium
+  high
+  xhigh
+}
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum BroadcastMessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  TEMPLATE
 }
 
 enum BroadcastLogStatus {
@@ -1516,74 +1495,4 @@ enum BroadcastLogStatus {
   SENT
   FAILED
   SKIPPED
-}
-
-model BroadcastLog {
-  id           String              @id @default(uuid())
-  campaignId   String
-  contactPhone String
-  contactName  String?
-  status       BroadcastLogStatus  @default(PENDING)
-  usedTemplate Boolean             @default(false)
-  sentAt       DateTime?
-  error        String?
-  metadata     Json?
-  createdAt    DateTime            @default(now())
-
-  campaign BroadcastCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@index([campaignId, status])
-  @@index([campaignId, createdAt])
-}
-
-model ConfigurationBackup {
-  id           String   @id @default(uuid())
-  businessId   String
-  instanceId   String?
-  configJson   Json
-  description  String?
-  backupType   String   @default("manual") // manual, auto_before_clear, auto_before_import
-  version      String   @default("1.0")
-  createdAt    DateTime @default(now())
-
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  @@index([businessId, createdAt])
-  @@index([businessId, instanceId])
-}
-
-model MediaShortUrl {
-  id          String   @id @default(uuid())
-  shortId     String   @unique
-  originalUrl String
-  businessId  String?
-  mediaType   String?
-  createdAt   DateTime @default(now())
-
-  business Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
-
-  @@index([shortId])
-  @@index([businessId, createdAt])
-}
-
-model WebhookRawLog {
-  id              String   @id @default(uuid())
-  source          String   @default("META")
-  endpoint        String
-  method          String   @default("POST")
-  headers         Json?
-  queryParams     Json?
-  body            Json
-  phoneNumberId   String?
-  businessId      String?
-  instanceId      String?
-  messageCount    Int      @default(0)
-  statusCount     Int      @default(0)
-  processingError String?
-  processedAt     DateTime?
-  createdAt       DateTime @default(now())
-
-  @@index([source, createdAt])
-  @@index([phoneNumberId, createdAt])
-  @@index([businessId, createdAt])
 }
