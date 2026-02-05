@@ -43,8 +43,7 @@ export default function CatalogPage() {
   useEffect(() => {
     async function fetchCatalog() {
       try {
-        // Use relative URL to leverage Next.js rewrite proxy
-        const res = await fetch(`/public/catalog/${slug}`);
+        const res = await fetch(`/api/public/catalog/${slug}`);
         const data = await res.json();
         
         if (!res.ok) {
