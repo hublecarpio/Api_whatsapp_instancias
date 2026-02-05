@@ -116,16 +116,15 @@ export class BuscarProductoTool extends BaseTool {
           }
           
           // Product has in-stock variations - show each with its price
-          response += `• ${product.title}:\n`;
+          response += `📦 ${product.title}:\n`;
+          if (product.imageUrl) {
+            response += `  🖼️ FOTO DEL PRODUCTO: ${product.imageUrl}\n`;
+          }
           for (const variation of variationsData) {
             response += `    - ${variation.name}: ${currencySymbol}${variation.price}\n`;
           }
-          
           if (product.description) {
             response += `  ${product.description.slice(0, 80)}...\n`;
-          }
-          if (product.imageUrl) {
-            response += `  Imagen: ${product.imageUrl}\n`;
           }
           
           // Add product with variations array to structured data
@@ -140,9 +139,9 @@ export class BuscarProductoTool extends BaseTool {
           addedCount++;
         } else {
           // No variations - simple product
-          response += `• ${product.title}: ${currencySymbol}${product.price}`;
+          response += `📦 ${product.title}: ${currencySymbol}${product.price}`;
           if (product.imageUrl) {
-            response += `\n  Imagen: ${product.imageUrl}`;
+            response += `\n  🖼️ FOTO DEL PRODUCTO: ${product.imageUrl}`;
           }
           if (product.description) {
             response += `\n  ${product.description.slice(0, 80)}...`;

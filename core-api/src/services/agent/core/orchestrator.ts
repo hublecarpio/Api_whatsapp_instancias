@@ -358,7 +358,9 @@ export class AgentOrchestrator {
         toolCallCount++;
       }
 
-      const finalResponse = response.content || 'Lo siento, no pude generar una respuesta.';
+      let finalResponse = response.content || 'Lo siento, no pude generar una respuesta.';
+
+      finalResponse = this.ensureImageUrlsIncluded(finalResponse, toolsExecuted);
 
       const processingTimeMs = Date.now() - startTime;
       console.log(`[Orchestrator] ═══════════════════════════════════════════════════════`);
@@ -412,6 +414,45 @@ export class AgentOrchestrator {
       // Re-throw the error so callers can handle fallback to V1
       throw error;
     }
+  }
+
+  private ensureImageUrlsIncluded(
+    response: string,
+    toolsExecuted: Array<{ name: string; success: boolean; result: string }>
+  ): string {
+    const photoKeywords = /\b(foto|fotos|imagen|imágenes|imagenes|muest|mostrar|muestro|envío la|envio la|aquí tienes|aqui tienes|mándame|mandame|ver el producto|envíame|enviame|te comparto|te envío|te envio)\b/i;
+    const urlPattern = /https?:\/\/[^\s)]+\.(png|jpg|jpeg|webp|gif)/i;
+
+    const mentionsPhoto = photoKeywords.test(response);
+    const hasImageUrl = urlPattern.test(response);
+
+    if (!mentionsPhoto || hasImageUrl) {
+      return response;
+    }
+
+    const imageUrls: string[] = [];
+
+    for (const tool of toolsExecuted) {
+      if (tool.name === 'ejecutar_accion' && tool.success && tool.result) {
+        const urlMatches = tool.result.match(/https?:\/\/[^\s)]+\.(?:png|jpg|jpeg|webp|gif)/gi);
+        if (urlMatches) {
+          for (const url of urlMatches) {
+            if (!imageUrls.includes(url)) {
+              imageUrls.push(url);
+            }
+          }
+        }
+      }
+    }
+
+    if (imageUrls.length > 0) {
+      console.log(`[Orchestrator] 🖼️ IMAGE GUARD: LLM mentioned photos but omitted ${imageUrls.length} URL(s) - appending them`);
+      response += '\n\n' + imageUrls.join('\n');
+    } else {
+      console.log(`[Orchestrator] ⚠️ IMAGE GUARD: LLM mentioned photos but no image URLs found in tool results`);
+    }
+
+    return response;
   }
 }
 

@@ -356,9 +356,17 @@ REGLAS CRÍTICAS:
 ✅ variation: Usa el nombre EXACTO como viene de la DB (ej: "100 ml", NO "100ml")
 ${convContext.existingOrder ? `✅ Orden activa: Usa agregar_producto_orden, NUNCA confirmar_pedido` : `✅ deliveryZoneId: Requerido para confirmar_pedido`}
 
+FOTOS DE PRODUCTOS:
+Si buscar_producto retorna URLs de imagen (🖼️ FOTO DEL PRODUCTO: https://...):
+- SIEMPRE incluye las URLs en tu respuesta final
+- Cada URL en su propia línea
+- Formato: "Foto de [producto]: https://url-completa"
+- NUNCA omitas las URLs de imagen - LLM1 las necesita para enviar las fotos al cliente
+
 ERRORES A EVITAR:
 ❌ Inventar UUIDs - Usa SOLO los que retorna buscar_producto
 ❌ Modificar el nombre de variation - "100 ml" ≠ "100ml" ≠ "100ML"
+❌ Omitir URLs de imagen retornadas por buscar_producto
 ${convContext.existingOrder ? `❌ Usar confirmar_pedido cuando ya hay orden activa - usa agregar_producto_orden` : `❌ Omitir deliveryZoneId cuando usas items[] en confirmar_pedido`}
 
 REGISTRO DE VOUCHER/PAGO:
