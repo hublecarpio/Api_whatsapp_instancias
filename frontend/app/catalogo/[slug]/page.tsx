@@ -112,21 +112,21 @@ export default function CatalogPage() {
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
-            {catalog.logoUrl && (
+            {catalog.logoUrl ? (
               <Image
                 src={catalog.logoUrl}
                 alt={catalog.businessName}
-                width={48}
+                width={120}
                 height={48}
-                className="rounded-full object-cover"
+                className="object-contain max-h-12"
+                style={{ width: 'auto', height: '48px' }}
               />
-            )}
-            <div>
+            ) : (
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{catalog.businessName}</h1>
-              {catalog.industry && (
-                <p className="text-sm text-gray-500">{catalog.industry}</p>
-              )}
-            </div>
+            )}
+            {catalog.industry && !catalog.logoUrl && (
+              <p className="text-sm text-gray-500">{catalog.industry}</p>
+            )}
           </div>
           {catalog.description && (
             <p className="mt-2 text-gray-600 text-sm">{catalog.description}</p>

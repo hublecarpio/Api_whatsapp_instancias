@@ -162,11 +162,14 @@ router.get('/catalog/:slug', async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
     
+    console.log('[CATALOG] Request for slug:', slug);
+    
     if (!slug) {
       return res.status(400).json({ error: 'Se requiere el identificador del catálogo' });
     }
 
     const normalizedSlug = slug.toLowerCase();
+    console.log('[CATALOG] Normalized slug:', normalizedSlug);
 
     // First, try to find by WhatsApp instance slug (preferred - instance-specific catalog)
     const instance = await prisma.whatsAppInstance.findFirst({
@@ -208,10 +211,13 @@ router.get('/catalog/:slug', async (req: Request, res: Response) => {
       }
     });
 
+    console.log('[CATALOG] Instance found:', instance ? { id: instance.id, name: instance.name, slug: normalizedSlug } : 'NOT FOUND');
+
     if (instance) {
       // Instance-level catalog found
       const whatsappPhone = instance.phoneNumber?.replace(/\D/g, '') || null;
       const logoUrl = instance.catalogLogoUrl || instance.business.logoUrl;
+      console.log('[CATALOG] Returning instance catalog with', instance.products.length, 'products');
 
       return res.json({
         success: true,
@@ -305,7 +311,10 @@ router.get('/catalog/:slug', async (req: Request, res: Response) => {
       }
     });
 
+    console.log('[CATALOG] Business found:', business ? { id: business.id, name: business.name } : 'NOT FOUND');
+
     if (!business) {
+      console.log('[CATALOG] Neither instance nor business found for slug:', normalizedSlug);
       return res.status(404).json({ error: 'Catálogo no encontrado' });
     }
 
