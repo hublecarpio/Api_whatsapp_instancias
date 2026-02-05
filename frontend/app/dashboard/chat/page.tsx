@@ -1640,6 +1640,9 @@ export default function ChatPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-white truncate">{selectedContactName || `+${selectedPhone}`}</p>
+                    {selectedContactName && selectedPhone && (
+                      <p className="text-[10px] text-gray-400 truncate -mt-0.5">+{selectedPhone}</p>
+                    )}
                     <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
                       <button 
                         onClick={handleToggleContactBot} 

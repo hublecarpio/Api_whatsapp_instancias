@@ -1032,6 +1032,9 @@ body.glass-mode .mobile-drawer {
 .-ml-1 {
   margin-left: -0.25rem;
 }
+.-mt-0\.5 {
+  margin-top: -0.125rem;
+}
 .mb-0\.5 {
   margin-bottom: 0.125rem;
 }
