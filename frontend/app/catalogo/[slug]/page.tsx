@@ -116,16 +116,17 @@ export default function CatalogPage() {
   }, [slug]);
 
   const getProductPrice = (product: Product, variationIndex?: number) => {
-    if (variationIndex !== undefined && product.pricePerVariation[variationIndex]) {
+    if (variationIndex !== undefined && product.pricePerVariation.length > variationIndex) {
       return product.pricePerVariation[variationIndex];
     }
-    return product.price;
+    return product.displayPrice ?? product.price;
   };
 
   const getWhatsAppLink = (product: Product, variationIndex?: number) => {
     if (!catalog?.whatsappPhone) return null;
     
-    const variation = variationIndex !== undefined && product.variations[variationIndex] 
+    const hasSelectedVariation = variationIndex !== undefined && product.variations[variationIndex];
+    const variation = hasSelectedVariation
       ? ` (${product.variations[variationIndex]})` 
       : '';
     const price = getProductPrice(product, variationIndex);
@@ -235,7 +236,7 @@ export default function CatalogPage() {
                           <option value="">Seleccionar variación</option>
                           {product.variations.map((variation, idx) => (
                             <option key={idx} value={idx}>
-                              {variation} - {catalog.currencySymbol}{(product.pricePerVariation[idx] || product.price).toFixed(2)}
+                              {variation} - {catalog.currencySymbol}{(product.pricePerVariation.length > idx ? product.pricePerVariation[idx] : product.displayPrice ?? product.price).toFixed(2)}
                             </option>
                           ))}
                         </select>
