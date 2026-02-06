@@ -340,9 +340,9 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
         config: {
           model: (business as any).v3Llm1Model || (business as any).openaiModel || 'gpt-4.1-mini',
           llm1Model: (business as any).v3Llm1Model || (business as any).openaiModel || 'gpt-4.1-mini',
-          llm1Provider: ((business as any).v3Llm1Provider || 'openai') as 'openai' | 'openrouter',
+          llm1Provider: (business as any).v3Llm1Provider || 'openai',
           llm2Model: (business as any).v3Llm2Model || 'gpt-4.1',
-          llm2Provider: ((business as any).v3Llm2Provider || 'openai') as 'openai' | 'openrouter',
+          llm2Provider: (business as any).v3Llm2Provider || 'openai',
           temperature: 0.7,
           maxTokens: 2000,
           maxToolCalls: 5
@@ -2236,9 +2236,9 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
         config: {
           model: (business as any).v3Llm1Model || (business as any).openaiModel || 'gpt-4.1-mini',
           llm1Model: (business as any).v3Llm1Model || (business as any).openaiModel || 'gpt-4.1-mini',
-          llm1Provider: ((business as any).v3Llm1Provider || 'openai') as 'openai' | 'openrouter',
+          llm1Provider: (business as any).v3Llm1Provider || 'openai',
           llm2Model: (business as any).v3Llm2Model || 'gpt-4.1',
-          llm2Provider: ((business as any).v3Llm2Provider || 'openai') as 'openai' | 'openrouter',
+          llm2Provider: (business as any).v3Llm2Provider || 'openai',
           temperature: 0.7,
           maxTokens: 2000,
           maxToolCalls: 5

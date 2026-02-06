@@ -315,26 +315,142 @@ export class OpenRouterAdapter implements ILLMProvider {
 
 export type LLMProviderType = 'openai' | 'openrouter' | 'gemini';
 
+const OPENROUTER_MODEL_MAP: Record<string, string> = {
+  'gpt-4o': 'openai/gpt-4o',
+  'gpt-4o-mini': 'openai/gpt-4o-mini',
+  'gpt-4.1': 'openai/gpt-4.1',
+  'gpt-4.1-mini': 'openai/gpt-4.1-mini',
+  'gpt-4.1-nano': 'openai/gpt-4.1-nano',
+  'gpt-4-turbo': 'openai/gpt-4-turbo',
+  'gpt-3.5-turbo': 'openai/gpt-3.5-turbo',
+  'gemini-2.5-flash': 'google/gemini-2.5-flash-preview',
+  'gemini-2.5-pro': 'google/gemini-2.5-pro-preview',
+  'gemini-2.0-flash': 'google/gemini-2.0-flash-001',
+  'gemini-1.5-pro': 'google/gemini-pro-1.5',
+  'gemini-1.5-flash': 'google/gemini-flash-1.5',
+};
+
+function mapModelToOpenRouter(model: string): string {
+  if (model.includes('/')) return model;
+  if (OPENROUTER_MODEL_MAP[model]) return OPENROUTER_MODEL_MAP[model];
+  if (model.startsWith('gpt-')) return `openai/${model}`;
+  if (model.startsWith('gemini-')) return `google/${model}`;
+  if (model.startsWith('claude-')) return `anthropic/${model}`;
+  return model;
+}
+
+export class FallbackLLMProvider implements ILLMProvider {
+  readonly name: string;
+  private primary: ILLMProvider;
+  private fallback: OpenRouterAdapter;
+
+  constructor(primary: ILLMProvider, fallback: OpenRouterAdapter) {
+    this.primary = primary;
+    this.fallback = fallback;
+    this.name = `${primary.name}+openrouter-fallback`;
+  }
+
+  isConfigured(): boolean {
+    return this.primary.isConfigured();
+  }
+
+  async chat(
+    messages: LLMMessage[],
+    config: LLMConfig,
+    tools?: OpenAIToolFormat[],
+    traceId?: string
+  ): Promise<LLMResponse> {
+    const prefix = traceId ? `[Fallback][TRACE:${traceId}]` : `[Fallback]`;
+
+    try {
+      return await this.primary.chat(messages, config, tools, traceId);
+    } catch (primaryError: any) {
+      if (!this.fallback.isConfigured()) {
+        console.error(`${prefix} ${this.primary.name} failed and OpenRouter fallback not configured - re-throwing`);
+        throw primaryError;
+      }
+
+      const errorType = primaryError?.status || primaryError?.code || 'UNKNOWN';
+      const errorMsg = primaryError?.message || 'Unknown error';
+      console.warn(`${prefix} ⚠️ PRIMARY FAILED (${this.primary.name}) - ${errorType}: ${errorMsg}`);
+
+      const openRouterModel = mapModelToOpenRouter(config.model);
+      console.warn(`${prefix} → FALLING BACK to OpenRouter with model: ${openRouterModel} (original: ${config.model})`);
+
+      const fallbackConfig: LLMConfig = {
+        ...config,
+        model: openRouterModel
+      };
+
+      try {
+        const result = await this.fallback.chat(messages, fallbackConfig, tools, traceId);
+        console.log(`${prefix} ✓ OpenRouter fallback SUCCEEDED for model ${openRouterModel}`);
+        return result;
+      } catch (fallbackError: any) {
+        const fbErrorType = fallbackError?.status || fallbackError?.code || 'UNKNOWN';
+        const fbErrorMsg = fallbackError?.message || 'Unknown error';
+        console.error(`${prefix} ✗ OpenRouter fallback ALSO FAILED - ${fbErrorType}: ${fbErrorMsg}`);
+        console.error(`${prefix} ✗ Both ${this.primary.name} and OpenRouter failed for model ${config.model}. Throwing original error.`);
+        throw primaryError;
+      }
+    }
+  }
+}
+
 export class LLMFactory {
-  private static providers: Map<LLMProviderType, ILLMProvider> = new Map();
+  private static providers: Map<string, ILLMProvider> = new Map();
+  private static openRouterFallback: OpenRouterAdapter | null = null;
+
+  private static getOpenRouterFallback(): OpenRouterAdapter {
+    if (!this.openRouterFallback) {
+      this.openRouterFallback = new OpenRouterAdapter();
+    }
+    return this.openRouterFallback;
+  }
 
   static getProvider(type: LLMProviderType = 'openai'): ILLMProvider {
-    let provider = this.providers.get(type);
-    
+    if (type === 'openrouter') {
+      let provider = this.providers.get('openrouter-direct');
+      if (!provider) {
+        provider = new OpenRouterAdapter();
+        this.providers.set('openrouter-direct', provider);
+      }
+      return provider;
+    }
+
+    const cacheKey = `${type}-with-fallback`;
+    let provider = this.providers.get(cacheKey);
+
     if (!provider) {
+      let primaryProvider: ILLMProvider;
       switch (type) {
         case 'openai':
-          provider = new OpenAIAdapter();
+          primaryProvider = new OpenAIAdapter();
           break;
-        case 'openrouter':
-          provider = new OpenRouterAdapter();
-          break;
+        case 'gemini':
+          console.warn(`[LLMFactory] Gemini direct adapter not yet implemented - routing through OpenRouter`);
+          const geminiViaRouter = this.getOpenRouterFallback();
+          if (geminiViaRouter.isConfigured()) {
+            this.providers.set(cacheKey, geminiViaRouter);
+            return geminiViaRouter;
+          }
+          throw new Error('Gemini provider requires OPENROUTER_API_KEY (Gemini is served via OpenRouter)');
         default:
-          provider = new OpenAIAdapter();
+          primaryProvider = new OpenAIAdapter();
       }
-      this.providers.set(type, provider);
+
+      const fallback = this.getOpenRouterFallback();
+      if (fallback.isConfigured()) {
+        provider = new FallbackLLMProvider(primaryProvider, fallback);
+        console.log(`[LLMFactory] Created ${type} provider with OpenRouter fallback`);
+      } else {
+        provider = primaryProvider;
+        console.log(`[LLMFactory] Created ${type} provider WITHOUT fallback (OPENROUTER_API_KEY not set)`);
+      }
+
+      this.providers.set(cacheKey, provider);
     }
-    
+
     return provider;
   }
 
@@ -349,6 +465,13 @@ export class LLMFactory {
   }
 
   static isAnyProviderConfigured(): boolean {
-    return this.getProvider('openai').isConfigured() || this.getProvider('openrouter').isConfigured();
+    const openaiAdapter = new OpenAIAdapter();
+    const openrouterAdapter = new OpenRouterAdapter();
+    return openaiAdapter.isConfigured() || openrouterAdapter.isConfigured();
+  }
+
+  static resetProviders(): void {
+    this.providers.clear();
+    this.openRouterFallback = null;
   }
 }

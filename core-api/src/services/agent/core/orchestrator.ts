@@ -1,6 +1,6 @@
 import { ToolContext, ToolAvailabilityContext, ToolDefinitionContext, LLMMessage, LLMConfig, OpenAIToolFormat, ChatMessage } from './types.js';
 import { toolRegistry } from './toolRegistry.js';
-import { LLMFactory, ILLMProvider } from './llmAdapter.js';
+import { LLMFactory, ILLMProvider, LLMProviderType } from './llmAdapter.js';
 import { ContextBuilder, BusinessContext, ConversationContext, TriggerContext, loadBusinessContext, loadConversationContext, loadConversationHistory } from '../prompts/contextBuilder.js';
 import { loadCustomToolsForBusiness } from '../tools/customToolAdapter.js';
 import { registerAllNativeTools } from '../tools/index.js';
@@ -29,14 +29,14 @@ function redactForLog(obj: any, maxLen: number = 150): string {
 
 export interface OrchestratorConfig {
   maxToolCalls?: number;
-  llmProvider?: 'openai' | 'openrouter';
+  llmProvider?: LLMProviderType;
   model?: string;
   temperature?: number;
   maxTokens?: number;
   llm1Model?: string;
-  llm1Provider?: 'openai' | 'openrouter';
+  llm1Provider?: LLMProviderType;
   llm2Model?: string;
-  llm2Provider?: 'openai' | 'openrouter';
+  llm2Provider?: LLMProviderType;
 }
 
 export interface OrchestratorInput {
