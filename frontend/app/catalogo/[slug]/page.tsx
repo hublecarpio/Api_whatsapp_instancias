@@ -67,15 +67,15 @@ function DescriptionPopover({ description }: { description: string }) {
       </p>
 
       {open && (
-        <div className="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 animate-in fade-in slide-in-from-top-1 duration-200">
-          <div className="absolute -top-2 left-4 w-4 h-4 bg-white border-l border-t border-gray-200 rotate-45"></div>
-          <p className="text-sm text-gray-600 leading-relaxed relative z-10">{description}</p>
+        <div className="absolute z-30 left-1/2 -translate-x-1/2 bottom-full mb-2 w-[90vw] max-w-sm bg-white border border-gray-200 rounded-xl shadow-lg p-3 animate-in fade-in slide-in-from-bottom-1 duration-200">
+          <div className="max-h-48 overflow-y-auto overscroll-contain text-sm text-gray-600 leading-relaxed relative z-10">{description}</div>
           <button
             onClick={() => setOpen(false)}
             className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
           >
             Cerrar
           </button>
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-r border-b border-gray-200 rotate-45"></div>
         </div>
       )}
     </div>
@@ -197,8 +197,8 @@ export default function CatalogPage() {
               const whatsappLink = getWhatsAppLink(product, selectedVariation);
               
               return (
-                <div key={product.id} className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                  <div className="aspect-square relative bg-gray-100">
+                <div key={product.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                  <div className="aspect-square relative bg-gray-100 rounded-t-xl overflow-hidden">
                     {product.imageUrl ? (
                       <Image
                         src={product.imageUrl}
