@@ -37,17 +37,6 @@ export interface TriggerContext {
   autoTriggerResult?: any;
   mediaAnalysis?: string;
   voucherInfo?: any;
-  geminiVoucherResult?: {
-    isValid: boolean;
-    isPaymentProof: boolean;
-    brand?: string;
-    amount?: number;
-    currency?: string;
-    operationCode?: string;
-    confidence: number;
-    reason: string;
-    imageUrl?: string;
-  };
 }
 
 export interface BuiltContext {
@@ -118,8 +107,7 @@ export class ContextBuilder {
     // BLOQUE 6: ACCIONES AUTOMÁTICAS Y ANÁLISIS DE MULTIMEDIA
     // Incluir si hay cualquier trigger, análisis de imagen, o voucher detectado
     const hasTriggerContent = this.triggerContext.autoTriggerResult || 
-                               this.triggerContext.mediaAnalysis || 
-                               this.triggerContext.geminiVoucherResult;
+                               this.triggerContext.mediaAnalysis;
     if (hasTriggerContent) {
       sections.push(this.buildTriggerContext());
     }
@@ -752,7 +740,7 @@ Luego: Creas orden con productos reales + descuento_porcentaje: "20", descuento_
   }
 
   private buildTriggerContext(): string {
-    const { autoTriggerResult, mediaAnalysis, geminiVoucherResult } = this.triggerContext;
+    const { autoTriggerResult, mediaAnalysis } = this.triggerContext;
     
     let context = `# ACCIONES AUTOMÁTICAS EJECUTADAS\n`;
     
@@ -762,23 +750,6 @@ Luego: Creas orden con productos reales + descuento_porcentaje: "20", descuento_
     
     if (mediaAnalysis) {
       context += `\nAnálisis de multimedia: ${mediaAnalysis}\n`;
-    }
-    
-    // Incluir datos estructurados del voucher para que el agente pueda registrar el pago
-    if (geminiVoucherResult?.isPaymentProof) {
-      context += `\n## DATOS DEL VOUCHER DETECTADO\n`;
-      context += `- Método de pago: ${geminiVoucherResult.brand || 'No identificado'}\n`;
-      context += `- Monto: ${geminiVoucherResult.amount || 'No identificado'}\n`;
-      context += `- Código de operación: ${geminiVoucherResult.operationCode || 'No identificado'}\n`;
-      if (geminiVoucherResult.imageUrl) {
-        context += `- URL de imagen del voucher: ${geminiVoucherResult.imageUrl}\n`;
-      }
-      context += `\n⚠️ INSTRUCCIÓN OBLIGATORIA PARA REGISTRAR PAGO:\n`;
-      context += `Cuando uses ejecutar_accion para registrar este voucher, incluye en contexto_adicional:\n`;
-      context += `"voucherImageUrl: ${geminiVoucherResult.imageUrl || 'URL_NO_DISPONIBLE'} | `;
-      context += `paymentMethod: ${geminiVoucherResult.brand || 'DESCONOCIDO'} | `;
-      context += `amount: ${geminiVoucherResult.amount || 0} | `;
-      context += `operationCode: ${geminiVoucherResult.operationCode || 'N/A'}"\n`;
     }
     
     return context;

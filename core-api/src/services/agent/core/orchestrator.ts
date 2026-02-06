@@ -234,8 +234,7 @@ export class AgentOrchestrator {
         contact: conversationContext.contact,
         existingOrder: conversationContext.existingOrder,
         extractedData: conversationContext.extractedData,
-        conversationMessages: input.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-        geminiVoucherResult: input.triggerContext?.geminiVoucherResult
+        conversationMessages: input.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
       };
 
       const llmMessages: LLMMessage[] = [

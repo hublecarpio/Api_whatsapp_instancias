@@ -206,15 +206,6 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
       console.log(`[LLM2-Delegate] Context loaded: products=${businessContext.products.length}, zones=${businessContext.deliveryZones.length}`);
       console.log(`[LLM2-Delegate] Existing order: ${convContext.existingOrder?.id?.slice(0, 8) || 'NONE'}`);
       
-      // Log voucher context for debugging payment flow
-      if (context.geminiVoucherResult) {
-        console.log(`[LLM2-Delegate] 🧾 Voucher context available:`);
-        console.log(`[LLM2-Delegate]   └─ isPaymentProof: ${context.geminiVoucherResult.isPaymentProof}`);
-        console.log(`[LLM2-Delegate]   └─ brand: ${context.geminiVoucherResult.brand || 'N/A'}`);
-        console.log(`[LLM2-Delegate]   └─ amount: ${context.geminiVoucherResult.amount || 'N/A'}`);
-        console.log(`[LLM2-Delegate]   └─ imageUrl: ${context.geminiVoucherResult.imageUrl ? 'YES' : 'MISSING'}`);
-      }
-
       // Load previous session memory if available (needed for availability check)
       const previousMemory = await loadSessionMemory(businessId, contactPhone);
       const hasSessionCart = !!(previousMemory && (previousMemory.productData?.length > 0 || previousMemory.orderId));
@@ -227,7 +218,7 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         hasZones: businessContext.deliveryZones.length > 0,
         hasAppointments: businessContext.hasAppointments,
         businessObjective: businessContext.businessObjective,
-        hasVoucherContext: !!(context.geminiVoucherResult?.isPaymentProof),
+        hasVoucherContext: false,
         hasSessionCart
       };
 
@@ -247,8 +238,6 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         return this.success('No hay herramientas disponibles para ejecutar en este contexto.');
       }
 
-      // CRITICAL: Pass geminiVoucherResult from parent context to sub-tools
-      // This enables fallback for voucher data (imageUrl, brand) when LLM2 doesn't pass explicit args
       const toolContext: ToolContext = {
         businessId,
         instanceId,
@@ -260,8 +249,7 @@ IMPORTANTE: Esta herramienta mantiene memoria de productos encontrados y cálcul
         contact: convContext.contact,
         existingOrder: convContext.existingOrder,
         extractedData: convContext.extractedData,
-        conversationMessages: conversationMessages || [],
-        geminiVoucherResult: context.geminiVoucherResult
+        conversationMessages: conversationMessages || []
       };
 
       // Use already-loaded session memory from availability check
