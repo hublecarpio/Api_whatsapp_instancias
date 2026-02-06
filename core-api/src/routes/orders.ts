@@ -525,6 +525,7 @@ router.get('/export/csv', authMiddleware, async (req: any, res) => {
       'Ciudad',
       'Instancia',
       'Pagado',
+      'Método de Pago',
       'Notas'
     ];
 
@@ -545,6 +546,22 @@ router.get('/export/csv', authMiddleware, async (req: any, res) => {
       const discountAmount = (order as any).discountAmount || 0;
       const giftItems = (order as any).giftItems || '';
       
+      let paymentMethodStr = '';
+      try {
+        if (order.notes) {
+          const notesData = JSON.parse(order.notes);
+          if (notesData.paymentHistory && Array.isArray(notesData.paymentHistory)) {
+            paymentMethodStr = notesData.paymentHistory
+              .map((p: any) => p.paymentMethod || p.brand || '')
+              .filter((m: string) => m && m !== 'unknown')
+              .join('; ');
+          }
+        }
+      } catch (e) {}
+      if (!paymentMethodStr && (order as any).lastVoucherBank) {
+        paymentMethodStr = (order as any).lastVoucherBank;
+      }
+      
       return [
         order.id.substring(0, 8).toUpperCase(),
         new Date(order.createdAt).toLocaleString('es-PE', { timeZone: 'America/Lima' }),
@@ -564,6 +581,7 @@ router.get('/export/csv', authMiddleware, async (req: any, res) => {
         order.shippingCity || '',
         order.instance?.name || order.instance?.phoneNumber || '',
         order.paidAt ? new Date(order.paidAt).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : '',
+        paymentMethodStr,
         order.notes || ''
       ].map(escapeCSV).join(',');
     });

@@ -588,7 +588,7 @@ export default function OrdersPage() {
         p && typeof p.amount === 'number' && p.timestamp
       ).map((p: any) => ({
         amount: Number(p.amount) || 0,
-        paymentMethod: p.paymentMethod || 'N/A',
+        paymentMethod: p.paymentMethod || p.brand || 'N/A',
         operationCode: p.operationCode || null,
         brand: p.brand || null,
         imageUrl: p.imageUrl || null,
