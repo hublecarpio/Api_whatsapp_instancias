@@ -1,13 +1,72 @@
 import OpenAI from 'openai';
 import { LLMMessage, LLMResponse, LLMConfig, OpenAIToolFormat } from './types.js';
 
+const LLM_TIMEOUT_MS = 30000;
+const LLM_MAX_RETRIES = 3;
+const LLM_RETRY_BASE_DELAY_MS = 5000;
+
+function isRetryableError(error: any): boolean {
+  if (error?.status === 429) return true;
+  if (error?.status >= 500 && error?.status < 600) return true;
+  if (error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT' || error?.code === 'ECONNREFUSED') return true;
+  if (error?.code === 'UND_ERR_CONNECT_TIMEOUT' || error?.code === 'UND_ERR_SOCKET') return true;
+  if (error?.message?.includes('timeout') || error?.message?.includes('TIMEOUT')) return true;
+  if (error?.message?.includes('rate_limit') || error?.message?.includes('Rate limit')) return true;
+  if (error?.message?.includes('overloaded') || error?.message?.includes('capacity')) return true;
+  if (error?.type === 'server_error' || error?.type === 'rate_limit_error') return true;
+  return false;
+}
+
+async function withRetryAndTimeout<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  label: string,
+  traceId?: string
+): Promise<T> {
+  const prefix = traceId ? `[${label}][TRACE:${traceId}]` : `[${label}]`;
+  let lastError: any;
+
+  for (let attempt = 1; attempt <= LLM_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
+    try {
+      const result = await fn(controller.signal);
+      clearTimeout(timeoutId);
+      if (attempt > 1) {
+        console.log(`${prefix} Succeeded on attempt ${attempt}/${LLM_MAX_RETRIES}`);
+      }
+      return result;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      lastError = error;
+
+      const isAbort = error?.name === 'AbortError' || controller.signal.aborted;
+      const errorType = isAbort ? 'TIMEOUT' : (error?.status || error?.code || 'UNKNOWN');
+      const errorMsg = isAbort ? `Request timed out after ${LLM_TIMEOUT_MS}ms` : (error?.message || 'Unknown error');
+
+      if (attempt < LLM_MAX_RETRIES && (isAbort || isRetryableError(error))) {
+        const delayMs = LLM_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(`${prefix} ⚠️ RETRY ${attempt}/${LLM_MAX_RETRIES} - ${errorType}: ${errorMsg} - waiting ${delayMs}ms`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      console.error(`${prefix} ✗ FAILED after ${attempt} attempt(s) - ${errorType}: ${errorMsg}`);
+      throw error;
+    }
+  }
+
+  throw lastError;
+}
+
 export interface ILLMProvider {
   readonly name: string;
   
   chat(
     messages: LLMMessage[],
     config: LLMConfig,
-    tools?: OpenAIToolFormat[]
+    tools?: OpenAIToolFormat[],
+    traceId?: string
   ): Promise<LLMResponse>;
   
   isConfigured(): boolean;
@@ -32,7 +91,8 @@ export class OpenAIAdapter implements ILLMProvider {
   async chat(
     messages: LLMMessage[],
     config: LLMConfig,
-    tools?: OpenAIToolFormat[]
+    tools?: OpenAIToolFormat[],
+    traceId?: string
   ): Promise<LLMResponse> {
     if (!this.client) {
       throw new Error('OpenAI client not configured');
@@ -52,9 +112,21 @@ export class OpenAIAdapter implements ILLMProvider {
       params.tool_choice = 'auto';
     }
 
-    console.log(`[OpenAIAdapter] Calling ${config.model} with ${messages.length} messages, ${tools?.length || 0} tools`);
+    const prefix = traceId ? `[OpenAIAdapter][TRACE:${traceId}]` : `[OpenAIAdapter]`;
+    console.log(`${prefix} Calling ${config.model} with ${messages.length} messages, ${tools?.length || 0} tools`);
 
-    const response = await this.client.chat.completions.create(params);
+    const client = this.client;
+    const startTime = Date.now();
+
+    const response = await withRetryAndTimeout(
+      async (signal: AbortSignal) => {
+        return await client.chat.completions.create(params, { signal, timeout: LLM_TIMEOUT_MS });
+      },
+      'OpenAIAdapter',
+      traceId
+    );
+
+    const duration = Date.now() - startTime;
     const choice = response.choices[0];
 
     const result: LLMResponse = {
@@ -77,7 +149,7 @@ export class OpenAIAdapter implements ILLMProvider {
         }));
     }
 
-    console.log(`[OpenAIAdapter] Response: ${result.finishReason}, tools: ${result.toolCalls?.length || 0}, tokens: ${result.usage?.totalTokens}`);
+    console.log(`${prefix} Response (${duration}ms): ${result.finishReason}, tools: ${result.toolCalls?.length || 0}, tokens: ${result.usage?.totalTokens}`);
 
     return result;
   }
@@ -141,7 +213,8 @@ export class OpenRouterAdapter implements ILLMProvider {
   async chat(
     messages: LLMMessage[],
     config: LLMConfig,
-    tools?: OpenAIToolFormat[]
+    tools?: OpenAIToolFormat[],
+    traceId?: string
   ): Promise<LLMResponse> {
     if (!this.client) {
       throw new Error('OpenRouter client not configured');
@@ -161,9 +234,21 @@ export class OpenRouterAdapter implements ILLMProvider {
       params.tool_choice = 'auto';
     }
 
-    console.log(`[OpenRouterAdapter] Calling ${config.model} with ${messages.length} messages`);
+    const prefix = traceId ? `[OpenRouterAdapter][TRACE:${traceId}]` : `[OpenRouterAdapter]`;
+    console.log(`${prefix} Calling ${config.model} with ${messages.length} messages`);
 
-    const response = await this.client.chat.completions.create(params);
+    const client = this.client;
+    const startTime = Date.now();
+
+    const response = await withRetryAndTimeout(
+      async (signal: AbortSignal) => {
+        return await client.chat.completions.create(params, { signal, timeout: LLM_TIMEOUT_MS });
+      },
+      'OpenRouterAdapter',
+      traceId
+    );
+
+    const duration = Date.now() - startTime;
     const choice = response.choices[0];
 
     const result: LLMResponse = {
@@ -185,6 +270,8 @@ export class OpenRouterAdapter implements ILLMProvider {
           arguments: this.safeParseJSON(tc.function.arguments)
         }));
     }
+
+    console.log(`${prefix} Response (${duration}ms): ${result.finishReason}, tools: ${result.toolCalls?.length || 0}, tokens: ${result.usage?.totalTokens}`);
 
     return result;
   }

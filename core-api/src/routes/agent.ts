@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import OpenAI from 'openai';
 import axios from 'axios';
+import crypto from 'crypto';
 import prisma from '../services/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireActiveSubscription } from '../middleware/billing.js';
@@ -24,6 +25,12 @@ import { parseAgentOutputToWhatsAppEvents } from '../services/agentOutputParser.
 import { processWithOrchestrator, OrchestratorInput } from '../services/agent/index.js';
 import { toolRegistry } from '../services/agent/core/toolRegistry.js';
 import { registerAllNativeTools } from '../services/agent/tools/index.js';
+
+function generateTraceId(): string {
+  return crypto.randomBytes(4).toString('hex');
+}
+
+const BUFFER_RECOVERY_MAX_RETRIES = 2;
 
 const router = Router();
 
@@ -3351,13 +3358,14 @@ async function buildLayeredContext(params: ContextBuilderParams, tools: any[]): 
 }
 
 router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Response) => {
-  console.log(`[Agent Think] Endpoint called - business_id: ${req.body.business_id}, phone: ${req.body.phone}${req.body.isVoucherTrigger ? ' [VOUCHER TRIGGER]' : ''}`);
+  const traceId = generateTraceId();
+  const T = `[TRACE:${traceId}]`;
+  console.log(`${T}[Agent Think] Endpoint called - business_id: ${req.body.business_id}, phone: ${req.body.phone}${req.body.isVoucherTrigger ? ' [VOUCHER TRIGGER]' : ''}`);
   try {
     const { business_id, user_message, phone, phoneNumber, contactName, instanceId, instanceBackendId, providerMessageId, provider, isVoucherTrigger } = req.body;
     
-    // Log voucher trigger mode for debugging
     if (isVoucherTrigger) {
-      console.log(`[Agent Think] 🎯 VOUCHER TRIGGER MODE - Payment already processed, LLM1 receives confirmation context only`);
+      console.log(`${T}[Agent Think] VOUCHER TRIGGER MODE - Payment already processed, LLM1 receives confirmation context only`);
     }
     
     if (!business_id || !user_message || !phone) {
@@ -3401,19 +3409,18 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     
     if (!business.botEnabled) {
       if (!isBotTestEnabledForContact) {
-        console.log(`[Agent Think] Bot disabled globally and no testing mode for contact ${contactPhone}`);
+        console.log(`${T}[Agent Think] Bot disabled globally and no testing mode for contact ${contactPhone}`);
         return res.json({
           action: 'manual',
           message: 'Bot is disabled',
           botEnabled: false
         });
       }
-      console.log(`[Agent Think] Bot disabled globally but Testing ON for contact ${contactPhone}, processing...`);
+      console.log(`${T}[Agent Think] Bot disabled globally but Testing ON for contact ${contactPhone}, processing...`);
     }
     
-    // Per-contact bot disable (only applies when bot is globally enabled)
     if (business.botEnabled && isBotDisabledForContact) {
-      console.log(`[Agent Think] Bot disabled for contact ${contactPhone} (from Contact or ContactSettings)`);
+      console.log(`${T}[Agent Think] Bot disabled for contact ${contactPhone} (from Contact or ContactSettings)`);
       return res.json({
         action: 'manual',
         message: 'Bot is disabled for this contact',
@@ -3432,7 +3439,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     }
     
     const bufferSeconds = promptConfig?.bufferSeconds ?? 7;
-    console.log(`[Agent Think] Buffer config: ${bufferSeconds}s (instanceId: ${instanceId || 'none'}, promptId: ${promptConfig?.id || 'none'})`);
+    console.log(`${T}[Agent Think] Buffer config: ${bufferSeconds}s (instanceId: ${instanceId || 'none'}, promptId: ${promptConfig?.id || 'none'})`);
     
     const bufferKey = `${business_id}:${contactPhone}`;
     
@@ -3470,7 +3477,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
         : existingMessageIds;
       
       const expiresAt = new Date(Date.now() + bufferSeconds * 1000);
-      console.log(`[Agent Think] Creating/updating buffer for ${contactPhone} with ${currentMessages.length} messages, expires at ${expiresAt.toISOString()}`);
+      console.log(`${T}[Agent Think] Creating/updating buffer for ${contactPhone} with ${currentMessages.length} messages, expires at ${expiresAt.toISOString()}`);
       
       await prisma.messageBuffer.upsert({
         where: { businessId_contactPhone: { businessId: business_id, contactPhone } },
@@ -3500,22 +3507,21 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
         }
       });
       
-      console.log(`[Agent Think] Buffer created/updated successfully for ${contactPhone}`);
+      console.log(`${T}[Agent Think] Buffer created/updated successfully for ${contactPhone}`);
       
       // Capture all providerMessageIds and provider for this buffer
       const capturedProviderMessageIds = currentProviderMessageIds;
       const capturedProvider = provider;
       
+      const capturedTraceId = traceId;
       const timeout = setTimeout(async () => {
-        console.log(`[Agent Buffer] Processing buffer for ${contactPhone} after ${bufferSeconds}s delay`);
+        const BT = `[TRACE:${capturedTraceId}]`;
+        console.log(`${BT}[Agent Buffer] Processing buffer for ${contactPhone} after ${bufferSeconds}s delay`);
         try {
-          // Use atomic delete to claim the buffer - prevents race condition with legacyBufferProcessor
-          // Only process if WE successfully deleted the buffer (no one else claimed it)
           const deletedBuffers = await prisma.messageBuffer.deleteMany({
             where: { 
               businessId: business_id, 
               contactPhone,
-              // Only delete if not being processed by legacy worker
               OR: [
                 { processingUntil: null },
                 { processingUntil: { lt: new Date() } }
@@ -3524,32 +3530,86 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
           });
           
           if (deletedBuffers.count === 0) {
-            console.log(`[Agent Buffer] Buffer for ${contactPhone} already processed by another worker, skipping`);
+            console.log(`${BT}[Agent Buffer] Buffer for ${contactPhone} already processed by another worker, skipping`);
             activeBuffers.delete(bufferKey);
             return;
           }
           
-          // We successfully claimed the buffer, now get the data from our captured state
           const messages = currentMessages;
           const messageIds = capturedProviderMessageIds;
           
-          console.log(`[Agent Buffer] Claimed buffer with ${messages.length} messages to process for ${contactPhone}`);
+          console.log(`${BT}[Agent Buffer] Claimed buffer with ${messages.length} messages to process for ${contactPhone}`);
           activeBuffers.delete(bufferKey);
           
-          console.log(`[Agent Buffer] Calling processWithAgentQueuedWithIds for ${contactPhone}`);
-          await processWithAgentQueuedWithIds(
-            business_id,
-            messages,
-            phone,
-            contactPhone,
-            contactName,
-            instanceId,
-            instanceBackendId,
-            messageIds,
-            capturedProvider
-          );
-        } catch (error) {
-          console.error('Buffer processing error:', error);
+          let lastError: any = null;
+          for (let attempt = 1; attempt <= BUFFER_RECOVERY_MAX_RETRIES + 1; attempt++) {
+            try {
+              console.log(`${BT}[Agent Buffer] Calling processWithAgentQueuedWithIds for ${contactPhone} (attempt ${attempt}/${BUFFER_RECOVERY_MAX_RETRIES + 1})`);
+              await processWithAgentQueuedWithIds(
+                business_id,
+                messages,
+                phone,
+                contactPhone,
+                contactName,
+                instanceId,
+                instanceBackendId,
+                messageIds,
+                capturedProvider
+              );
+              console.log(`${BT}[Agent Buffer] Successfully processed buffer for ${contactPhone}`);
+              lastError = null;
+              break;
+            } catch (retryError: any) {
+              lastError = retryError;
+              console.error(`${BT}[Agent Buffer] ✗ Processing attempt ${attempt} failed for ${contactPhone}: ${retryError.message}`);
+              
+              if (attempt <= BUFFER_RECOVERY_MAX_RETRIES) {
+                const retryDelay = 5000 * attempt;
+                console.warn(`${BT}[Agent Buffer] Retrying in ${retryDelay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+              }
+            }
+          }
+          
+          if (lastError) {
+            console.error(`${BT}[Agent Buffer] ✗ BUFFER RECOVERY: All ${BUFFER_RECOVERY_MAX_RETRIES + 1} attempts failed for ${contactPhone}. Re-inserting buffer to prevent message loss.`);
+            try {
+              await prisma.messageBuffer.upsert({
+                where: { businessId_contactPhone: { businessId: business_id, contactPhone } },
+                create: {
+                  businessId: business_id,
+                  contactPhone,
+                  instanceId: instanceId || null,
+                  messages: { 
+                    texts: messages, 
+                    providerMessageIds: messageIds,
+                    contactJid: phone,
+                    contactName: contactName || '',
+                    provider: capturedProvider || undefined,
+                    recoveryAttempt: true
+                  },
+                  expiresAt: new Date(Date.now() + 30000)
+                },
+                update: {
+                  messages: { 
+                    texts: messages, 
+                    providerMessageIds: messageIds,
+                    contactJid: phone,
+                    contactName: contactName || '',
+                    provider: capturedProvider || undefined,
+                    recoveryAttempt: true
+                  },
+                  expiresAt: new Date(Date.now() + 30000)
+                }
+              });
+              console.warn(`${BT}[Agent Buffer] Buffer re-inserted for ${contactPhone} - expiredBufferProcessor will retry in 30s`);
+            } catch (recoveryError: any) {
+              console.error(`${BT}[Agent Buffer] ✗ CRITICAL: Failed to re-insert buffer for ${contactPhone}: ${recoveryError.message}. Messages LOST: ${messages.join(' | ')}`);
+            }
+          }
+          
+        } catch (error: any) {
+          console.error(`${BT}[Agent Buffer] ✗ Unexpected error for ${contactPhone}: ${error.message}`);
           activeBuffers.delete(bufferKey);
         }
       }, bufferSeconds * 1000);
@@ -4061,8 +4121,6 @@ router.get('/queue/stats', authMiddleware, async (req: AuthRequest, res: Respons
     res.status(500).json({ error: error.message });
   }
 });
-
-import crypto from 'crypto';
 
 function hashApiKey(key: string): string {
   return crypto.createHash('sha256').update(key).digest('hex');
@@ -5244,7 +5302,7 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
           where: { id: existingPrompt.id },
           data: { 
             prompt: masterResult.masterPrompt,
-            bufferSeconds: 10,
+            bufferSeconds: 7,
             historyLimit: 15
           }
         });
@@ -5254,7 +5312,7 @@ router.post('/import-full-prompt', authMiddleware, async (req: AuthRequest, res:
             businessId: business_id,
             instanceId: instanceId || undefined,
             prompt: masterResult.masterPrompt,
-            bufferSeconds: 10,
+            bufferSeconds: 7,
             historyLimit: 15
           }
         });
@@ -5980,7 +6038,7 @@ router.post('/config/restore/:backupId', authMiddleware, async (req: AuthRequest
               businessId,
               instanceId: instanceId || null,
               prompt: config.prompt.prompt,
-              bufferSeconds: config.prompt.bufferSeconds || 10,
+              bufferSeconds: config.prompt.bufferSeconds || 7,
               historyLimit: config.prompt.historyLimit || 15,
               splitMessages: config.prompt.splitMessages ?? true
             }

@@ -47,6 +47,7 @@ export interface OrchestratorInput {
   messages: ChatMessage[];
   triggerContext?: TriggerContext;
   config?: OrchestratorConfig;
+  traceId?: string;
 }
 
 export interface OrchestratorOutput {
@@ -266,7 +267,7 @@ export class AgentOrchestrator {
       console.log(`[Orchestrator]   🤖 Model: ${llmConfig.model}, Temp: ${llmConfig.temperature}`);
       
       const llm1StartTime = Date.now();
-      let response = await this.llmProvider.chat(llmMessages, llmConfig, openaiTools);
+      let response = await this.llmProvider.chat(llmMessages, llmConfig, openaiTools, input.traceId);
       llmCalls++;
       
       const llm1Duration = Date.now() - llm1StartTime;
@@ -344,7 +345,7 @@ export class AgentOrchestrator {
 
         console.log(`[Orchestrator]   → Calling LLM again after tool results...`);
         const llmLoopStart = Date.now();
-        response = await this.llmProvider.chat(llmMessages, llmConfig, openaiTools);
+        response = await this.llmProvider.chat(llmMessages, llmConfig, openaiTools, input.traceId);
         llmCalls++;
         console.log(`[Orchestrator]   → LLM response (${Date.now() - llmLoopStart}ms): finish=${response.finishReason}, moreTools=${response.toolCalls?.length || 0}`);
         

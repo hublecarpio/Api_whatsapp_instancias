@@ -34,7 +34,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         agentPrompts: {
           create: {
             prompt: '',
-            bufferSeconds: 10,
+            bufferSeconds: 7,
             historyLimit: 15,
             splitMessages: true
           }
@@ -77,7 +77,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           agentPrompts: {
             create: {
               prompt: '',
-              bufferSeconds: 10,
+              bufferSeconds: 7,
               historyLimit: 15,
               splitMessages: true
             }
@@ -576,7 +576,7 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
           where: { businessId, instanceId },
           data: {
             prompt: '',
-            bufferSeconds: 10,
+            bufferSeconds: 7,
             historyLimit: 15,
             splitMessages: true
           }
@@ -595,7 +595,7 @@ router.post('/:id/reset-config', async (req: AuthRequest, res: Response) => {
           where: { businessId },
           data: {
             prompt: '',
-            bufferSeconds: 10,
+            bufferSeconds: 7,
             historyLimit: 15,
             splitMessages: true
           }
