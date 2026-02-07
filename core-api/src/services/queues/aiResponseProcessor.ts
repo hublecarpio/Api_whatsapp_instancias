@@ -2100,7 +2100,7 @@ export function startAIResponseWorker(): Worker<AIResponseJobData> {
       } else {
         try {
           const backoffDelay = Math.pow(2, attemptsMade) * 5000;
-          const extendedLock = new Date(Date.now() + backoffDelay + 600000);
+          const extendedLock = new Date(Date.now() + backoffDelay + 300000);
           await prisma.messageBuffer.update({
             where: { id: job.data.bufferId },
             data: { 

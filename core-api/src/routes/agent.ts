@@ -534,19 +534,18 @@ import { isBufferActive, setBufferActive, clearBufferActive } from '../services/
 
 const activeBuffers = new Map<string, NodeJS.Timeout>();
 
+const LEGACY_BUFFER_LOCK_DURATION_MS = 5 * 60 * 1000;
+const LEGACY_BUFFER_MAX_RETRIES = 5;
+
 async function processExpiredBuffersLegacy() {
   try {
     const now = new Date();
-    const lockUntil = new Date(Date.now() + 7200000);
-    
-    const allBuffers = await prisma.messageBuffer.findMany();
-    if (allBuffers.length > 0) {
-      console.log(`[BUFFER-WORKER] Found ${allBuffers.length} total buffers, checking for expired...`);
-    }
+    const lockUntil = new Date(Date.now() + LEGACY_BUFFER_LOCK_DURATION_MS);
     
     const expiredBuffers = await prisma.messageBuffer.findMany({
       where: {
         expiresAt: { lte: now },
+        failedAt: null,
         OR: [
           { processingUntil: null },
           { processingUntil: { lt: now } }
@@ -565,9 +564,15 @@ async function processExpiredBuffersLegacy() {
         continue;
       }
       
+      if (buffer.retryCount >= LEGACY_BUFFER_MAX_RETRIES) {
+        console.error(`[BUFFER-WORKER] Buffer ${bufferKey} exceeded max retries (${buffer.retryCount}/${LEGACY_BUFFER_MAX_RETRIES}) - skipping`);
+        continue;
+      }
+      
       const claimed = await prisma.messageBuffer.updateMany({
         where: {
           id: buffer.id,
+          failedAt: null,
           OR: [
             { processingUntil: null },
             { processingUntil: { lt: now } }
@@ -583,7 +588,7 @@ async function processExpiredBuffersLegacy() {
       }
       
       try {
-        console.log(`[BUFFER-WORKER] Processing expired buffer for ${bufferKey}`);
+        console.log(`[BUFFER-WORKER] Processing expired buffer for ${bufferKey} (retry ${buffer.retryCount || 0}/${LEGACY_BUFFER_MAX_RETRIES})`);
         const bufferData = buffer.messages as any;
         const messages = bufferData?.texts || (Array.isArray(bufferData) ? bufferData : []);
         const storedMessageIds = bufferData?.providerMessageIds || [];
@@ -663,12 +668,26 @@ async function processExpiredBuffersLegacy() {
         );
         
         await prisma.messageBuffer.delete({ where: { id: buffer.id } });
-      } catch (error) {
-        console.error(`[BUFFER-WORKER] Error processing buffer ${bufferKey}:`, error);
-        await prisma.messageBuffer.update({
-          where: { id: buffer.id },
-          data: { processingUntil: null }
-        }).catch(() => {});
+      } catch (error: any) {
+        const newRetryCount = (buffer.retryCount || 0) + 1;
+        console.error(`[BUFFER-WORKER] Error processing buffer ${bufferKey} (retry ${newRetryCount}/${LEGACY_BUFFER_MAX_RETRIES}):`, error.message || error);
+        if (newRetryCount >= LEGACY_BUFFER_MAX_RETRIES) {
+          await prisma.messageBuffer.update({
+            where: { id: buffer.id },
+            data: {
+              failedAt: new Date(),
+              failureReason: `Legacy processor: failed after ${newRetryCount} retries: ${(error.message || 'Unknown').substring(0, 400)}`,
+              retryCount: newRetryCount,
+              processingUntil: new Date(Date.now() + 86400000 * 365)
+            }
+          }).catch(() => {});
+          console.error(`[BUFFER-WORKER] Buffer ${bufferKey} marked as DEAD LETTER after ${newRetryCount} retries`);
+        } else {
+          await prisma.messageBuffer.update({
+            where: { id: buffer.id },
+            data: { processingUntil: null, retryCount: newRetryCount }
+          }).catch(() => {});
+        }
       }
     }
   } catch (error) {
@@ -3546,34 +3565,62 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       const capturedProviderMessageIds = currentProviderMessageIds;
       const capturedProvider = provider;
       
+      const BUFFER_MAX_RETRIES = 5;
+      const BUFFER_LOCK_DURATION_MS = 5 * 60 * 1000;
       const capturedTraceId = traceId;
       const timeout = setTimeout(async () => {
         const BT = `[TRACE:${capturedTraceId}]`;
         console.log(`${BT}[Agent Buffer] Processing buffer for ${contactPhone} after ${bufferSeconds}s delay`);
         const bufferTrace = new TraceLogger({ traceId: capturedTraceId, businessId: business_id, contactPhone, provider: capturedProvider });
         try {
-          const deletedBuffers = await prisma.messageBuffer.deleteMany({
+          const now = new Date();
+          const lockUntil = new Date(Date.now() + BUFFER_LOCK_DURATION_MS);
+          
+          const claimed = await prisma.messageBuffer.updateMany({
             where: { 
               businessId: business_id, 
               contactPhone,
+              failedAt: null,
               OR: [
                 { processingUntil: null },
-                { processingUntil: { lt: new Date() } }
+                { processingUntil: { lt: now } }
               ]
+            },
+            data: {
+              processingUntil: lockUntil
             }
           });
           
-          if (deletedBuffers.count === 0) {
-            console.log(`${BT}[Agent Buffer] Buffer for ${contactPhone} already processed by another worker, skipping`);
+          if (claimed.count === 0) {
+            console.log(`${BT}[Agent Buffer] Buffer for ${contactPhone} already claimed or dead-lettered, skipping`);
             activeBuffers.delete(bufferKey);
             return;
           }
           
-          const messages = currentMessages;
-          const messageIds = capturedProviderMessageIds;
+          const freshBuffer = await prisma.messageBuffer.findUnique({
+            where: { businessId_contactPhone: { businessId: business_id, contactPhone } }
+          });
           
-          await bufferTrace.addStep('buffer_timer_fired', { messageCount: messages.length });
-          console.log(`${BT}[Agent Buffer] Claimed buffer with ${messages.length} messages to process for ${contactPhone}`);
+          if (!freshBuffer || freshBuffer.failedAt) {
+            console.log(`${BT}[Agent Buffer] Buffer for ${contactPhone} no longer exists or is dead-lettered, aborting`);
+            activeBuffers.delete(bufferKey);
+            return;
+          }
+          
+          const bufferData = freshBuffer.messages as any;
+          const messages = bufferData?.texts || [];
+          const messageIds = bufferData?.providerMessageIds || [];
+          const currentRetryCount = freshBuffer.retryCount || 0;
+          
+          if (messages.length === 0) {
+            console.log(`${BT}[Agent Buffer] Buffer for ${contactPhone} has no messages, deleting`);
+            await prisma.messageBuffer.delete({ where: { id: freshBuffer.id } }).catch(() => {});
+            activeBuffers.delete(bufferKey);
+            return;
+          }
+          
+          await bufferTrace.addStep('buffer_timer_fired', { messageCount: messages.length, retryCount: currentRetryCount });
+          console.log(`${BT}[Agent Buffer] Claimed buffer with ${messages.length} messages for ${contactPhone} (retry ${currentRetryCount}/${BUFFER_MAX_RETRIES})`);
           activeBuffers.delete(bufferKey);
           
           let lastError: any = null;
@@ -3594,6 +3641,11 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
               );
               await bufferTrace.addStep('agent_processing_dispatched', { method: USE_AI_QUEUE ? 'queue' : 'direct' });
               console.log(`${BT}[Agent Buffer] Successfully processed buffer for ${contactPhone}`);
+              
+              await prisma.messageBuffer.deleteMany({
+                where: { businessId: business_id, contactPhone }
+              });
+              
               await bufferTrace.complete();
               lastError = null;
               break;
@@ -3611,40 +3663,32 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
           }
           
           if (lastError) {
-            console.error(`${BT}[Agent Buffer] ✗ BUFFER RECOVERY: All ${BUFFER_RECOVERY_MAX_RETRIES + 1} attempts failed for ${contactPhone}. Re-inserting buffer to prevent message loss.`);
-            try {
-              await prisma.messageBuffer.upsert({
-                where: { businessId_contactPhone: { businessId: business_id, contactPhone } },
-                create: {
-                  businessId: business_id,
-                  contactPhone,
-                  instanceId: instanceId || null,
-                  messages: { 
-                    texts: messages, 
-                    providerMessageIds: messageIds,
-                    contactJid: phone,
-                    contactName: contactName || '',
-                    provider: capturedProvider || undefined,
-                    recoveryAttempt: true
-                  },
-                  expiresAt: new Date(Date.now() + 30000)
-                },
-                update: {
-                  messages: { 
-                    texts: messages, 
-                    providerMessageIds: messageIds,
-                    contactJid: phone,
-                    contactName: contactName || '',
-                    provider: capturedProvider || undefined,
-                    recoveryAttempt: true
-                  },
+            const newRetryCount = currentRetryCount + 1;
+            console.error(`${BT}[Agent Buffer] ✗ BUFFER RECOVERY: All ${BUFFER_RECOVERY_MAX_RETRIES + 1} attempts failed for ${contactPhone} (global retry ${newRetryCount}/${BUFFER_MAX_RETRIES})`);
+            
+            if (newRetryCount >= BUFFER_MAX_RETRIES) {
+              await prisma.messageBuffer.updateMany({
+                where: { businessId: business_id, contactPhone },
+                data: {
+                  failedAt: new Date(),
+                  failureReason: `RAM timer: all attempts failed after ${newRetryCount} retries: ${lastError.message?.substring(0, 400)}`,
+                  retryCount: newRetryCount,
+                  processingUntil: new Date(Date.now() + 86400000 * 365)
+                }
+              }).catch(() => {});
+              await bufferTrace.fail(`Dead letter after ${newRetryCount} retries: ${lastError.message}`);
+              console.error(`${BT}[Agent Buffer] ✗ DEAD LETTER: Buffer for ${contactPhone} marked as permanently failed after ${newRetryCount} retries`);
+            } else {
+              await prisma.messageBuffer.updateMany({
+                where: { businessId: business_id, contactPhone },
+                data: {
+                  processingUntil: null,
+                  retryCount: newRetryCount,
                   expiresAt: new Date(Date.now() + 30000)
                 }
-              });
-              console.warn(`${BT}[Agent Buffer] Buffer re-inserted for ${contactPhone} - expiredBufferProcessor will retry in 30s`);
-            } catch (recoveryError: any) {
-              await bufferTrace.fail(`All ${BUFFER_RECOVERY_MAX_RETRIES + 1} attempts failed`);
-              console.error(`${BT}[Agent Buffer] ✗ CRITICAL: Failed to re-insert buffer for ${contactPhone}: ${recoveryError.message}. Messages LOST: ${messages.join(' | ')}`);
+              }).catch(() => {});
+              await bufferTrace.fail(`Attempt ${newRetryCount}/${BUFFER_MAX_RETRIES} failed, will retry`);
+              console.warn(`${BT}[Agent Buffer] Buffer for ${contactPhone} released for retry ${newRetryCount}/${BUFFER_MAX_RETRIES} - expiredBufferProcessor will pick up in 30s`);
             }
           }
           

@@ -10,16 +10,18 @@ export interface ExpiredBufferJobData {
   triggeredAt: number;
 }
 
+const BUFFER_LOCK_DURATION_MS = 5 * 60 * 1000;
+const BUFFER_MAX_RETRIES = 5;
+
 async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ processed: number }> {
-  console.log('[ExpiredBuffer] Checking for expired buffers...');
-  
   try {
     const now = new Date();
-    const lockUntil = new Date(Date.now() + 7200000);
+    const lockUntil = new Date(Date.now() + BUFFER_LOCK_DURATION_MS);
     
     const expiredBuffers = await prisma.messageBuffer.findMany({
       where: {
         expiresAt: { lte: now },
+        failedAt: null,
         OR: [
           { processingUntil: null },
           { processingUntil: { lt: now } }
@@ -38,9 +40,23 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
     for (const buffer of expiredBuffers) {
       const bufferKey = `${buffer.businessId}:${buffer.contactPhone}`;
       
+      if (buffer.retryCount >= BUFFER_MAX_RETRIES) {
+        console.error(`[ExpiredBuffer] Buffer ${bufferKey} exceeded max retries (${buffer.retryCount}/${BUFFER_MAX_RETRIES}) - marking as dead letter`);
+        await prisma.messageBuffer.update({
+          where: { id: buffer.id },
+          data: {
+            failedAt: new Date(),
+            failureReason: `Exceeded max retries (${BUFFER_MAX_RETRIES}). Last retry at ${now.toISOString()}`,
+            processingUntil: new Date(Date.now() + 86400000 * 365)
+          }
+        }).catch(() => {});
+        continue;
+      }
+      
       const claimed = await prisma.messageBuffer.updateMany({
         where: {
           id: buffer.id,
+          failedAt: null,
           OR: [
             { processingUntil: null },
             { processingUntil: { lt: now } }
@@ -151,20 +167,48 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
             processedCount++;
             console.log(`[ExpiredBuffer] Successfully processed buffer for ${bufferKey} directly`);
           } catch (directError: any) {
-            console.error(`[ExpiredBuffer] Direct processing failed for ${bufferKey}:`, directError.message);
-            await prisma.messageBuffer.update({
-              where: { id: buffer.id },
-              data: { processingUntil: null }
-            }).catch(() => {});
-            console.warn(`[ExpiredBuffer] Buffer ${bufferKey} NOT deleted - will retry on next cycle`);
+            const newRetryCount = (buffer.retryCount || 0) + 1;
+            console.error(`[ExpiredBuffer] Direct processing failed for ${bufferKey} (retry ${newRetryCount}/${BUFFER_MAX_RETRIES}):`, directError.message);
+            if (newRetryCount >= BUFFER_MAX_RETRIES) {
+              await prisma.messageBuffer.update({
+                where: { id: buffer.id },
+                data: {
+                  failedAt: new Date(),
+                  failureReason: `Direct processing failed after ${newRetryCount} retries: ${directError.message?.substring(0, 400)}`,
+                  retryCount: newRetryCount,
+                  processingUntil: new Date(Date.now() + 86400000 * 365)
+                }
+              }).catch(() => {});
+              console.error(`[ExpiredBuffer] Buffer ${bufferKey} marked as DEAD LETTER after ${newRetryCount} retries`);
+            } else {
+              await prisma.messageBuffer.update({
+                where: { id: buffer.id },
+                data: { processingUntil: null, retryCount: newRetryCount }
+              }).catch(() => {});
+              console.warn(`[ExpiredBuffer] Buffer ${bufferKey} retry ${newRetryCount}/${BUFFER_MAX_RETRIES} - will retry on next cycle`);
+            }
           }
         }
       } catch (error: any) {
-        console.error(`[ExpiredBuffer] Error processing buffer ${bufferKey}:`, error.message);
-        await prisma.messageBuffer.update({
-          where: { id: buffer.id },
-          data: { processingUntil: null }
-        }).catch(() => {});
+        const newRetryCount = (buffer.retryCount || 0) + 1;
+        console.error(`[ExpiredBuffer] Error processing buffer ${bufferKey} (retry ${newRetryCount}/${BUFFER_MAX_RETRIES}):`, error.message);
+        if (newRetryCount >= BUFFER_MAX_RETRIES) {
+          await prisma.messageBuffer.update({
+            where: { id: buffer.id },
+            data: {
+              failedAt: new Date(),
+              failureReason: `Processing error after ${newRetryCount} retries: ${error.message?.substring(0, 400)}`,
+              retryCount: newRetryCount,
+              processingUntil: new Date(Date.now() + 86400000 * 365)
+            }
+          }).catch(() => {});
+          console.error(`[ExpiredBuffer] Buffer ${bufferKey} marked as DEAD LETTER after ${newRetryCount} retries`);
+        } else {
+          await prisma.messageBuffer.update({
+            where: { id: buffer.id },
+            data: { processingUntil: null, retryCount: newRetryCount }
+          }).catch(() => {});
+        }
       }
     }
     
