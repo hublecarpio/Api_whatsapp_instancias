@@ -152,7 +152,7 @@ async function findInstanceByPhoneNumberId(phoneNumberId: string) {
   });
 }
 
-async function processWebhookPayload(payload: MetaWebhookPayload) {
+export async function processWebhookPayload(payload: MetaWebhookPayload) {
   const parsed = MetaCloudService.parseWebhookMessage(payload);
   
   if (!parsed) {

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { getTraces, getTraceByTraceId } from '../services/traceLogger.js';
 import { SuperAdminRequest, superAdminMiddleware } from '../middleware/superAdmin.js';
 import prisma from '../services/prisma.js';
+import { processWebhookPayload } from './metaWebhook.js';
 
 const router = Router();
 
@@ -109,6 +110,128 @@ router.get('/:traceId', superAdminMiddleware, async (req: SuperAdminRequest, res
   } catch (error: any) {
     console.error('[Traces API] Error fetching trace:', error.message);
     res.status(500).json({ error: 'Failed to fetch trace' });
+  }
+});
+
+router.get('/webhooks/failed', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { hours = '24', limit = '50' } = req.query;
+    const since = new Date(Date.now() - parseInt(hours as string) * 3600000);
+
+    const failed = await prisma.webhookRawLog.findMany({
+      where: {
+        createdAt: { gte: since },
+        OR: [
+          { processingError: { not: null } },
+          { processedAt: null, createdAt: { lte: new Date(Date.now() - 60000) } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(parseInt(limit as string) || 50, 200),
+      select: {
+        id: true,
+        source: true,
+        phoneNumberId: true,
+        businessId: true,
+        messageCount: true,
+        statusCount: true,
+        processingError: true,
+        processedAt: true,
+        createdAt: true
+      }
+    });
+
+    const stats = {
+      total: failed.length,
+      withError: failed.filter(f => f.processingError).length,
+      orphaned: failed.filter(f => !f.processedAt && !f.processingError).length,
+      since: since.toISOString()
+    };
+
+    res.json({ success: true, stats, data: failed });
+  } catch (error: any) {
+    console.error('[Traces API] Error fetching failed webhooks:', error.message);
+    res.status(500).json({ error: 'Failed to fetch failed webhooks' });
+  }
+});
+
+router.post('/webhooks/replay/:id', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const rawLog = await prisma.webhookRawLog.findUnique({ where: { id } });
+    if (!rawLog) {
+      return res.status(404).json({ error: 'Webhook log not found' });
+    }
+
+    if (!rawLog.processingError && rawLog.processedAt) {
+      return res.status(400).json({ error: 'This webhook was already processed successfully' });
+    }
+
+    console.log(`[REPLAY] Replaying webhook ${id} (original error: ${rawLog.processingError})`);
+
+    try {
+      await processWebhookPayload(rawLog.body as any);
+      await prisma.webhookRawLog.update({
+        where: { id },
+        data: { processedAt: new Date(), processingError: null }
+      });
+      console.log(`[REPLAY] Webhook ${id} replayed successfully`);
+      res.json({ success: true, message: 'Webhook replayed successfully' });
+    } catch (replayError: any) {
+      await prisma.webhookRawLog.update({
+        where: { id },
+        data: { processingError: `Replay failed: ${replayError.message}`, processedAt: new Date() }
+      }).catch(() => {});
+      console.error(`[REPLAY] Webhook ${id} replay failed:`, replayError.message);
+      res.status(500).json({ success: false, error: `Replay failed: ${replayError.message}` });
+    }
+  } catch (error: any) {
+    console.error('[Traces API] Error replaying webhook:', error.message);
+    res.status(500).json({ error: 'Failed to replay webhook' });
+  }
+});
+
+router.post('/webhooks/replay-all', superAdminMiddleware, async (req: SuperAdminRequest, res: Response) => {
+  try {
+    const { hours = '24' } = req.body;
+    const since = new Date(Date.now() - parseInt(hours as string) * 3600000);
+
+    const failed = await prisma.webhookRawLog.findMany({
+      where: {
+        createdAt: { gte: since },
+        processingError: { not: null },
+        messageCount: { gt: 0 }
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 100
+    });
+
+    let replayed = 0;
+    let errors = 0;
+
+    for (const rawLog of failed) {
+      try {
+        await processWebhookPayload(rawLog.body as any);
+        await prisma.webhookRawLog.update({
+          where: { id: rawLog.id },
+          data: { processedAt: new Date(), processingError: null }
+        });
+        replayed++;
+      } catch (replayError: any) {
+        errors++;
+        await prisma.webhookRawLog.update({
+          where: { id: rawLog.id },
+          data: { processingError: `Replay failed: ${replayError.message}`, processedAt: new Date() }
+        }).catch(() => {});
+      }
+    }
+
+    console.log(`[REPLAY-ALL] Replayed ${replayed}/${failed.length} webhooks (${errors} errors)`);
+    res.json({ success: true, total: failed.length, replayed, errors });
+  } catch (error: any) {
+    console.error('[Traces API] Error in replay-all:', error.message);
+    res.status(500).json({ error: 'Failed to replay webhooks' });
   }
 });
 

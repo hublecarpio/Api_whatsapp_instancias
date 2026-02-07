@@ -280,189 +280,191 @@ async function sendWhatsAppResponseDirect(
   message: string,
   business: any
 ): Promise<void> {
-  try {
-    const instance = business.instances?.find((i: any) => i.id === instanceId);
-    const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
-    
-    if (!instance) {
-      console.error(`[Agent Send] Instance ${instanceId} not found in business instances`);
-      return;
-    }
-    
-    const events = parseAgentOutputToWhatsAppEvents(message);
-    console.log(`[Agent Send] Parsed ${events.length} events for ${cleanPhone}:`, events.map(e => e.type));
-    
-    const metaCredential = instance.metaCredential;
-    const coexistCredential = instance.metaCoexistCredential;
-    
-    if ((instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') && (metaCredential || coexistCredential)) {
-      let accessToken: string;
-      let phoneNumberId: string;
-      let metaBusinessId: string;
-      
-      if (metaCredential) {
-        accessToken = metaCredential.accessToken;
-        phoneNumberId = metaCredential.phoneNumberId;
-        metaBusinessId = metaCredential.businessId;
-      } else if (coexistCredential) {
-        accessToken = coexistCredential.systemAccessToken || coexistCredential.userAccessToken;
-        phoneNumberId = coexistCredential.phoneNumberId;
-        metaBusinessId = coexistCredential.metaBusinessId;
-      } else {
-        console.error(`[Agent Send] No valid credential found for instance ${instanceId}`);
-        return;
-      }
-      
-      console.log(`[Agent Send] Sending via Meta Cloud API (${instance.provider}) to ${cleanPhone}`);
-      const metaService = new MetaCloudService({
-        accessToken,
-        phoneNumberId,
-        businessId: metaBusinessId
-      });
-      
-      for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        
-        if (i > 0) {
-          const delay = event.type === 'text' ? calculateTypingDelay(event.text || '') : 500;
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-        
-        // Save message to database
-        const messageLog = await prisma.messageLog.create({
-          data: {
-            businessId: business.id,
-            instanceId: instance.id,
-            direction: 'outbound',
-            sender: instance.phoneNumber || 'bot',
-            recipient: cleanPhone,
-            message: event.type === 'text' ? event.text : (event.caption || null),
-            mediaUrl: event.url || null,
-            deliveryStatus: 'pending',
-            deliveryAttempts: 0,
-            metadata: { 
-              source: 'agent_direct',
-              provider: instance.provider || 'BAILEYS',
-              type: event.type,
-              ...(event.type !== 'text' && { mediaType: event.type, filename: event.filename })
-            }
-          }
-        });
-        
-        console.log(`[Agent Send] Sending event ${i+1}/${events.length}: type=${event.type}, to=${cleanPhone}, logId=${messageLog.id}`);
-        
-        try {
-          let sendResult: any;
-          
-          if (event.type === 'text' && event.text) {
-            sendResult = await metaService.sendTextMessage(cleanPhone, event.text);
-          } else if (event.type === 'image' && event.url) {
-            sendResult = await metaService.sendImageMessage(cleanPhone, event.url, event.caption);
-          } else if (event.type === 'video' && event.url) {
-            sendResult = await metaService.sendVideoMessage(cleanPhone, event.url, event.caption);
-          } else if (event.type === 'audio' && event.url) {
-            sendResult = await metaService.sendAudioMessage(cleanPhone, event.url);
-          } else if (event.type === 'document' && event.url) {
-            sendResult = await metaService.sendDocumentMessage(cleanPhone, event.url, event.filename, event.caption);
-          }
-          
-          const providerMessageId = sendResult?.messages?.[0]?.id;
-          await prisma.messageLog.update({
-            where: { id: messageLog.id },
-            data: {
-              deliveryStatus: 'sent',
-              deliveryAttempts: 1,
-              providerMessageId: providerMessageId || null
-            }
-          });
-          console.log(`[Agent Send] Event ${i+1} SUCCESS: messageId=${providerMessageId}`);
-        } catch (sendErr: any) {
-          console.error(`[Agent Send] Event ${i+1} FAILED: ${sendErr.message}`);
-          await prisma.messageLog.update({
-            where: { id: messageLog.id },
-            data: {
-              deliveryStatus: 'failed',
-              deliveryError: sendErr.message,
-              deliveryAttempts: 1
-            }
-          });
-        }
-      }
-    } else if (instance.instanceBackendId) {
-      // BAILEYS provider - send via WA API
-      const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
-      
-      for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        
-        if (i > 0) {
-          const delay = event.type === 'text' ? calculateTypingDelay(event.text || '') : 500;
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-        
-        const messageLog = await prisma.messageLog.create({
-          data: {
-            businessId: business.id,
-            instanceId: instance.id,
-            direction: 'outbound',
-            sender: instance.phoneNumber || 'bot',
-            recipient: cleanPhone,
-            message: event.type === 'text' ? event.text : (event.caption || null),
-            mediaUrl: event.url || null,
-            deliveryStatus: 'pending',
-            deliveryAttempts: 0,
-            metadata: { 
-              source: 'agent_direct',
-              provider: 'BAILEYS',
-              type: event.type
-            }
-          }
-        });
-        
-        try {
-          const payload: any = { to: cleanPhone };
-          
-          if (event.type === 'text') {
-            payload.text = event.text;
-          } else {
-            payload.mediaUrl = event.url;
-            payload.mediaType = event.type;
-            if (event.caption) payload.caption = event.caption;
-            if (event.filename) payload.filename = event.filename;
-          }
-          
-          const response = await axios.post(
-            `${WA_API_URL}/instances/${instance.instanceBackendId}/send`,
-            payload
-          );
-          
-          const waMessageId = response.data?.messageId;
-          await prisma.messageLog.update({
-            where: { id: messageLog.id },
-            data: {
-              deliveryStatus: 'sent',
-              deliveryAttempts: 1,
-              providerMessageId: waMessageId || null
-            }
-          });
-          console.log(`[Agent Send] Baileys event ${i+1} SUCCESS: messageId=${waMessageId}`);
-        } catch (sendErr: any) {
-          console.error(`[Agent Send] Baileys event ${i+1} FAILED: ${sendErr.message}`);
-          await prisma.messageLog.update({
-            where: { id: messageLog.id },
-            data: {
-              deliveryStatus: 'failed',
-              deliveryError: sendErr.message,
-              deliveryAttempts: 1
-            }
-          });
-        }
-      }
+  const instance = business.instances?.find((i: any) => i.id === instanceId);
+  const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+  
+  if (!instance) {
+    throw new Error(`Instance ${instanceId} not found in business instances`);
+  }
+
+  const events = parseAgentOutputToWhatsAppEvents(message);
+  console.log(`[Agent Send] Parsed ${events.length} events for ${cleanPhone}:`, events.map(e => e.type));
+
+  const metaCredential = instance.metaCredential;
+  const coexistCredential = instance.metaCoexistCredential;
+  let sendFailures = 0;
+  let lastSendError = '';
+
+  if ((instance.provider === 'META_CLOUD' || instance.provider === 'META_COEXIST') && (metaCredential || coexistCredential)) {
+    let accessToken: string;
+    let phoneNumberId: string;
+    let metaBusinessId: string;
+
+    if (metaCredential) {
+      accessToken = metaCredential.accessToken;
+      phoneNumberId = metaCredential.phoneNumberId;
+      metaBusinessId = metaCredential.businessId;
+    } else if (coexistCredential) {
+      accessToken = coexistCredential.systemAccessToken || coexistCredential.userAccessToken;
+      phoneNumberId = coexistCredential.phoneNumberId;
+      metaBusinessId = coexistCredential.metaBusinessId;
     } else {
-      console.error(`[Agent Send] No valid provider/credentials for instance ${instanceId}`);
+      throw new Error(`No valid credential found for instance ${instanceId}`);
     }
-  } catch (error: any) {
-    console.error(`[Agent Send] Error sending WhatsApp response:`, error.message);
+
+    console.log(`[Agent Send] Sending via Meta Cloud API (${instance.provider}) to ${cleanPhone}`);
+    const metaService = new MetaCloudService({
+      accessToken,
+      phoneNumberId,
+      businessId: metaBusinessId
+    });
+
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+
+      if (i > 0) {
+        const delay = event.type === 'text' ? calculateTypingDelay(event.text || '') : 500;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      const messageLog = await prisma.messageLog.create({
+        data: {
+          businessId: business.id,
+          instanceId: instance.id,
+          direction: 'outbound',
+          sender: instance.phoneNumber || 'bot',
+          recipient: cleanPhone,
+          message: event.type === 'text' ? event.text : (event.caption || null),
+          mediaUrl: event.url || null,
+          deliveryStatus: 'pending',
+          deliveryAttempts: 0,
+          metadata: {
+            source: 'agent_direct',
+            provider: instance.provider || 'BAILEYS',
+            type: event.type,
+            ...(event.type !== 'text' && { mediaType: event.type, filename: event.filename })
+          }
+        }
+      });
+
+      console.log(`[Agent Send] Sending event ${i+1}/${events.length}: type=${event.type}, to=${cleanPhone}, logId=${messageLog.id}`);
+
+      try {
+        let sendResult: any;
+
+        if (event.type === 'text' && event.text) {
+          sendResult = await metaService.sendTextMessage(cleanPhone, event.text);
+        } else if (event.type === 'image' && event.url) {
+          sendResult = await metaService.sendImageMessage(cleanPhone, event.url, event.caption);
+        } else if (event.type === 'video' && event.url) {
+          sendResult = await metaService.sendVideoMessage(cleanPhone, event.url, event.caption);
+        } else if (event.type === 'audio' && event.url) {
+          sendResult = await metaService.sendAudioMessage(cleanPhone, event.url);
+        } else if (event.type === 'document' && event.url) {
+          sendResult = await metaService.sendDocumentMessage(cleanPhone, event.url, event.filename, event.caption);
+        }
+
+        const providerMessageId = sendResult?.messages?.[0]?.id;
+        await prisma.messageLog.update({
+          where: { id: messageLog.id },
+          data: {
+            deliveryStatus: 'sent',
+            deliveryAttempts: 1,
+            providerMessageId: providerMessageId || null
+          }
+        });
+        console.log(`[Agent Send] Event ${i+1} SUCCESS: messageId=${providerMessageId}`);
+      } catch (sendErr: any) {
+        sendFailures++;
+        lastSendError = sendErr.message;
+        console.error(`[Agent Send] Event ${i+1} FAILED: ${sendErr.message}`);
+        await prisma.messageLog.update({
+          where: { id: messageLog.id },
+          data: {
+            deliveryStatus: 'failed',
+            deliveryError: sendErr.message,
+            deliveryAttempts: 1
+          }
+        }).catch(() => {});
+      }
+    }
+  } else if (instance.instanceBackendId) {
+    const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
+
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+
+      if (i > 0) {
+        const delay = event.type === 'text' ? calculateTypingDelay(event.text || '') : 500;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      const messageLog = await prisma.messageLog.create({
+        data: {
+          businessId: business.id,
+          instanceId: instance.id,
+          direction: 'outbound',
+          sender: instance.phoneNumber || 'bot',
+          recipient: cleanPhone,
+          message: event.type === 'text' ? event.text : (event.caption || null),
+          mediaUrl: event.url || null,
+          deliveryStatus: 'pending',
+          deliveryAttempts: 0,
+          metadata: {
+            source: 'agent_direct',
+            provider: 'BAILEYS',
+            type: event.type
+          }
+        }
+      });
+
+      try {
+        const payload: any = { to: cleanPhone };
+
+        if (event.type === 'text') {
+          payload.text = event.text;
+        } else {
+          payload.mediaUrl = event.url;
+          payload.mediaType = event.type;
+          if (event.caption) payload.caption = event.caption;
+          if (event.filename) payload.filename = event.filename;
+        }
+
+        const response = await axios.post(
+          `${WA_API_URL}/instances/${instance.instanceBackendId}/send`,
+          payload
+        );
+
+        const waMessageId = response.data?.messageId;
+        await prisma.messageLog.update({
+          where: { id: messageLog.id },
+          data: {
+            deliveryStatus: 'sent',
+            deliveryAttempts: 1,
+            providerMessageId: waMessageId || null
+          }
+        });
+        console.log(`[Agent Send] Baileys event ${i+1} SUCCESS: messageId=${waMessageId}`);
+      } catch (sendErr: any) {
+        sendFailures++;
+        lastSendError = sendErr.message;
+        console.error(`[Agent Send] Baileys event ${i+1} FAILED: ${sendErr.message}`);
+        await prisma.messageLog.update({
+          where: { id: messageLog.id },
+          data: {
+            deliveryStatus: 'failed',
+            deliveryError: sendErr.message,
+            deliveryAttempts: 1
+          }
+        }).catch(() => {});
+      }
+    }
+  } else {
+    throw new Error(`No valid provider/credentials for instance ${instanceId}`);
+  }
+
+  if (sendFailures > 0 && sendFailures === events.length) {
+    throw new Error(`All ${sendFailures} message events failed to send. Last error: ${lastSendError}`);
   }
 }
 

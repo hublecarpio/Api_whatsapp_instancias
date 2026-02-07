@@ -383,14 +383,6 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
         });
       }
 
-      if (targetInstanceId && result.response) {
-        await sendWhatsAppResponse(targetInstanceId, phone, result.response, business);
-      }
-
-      if (aiTrace) {
-        await aiTrace.addStep('whatsapp_send_dispatched', { instanceId: targetInstanceId, hasResponse: !!result.response });
-        await aiTrace.complete(result.response);
-      }
     } catch (v3Error: any) {
       if (aiTrace) {
         await aiTrace.addError('v3_orchestrator_failed', v3Error);
@@ -402,6 +394,7 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       console.error(`[AI Worker V3] ═══════════════════════════════════════════════════════`);
       result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
     }
+
   } else if (business.agentVersion === 'v2') {
     try {
       const v2Available = await isAgentV2Available();
@@ -418,6 +411,43 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
     result = await processWithAgentV1Worker(business, messages, contactPhone, contactName, phone, targetInstanceId);
   }
   
+  if (targetInstanceId && result.response) {
+    let shouldSend = true;
+
+    if (bufferId) {
+      try {
+        const normalizedRecipient = contactPhone.replace(/\D/g, '').replace(/:.*$/, '');
+        const recentDuplicate = await prisma.messageLog.findFirst({
+          where: {
+            businessId,
+            recipient: normalizedRecipient,
+            direction: 'outbound',
+            message: result.response.substring(0, 200),
+            deliveryStatus: 'sent',
+            providerMessageId: { not: null },
+            createdAt: { gte: new Date(Date.now() - 30000) }
+          },
+          select: { id: true, providerMessageId: true }
+        });
+        if (recentDuplicate) {
+          console.log(`[AI Worker] IDEMPOTENCY: Skipping duplicate send for ${normalizedRecipient} - already delivered (logId=${recentDuplicate.id}, providerMsgId=${recentDuplicate.providerMessageId})`);
+          shouldSend = false;
+        }
+      } catch (dedupErr: any) {
+        console.error(`[AI Worker] Dedup check failed (proceeding with send):`, dedupErr.message);
+      }
+    }
+
+    if (shouldSend) {
+      await sendWhatsAppResponse(targetInstanceId, phone, result.response, business);
+    }
+  }
+
+  if (aiTrace) {
+    await aiTrace.addStep('whatsapp_send_dispatched', { instanceId: targetInstanceId, hasResponse: !!result.response });
+    await aiTrace.complete(result.response);
+  }
+
   if (bufferId) {
     await prisma.messageBuffer.delete({ where: { id: bufferId } }).catch(() => {});
     console.log(`[AI Worker] Buffer ${bufferId} deleted after successful processing`);
@@ -537,10 +567,6 @@ async function processWithAgentV2Worker(
   }
   
   const aiResponse = result.response || '';
-  
-  if (instanceId && aiResponse) {
-    await sendWhatsAppResponse(instanceId, phone, aiResponse, business);
-  }
   
   return { response: aiResponse, tokensUsed: result.tokens_used };
 }
@@ -1087,10 +1113,6 @@ Tu objetivo principal es ayudar a los clientes con sus compras y consultas sobre
     
     const aiResponse = result.content;
     const tokensUsed = result.usage?.totalTokens;
-    
-    if (instanceId && aiResponse) {
-      await sendWhatsAppResponse(instanceId, phone, aiResponse, business);
-    }
     
     return { response: aiResponse, tokensUsed };
   }
@@ -1908,10 +1930,6 @@ Informa al cliente el total y pídele que envíe su comprobante de pago.`;
     totalTokens
   }).catch((err: any) => console.error('[AI Worker] Token logging failed:', err.message));
   
-  if (instanceId && aiResponse) {
-    await sendWhatsAppResponse(instanceId, phone, aiResponse, business);
-  }
-  
   // Dispatch agent_message webhook
   if (aiResponse) {
     dispatchAgentMessage(
@@ -1971,57 +1989,47 @@ async function sendWhatsAppResponse(
   message: string,
   business: any
 ): Promise<void> {
-  try {
-    const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+  const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+  
+  console.log(`[AI Worker] sendWhatsAppResponse called for ${cleanPhone} via instance ${instanceId}`);
+  
+  if (isQueueAvailable()) {
+    console.log(`[AI Worker] Using unified queue (queueAgentResponse) for ${cleanPhone}`);
     
-    console.log(`[AI Worker] sendWhatsAppResponse called for ${cleanPhone} via instance ${instanceId}`);
-    
-    if (isQueueAvailable()) {
-      console.log(`[AI Worker] Using unified queue (queueAgentResponse) for ${cleanPhone}`);
-      
-      const result = await queueAgentResponse({
-        businessId: business.id,
-        instanceId,
-        to: cleanPhone,
-        response: message,
-        splitMessages: true,
-        priority: 'high'
-      });
-      
-      if (result.success) {
-        console.log(`[AI Worker] Queued ${result.jobIds?.length || 1} jobs for ${cleanPhone}`);
-      } else {
-        console.error(`[AI Worker] Failed to queue agent response: ${result.error}`);
-      }
-    } else {
-      console.log(`[AI Worker] Redis not available, using direct send for ${cleanPhone}`);
-      
-      const result = await sendAgentResponseDirect({
-        businessId: business.id,
-        instanceId,
-        to: cleanPhone,
-        response: message,
-        contactJid: phone
-      });
-      
-      if (!result.success) {
-        console.error(`[AI Worker] Direct send failed: ${result.error}`);
-      }
-    }
-    
-    await scheduleFollowUp(business.id, cleanPhone, 'ai', instanceId);
-    
-    console.log(`[AI Worker] Response flow completed for ${cleanPhone}`);
-  } catch (error: any) {
-    const errorDetails = error.response?.data 
-      ? JSON.stringify(error.response.data) 
-      : error.message;
-    console.error(`[AI Worker] Failed to send WhatsApp response:`, {
-      message: error.message,
-      status: error.response?.status,
-      details: errorDetails
+    const result = await queueAgentResponse({
+      businessId: business.id,
+      instanceId,
+      to: cleanPhone,
+      response: message,
+      splitMessages: true,
+      priority: 'high'
     });
+    
+    if (result.success) {
+      console.log(`[AI Worker] Queued ${result.jobIds?.length || 1} jobs for ${cleanPhone}`);
+    } else {
+      throw new Error(`Failed to queue agent response: ${result.error || 'unknown queue error'}`);
+    }
+  } else {
+    console.log(`[AI Worker] Redis not available, using direct send for ${cleanPhone}`);
+    
+    const result = await sendAgentResponseDirect({
+      businessId: business.id,
+      instanceId,
+      to: cleanPhone,
+      response: message,
+      contactJid: phone
+    });
+    
+    if (!result.success) {
+      throw new Error(`Direct send failed: ${result.error || 'unknown send error'}`);
+    }
   }
+  
+  scheduleFollowUp(business.id, cleanPhone, 'ai', instanceId)
+    .catch(err => console.error(`[AI Worker] Follow-up scheduling failed (non-critical): ${err.message}`));
+  
+  console.log(`[AI Worker] Response flow completed for ${cleanPhone}`);
 }
 
 export function startAIResponseWorker(): Worker<AIResponseJobData> {
