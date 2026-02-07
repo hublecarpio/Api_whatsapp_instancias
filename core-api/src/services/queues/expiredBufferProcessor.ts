@@ -66,6 +66,7 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
         const storedContactJid = bufferData?.contactJid;
         const storedContactName = bufferData?.contactName || '';
         const storedProvider = bufferData?.provider;
+        const storedTraceId = bufferData?.traceId;
         
         const business = await prisma.business.findUnique({
           where: { id: buffer.businessId }
@@ -124,7 +125,8 @@ async function processExpiredBuffers(job: Job<ExpiredBufferJobData>): Promise<{ 
             priority: 'normal',
             bufferId: buffer.id,
             providerMessageIds: storedMessageIds,
-            provider: storedProvider || instance.provider
+            provider: storedProvider || instance.provider,
+            traceId: storedTraceId
           });
           queued = !!job;
         }

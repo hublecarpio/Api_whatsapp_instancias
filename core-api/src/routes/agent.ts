@@ -25,6 +25,7 @@ import { parseAgentOutputToWhatsAppEvents } from '../services/agentOutputParser.
 import { processWithOrchestrator, OrchestratorInput } from '../services/agent/index.js';
 import { toolRegistry } from '../services/agent/core/toolRegistry.js';
 import { registerAllNativeTools } from '../services/agent/tools/index.js';
+import { TraceLogger } from '../services/traceLogger.js';
 
 function generateTraceId(): string {
   return crypto.randomBytes(4).toString('hex');
@@ -136,7 +137,8 @@ async function processWithAgentQueuedWithIds(
   instanceId?: string,
   instanceBackendId?: string,
   providerMessageIds?: string[],
-  provider?: string
+  provider?: string,
+  traceId?: string
 ): Promise<{ response: string; tokensUsed?: number; queued?: boolean }> {
   console.log(`[Agent Processor] Starting processWithAgentQueuedWithIds for ${contactPhone} with ${messages.length} messages`);
   const queue = getAIResponseQueue();
@@ -153,7 +155,8 @@ async function processWithAgentQueuedWithIds(
       instanceBackendId,
       priority: 'normal',
       providerMessageIds,
-      provider
+      provider,
+      traceId
     });
     
     if (jobId) {
@@ -3358,7 +3361,7 @@ async function buildLayeredContext(params: ContextBuilderParams, tools: any[]): 
 }
 
 router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Response) => {
-  const traceId = generateTraceId();
+  const traceId = req.body.traceId || generateTraceId();
   const T = `[TRACE:${traceId}]`;
   console.log(`${T}[Agent Think] Endpoint called - business_id: ${req.body.business_id}, phone: ${req.body.phone}${req.body.isVoucherTrigger ? ' [VOUCHER TRIGGER]' : ''}`);
   try {
@@ -3410,6 +3413,9 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     if (!business.botEnabled) {
       if (!isBotTestEnabledForContact) {
         console.log(`${T}[Agent Think] Bot disabled globally and no testing mode for contact ${contactPhone}`);
+        const traceDisabled = new TraceLogger({ traceId, businessId: business_id, contactPhone: contactPhone, provider });
+        await traceDisabled.addStep('bot_disabled', { globalBotEnabled: false, testModeEnabled: false });
+        await traceDisabled.complete();
         return res.json({
           action: 'manual',
           message: 'Bot is disabled',
@@ -3421,6 +3427,9 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     
     if (business.botEnabled && isBotDisabledForContact) {
       console.log(`${T}[Agent Think] Bot disabled for contact ${contactPhone} (from Contact or ContactSettings)`);
+      const traceDisabled = new TraceLogger({ traceId, businessId: business_id, contactPhone: contactPhone, provider });
+      await traceDisabled.addStep('bot_disabled', { globalBotEnabled: true, perContactDisabled: true });
+      await traceDisabled.complete();
       return res.json({
         action: 'manual',
         message: 'Bot is disabled for this contact',
@@ -3440,6 +3449,22 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     
     const bufferSeconds = promptConfig?.bufferSeconds ?? 7;
     console.log(`${T}[Agent Think] Buffer config: ${bufferSeconds}s (instanceId: ${instanceId || 'none'}, promptId: ${promptConfig?.id || 'none'})`);
+
+    const trace = new TraceLogger({
+      traceId,
+      businessId: business_id,
+      instanceId,
+      contactPhone,
+      provider,
+      userMessage: user_message
+    });
+    await trace.addStep('agent_think_received', {
+      bufferSeconds: promptConfig?.bufferSeconds ?? 7,
+      botEnabled: business.botEnabled,
+      botTestMode: !!isBotTestEnabledForContact,
+      hasMedia: !!req.body.mediaUrl,
+      isVoucherTrigger: !!req.body.isVoucherTrigger
+    });
     
     const bufferKey = `${business_id}:${contactPhone}`;
     
@@ -3490,7 +3515,8 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
             providerMessageIds: currentProviderMessageIds,
             contactJid: phone,
             contactName: contactName || '',
-            provider: provider || undefined
+            provider: provider || undefined,
+            traceId
           },
           expiresAt
         },
@@ -3500,7 +3526,8 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
             providerMessageIds: currentProviderMessageIds,
             contactJid: phone,
             contactName: contactName || '',
-            provider: provider || undefined
+            provider: provider || undefined,
+            traceId
           },
           instanceId: instanceId || undefined,
           expiresAt
@@ -3508,6 +3535,12 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       });
       
       console.log(`${T}[Agent Think] Buffer created/updated successfully for ${contactPhone}`);
+
+      await trace.addStep('buffer_created', {
+        messagesInBuffer: currentMessages.length,
+        bufferSeconds,
+        expiresAt: expiresAt.toISOString()
+      });
       
       // Capture all providerMessageIds and provider for this buffer
       const capturedProviderMessageIds = currentProviderMessageIds;
@@ -3517,6 +3550,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       const timeout = setTimeout(async () => {
         const BT = `[TRACE:${capturedTraceId}]`;
         console.log(`${BT}[Agent Buffer] Processing buffer for ${contactPhone} after ${bufferSeconds}s delay`);
+        const bufferTrace = new TraceLogger({ traceId: capturedTraceId, businessId: business_id, contactPhone, provider: capturedProvider });
         try {
           const deletedBuffers = await prisma.messageBuffer.deleteMany({
             where: { 
@@ -3538,6 +3572,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
           const messages = currentMessages;
           const messageIds = capturedProviderMessageIds;
           
+          await bufferTrace.addStep('buffer_timer_fired', { messageCount: messages.length });
           console.log(`${BT}[Agent Buffer] Claimed buffer with ${messages.length} messages to process for ${contactPhone}`);
           activeBuffers.delete(bufferKey);
           
@@ -3554,13 +3589,17 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
                 instanceId,
                 instanceBackendId,
                 messageIds,
-                capturedProvider
+                capturedProvider,
+                capturedTraceId
               );
+              await bufferTrace.addStep('agent_processing_dispatched', { method: USE_AI_QUEUE ? 'queue' : 'direct' });
               console.log(`${BT}[Agent Buffer] Successfully processed buffer for ${contactPhone}`);
+              await bufferTrace.complete();
               lastError = null;
               break;
             } catch (retryError: any) {
               lastError = retryError;
+              await bufferTrace.addError('agent_processing_failed', retryError, { attempt });
               console.error(`${BT}[Agent Buffer] ✗ Processing attempt ${attempt} failed for ${contactPhone}: ${retryError.message}`);
               
               if (attempt <= BUFFER_RECOVERY_MAX_RETRIES) {
@@ -3604,6 +3643,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
               });
               console.warn(`${BT}[Agent Buffer] Buffer re-inserted for ${contactPhone} - expiredBufferProcessor will retry in 30s`);
             } catch (recoveryError: any) {
+              await bufferTrace.fail(`All ${BUFFER_RECOVERY_MAX_RETRIES + 1} attempts failed`);
               console.error(`${BT}[Agent Buffer] ✗ CRITICAL: Failed to re-insert buffer for ${contactPhone}: ${recoveryError.message}. Messages LOST: ${messages.join(' | ')}`);
             }
           }
@@ -3624,6 +3664,7 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
       });
     }
     
+    await trace.addStep('direct_processing', { method: 'no_buffer' });
     const result = await processWithAgentQueued(
       business_id,
       [user_message],
@@ -3637,12 +3678,14 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     );
     
     if (result.queued) {
+      await trace.addStep('direct_processing_queued');
       res.json({
         action: 'queued',
         message: 'Message queued for AI processing',
         botEnabled: true
       });
     } else {
+      await trace.complete(result.response);
       res.json({
         action: 'responded',
         response: result.response,
@@ -3653,6 +3696,16 @@ router.post('/think', internalOrAuthMiddleware, async (req: Request, res: Respon
     }
   } catch (error: any) {
     console.error('Agent think error:', error);
+    try {
+      const failTrace = new TraceLogger({
+        traceId: req.body.traceId || 'unknown',
+        businessId: req.body.business_id || 'unknown',
+        contactPhone: req.body.phoneNumber || req.body.phone || 'unknown',
+        provider: req.body.provider
+      });
+      await failTrace.addError('agent_think_error', error);
+      await failTrace.fail(error.message);
+    } catch (_) {}
     
     if (error.code === 'invalid_api_key') {
       return res.status(400).json({ error: 'Invalid OpenAI API key' });

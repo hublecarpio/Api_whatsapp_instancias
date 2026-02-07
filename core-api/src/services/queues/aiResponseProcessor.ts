@@ -13,6 +13,7 @@ import axios from 'axios';
 import eventLogger from '../eventLogger.js';
 import { processWithOrchestrator, OrchestratorInput } from '../agent/index.js';
 import { queueAgentResponse, isQueueAvailable, sendAgentResponseDirect } from '../whatsappSender.js';
+import { TraceLogger } from '../traceLogger.js';
 
 const USE_V3_AGENT = process.env.USE_V3_AGENT === 'true';
 import { dispatchAgentMessage, dispatchToolCall } from '../webhookService.js';
@@ -278,6 +279,13 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
   const phoneMask = contactPhone.length > 4 ? `***${contactPhone.slice(-4)}` : '****';
   const DEBUG_AGENT = process.env.DEBUG_AGENT_V3 === 'true';
   
+  const traceId = job.data.traceId;
+  let aiTrace: TraceLogger | null = null;
+  if (traceId) {
+    aiTrace = new TraceLogger({ traceId, businessId, contactPhone, provider: job.data.provider });
+    await aiTrace.addStep('ai_worker_started', { useV3, agentVersion: business.agentVersion });
+  }
+
   console.log(`[AI Worker] ═══════════════════════════════════════════════════════`);
   console.log(`[AI Worker] AGENT DECISION: USE_V3_AGENT=${USE_V3_AGENT}, agentVersion=${business.agentVersion}, useV3=${useV3}`);
   console.log(`[AI Worker] Context: business=${business.name}, phone=${phoneMask}, instanceId=${targetInstanceId?.slice(0, 8) || 'none'}`);
@@ -366,10 +374,27 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
       console.log(`[AI Worker V3] Response length: ${result.response?.length || 0} chars`);
       console.log(`[AI Worker V3] ═══════════════════════════════════════════════════════`);
       
+      if (aiTrace) {
+        await aiTrace.addStep('v3_orchestrator_completed', {
+          durationMs: v3Duration,
+          toolsExecuted: v3Result.toolsExecuted?.length || 0,
+          responseLength: result.response?.length || 0,
+          tokensTotal: v3Result.tokensUsed?.total || 0
+        });
+      }
+
       if (targetInstanceId && result.response) {
         await sendWhatsAppResponse(targetInstanceId, phone, result.response, business);
       }
+
+      if (aiTrace) {
+        await aiTrace.addStep('whatsapp_send_dispatched', { instanceId: targetInstanceId, hasResponse: !!result.response });
+        await aiTrace.complete(result.response);
+      }
     } catch (v3Error: any) {
+      if (aiTrace) {
+        await aiTrace.addError('v3_orchestrator_failed', v3Error);
+      }
       console.error(`[AI Worker V3] ═══════════════════════════════════════════════════════`);
       console.error(`[AI Worker V3] ✗ V3 FAILED - Falling back to V1`);
       console.error(`[AI Worker V3] Error: ${v3Error.message}`);

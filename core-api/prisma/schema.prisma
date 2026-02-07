@@ -1547,3 +1547,25 @@ model BaileysSession {
   @@unique([instanceId, sessionKey])
   @@index([instanceId])
 }
+
+model MessageTrace {
+  id            String   @id @default(uuid())
+  traceId       String   @unique
+  businessId    String
+  instanceId    String?
+  contactPhone  String
+  provider      String?
+  status        String   @default("pending")
+  steps         Json     @default("[]")
+  userMessage   String?
+  aiResponse    String?
+  errorSummary  String?
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  durationMs    Int?
+
+  @@index([businessId, contactPhone])
+  @@index([businessId, status])
+  @@index([startedAt])
+  @@index([traceId])
+}

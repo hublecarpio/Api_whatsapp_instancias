@@ -5,6 +5,7 @@ import { assignNextRoundRobinAdvisor } from '../routes/advisor.js';
 import { cancelPendingFollowUps } from './followUpService.js';
 import { logTokenUsage } from './tokenLogger.js';
 import { processAutoTriggers, TriggerContext } from './autoTriggers.js';
+import { createTraceId } from './traceLogger.js';
 
 const WA_API_URL = process.env.WA_API_URL || 'http://localhost:8080';
 const INTERNAL_AGENT_SECRET = process.env.INTERNAL_AGENT_SECRET || 'internal-agent-secret-change-me';
@@ -440,6 +441,7 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
   }
 
   const CORE_API_URL = process.env.CORE_API_URL || 'http://localhost:3001';
+  const traceId = createTraceId();
   try {
     await axios.post(`${CORE_API_URL}/agent/think`, {
       business_id: businessId,
@@ -451,13 +453,14 @@ export async function processIncomingMessage(message: IncomingMessage): Promise<
       user_message: fullMessageForAgent,
       mediaUrl,
       mediaAnalysis: mediaAnalysis || undefined,
-      providerMessageId: providerMessageId || undefined
+      providerMessageId: providerMessageId || undefined,
+      traceId
     }, {
       headers: { 'X-Internal-Secret': INTERNAL_AGENT_SECRET }
     });
     return true;
   } catch (error: any) {
-    console.error('Failed to process with AI agent:', error.message);
+    console.error('Failed to process with AI agent:', error.message, 'traceId:', traceId);
     return false;
   }
 }

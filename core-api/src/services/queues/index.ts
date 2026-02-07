@@ -88,6 +88,7 @@ export interface AIResponseJobData {
   providerMessageId?: string;
   providerMessageIds?: string[];
   provider?: string;
+  traceId?: string;
 }
 
 export interface TemplateComponent {
