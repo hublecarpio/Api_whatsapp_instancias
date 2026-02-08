@@ -856,6 +856,7 @@ model TokenUsage {
   id               String   @id @default(uuid())
   businessId       String
   userId           String?
+  instanceId       String?
   feature          String
   provider         String   @default("openai")
   model            String
@@ -863,9 +864,12 @@ model TokenUsage {
   completionTokens Int
   totalTokens      Int
   costUsd          Float    @default(0)
+  metadata         Json?
   createdAt        DateTime @default(now())
 
   @@index([businessId, createdAt])
+  @@index([businessId, provider, createdAt])
+  @@index([businessId, instanceId, createdAt])
   @@index([userId, createdAt])
   @@index([createdAt])
   @@index([provider, createdAt])

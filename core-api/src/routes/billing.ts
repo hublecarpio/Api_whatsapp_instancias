@@ -756,6 +756,82 @@ router.get('/token-usage', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
+router.get('/token-usage/breakdown', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+    const businessId = req.query.businessId as string;
+    const period = (req.query.period as string) || 'month';
+
+    let startDate: Date;
+    const now = new Date();
+    if (period === 'week') {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (period === 'day') {
+      startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    } else {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const where: any = { userId, createdAt: { gte: startDate } };
+    if (businessId) where.businessId = businessId;
+
+    const byFeature = await prisma.tokenUsage.groupBy({
+      by: ['feature'],
+      where,
+      _sum: { promptTokens: true, completionTokens: true, totalTokens: true, costUsd: true },
+      _count: true
+    });
+
+    const byProvider = await prisma.tokenUsage.groupBy({
+      by: ['provider'],
+      where,
+      _sum: { promptTokens: true, completionTokens: true, totalTokens: true, costUsd: true },
+      _count: true
+    });
+
+    const byModel = await prisma.tokenUsage.groupBy({
+      by: ['model'],
+      where,
+      _sum: { promptTokens: true, completionTokens: true, totalTokens: true, costUsd: true },
+      _count: true
+    });
+
+    res.json({
+      period,
+      startDate: startDate.toISOString(),
+      byFeature: byFeature.map(r => ({
+        feature: r.feature,
+        calls: r._count,
+        promptTokens: r._sum.promptTokens || 0,
+        completionTokens: r._sum.completionTokens || 0,
+        totalTokens: r._sum.totalTokens || 0,
+        costUsd: Number((r._sum.costUsd || 0).toFixed(6))
+      })),
+      byProvider: byProvider.map(r => ({
+        provider: r.provider,
+        calls: r._count,
+        promptTokens: r._sum.promptTokens || 0,
+        completionTokens: r._sum.completionTokens || 0,
+        totalTokens: r._sum.totalTokens || 0,
+        costUsd: Number((r._sum.costUsd || 0).toFixed(6))
+      })),
+      byModel: byModel.map(r => ({
+        model: r.model,
+        calls: r._count,
+        promptTokens: r._sum.promptTokens || 0,
+        completionTokens: r._sum.completionTokens || 0,
+        totalTokens: r._sum.totalTokens || 0,
+        costUsd: Number((r._sum.costUsd || 0).toFixed(6))
+      }))
+    });
+  } catch (error: any) {
+    console.error('Error fetching token usage breakdown:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/portal', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId;

@@ -50,6 +50,15 @@ export interface OrchestratorInput {
   traceId?: string;
 }
 
+export interface LLMCallDetail {
+  role: 'llm1' | 'llm2';
+  provider: 'openai' | 'openrouter' | 'gemini';
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface OrchestratorOutput {
   response: string;
   toolsExecuted: Array<{ name: string; success: boolean; result: string }>;
@@ -58,6 +67,7 @@ export interface OrchestratorOutput {
     completion: number;
     total: number;
   };
+  llmCalls: LLMCallDetail[];
   metadata: {
     model: string;
     llmCalls: number;
@@ -112,6 +122,7 @@ export class AgentOrchestrator {
     const toolsExecuted: OrchestratorOutput['toolsExecuted'] = [];
     let totalTokens = { prompt: 0, completion: 0, total: 0 };
     let llmCalls = 0;
+    const llmCallDetails: LLMCallDetail[] = [];
     let currentStep = 'init';
 
     try {
@@ -235,7 +246,11 @@ export class AgentOrchestrator {
         contact: conversationContext.contact,
         existingOrder: conversationContext.existingOrder,
         extractedData: conversationContext.extractedData,
-        conversationMessages: input.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+        conversationMessages: input.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+        llm2Config: {
+          model: this.config.llm2Model || 'gpt-4.1',
+          provider: (this.config.llm2Provider as any) || 'openai'
+        }
       };
 
       const llmMessages: LLMMessage[] = [
@@ -290,6 +305,14 @@ export class AgentOrchestrator {
         totalTokens.prompt += response.usage.promptTokens;
         totalTokens.completion += response.usage.completionTokens;
         totalTokens.total += response.usage.totalTokens;
+        llmCallDetails.push({
+          role: 'llm1',
+          provider: response.actualProvider || this.config.llm1Provider as any || 'openai',
+          model: response.actualModel || this.config.llm1Model || 'unknown',
+          promptTokens: response.usage.promptTokens,
+          completionTokens: response.usage.completionTokens,
+          totalTokens: response.usage.totalTokens
+        });
       }
 
       let toolCallCount = 0;
@@ -325,6 +348,21 @@ export class AgentOrchestrator {
             result: result.content
           });
 
+          if (toolCall.name === 'ejecutar_accion' && result.data?.llm2Usage) {
+            const u = result.data.llm2Usage;
+            llmCallDetails.push({
+              role: 'llm2',
+              provider: u.provider || 'openai',
+              model: u.model || 'unknown',
+              promptTokens: u.promptTokens || 0,
+              completionTokens: u.completionTokens || 0,
+              totalTokens: u.totalTokens || 0
+            });
+            totalTokens.prompt += u.promptTokens || 0;
+            totalTokens.completion += u.completionTokens || 0;
+            totalTokens.total += u.totalTokens || 0;
+          }
+
           toolResults.push({
             role: 'tool',
             content: result.content,
@@ -353,6 +391,14 @@ export class AgentOrchestrator {
           totalTokens.prompt += response.usage.promptTokens;
           totalTokens.completion += response.usage.completionTokens;
           totalTokens.total += response.usage.totalTokens;
+          llmCallDetails.push({
+            role: 'llm1',
+            provider: response.actualProvider || this.config.llm1Provider as any || 'openai',
+            model: response.actualModel || this.config.llm1Model || 'unknown',
+            promptTokens: response.usage.promptTokens,
+            completionTokens: response.usage.completionTokens,
+            totalTokens: response.usage.totalTokens
+          });
         }
 
         toolCallCount++;
@@ -400,9 +446,10 @@ export class AgentOrchestrator {
         response: finalResponse,
         toolsExecuted,
         tokensUsed: totalTokens,
+        llmCalls: llmCallDetails,
         metadata: {
           model: this.config.model!,
-          llmCalls,
+          llmCalls: llmCalls,
           processingTimeMs
         }
       };

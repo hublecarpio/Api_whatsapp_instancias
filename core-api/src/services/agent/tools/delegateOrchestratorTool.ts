@@ -376,14 +376,19 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
    Sin voucherImageUrl, no se puede mostrar el comprobante al negocio.
    Sin paymentMethod, el pago aparece como "Desconocido".`;
 
-      const llmProvider = LLMFactory.getProvider('openai');
+      const llm2ProviderType = context.llm2Config?.provider || 'openai';
+      const llm2ModelName = context.llm2Config?.model || 'gpt-4.1';
+      const llmProvider = LLMFactory.getProvider(llm2ProviderType);
       const llmMessages: any[] = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Ejecuta: ${objetivo}` }
       ];
 
-      const llmConfig = { model: 'gpt-4o', temperature: 0.2, maxTokens: 2000 };
+      const llmConfig = { model: llm2ModelName, temperature: 0.2, maxTokens: 2000 };
       const toolsExecuted: Array<{ name: string; success: boolean; result: string; data?: any }> = [];
+      let llm2TokensUsed = { prompt: 0, completion: 0, total: 0 };
+      let llm2ActualProvider: string = llm2ProviderType;
+      let llm2ActualModel: string = llm2ModelName;
       
       console.log(`[LLM2-Delegate] Tools available for LLM2: ${filteredTools.map((t: any) => t.function?.name).join(', ')}`);
       console.log(`[LLM2-Delegate] Calling LLM2 (${llmConfig.model})...`);
@@ -391,6 +396,13 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
       const llm2StartTime = Date.now();
       let response = await llmProvider.chat(llmMessages, llmConfig, filteredTools);
       console.log(`[LLM2-Delegate] LLM2 initial response (${Date.now() - llm2StartTime}ms): finish=${response.finishReason}, toolCalls=${response.toolCalls?.length || 0}`);
+      if (response.usage) {
+        llm2TokensUsed.prompt += response.usage.promptTokens;
+        llm2TokensUsed.completion += response.usage.completionTokens;
+        llm2TokensUsed.total += response.usage.totalTokens;
+      }
+      if (response.actualProvider) llm2ActualProvider = response.actualProvider;
+      if (response.actualModel) llm2ActualModel = response.actualModel;
       
       let iterations = 0;
 
@@ -536,6 +548,13 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
         const llmLoopStart = Date.now();
         response = await llmProvider.chat(llmMessages, llmConfig, filteredTools);
         console.log(`[LLM2-Delegate] LLM2 response (${Date.now() - llmLoopStart}ms): finish=${response.finishReason}, moreTools=${response.toolCalls?.length || 0}`);
+        if (response.usage) {
+          llm2TokensUsed.prompt += response.usage.promptTokens;
+          llm2TokensUsed.completion += response.usage.completionTokens;
+          llm2TokensUsed.total += response.usage.totalTokens;
+        }
+        if (response.actualProvider) llm2ActualProvider = response.actualProvider;
+        if (response.actualModel) llm2ActualModel = response.actualModel;
         iterations++;
       }
 
@@ -619,6 +638,13 @@ Si el objetivo menciona "voucher" o "pago" y hay una orden activa:
           wasOrderObjective: isOrderCreationObjective,
           orderCreated: !!memory.orderId,
           fallbackAttempted: isOrderCreationObjective && !orderWasCreated && hasProductsAndZone
+        },
+        llm2Usage: {
+          provider: llm2ActualProvider,
+          model: llm2ActualModel,
+          promptTokens: llm2TokensUsed.prompt,
+          completionTokens: llm2TokensUsed.completion,
+          totalTokens: llm2TokensUsed.total
         }
       };
 

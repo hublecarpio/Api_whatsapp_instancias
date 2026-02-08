@@ -17,6 +17,10 @@ export interface ToolContext {
   existingOrder?: any;
   extractedData?: Record<string, any>;
   conversationMessages?: ChatMessage[];
+  llm2Config?: {
+    model: string;
+    provider: 'openai' | 'openrouter' | 'gemini';
+  };
 }
 
 export interface ToolResult {
@@ -139,6 +143,8 @@ export interface LLMResponse {
     completionTokens: number;
     totalTokens: number;
   };
+  actualProvider?: 'openai' | 'openrouter' | 'gemini';
+  actualModel?: string;
 }
 
 export interface LLMConfig {

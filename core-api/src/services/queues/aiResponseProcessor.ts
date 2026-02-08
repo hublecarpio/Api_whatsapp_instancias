@@ -12,6 +12,7 @@ import { analyzeAndUpdateLeadStage } from '../leadStageService.js';
 import axios from 'axios';
 import eventLogger from '../eventLogger.js';
 import { processWithOrchestrator, OrchestratorInput } from '../agent/index.js';
+import { logTokenUsage as logTokenUsageDetailed, TokenProvider } from '../tokenLogger.js';
 import { queueAgentResponse, isQueueAvailable, sendAgentResponseDirect } from '../whatsappSender.js';
 import { TraceLogger } from '../traceLogger.js';
 
@@ -381,6 +382,37 @@ async function processAIResponse(job: Job<AIResponseJobData>): Promise<{ respons
           responseLength: result.response?.length || 0,
           tokensTotal: v3Result.tokensUsed?.total || 0
         });
+      }
+
+      if (v3Result.llmCalls && v3Result.llmCalls.length > 0) {
+        for (const call of v3Result.llmCalls) {
+          logTokenUsageDetailed({
+            businessId,
+            userId: business.userId,
+            instanceId: targetInstanceId || undefined,
+            feature: `agent_v3_${call.role}`,
+            provider: call.provider as TokenProvider,
+            model: call.model,
+            promptTokens: call.promptTokens,
+            completionTokens: call.completionTokens,
+            metadata: {
+              role: call.role,
+              contactPhone: contactPhone.replace(/\d(?=\d{4})/g, '*')
+            }
+          }).catch(err => console.error(`[AI Worker V3] Token logging failed for ${call.role}:`, err.message));
+        }
+      } else if (v3Result.tokensUsed?.total > 0) {
+        logTokenUsageDetailed({
+          businessId,
+          userId: business.userId,
+          instanceId: targetInstanceId || undefined,
+          feature: 'agent_v3_combined',
+          provider: ((business as any).v3Llm1Provider || 'openai') as TokenProvider,
+          model: (business as any).v3Llm1Model || 'gpt-4.1-mini',
+          promptTokens: v3Result.tokensUsed.prompt,
+          completionTokens: v3Result.tokensUsed.completion,
+          metadata: {}
+        }).catch(err => console.error(`[AI Worker V3] Token logging failed:`, err.message));
       }
 
     } catch (v3Error: any) {
@@ -2283,6 +2315,34 @@ export async function processAIResponseDirect(data: AIResponseJobData): Promise<
       
       if (v3Result.toolsExecuted?.length) {
         console.log(`[AI Direct V3] Tools executed: ${v3Result.toolsExecuted.map(t => t.name).join(', ')}`);
+      }
+
+      if (v3Result.llmCalls && v3Result.llmCalls.length > 0) {
+        for (const call of v3Result.llmCalls) {
+          logTokenUsageDetailed({
+            businessId,
+            userId: business.userId,
+            instanceId: targetInstanceId || undefined,
+            feature: `agent_v3_${call.role}`,
+            provider: call.provider as TokenProvider,
+            model: call.model,
+            promptTokens: call.promptTokens,
+            completionTokens: call.completionTokens,
+            metadata: { role: call.role, source: 'direct' }
+          }).catch(err => console.error(`[AI Direct V3] Token logging failed:`, err.message));
+        }
+      } else if (v3Result.tokensUsed?.total > 0) {
+        logTokenUsageDetailed({
+          businessId,
+          userId: business.userId,
+          instanceId: targetInstanceId || undefined,
+          feature: 'agent_v3_combined',
+          provider: ((business as any).v3Llm1Provider || 'openai') as TokenProvider,
+          model: (business as any).v3Llm1Model || 'gpt-4.1-mini',
+          promptTokens: v3Result.tokensUsed.prompt,
+          completionTokens: v3Result.tokensUsed.completion,
+          metadata: { source: 'direct' }
+        }).catch(err => console.error(`[AI Direct V3] Token logging failed:`, err.message));
       }
     } catch (v3Error: any) {
       console.error('[AI Direct] Agent V3 error, falling back to V1:', v3Error.message);

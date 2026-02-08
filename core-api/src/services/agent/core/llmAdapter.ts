@@ -136,7 +136,9 @@ export class OpenAIAdapter implements ILLMProvider {
         promptTokens: response.usage.prompt_tokens,
         completionTokens: response.usage.completion_tokens,
         totalTokens: response.usage.total_tokens
-      } : undefined
+      } : undefined,
+      actualProvider: 'openai',
+      actualModel: config.model
     };
 
     if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
@@ -258,7 +260,9 @@ export class OpenRouterAdapter implements ILLMProvider {
         promptTokens: response.usage.prompt_tokens,
         completionTokens: response.usage.completion_tokens,
         totalTokens: response.usage.total_tokens
-      } : undefined
+      } : undefined,
+      actualProvider: 'openrouter',
+      actualModel: config.model
     };
 
     if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {

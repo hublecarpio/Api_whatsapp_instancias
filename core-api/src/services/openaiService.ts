@@ -227,11 +227,14 @@ export function getOpenAIClient(): OpenAI {
 export interface TokenUsageData {
   businessId: string;
   userId?: string;
+  instanceId?: string;
   feature: string;
+  provider?: string;
   model: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  metadata?: Record<string, any>;
 }
 
 export async function logTokenUsage(data: TokenUsageData): Promise<void> {
@@ -242,12 +245,15 @@ export async function logTokenUsage(data: TokenUsageData): Promise<void> {
       data: {
         businessId: data.businessId,
         userId: data.userId,
+        instanceId: data.instanceId,
         feature: data.feature,
+        provider: data.provider || 'openai',
         model: data.model,
         promptTokens: data.promptTokens,
         completionTokens: data.completionTokens,
         totalTokens: data.totalTokens,
-        costUsd
+        costUsd,
+        metadata: data.metadata || undefined
       }
     });
   } catch (error) {
