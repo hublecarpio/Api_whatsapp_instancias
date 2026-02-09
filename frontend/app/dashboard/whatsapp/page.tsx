@@ -254,7 +254,11 @@ export default function WhatsAppPage() {
       }
     } catch (err: any) {
       if (err.response?.status === 404) {
-        setStatus('not_created');
+        if (selectedInstanceId) {
+          setStatus('disconnected');
+        } else {
+          setStatus('not_created');
+        }
       }
     }
   }, [currentBusiness, selectedInstanceId, status, addEvent]);
@@ -267,6 +271,7 @@ export default function WhatsAppPage() {
       'open': 'Conectado',
       'connected': 'Conectado',
       'closed': 'Desconectado',
+      'disconnected': 'Desconectado',
       'connecting': 'Conectando',
       'error': 'Error'
     };
@@ -683,6 +688,7 @@ export default function WhatsAppPage() {
       'open': { bg: 'bg-accent-success/20', dot: 'bg-accent-success', text: 'Conectado' },
       'connected': { bg: 'bg-accent-success/20', dot: 'bg-accent-success', text: 'Conectado' },
       'closed': { bg: 'bg-accent-error/20', dot: 'bg-accent-error', text: 'Desconectado' },
+      'disconnected': { bg: 'bg-accent-error/20', dot: 'bg-accent-error', text: 'Desconectado' },
       'connecting': { bg: 'bg-neon-blue/20', dot: 'bg-neon-blue', text: 'Conectando' },
       'error': { bg: 'bg-accent-error/20', dot: 'bg-accent-error', text: 'Error' }
     };
@@ -1232,7 +1238,7 @@ export default function WhatsAppPage() {
               </div>
             )}
 
-            {status === 'closed' && (
+            {(status === 'closed' || status === 'disconnected') && (
               <div className="py-2">
                 <div className="flex items-center gap-3 p-3 bg-accent-error/10 border border-accent-error/20 rounded-lg mb-4">
                   <div className="w-10 h-10 bg-accent-error/20 rounded-full flex items-center justify-center flex-shrink-0">

@@ -910,8 +910,11 @@ router.get('/instances/:instanceId/status', async (req: AuthRequest, res: Respon
         id: instance.id,
         name: instance.name,
         provider: instance.provider,
-        status: 'not_created',
-        phoneNumber: instance.phoneNumber
+        status: instance.phoneNumber ? 'disconnected' : 'not_created',
+        phoneNumber: instance.phoneNumber,
+        isActive: instance.isActive,
+        lastConnection: instance.lastConnection,
+        needsReconnect: true
       });
     }
     
@@ -1058,10 +1061,57 @@ router.post('/instances/:instanceId/restart', async (req: AuthRequest, res: Resp
     
     // BAILEYS provider needs backend connection
     if (!instance.instanceBackendId) {
-      return res.status(400).json({ error: 'Instance has no backend connection' });
+      const newBackendId = `${(businessId as string).substring(0, 8)}_${instance.id.substring(0, 8)}_${Date.now()}`;
+      const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
+      const internalWebhookUrl = `${coreApiUrl}/webhook/${businessId}`;
+      
+      try {
+        await axios.post(`${WA_API_URL}/instances`, {
+          instanceId: newBackendId,
+          webhook: internalWebhookUrl
+        });
+        
+        await prisma.whatsAppInstance.update({
+          where: { id: instance.id },
+          data: { instanceBackendId: newBackendId, status: 'pending_qr', qr: null }
+        });
+        
+        await recordInstanceEvent({
+          instanceId: instance.id,
+          businessId: businessId as string,
+          eventType: 'RECONNECTED',
+          previousStatus: instance.status,
+          newStatus: 'pending_qr',
+          details: `Instance "${instance.name}" re-created with new backend ID`
+        });
+        
+        return res.json({ success: true, message: 'Instance re-created, scan QR to connect' });
+      } catch (createErr: any) {
+        console.error('Failed to re-create backend instance:', createErr.response?.data || createErr.message);
+        return res.status(500).json({ error: 'No se pudo reconectar. El servidor de WhatsApp no responde.' });
+      }
     }
     
-    await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/restart`);
+    try {
+      await axios.post(`${WA_API_URL}/instances/${instance.instanceBackendId}/restart`);
+    } catch (restartErr: any) {
+      if (restartErr.response?.status === 404) {
+        const coreApiUrl = process.env.CORE_API_URL || 'http://localhost:3001';
+        const internalWebhookUrl = `${coreApiUrl}/webhook/${businessId}`;
+        
+        try {
+          await axios.post(`${WA_API_URL}/instances`, {
+            instanceId: instance.instanceBackendId,
+            webhook: internalWebhookUrl
+          });
+        } catch (reCreateErr: any) {
+          console.error('Failed to re-create backend instance:', reCreateErr.response?.data || reCreateErr.message);
+          return res.status(500).json({ error: 'No se pudo reconectar. El servidor de WhatsApp no responde.' });
+        }
+      } else {
+        throw restartErr;
+      }
+    }
     
     await prisma.whatsAppInstance.update({
       where: { id: instance.id },
