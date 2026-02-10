@@ -3,7 +3,7 @@ import prisma, { withRetry } from '../services/prisma.js';
 import { MetaCloudService, MetaWebhookPayload, ParsedMessage, ParsedStatus, fetchCatalogProductDetails } from '../services/metaCloud.js';
 import { processIncomingMessage } from '../services/messageIngest.js';
 import { uploadBuffer, isS3Configured } from '../services/storage.js';
-import { dispatchUserMessage, dispatchMediaUpdate } from '../services/webhookService.js';
+import { dispatchUserMessage } from '../services/webhookService.js';
 import { webhookLogger, logWebhookEvent } from '../services/logger.js';
 import { getRedisConnection, isRedisAvailable } from '../services/redis.js';
 import { getMediaDownloadQueue, MediaDownloadJobData } from '../services/queues/index.js';
@@ -787,15 +787,8 @@ async function processMessage(
           // Also update mediaUrl for the dispatchUserMessage below
           mediaUrl = finalUrl;
           
-          // Dispatch media_update webhook for fallback downloads
-          dispatchMediaUpdate(
-            instance.businessId,
-            msg.from,
-            messageLog.id,
-            finalUrl,
-            mediaPendingData.mediaType,
-            instance.id
-          ).catch(err => console.warn(`[META WEBHOOK MEDIA] Failed to dispatch media_update: ${err.message}`));
+          // NOTE: dispatchMediaUpdate removed to prevent duplicate webhook calls.
+          // dispatchUserMessage in mediaDownloadProcessor already includes mediaUrl.
         } catch (fallbackError: any) {
           console.error(`[META WEBHOOK MEDIA] Fallback download also failed: ${fallbackError.message}`);
           // Mark as failed so UI knows media is not available (merge metadata)

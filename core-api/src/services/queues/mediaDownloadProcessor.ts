@@ -4,7 +4,7 @@ import prisma from '../prisma.js';
 import { QUEUE_NAMES, MediaDownloadJobData, getQueueConnection, getMediaDownloadQueue } from './index.js';
 import { MetaCloudService, getCircuitBreakerState } from '../metaCloud.js';
 import { uploadBuffer, isS3Configured } from '../storage.js';
-import { dispatchMediaUpdate, dispatchUserMessage } from '../webhookService.js';
+import { dispatchUserMessage } from '../webhookService.js';
 import { geminiService } from '../gemini.js';
 import { processAutoTriggers, TriggerContext, TriggerResult } from '../autoTriggers.js';
 
@@ -374,22 +374,11 @@ async function processMediaDownload(job: Job<MediaDownloadJobData>): Promise<voi
       }
     }
     
-    // Dispatch media_update webhook to notify external systems
-    try {
-      await dispatchMediaUpdate(
-        businessId,
-        contactPhone,
-        messageLogId,
-        finalMediaUrl,
-        mediaType,
-        instanceId
-      );
-      console.log(`${logPrefix} media_update webhook dispatched`);
-    } catch (webhookError: any) {
-      console.warn(`${logPrefix} Failed to dispatch media_update webhook: ${webhookError.message}`);
-    }
+    // NOTE: dispatchMediaUpdate removed to prevent duplicate webhook calls.
+    // dispatchUserMessage below already includes mediaUrl, so external webhooks
+    // receive all media information in a single call.
 
-    // Dispatch user_message webhook NOW that media is ready (Option B: wait for media)
+    // Dispatch user_message webhook NOW that media is ready
     // Get message data for the webhook
     try {
       const messageForWebhook = await prisma.messageLog.findUnique({
